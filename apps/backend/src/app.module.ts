@@ -11,6 +11,7 @@ import { ConversationsModule } from './application/conversations/conversations.m
 import { EventsModule } from './application/events/events.module';
 import { ActionsModule } from './application/actions/actions.module';
 import { ConnectorsModule } from './application/connectors/connectors.module';
+import { BillingModule } from './application/billing/billing.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -22,10 +23,16 @@ import { HealthController } from './presentation/http/health/health.controller';
     // Logger estruturado (pino) com correlationId no contexto
     LoggerModule.forRoot({
       pinoHttp: {
+        level: process.env.LOG_LEVEL ?? 'info',
         customProps: (req) => ({ correlationId: (req as any).correlationId }),
+        // resumo enxuto de cada request (evita log gigante)
+        serializers: {
+          req: (r: any) => ({ method: r.method, url: r.url }),
+          res: (r: any) => ({ statusCode: r.statusCode }),
+        },
         transport:
           process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty' }
+            ? { target: 'pino-pretty', options: { singleLine: true } }
             : undefined,
       },
     }),
@@ -37,7 +44,8 @@ import { HealthController } from './presentation/http/health/health.controller';
     ContactsModule,
     ConversationsModule,
     ActionsModule,
-    // Próximos módulos de feature: billing, ...
+    BillingModule,
+    // Próximos módulos de feature: agents, knowledge, ...
   ],
   controllers: [HealthController],
 })

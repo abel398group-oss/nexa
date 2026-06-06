@@ -92,6 +92,17 @@ enum DlqStatus {
   discarded
 }
 
+enum BillingRequestStatus {
+  requested
+  processing
+  link_sent
+  pending_payment
+  confirmed
+  failed
+  expired
+  cancelled
+}
+
 // ===================== AUTH (Sprint 2) =====================
 enum UserRole {
   admin
@@ -344,6 +355,66 @@ model Product {
   credentials ProductConnectorCredential[]
 
   @@map("products")
+}
+
+// ===================== BILLING (Sprint 6 — rastreio local; TMS executa) =====================
+model AiBillingRequest {
+  id                     String               @id @default(uuid())
+  conversationId         String?              @map("conversation_id")
+  correlationId          String               @map("correlation_id")
+  contactId              String?              @map("contact_id")
+  tenantId               String?              @map("tenant_id")
+  productCode            String?              @map("product_code")
+  externalTenantId       String?              @map("external_tenant_id")
+  planCode               String?              @map("plan_code")
+  requestedAmount        Decimal?             @map("requested_amount") @db.Decimal(12, 2)
+  idempotencyKey         String               @unique @map("idempotency_key")
+  status                 BillingRequestStatus @default(requested)
+  paymentLink            String?              @map("payment_link")
+  externalSubscriptionId String?              @map("external_subscription_id")
+  externalInvoiceId      String?              @map("external_invoice_id")
+  externalPaymentId      String?              @map("external_payment_id")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  confirmedAt           DateTime?            @map("confirmed_at")
+
+  events       BillingEvent[]
+  paymentSyncs PaymentStatusSync[]
+
+  @@index([correlationId])
+  @@index([tenantId])
+  @@map("ai_billing_requests")
+}
+
+model BillingEvent {
+  id               String           @id @default(uuid())
+  billingRequestId String           @map("ai_billing_request_id")
+  billingRequest   AiBillingRequest @relation(fields: [billingRequestId], references: [id], onDelete: Cascade)
+  tenantId         String?          @map("tenant_id")
+  correlationId    String?          @map("correlation_id")
+  asaasPaymentId   String?          @map("asaas_payment_id")
+  eventType        String           @map("event_type")
+  rawPayload       Json             @default("{}") @map("raw_payload")
+  signatureValid   Boolean          @default(false) @map("signature_valid")
+  processed        Boolean          @default(false)
+  idempotencyKey   String           @unique @map("idempotency_key")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@index([billingRequestId])
+  @@map("billing_events")
+}
+
+model PaymentStatusSync {
+  id               String           @id @default(uuid())
+  billingRequestId String           @map("ai_billing_request_id")
+  billingRequest   AiBillingRequest @relation(fields: [billingRequestId], references: [id], onDelete: Cascade)
+  asaasPaymentId   String?          @map("asaas_payment_id")
+  expectedStatus   String?          @map("expected_status")
+  actualStatus     String?          @map("actual_status")
+  divergence       Boolean          @default(false)
+  checkedAt        DateTime         @default(now()) @map("checked_at")
+
+  @@index([billingRequestId])
+  @@map("payment_status_sync")
 }
 
 model ProductConnectorCredential {

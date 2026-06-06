@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nexa-frontend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@nexa/frontend", "dev"],
+      "port": 5173
+    }
+  ]
+}

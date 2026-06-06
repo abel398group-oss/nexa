@@ -82,8 +82,24 @@
 - [x] Endpoints: GET /products, GET /products/:code/health, GET /plans
 - [x] Testado: produto listado, health honesto (false até configurar TMS), planos R$89/299/599
 - [ ] Conexão REAL com TMS → quando Uelder validar (preencher .env TMS_API_BASE_URL+TOKEN)
-- [ ] Sprint 6A/6B — Billing (cobrança + confirmação) ← PRÓXIMO
-- [ ] Sprint 7 — Frontend + Inbox
+### Sprint 6 — Billing ✅ VALIDADO RODANDO (com stub do conector)
+- [x] Tabelas: ai_billing_requests + billing_events + payment_status_sync (migration add_billing)
+- [x] BillingService: createPaymentRequest (valida preço vs catálogo, máquina de estados)
+- [x] Webhook /webhooks/asaas: valida ASSINATURA (rejeita sem token), confirma pagamento
+- [x] Confirmação → provisionAccess + eventos payment_confirmed + tenant_created
+- [x] Reconciliação (@Interval 60s) payment_status_sync
+- [x] Testado: cobrança link_sent R$299; webhook sem assinatura REJEITADO; com assinatura→confirmed; eventos processados
+- [x] Logs enxutos (singleLine)
+- [ ] Conexão real TMS/Asaas → quando Uelder validar
+### Sprint 7 — Frontend + Inbox ✅ VALIDADO VISUALMENTE
+- [x] Scaffold React+Vite+TS+Tailwind (apps/frontend, proxy /api+/ws → :3001)
+- [x] api.ts (axios withCredentials) + AuthContext (login/logout/me)
+- [x] LoginPage (form admin@nexa.local) + InboxPage (lista conversas + thread + envio)
+- [x] App.tsx (React Router: /login, /inbox protegida) + main.tsx
+- [x] WebSocket no inbox (socket.io-client /ws) — mensagem volta em tempo real
+- [x] Fix: alias `@/` faltava no vite.config (resolve.alias) → build exit 0 (119 módulos)
+- [x] **VALIDADO NO NAVEGADOR**: login → inbox 6 conversas → abrir thread →
+      enviar "Lia da Nexa" → bolha aparece via WS (screenshots conferidos)
 - [ ] Sprint 8 — CRM
 - [ ] Sprint 9 — Knowledge Import (KB do TMS)
 - [ ] Sprint 10 — Knowledge Service + Support Agent
