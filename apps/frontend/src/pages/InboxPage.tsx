@@ -12,6 +12,8 @@ export function InboxPage() {
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [liaBusy, setLiaBusy] = useState(false);
+  const [liaInfo, setLiaInfo] = useState('');
   const socketRef = useRef<Socket | null>(null);
 
   // carrega conversas
@@ -38,7 +40,32 @@ export function InboxPage() {
     if (!active || !text.trim()) return;
     await api.post(`/conversations/${active.id}/messages`, { direction: 'outbound', content: text });
     setText('');
+    setLiaInfo('');
     // a mensagem volta via WebSocket
+  }
+
+  // Lia sugere resposta com base na última mensagem do cliente + KB
+  async function suggest() {
+    if (!active) return;
+    const lastInbound = [...messages].reverse().find((m) => m.direction === 'inbound');
+    const question = lastInbound?.content || 'Olá, tudo bem?';
+    setLiaBusy(true);
+    setLiaInfo('');
+    try {
+      const r = await api.post('/agent/handle', { message: question, conversationId: active.id });
+      setText(r.data.draft);
+      const agentEmoji: Record<string, string> = { sales: '💰', support: '🛠️', human: '🙋', optout: '🚫' };
+      const route = r.data.route || {};
+      const fontes = (r.data.usedKnowledge || []).map((k: any) => k.title).join(', ');
+      setLiaInfo(
+        `${agentEmoji[route.agent] || '✨'} ${route.agent} · ${route.intent} · score ${route.leadScore}` +
+          (r.data.suggestedAction && r.data.suggestedAction !== 'none' ? ` · ação: ${r.data.suggestedAction}` : '') +
+          (r.data.needsHuman ? ' · escalar' : '') +
+          (fontes ? ` · fontes: ${fontes}` : ''),
+      );
+    } finally {
+      setLiaBusy(false);
+    }
   }
 
   return (
@@ -83,17 +110,28 @@ export function InboxPage() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 border-t bg-white p-3">
-              <input
-                className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-sm"
-                placeholder="Digite uma mensagem..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && send()}
-              />
-              <button onClick={send} className="rounded-full bg-slate-800 px-5 py-2 text-sm text-white hover:bg-slate-700">
-                Enviar
-              </button>
+            <div className="border-t bg-white p-3">
+              {liaInfo && <div className="mb-2 px-2 text-xs text-emerald-600">✨ {liaInfo}</div>}
+              <div className="flex gap-2">
+                <button
+                  onClick={suggest}
+                  disabled={liaBusy}
+                  title="Sugerir resposta com a Lia (IA + base de conhecimento)"
+                  className="rounded-full bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {liaBusy ? '...' : '✨ Lia'}
+                </button>
+                <input
+                  className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-sm"
+                  placeholder="Digite uma mensagem..."
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && send()}
+                />
+                <button onClick={send} className="rounded-full bg-slate-800 px-5 py-2 text-sm text-white hover:bg-slate-700">
+                  Enviar
+                </button>
+              </div>
             </div>
           </>
         )}

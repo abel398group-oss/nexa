@@ -34,6 +34,47 @@ export class KnowledgeService {
     return { items, total };
   }
 
+  // Recupera os KB mais relevantes p/ uma pergunta (retrieval p/ a Lia).
+  // Scoring textual simples (título>tags>tópico>conteúdo). pgvector entra depois.
+  async retrieve(tenantId: string, query: string, topN = 3) {
+    const all = await this.prisma.aiKnowledgeBase.findMany({ where: { tenantId } });
+    const terms = query
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .split(/\W+/)
+      .filter((t) => t.length >= 3);
+    if (terms.length === 0) return [];
+
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const scored = all
+      .map((kb) => {
+        const title = norm(kb.title);
+        const content = norm(kb.content);
+        const topic = norm(`${kb.topic} ${kb.category}`);
+        const tags = norm((kb.tags ?? []).join(' '));
+        let score = 0;
+        for (const t of terms) {
+          if (title.includes(t)) score += 3;
+          if (tags.includes(t)) score += 2;
+          if (topic.includes(t)) score += 2;
+          if (content.includes(t)) score += 1;
+        }
+        return { kb, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN);
+
+    return scored.map((x) => ({
+      id: x.kb.id,
+      title: x.kb.title,
+      content: x.kb.content,
+      category: x.kb.category,
+      score: x.score,
+    }));
+  }
+
   async findOne(tenantId: string, id: string) {
     const kb = await this.prisma.aiKnowledgeBase.findFirst({
       where: { id, tenantId },

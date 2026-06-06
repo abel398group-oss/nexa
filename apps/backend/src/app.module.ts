@@ -4,7 +4,10 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from './infra/prisma/prisma.module';
+import { AiModule } from './shared/ai/ai.module';
+import { GovernanceModule } from './shared/governance/governance.module';
 import { AuditModule } from './shared/audit/audit.module';
+import { AdminModule } from './application/admin/admin.module';
 import { AuthModule } from './application/auth/auth.module';
 import { ContactsModule } from './application/contacts/contacts.module';
 import { ConversationsModule } from './application/conversations/conversations.module';
@@ -13,6 +16,7 @@ import { ActionsModule } from './application/actions/actions.module';
 import { ConnectorsModule } from './application/connectors/connectors.module';
 import { BillingModule } from './application/billing/billing.module';
 import { KnowledgeModule } from './application/knowledge/knowledge.module';
+import { AgentsModule } from './application/agents/agents.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -38,6 +42,8 @@ import { HealthController } from './presentation/http/health/health.controller';
       },
     }),
     PrismaModule,
+    AiModule,
+    GovernanceModule,
     AuditModule,
     AuthModule,
     EventsModule,
@@ -47,7 +53,9 @@ import { HealthController } from './presentation/http/health/health.controller';
     ActionsModule,
     BillingModule,
     KnowledgeModule,
-    // Próximos módulos de feature: agents, ...
+    AgentsModule,
+    AdminModule,
+    // Próximos módulos de feature: router, sales, supervisor ...
   ],
   controllers: [HealthController],
 })

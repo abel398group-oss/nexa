@@ -121,9 +121,33 @@
 - [x] **VALIDADO (API)**: import 5 criados → reimport idempotente 0/0 → aprovar v1 (reviewer+approvedAt)
 - [x] **VALIDADO (UI)**: importou 5, abriu "CT-e", clicou Aprovar → "v1 ✓ aprovada · admin"
 - [ ] Embeddings/pgvector (busca semântica) — Sprint 10
-- [ ] Sprint 10 — Knowledge Service + Support Agent
-- [ ] Sprint 11 — Agentes: Router + Sales (Flowise)
-- [ ] Sprint 12 — Onboarding + Supervisora + Kill Switch
+### Sprint 10 — Knowledge Service + Support Agent (Lia) ✅ VALIDADO RODANDO
+- [x] KnowledgeService.retrieve(): RAG textual (título>tags>tópico>conteúdo, top-N) — pgvector depois
+- [x] SupportAgentService.ask(): retrieval → prompt persona Lia → Claude Haiku (fetch nativo)
+- [x] Guardrails: usa SÓ as fontes; sem KB → escala humano (não alucina)
+- [x] Kill switch + ADR 012: autonomia OFF → gera RASCUNHO; ON+confiança alta → auto-envia
+- [x] Fallback gracioso: se Claude falhar (key inválida/timeout) → resposta da fonte top-1 (confidence low)
+- [x] Rota POST /agent/ask
+- [x] Frontend: botão "✨ Lia" no inbox (sugere resposta da última msg do cliente + mostra fontes/confiança)
+- [x] **VALIDADO (API)**: Q1 planos→fonte "Planos", Q2 fora-da-KB→escala humano, Q3 implantação→fonte certa
+- [x] **VALIDADO (UI)**: ✨ Lia preencheu rascunho + barra "fontes: Tempo de implantação"
+- [x] ✅ ANTHROPIC_API_KEY REAL configurada (apps/backend/.env — atenção: backend lê esse, não o root)
+      → Lia respondendo com Claude Haiku DE VERDADE (confidence high, tom consultivo/vendas,
+        faz pergunta de qualificação, respeita fontes). Testado Q planos + Q CT-e.
+- [ ] Embeddings/pgvector p/ busca semântica (hoje é textual)
+### Sprint 11 — Router + Sales Agent ✅ VALIDADO RODANDO
+- [x] AnthropicService compartilhado (shared/ai, @Global) + AiModule — complete()/completeJson()
+- [x] RouterAgent: classifica intent + leadScore (0-100) + roteia (sales/support/human/optout)
+      opt-out por REGRA (precedência, sem IA, LGPD); fallback heurístico se Claude cair
+- [x] SalesAgent: consultiva, usa catálogo de planos (connector) + KB, sugere próximo passo
+      (ACTION=none|create_payment|schedule_meeting|handoff_human) — NÃO executa (ADR 012)
+- [x] ConversationAgent (orquestrador): route → despacha p/ agente → auto-envia se autonomia ON
+- [x] Rota POST /agent/handle (pipeline completo)
+- [x] Frontend: botão ✨ Lia agora usa /agent/handle e mostra agente/intent/score/ação
+- [x] **VALIDADO (IA real)**: frota 20 caminhões→sales/pricing/score 75; erro CT-e cliente→support/15;
+      "falar com humano"→human/handoff; "PARAR"→optout/0 (regra)
+- [ ] Flowise (orquestração visual) — opcional, não bloqueia
+- [ ] Sprint 12 — Onboarding + Supervisora + Kill Switch (enforcement)
 - [ ] Sprint 13 — Observabilidade
 - [ ] Sprint 14+ — Multi-tenant + Escala
 
