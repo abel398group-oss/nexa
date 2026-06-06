@@ -65,9 +65,17 @@
 - [x] WebSocket (tempo real) — VALIDADO: cliente recebe mensagem instantânea
       (gateway /ws + EventEmitter message.created; testado roundtrip completo)
 
+### Sprint 4 — Ações + Event Bus + DLQ ✅ VALIDADO RODANDO
+- [x] Action Policy (ADR 012): ações × backend × humano
+- [x] ActionsService (request com idempotência + validação de policy)
+- [x] Ação permitida → executa + publica evento; irreversível → blocked (REQUIRES_HUMAN)
+- [x] Outbox: EventsService.publish → domain_events
+- [x] Worker (@Interval 5s) processa outbox → emite domain.<tipo> → processed
+- [x] DLQ + retry/backoff (2s/8s/30s → event_dlq após 3 tentativas)
+- [x] Enum ActionType expandido (migration) + testado: create_payment executed, refund blocked, outbox processed, DLQ vazia
+
 ## 📋 FILA (próximos sprints)
-- [ ] Sprint 4 — Ações + Eventos + DLQ
-- [ ] Sprint 5 — Conector HiperTMS (base) + healthCheck + getPlans
+- [ ] Sprint 5 — Conector HiperTMS (base) + healthCheck + getPlans ← PRÓXIMO
 - [ ] Sprint 6A/6B — Billing (cobrança + confirmação)
 - [ ] Sprint 7 — Frontend + Inbox
 - [ ] Sprint 8 — CRM
