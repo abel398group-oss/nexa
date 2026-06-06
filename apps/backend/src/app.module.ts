@@ -12,6 +12,7 @@ import { EventsModule } from './application/events/events.module';
 import { ActionsModule } from './application/actions/actions.module';
 import { ConnectorsModule } from './application/connectors/connectors.module';
 import { BillingModule } from './application/billing/billing.module';
+import { KnowledgeModule } from './application/knowledge/knowledge.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -45,7 +46,8 @@ import { HealthController } from './presentation/http/health/health.controller';
     ConversationsModule,
     ActionsModule,
     BillingModule,
-    // Próximos módulos de feature: agents, knowledge, ...
+    KnowledgeModule,
+    // Próximos módulos de feature: agents, ...
   ],
   controllers: [HealthController],
 })

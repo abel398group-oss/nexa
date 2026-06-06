@@ -15,6 +15,15 @@ export interface PaymentRequestResult {
   status: string;
 }
 
+// Item de conhecimento exportado pelo produto (FAQ, política, how-to) → alimenta a Lia.
+export interface KnowledgeItem {
+  topic: string;
+  category: string;
+  title: string;
+  content: string;
+  tags?: string[];
+}
+
 export interface Connector {
   readonly productCode: string;
 
@@ -23,6 +32,9 @@ export interface Connector {
 
   // catálogo de planos (fonte de verdade = produto)
   getPlans(): Promise<Plan[]>;
+
+  // base de conhecimento do produto (FAQ/políticas) p/ importar e alimentar a IA
+  getKnowledge(): Promise<KnowledgeItem[]>;
 
   // inicia cobrança (a IA solicita; backend chama isto)
   createPaymentRequest(input: {

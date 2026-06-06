@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { Connector, Plan, PaymentRequestResult } from './connector.interface';
+import { Connector, Plan, PaymentRequestResult, KnowledgeItem } from './connector.interface';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
@@ -28,6 +28,38 @@ export class HiperTmsConnector implements Connector {
       { code: 'basico', name: 'Básico', price: 89, maxUsers: 1, features: ['CT-e', 'precificação', '500 docs/mês'] },
       { code: 'essencial', name: 'Essencial', price: 299, maxUsers: 5, features: ['tudo do Básico', '5 filiais', '1.000 docs/mês'] },
       { code: 'profissional', name: 'Profissional', price: 599, maxUsers: 15, features: ['tudo do Essencial', 'suporte prioritário', '5.000 docs/mês'] },
+    ];
+  }
+
+  async getKnowledge(): Promise<KnowledgeItem[]> {
+    // TODO(real): GET ${TMS_API_BASE_URL}/knowledge (FAQ/políticas do TMS)
+    // STUB: conhecimento conhecido do HiperTMS p/ a Lia responder leads.
+    return [
+      {
+        topic: 'cte', category: 'produto', title: 'O que é o CT-e no HiperTMS',
+        content: 'O HiperTMS emite o Conhecimento de Transporte eletrônico (CT-e) integrado à SEFAZ, com validação automática, cálculo de impostos (ICMS) e geração do DACTE em PDF.',
+        tags: ['cte', 'fiscal', 'sefaz'],
+      },
+      {
+        topic: 'precificacao', category: 'produto', title: 'Precificação de fretes',
+        content: 'A precificação considera origem/destino, peso, cubagem, tabela do cliente e pedágio. Permite tabelas por rota e por cliente, com markup configurável.',
+        tags: ['frete', 'precificacao', 'tabela'],
+      },
+      {
+        topic: 'planos', category: 'comercial', title: 'Planos e limites',
+        content: 'Básico R$89 (1 usuário, 500 docs/mês). Essencial R$299 (5 usuários, 5 filiais, 1.000 docs/mês). Profissional R$599 (15 usuários, suporte prioritário, 5.000 docs/mês).',
+        tags: ['planos', 'preco', 'limites'],
+      },
+      {
+        topic: 'onboarding', category: 'suporte', title: 'Tempo de implantação',
+        content: 'A implantação leva em média de 3 a 7 dias úteis, incluindo cadastro de clientes, tabelas de frete e treinamento básico da equipe. Migração de dados é opcional.',
+        tags: ['implantacao', 'onboarding', 'prazo'],
+      },
+      {
+        topic: 'integracao', category: 'produto', title: 'Integrações disponíveis',
+        content: 'O HiperTMS integra com SEFAZ (CT-e/MDF-e), emissão de boletos, e exportação contábil. API REST disponível para integrações sob demanda.',
+        tags: ['integracao', 'api', 'mdfe'],
+      },
     ];
   }
 

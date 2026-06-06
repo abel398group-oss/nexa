@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const items = [
   { to: '/inbox', label: 'Inbox', icon: '💬' },
   { to: '/contacts', label: 'CRM', icon: '👥' },
+  { to: '/knowledge', label: 'KB', icon: '📚' },
 ];
 
 export function Layout() {

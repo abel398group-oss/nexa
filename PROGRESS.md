@@ -100,8 +100,27 @@
 - [x] Fix: alias `@/` faltava no vite.config (resolve.alias) → build exit 0 (119 módulos)
 - [x] **VALIDADO NO NAVEGADOR**: login → inbox 6 conversas → abrir thread →
       enviar "Lia da Nexa" → bolha aparece via WS (screenshots conferidos)
-- [ ] Sprint 8 — CRM
-- [ ] Sprint 9 — Knowledge Import (KB do TMS)
+### Sprint 8 — CRM (frontend) ✅ VALIDADO RODANDO
+- [x] Layout com nav rail compartilhado (Inbox ↔ CRM ↔ sair) + rotas aninhadas
+- [x] ContactsPage: tabela (nome/telefone/empresa/lead/origem) + busca + badge lead
+- [x] Modal "Novo contato" (POST /contacts, valida phone BR, trata erros do backend)
+- [x] App.tsx refatorado: Layout envolve /inbox e /contacts (Outlet)
+- [x] Build exit 0; **VALIDADO NO NAVEGADOR**: CRM lista 6 → cadastra
+      "Carlos Frete/Frete Rapido LTDA" → total 7, linha no topo, persistiu no banco
+- [ ] Import CSV em lote na UI (backend /contacts/import já pronto) — futuro
+### Sprint 9 — Knowledge Import ✅ VALIDADO RODANDO
+- [x] connector.interface: + getKnowledge() (KnowledgeItem) — ADR 010
+- [x] HiperTmsConnector: getKnowledge() STUB (5 FAQs reais: CT-e, precificação,
+      planos, implantação, integrações)
+- [x] KnowledgeService: findAll/findOne(+versões)/create(v1 não-aprovada)/
+      importFromConnector (idempotente por tenant+title; gera nova versão se conteúdo mudou)/
+      addVersion/approveVersion (transação: aprova + vira conteúdo fonte-de-verdade ADR 011)
+- [x] 6 rotas /knowledge (GET, GET/:id, POST, POST import/:productCode, POST /:id/versions,
+      POST versions/:id/approve)
+- [x] Frontend KnowledgePage: lista + "Importar TMS" + detalhe + versões/aprovar; nav KB
+- [x] **VALIDADO (API)**: import 5 criados → reimport idempotente 0/0 → aprovar v1 (reviewer+approvedAt)
+- [x] **VALIDADO (UI)**: importou 5, abriu "CT-e", clicou Aprovar → "v1 ✓ aprovada · admin"
+- [ ] Embeddings/pgvector (busca semântica) — Sprint 10
 - [ ] Sprint 10 — Knowledge Service + Support Agent
 - [ ] Sprint 11 — Agentes: Router + Sales (Flowise)
 - [ ] Sprint 12 — Onboarding + Supervisora + Kill Switch

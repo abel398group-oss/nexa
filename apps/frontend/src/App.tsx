@@ -4,6 +4,7 @@ import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { ContactsPage } from '@/pages/ContactsPage';
+import { KnowledgePage } from '@/pages/KnowledgePage';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
           >
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
+            <Route path="/knowledge" element={<KnowledgePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>
