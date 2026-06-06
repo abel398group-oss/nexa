@@ -1,0 +1,24 @@
+# Nexa — infra local (Sprint 1). Portas diferentes do MVP n8n para não conflitar.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16   # PostgreSQL 16 + pgvector (decisão Sprint 1)
+    container_name: nexa_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexa
+      POSTGRES_PASSWORD: nexa_local_dev
+      POSTGRES_DB: nexa
+    ports:
+      - "5433:5432"   # 5433 externo (MVP usa 5432)
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: nexa_redis
+    restart: unless-stopped
+    command: redis-server --requirepass nexa_redis_local_dev
+    ports:
+      - "6380:6379"   # 6380 externo (MVP usa 6379)
+    volumes:
+      - ./redisdata:/data

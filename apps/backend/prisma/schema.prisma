@@ -1,0 +1,276 @@
+// ============================================================================
+// Nexa — Schema Prisma (Sprint 1 / Fase 1 core)
+// Derivado de docs-leads/schema/schema.prisma. Só as tabelas da Fase 1.
+// As demais (agentes, billing avançado, health, etc.) entram em migrations seguintes.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================== ENUMS =====================
+enum SourceChannel {
+  whatsapp
+  telegram
+  site
+  instagram
+  facebook
+  email
+}
+
+enum AgentType {
+  router
+  sdr
+  sales
+  onboarding
+  support
+  billing
+  knowledge
+  analytics
+}
+
+enum CustomerStage {
+  lead
+  cliente_novo
+  cliente_ativo
+}
+
+enum ConversationStatus {
+  open
+  escalated
+  closed
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum ActionType {
+  create_payment
+  consult_plan
+  escalate
+  update_context
+}
+
+enum ActionStatus {
+  requested
+  validated
+  executed
+  blocked
+  failed
+}
+
+enum EventStatus {
+  created
+  queued
+  processing
+  processed
+  failed
+}
+
+enum EventPriority {
+  alta
+  media
+  baixa
+}
+
+enum DlqStatus {
+  pending
+  reprocessed
+  discarded
+}
+
+// ===================== FASE 1 — CORE =====================
+model AiConversation {
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  productCode   String?            @map("product_code")
+  correlationId String             @map("correlation_id")
+  contactId     String             @map("contact_id")
+  phone         String
+  sourceChannel SourceChannel      @map("source_channel")
+  agentType     AgentType          @map("agent_type")
+  customerStage CustomerStage      @map("customer_stage")
+  status        ConversationStatus @default(open)
+  startedAt     DateTime           @default(now()) @map("started_at")
+  endedAt       DateTime?          @map("ended_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  messages AiMessage[]
+  actions  AiAction[]
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@index([contactId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id               String           @id @default(uuid())
+  conversationId   String           @map("conversation_id")
+  conversation     AiConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId         String           @map("tenant_id")
+  correlationId    String           @map("correlation_id")
+  direction        MessageDirection
+  content          String
+  metadata         Json             @default("{}")
+  intent           String?
+  promptVersion    String?          @map("prompt_version")
+  kbVersion        String?          @map("kb_version")
+  tokensIn         Int?             @map("tokens_in")
+  tokensOut        Int?             @map("tokens_out")
+  estimatedCostUsd Decimal?         @map("estimated_cost_usd") @db.Decimal(10, 6)
+  actualCostUsd    Decimal?         @map("actual_cost_usd") @db.Decimal(10, 6)
+  latencyMs        Int?             @map("latency_ms")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([correlationId])
+  @@map("ai_messages")
+}
+
+model AiAction {
+  id                String         @id @default(uuid())
+  conversationId    String         @map("conversation_id")
+  conversation      AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId          String         @map("tenant_id")
+  correlationId     String         @map("correlation_id")
+  actionType        ActionType     @map("action_type")
+  status            ActionStatus   @default(requested)
+  requestedByAi     Boolean        @default(true) @map("requested_by_ai")
+  executedByBackend Boolean        @default(false) @map("executed_by_backend")
+  idempotencyKey    String         @unique @map("idempotency_key")
+  payload           Json           @default("{}")
+  result            Json?
+  error             Json?
+  createdAt         DateTime       @default(now()) @map("created_at")
+  executedAt        DateTime?      @map("executed_at")
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@map("ai_actions")
+}
+
+model AiCustomerProfile {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  contactId         String   @unique @map("contact_id")
+  externalContactId String?  @map("external_contact_id")
+  industry          String?
+  segment           String?
+  fleetSize         Int?     @map("fleet_size")
+  satisfactionScore Decimal? @map("satisfaction_score") @db.Decimal(3, 1)
+  preferredTone     String?  @map("preferred_tone")
+  notes             Json     @default("{}")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_customer_profile")
+}
+
+model AiKnowledgeBase {
+  id             String               @id @default(uuid())
+  tenantId       String               @map("tenant_id")
+  productCode    String?              @map("product_code")
+  topic          String
+  category       String
+  title          String
+  content        String
+  tags           String[]
+  embeddingModel String?              @map("embedding_model")
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  versions AiKnowledgeVersion[]
+
+  @@index([tenantId])
+  @@index([category])
+  @@map("ai_knowledge_base")
+}
+
+model AiKnowledgeVersion {
+  id          String          @id @default(uuid())
+  knowledgeId String          @map("knowledge_id")
+  knowledge   AiKnowledgeBase @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+  version     Int
+  content     String
+  approved    Boolean         @default(false)
+  author      String?
+  reviewer    String?
+  approvedAt  DateTime?       @map("approved_at")
+  validUntil  DateTime?       @map("valid_until")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([knowledgeId])
+  @@map("ai_knowledge_versions")
+}
+
+model DomainEvent {
+  id             String        @id @default(uuid())
+  tenantId       String        @map("tenant_id")
+  correlationId  String        @map("correlation_id")
+  eventType      String        @map("event_type")
+  producer       String?
+  priority       EventPriority @default(media)
+  subjectId      String?       @map("subject_id")
+  payload        Json          @default("{}")
+  status         EventStatus   @default(created)
+  idempotencyKey String        @unique @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  processedAt    DateTime?     @map("processed_at")
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@index([status])
+  @@map("domain_events")
+}
+
+model EventDlq {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  correlationId   String?   @map("correlation_id")
+  originalEventId String?   @map("original_event_id")
+  eventType       String    @map("event_type")
+  payload         Json      @default("{}")
+  error           String?
+  retryCount      Int       @default(0) @map("retry_count")
+  status          DlqStatus @default(pending)
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("event_dlq")
+}
+
+// ===================== PRODUTOS / CONECTORES (ADR 009/010) =====================
+model Product {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  connector String
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  credentials ProductConnectorCredential[]
+
+  @@map("products")
+}
+
+model ProductConnectorCredential {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  credentialType  String   @map("credential_type")
+  encryptedSecret String   @map("encrypted_secret")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([productId])
+  @@map("product_connector_credentials")
+}

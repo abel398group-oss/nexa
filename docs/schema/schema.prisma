@@ -1,0 +1,582 @@
+// ============================================================================
+// SCHEMA PRISMA — Sistema de Leads / IA Autônoma (Hipervias)
+// ============================================================================
+// ARTEFATO DE DESIGN — NÃO implementar ainda. Base para o backend NestJS futuro.
+// Convenções (validadas com os ADRs e o GPT):
+//   - id String @id @default(uuid()) em tudo
+//   - idempotency_key = UNIQUE (evita duplicação)
+//   - correlation_id = INDEXADO, NUNCA unique (1 jornada = N registros compartilham)
+//   - id (uuid local) + external_*_id (referência ao TMS/Asaas)
+//   - tenantId em toda tabela sensível (multi-tenant desde já)
+//   - snake_case no banco (@@map / @map), camelCase no código
+//   - billing/plans NÃO recriados — consumidos do TMS (ADR 008)
+// Fase 1 (implementar primeiro): ai_conversations, ai_messages, ai_actions,
+//   ai_customer_profile, ai_knowledge_base, ai_knowledge_versions,
+//   domain_events, event_dlq. O resto entra em migrações seguintes.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // pgvector para RAG futuro (ai_knowledge_base.embedding)
+}
+
+// ===================== ENUMS =====================
+
+enum SourceChannel {
+  whatsapp
+  telegram
+  site
+  instagram
+  facebook
+  email
+}
+
+enum AgentType {
+  router
+  sdr
+  sales
+  onboarding
+  support
+  billing
+  knowledge
+  analytics
+}
+
+enum CustomerStage {
+  lead
+  cliente_novo
+  cliente_ativo
+}
+
+enum ConversationStatus {
+  open
+  escalated
+  closed
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum ActionStatus {
+  requested
+  validated
+  executed
+  blocked
+  failed
+}
+
+enum ActionType {
+  create_payment
+  consult_plan
+  escalate
+  update_context
+}
+
+enum BillingRequestStatus {
+  requested
+  processing
+  link_sent
+  pending_payment
+  confirmed
+  failed
+  expired
+  cancelled
+}
+
+enum EventStatus {
+  created
+  queued
+  processing
+  processed
+  failed
+}
+
+enum DlqStatus {
+  pending
+  reprocessed
+  discarded
+}
+
+enum EventPriority {
+  alta
+  media
+  baixa
+}
+
+enum HealthColor {
+  verde
+  amarelo
+  vermelho
+}
+
+enum PlaybookStatus {
+  draft
+  review
+  approved
+  deprecated
+}
+
+enum EscalationRisk {
+  normal
+  critical
+}
+
+// ===================== FASE 1 — CORE =====================
+
+model AiConversation {
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  productCode   String?            @map("product_code") // qual produto a IA vende/atende (ref products.code)
+  correlationId String             @map("correlation_id")
+  contactId     String             @map("contact_id")
+  phone         String
+  sourceChannel SourceChannel      @map("source_channel")
+  agentType     AgentType          @map("agent_type")
+  customerStage CustomerStage      @map("customer_stage")
+  status        ConversationStatus @default(open)
+  startedAt     DateTime           @default(now()) @map("started_at")
+  endedAt       DateTime?          @map("ended_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  messages AiMessage[]
+  actions  AiAction[]
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@index([contactId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id               String           @id @default(uuid())
+  conversationId   String           @map("conversation_id")
+  conversation     AiConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId         String           @map("tenant_id")
+  correlationId    String           @map("correlation_id")
+  direction        MessageDirection
+  content          String
+  metadata         Json             @default("{}") // attachments/message_type/source_message_id
+  intent           String?
+  promptVersion    String?          @map("prompt_version")
+  kbVersion        String?          @map("kb_version")
+  tokensIn         Int?             @map("tokens_in")
+  tokensOut        Int?             @map("tokens_out")
+  estimatedCostUsd Decimal?         @map("estimated_cost_usd") @db.Decimal(10, 6)
+  actualCostUsd    Decimal?         @map("actual_cost_usd") @db.Decimal(10, 6)
+  latencyMs        Int?             @map("latency_ms")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([correlationId])
+  @@map("ai_messages")
+}
+
+model AiAction {
+  id                String         @id @default(uuid())
+  conversationId    String         @map("conversation_id")
+  conversation      AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId          String         @map("tenant_id")
+  correlationId     String         @map("correlation_id")
+  actionType        ActionType     @map("action_type")
+  status            ActionStatus   @default(requested)
+  requestedByAi     Boolean        @default(true) @map("requested_by_ai")
+  executedByBackend Boolean        @default(false) @map("executed_by_backend")
+  idempotencyKey    String         @unique @map("idempotency_key")
+  payload           Json           @default("{}")
+  result            Json?
+  error             Json? // { code, message } ex PAYMENT_BLOCKED
+  createdAt         DateTime       @default(now()) @map("created_at")
+  executedAt        DateTime?      @map("executed_at")
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@map("ai_actions")
+}
+
+model AiCustomerProfile {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  contactId         String   @unique @map("contact_id")
+  externalContactId String?  @map("external_contact_id") // ref TMS
+  industry          String?
+  segment           String? // transportadora/distribuidor/industria/operador
+  fleetSize         Int?     @map("fleet_size")
+  satisfactionScore Decimal? @map("satisfaction_score") @db.Decimal(3, 1)
+  preferredTone     String?  @map("preferred_tone")
+  notes             Json     @default("{}")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_customer_profile")
+}
+
+model AiKnowledgeBase {
+  id             String                @id @default(uuid())
+  tenantId       String                @map("tenant_id")
+  productCode    String?               @map("product_code") // KB por produto (ref products.code)
+  topic          String
+  category       String // comercial/tecnico/suporte
+  title          String
+  content        String
+  tags           String[] // CTE/MDFE/TABELA_PRECOS/CADASTRO_CLIENTE
+  embedding      Unsupported("vector")? // pgvector futuro
+  embeddingModel String?               @map("embedding_model")
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  versions AiKnowledgeVersion[]
+
+  @@index([tenantId])
+  @@index([category])
+  @@map("ai_knowledge_base")
+}
+
+model AiKnowledgeVersion {
+  id          String          @id @default(uuid())
+  knowledgeId String          @map("knowledge_id")
+  knowledge   AiKnowledgeBase @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+  version     Int
+  content     String
+  approved    Boolean         @default(false)
+  author      String?
+  reviewer    String? // quem aprovou (ADR 012)
+  approvedAt  DateTime?       @map("approved_at")
+  validUntil  DateTime?       @map("valid_until")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([knowledgeId])
+  @@map("ai_knowledge_versions")
+}
+
+model DomainEvent {
+  id             String        @id @default(uuid())
+  tenantId       String        @map("tenant_id")
+  correlationId  String        @map("correlation_id")
+  eventType      String        @map("event_type")
+  producer       String?
+  priority       EventPriority @default(media)
+  subjectId      String?       @map("subject_id")
+  payload        Json          @default("{}")
+  status         EventStatus   @default(pending)
+  idempotencyKey String        @unique @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  processedAt    DateTime?     @map("processed_at")
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@index([status])
+  @@map("domain_events")
+}
+
+model EventDlq {
+  id              String      @id @default(uuid())
+  tenantId        String      @map("tenant_id")
+  correlationId   String?     @map("correlation_id")
+  originalEventId String?     @map("original_event_id")
+  eventType       String      @map("event_type")
+  payload         Json        @default("{}")
+  error           String?
+  retryCount      Int         @default(0) @map("retry_count")
+  status          DlqStatus   @default(pending)
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("event_dlq")
+}
+
+// ===================== FASE 2+ — EXPANSÃO =====================
+// (criar em migrações seguintes; aqui como referência de design)
+
+model AiAgentSession {
+  id               String    @id @default(uuid())
+  conversationId   String    @map("conversation_id")
+  tenantId         String    @map("tenant_id")
+  correlationId    String    @map("correlation_id")
+  agentType        AgentType @map("agent_type")
+  agentVersion     String?   @map("agent_version")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  endedAt          DateTime? @map("ended_at")
+  tokensIn         Int?      @map("tokens_in")
+  tokensOut        Int?      @map("tokens_out")
+  estimatedCostUsd Decimal?  @map("estimated_cost_usd") @db.Decimal(10, 6)
+  actualCostUsd    Decimal?  @map("actual_cost_usd") @db.Decimal(10, 6)
+
+  @@index([conversationId])
+  @@map("ai_agent_sessions")
+}
+
+model AiCustomerContext {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  contactId          String   @unique @map("contact_id")
+  lastCteIssue       DateTime? @map("last_cte_issue")
+  lastLogin          DateTime? @map("last_login")
+  lastOnboardingStep String?  @map("last_onboarding_step")
+  activeFeatures     Json     @default("{}") @map("active_features")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_customer_context")
+}
+
+model AiCustomerHealth {
+  id              String      @id @default(uuid())
+  tenantId        String      @map("tenant_id")
+  contactId       String      @unique @map("contact_id")
+  // inputs (fonte de verdade)
+  lastLoginAt     DateTime?   @map("last_login_at")
+  lastEmissionAt  DateTime?   @map("last_emission_at")
+  openTickets     Int         @default(0) @map("open_tickets")
+  complaintsCount Int         @default(0) @map("complaints_count")
+  daysInactive    Int         @default(0) @map("days_inactive")
+  // cache recalculável
+  cachedScore     Int?        @map("cached_score")
+  cachedColor     HealthColor? @map("cached_color")
+  formulaVersion  String?     @map("formula_version")
+  computedAt      DateTime?   @map("computed_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_customer_health")
+}
+
+model AiPlaybook {
+  id        String         @id @default(uuid())
+  tenantId  String         @map("tenant_id")
+  code      String // PLAYBOOK_VENDA/CHURN/CTE/MDFE/IMPLANTACAO
+  segment   String?
+  version   Int            @default(1)
+  content   String
+  status    PlaybookStatus @default(draft)
+  isActive  Boolean        @default(true) @map("is_active")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("ai_playbooks")
+}
+
+model AiEscalation {
+  id             String         @id @default(uuid())
+  conversationId String         @map("conversation_id")
+  tenantId       String         @map("tenant_id")
+  correlationId  String         @map("correlation_id")
+  reason         String // human_request/critical/risk_word/failover
+  riskLevel      EscalationRisk @default(normal) @map("risk_level")
+  trigger        String?
+  assignedTo     String?        @map("assigned_to")
+  status         String         @default("open") // open/handled
+  createdAt      DateTime       @default(now()) @map("created_at")
+  handledAt      DateTime?      @map("handled_at")
+
+  @@index([tenantId])
+  @@index([correlationId])
+  @@map("ai_escalations")
+}
+
+model AiQualityAudit {
+  id                   String   @id @default(uuid())
+  conversationId       String?  @map("conversation_id")
+  tenantId             String   @map("tenant_id")
+  correlationId        String?  @map("correlation_id")
+  phone                String?
+  qualityScore         Int?     @map("quality_score")
+  hasRepetition        Boolean  @default(false) @map("has_repetition")
+  leadConfused         Boolean  @default(false) @map("lead_confused")
+  hallucinationDetected Boolean @default(false) @map("hallucination_detected")
+  securityOk           Boolean  @default(true) @map("security_ok")
+  problems             String?
+  suggestion           String?
+  promptVersion        String?  @map("prompt_version")
+  kbVersion            String?  @map("kb_version")
+  auditedAt            DateTime @default(now()) @map("audited_at")
+
+  @@index([tenantId])
+  @@map("ai_quality_audits")
+}
+
+model AiPromptVersion {
+  id         String   @id @default(uuid())
+  agentType  AgentType @map("agent_type")
+  version    Int
+  content    String
+  approved   Boolean  @default(false)
+  isActive   Boolean  @default(false) @map("is_active")
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("ai_prompt_versions")
+}
+
+model AiAgentVersion {
+  id            String    @id @default(uuid())
+  agentType     AgentType @map("agent_type")
+  modelProvider String    @map("model_provider")
+  modelName     String    @map("model_name")
+  promptVersion String?   @map("prompt_version")
+  config        Json      @default("{}") // temperature/max_tokens
+  isActive      Boolean   @default(false) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("ai_agent_versions")
+}
+
+model AiTestSuite {
+  id               String    @id @default(uuid())
+  agentType        AgentType @map("agent_type")
+  scenario         String // prompt_injection/lead_agressivo/lead_tecnico/cancelamento/fraude
+  input            String
+  expectedBehavior String    @map("expected_behavior")
+  lastResult       String?   @map("last_result") // pass/fail
+  lastRunAt        DateTime? @map("last_run_at")
+
+  @@map("ai_test_suites")
+}
+
+model AiUsageLimit {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  contactId    String?  @map("contact_id")
+  windowType   String   @map("window_type") // minute/hour/day/month
+  windowStart  DateTime @map("window_start")
+  tokensUsed   Int      @default(0) @map("tokens_used")
+  queriesUsed  Int      @default(0) @map("queries_used")
+  messagesUsed Int      @default(0) @map("messages_used")
+  limitReached Boolean  @default(false) @map("limit_reached")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, windowType])
+  @@map("ai_usage_limits")
+}
+
+model AiImprovement {
+  id             String   @id @default(uuid())
+  conversationId String?  @map("conversation_id")
+  source         String // supervisor/human
+  problem        String
+  proposedRule   String?  @map("proposed_rule")
+  status         String   @default("proposed") // proposed/approved/applied
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("ai_improvements")
+}
+
+model FeatureFlag {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  flag      String // auto_sales/auto_onboarding/auto_support
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, flag])
+  @@map("feature_flags")
+}
+
+model AuditRetention {
+  id              String @id @default(uuid())
+  dataType        String @map("data_type") // messages/audit/financial
+  retentionMonths Int    @map("retention_months")
+  action          String // anonymize/purge
+
+  @@map("audit_retention")
+}
+
+// Registry de produtos conectados (ADR 009/010). A IA precisa saber o que vende.
+model Product {
+  id        String   @id @default(uuid())
+  code      String   @unique // hipertms/crm/...
+  name      String
+  connector String // HiperTmsConnector/CrmConnector
+  status    String   @default("active") // active/inactive
+  createdAt DateTime @default(now()) @map("created_at")
+
+  credentials ProductConnectorCredential[]
+
+  @@map("products")
+}
+
+// Credenciais por produto/tenant — SEMPRE criptografadas (ADR 010).
+model ProductConnectorCredential {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  credentialType  String   @map("credential_type") // api_key/oauth/service_account
+  encryptedSecret String   @map("encrypted_secret") // NUNCA texto puro
+  status          String   @default("active") // active/revoked
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([productId])
+  @@map("product_connector_credentials")
+}
+
+// ===================== BILLING (rastreio local — TMS executa) =====================
+// NÃO recriar plans/subscription — consumir do TMS (ADR 008).
+// Estas tabelas são rastreabilidade LOCAL do que a IA solicitou.
+// NOTA tenantId nullable: pode ser null apenas durante a fase de LEAD (antes da compra).
+//   Após payment_confirmed/tenant_created, tenantId DEVE existir (garantir no backend).
+
+model AiBillingRequest {
+  id                     String               @id @default(uuid())
+  conversationId         String?              @map("conversation_id")
+  correlationId          String               @map("correlation_id")
+  leadId                 String?              @map("lead_id")
+  tenantId               String?              @map("tenant_id") // tenant da PLATAFORMA leads
+  productCode            String?              @map("product_code") // qual produto (ref products.code)
+  externalTenantId       String?              @map("external_tenant_id") // tenant no PRODUTO (ex tms_123)
+  planId                 String?              @map("plan_id") // ref plano no produto (ex SystemAdminPlan do TMS)
+  requestedAmount        Decimal?             @map("requested_amount") @db.Decimal(12, 2)
+  idempotencyKey         String               @unique @map("idempotency_key")
+  status                 BillingRequestStatus @default(requested)
+  paymentLink            String?              @map("payment_link")
+  externalSubscriptionId String?              @map("external_subscription_id") // sub_* (asaasSubscriptionId)
+  externalInvoiceId      String?              @map("external_invoice_id") // TenantSubscriptionInvoice
+  externalPaymentId      String?              @map("external_payment_id") // AsaasWebhookEvent.paymentId
+  createdAt              DateTime             @default(now()) @map("created_at")
+  confirmedAt            DateTime?            @map("confirmed_at")
+
+  events           BillingEvent[]
+  paymentSyncs     PaymentStatusSync[]
+
+  @@index([correlationId])
+  @@index([tenantId])
+  @@map("ai_billing_requests")
+}
+
+model BillingEvent {
+  id               String           @id @default(uuid())
+  billingRequestId String           @map("ai_billing_request_id")
+  billingRequest   AiBillingRequest @relation(fields: [billingRequestId], references: [id], onDelete: Cascade)
+  tenantId         String?          @map("tenant_id")
+  correlationId    String?          @map("correlation_id")
+  asaasPaymentId   String?          @map("asaas_payment_id")
+  eventType        String           @map("event_type") // created/paid/failed/refunded
+  rawPayload       Json             @default("{}") @map("raw_payload")
+  signatureValid   Boolean          @default(false) @map("signature_valid")
+  processed        Boolean          @default(false)
+  idempotencyKey   String           @unique @map("idempotency_key")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@index([billingRequestId])
+  @@map("billing_events")
+}
+
+model PaymentStatusSync {
+  id               String           @id @default(uuid())
+  billingRequestId String           @map("ai_billing_request_id")
+  billingRequest   AiBillingRequest @relation(fields: [billingRequestId], references: [id], onDelete: Cascade)
+  asaasPaymentId   String?          @map("asaas_payment_id")
+  expectedStatus   String?          @map("expected_status")
+  actualStatus     String?          @map("actual_status")
+  divergence       Boolean          @default(false)
+  checkedAt        DateTime         @default(now()) @map("checked_at")
+
+  @@index([billingRequestId])
+  @@map("payment_status_sync")
+}

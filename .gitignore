@@ -1,0 +1,29 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+.vite/
+
+# env / secrets (NUNCA commitar)
+.env
+.env.*
+!.env.example
+
+# prisma
+*.db
+
+# logs
+*.log
+logs/
+
+# os/editor
+.DS_Store
+.vscode/
+.idea/
+
+# docker volumes locais
+pgdata/
+redisdata/
