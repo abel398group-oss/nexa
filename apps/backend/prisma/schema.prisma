@@ -86,6 +86,61 @@ enum DlqStatus {
   discarded
 }
 
+// ===================== AUTH (Sprint 2) =====================
+enum UserRole {
+  admin
+  gestor
+  operacional
+  financeiro
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String?   @map("tenant_id") // null = admin da plataforma
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(operacional)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  sessions Session[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ip               String?
+  revokedAt        DateTime? @map("revoked_at") // revogação de sessão
+  expiresAt        DateTime  @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  tenantId      String?  @map("tenant_id")
+  userId        String?  @map("user_id")
+  action        String
+  resource      String?
+  metadata      Json     @default("{}")
+  correlationId String?  @map("correlation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
 // ===================== FASE 1 — CORE =====================
 model AiConversation {
   id            String             @id @default(uuid())
