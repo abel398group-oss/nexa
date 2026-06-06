@@ -1,15 +1,23 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { AuthModule } from './application/auth/auth.module';
+import { ContactsModule } from './application/contacts/contacts.module';
+import { ConversationsModule } from './application/conversations/conversations.module';
+import { EventsModule } from './application/events/events.module';
+import { ActionsModule } from './application/actions/actions.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     // Logger estruturado (pino) com correlationId no contexto
     LoggerModule.forRoot({
       pinoHttp: {
@@ -23,7 +31,11 @@ import { HealthController } from './presentation/http/health/health.controller';
     PrismaModule,
     AuditModule,
     AuthModule,
-    // Próximos módulos de feature: contacts, conversations, actions, events, ...
+    EventsModule,
+    ContactsModule,
+    ConversationsModule,
+    ActionsModule,
+    // Próximos módulos de feature: connectors, billing, ...
   ],
   controllers: [HealthController],
 })

@@ -55,9 +55,17 @@
 
 ---
 
+### Sprint 3 — Contatos + Conversas + Mensagens ✅ VALIDADO RODANDO
+- [x] Model Contact (migration add_contacts)
+- [x] PaginationQueryDto (limit/offset/search)
+- [x] Contacts: CRUD + import em lote (upsert por phone)
+- [x] Conversations: criar (gera correlationId), listar, get
+- [x] Messages: adicionar (in/out) + histórico
+- [x] 18 rotas mapeadas; fluxo completo testado (login→contato→conversa→msgs→histórico)
+- [x] WebSocket (tempo real) — VALIDADO: cliente recebe mensagem instantânea
+      (gateway /ws + EventEmitter message.created; testado roundtrip completo)
+
 ## 📋 FILA (próximos sprints)
-- [ ] Entre S1-2: ADR 011/012 revisão + openapi.yaml + migration plan
-- [ ] Sprint 3 — Conversas/Mensagens + WebSocket
 - [ ] Sprint 4 — Ações + Eventos + DLQ
 - [ ] Sprint 5 — Conector HiperTMS (base) + healthCheck + getPlans
 - [ ] Sprint 6A/6B — Billing (cobrança + confirmação)

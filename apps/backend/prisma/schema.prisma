@@ -53,9 +53,15 @@ enum MessageDirection {
 
 enum ActionType {
   create_payment
+  get_payment_status
   consult_plan
   escalate
   update_context
+  cancel_payment
+  refund
+  cancel_subscription
+  delete_customer
+  alter_contract
 }
 
 enum ActionStatus {
@@ -139,6 +145,31 @@ model AuditLog {
   @@index([tenantId])
   @@index([userId])
   @@map("audit_logs")
+}
+
+// ===================== CONTATOS (Sprint 3) =====================
+model Contact {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  phone             String
+  name              String?
+  company           String?
+  email             String?
+  source            String?  // origem do lead (consent_source — LGPD)
+  status            String   @default("active") // active / opted_out
+  leadStatus        String?  @map("lead_status") // new / cold / warm / hot
+  interestScore     Int      @default(0) @map("interest_score")
+  externalContactId String?  @map("external_contact_id") // ref no produto/TMS
+  tags              String[]
+  notes             String?
+  optOutAt          DateTime? @map("opt_out_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("contacts")
 }
 
 // ===================== FASE 1 — CORE =====================
