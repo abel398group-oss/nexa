@@ -10,6 +10,7 @@ import { ContactsModule } from './application/contacts/contacts.module';
 import { ConversationsModule } from './application/conversations/conversations.module';
 import { EventsModule } from './application/events/events.module';
 import { ActionsModule } from './application/actions/actions.module';
+import { ConnectorsModule } from './application/connectors/connectors.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -32,10 +33,11 @@ import { HealthController } from './presentation/http/health/health.controller';
     AuditModule,
     AuthModule,
     EventsModule,
+    ConnectorsModule,
     ContactsModule,
     ConversationsModule,
     ActionsModule,
-    // Próximos módulos de feature: connectors, billing, ...
+    // Próximos módulos de feature: billing, ...
   ],
   controllers: [HealthController],
 })

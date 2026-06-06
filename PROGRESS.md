@@ -75,8 +75,14 @@
 - [x] Enum ActionType expandido (migration) + testado: create_payment executed, refund blocked, outbox processed, DLQ vazia
 
 ## 📋 FILA (próximos sprints)
-- [ ] Sprint 5 — Conector HiperTMS (base) + healthCheck + getPlans ← PRÓXIMO
-- [ ] Sprint 6A/6B — Billing (cobrança + confirmação)
+### Sprint 5 — Conector HiperTMS (base) ✅ VALIDADO RODANDO
+- [x] Interface Connector (ADR 010): healthCheck/getPlans/createPaymentRequest/getPaymentStatus/provisionAccess/suspendAccess
+- [x] HiperTmsConnector (STUB — getPlans mock; healthCheck reporta "aguardando Uelder"; createPaymentRequest lança ServiceUnavailable se não configurado = fallback)
+- [x] ConnectorsService (registry por productCode, lê products table)
+- [x] Endpoints: GET /products, GET /products/:code/health, GET /plans
+- [x] Testado: produto listado, health honesto (false até configurar TMS), planos R$89/299/599
+- [ ] Conexão REAL com TMS → quando Uelder validar (preencher .env TMS_API_BASE_URL+TOKEN)
+- [ ] Sprint 6A/6B — Billing (cobrança + confirmação) ← PRÓXIMO
 - [ ] Sprint 7 — Frontend + Inbox
 - [ ] Sprint 8 — CRM
 - [ ] Sprint 9 — Knowledge Import (KB do TMS)
