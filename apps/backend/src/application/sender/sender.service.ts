@@ -9,7 +9,9 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
 const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19); // 19h
-const MIN_DELAY_MS = Number(process.env.SENDER_MIN_DELAY_MS ?? 30000); // 30s entre envios
+// delay entre envios: aleatório 30-90s (anti-ban) — varia a cada envio
+const DELAY_MIN_MS = Number(process.env.SENDER_DELAY_MIN_MS ?? 30000);
+const DELAY_MAX_MS = Number(process.env.SENDER_DELAY_MAX_MS ?? 90000);
 // limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce
 const WARMUP_DAILY = [10, 15, 20, 30];
 
@@ -17,6 +19,7 @@ const WARMUP_DAILY = [10, 15, 20, 30];
 export class SenderService {
   private readonly logger = new Logger('Sender');
   private lastSentAt = 0;
+  private nextDelayMs = DELAY_MIN_MS; // sorteado a cada envio
 
   constructor(
     private readonly prisma: PrismaService,
@@ -149,7 +152,7 @@ export class SenderService {
         }
       }
 
-      if (Date.now() - this.lastSentAt < MIN_DELAY_MS) return; // respeita delay anti-ban
+      if (Date.now() - this.lastSentAt < this.nextDelayMs) return; // respeita delay anti-ban (30-90s)
 
       const number = await this.ensureNumber(campaign.tenantId);
       const dailyCap = this.effectiveDailyLimit(number);
@@ -170,6 +173,14 @@ export class SenderService {
         await this.prisma.campaign.update({ where: { id: campaign.id }, data: { status: 'done' } });
         return;
       }
+
+      // CLAIM ATÔMICO (idempotência): só prossegue quem conseguir marcar queued→sending.
+      // Evita "mesma campanha enviada 2x" se dois ciclos do worker se sobrepuserem.
+      const claim = await this.prisma.campaignTarget.updateMany({
+        where: { id: target.id, status: 'queued' },
+        data: { status: 'sending' },
+      });
+      if (claim.count === 0) return; // outro tick já pegou este alvo
 
       // pula opt-outs (LGPD)
       const contact = await this.contacts.create(campaign.tenantId, { phone: target.phone, name: target.name ?? undefined, source: 'outbound' });
@@ -203,7 +214,8 @@ export class SenderService {
         // agenda follow-up (24h/72h) caso o lead não responda
         await this.followup.schedule(campaign.tenantId, { conversationId: conv.id, phone: target.phone, name: target.name });
         this.lastSentAt = Date.now();
-        this.logger.log(`Disparo p/ ${target.phone} (campanha ${campaign.name}) [${number.sentToday + 1}/${number.dailyLimit} hoje]`);
+        this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS)); // sorteia 30-90s p/ o próximo
+        this.logger.log(`Disparo p/ ${target.phone} (campanha ${campaign.name}) [${number.sentToday + 1}/${number.dailyLimit} hoje; próx em ${Math.round(this.nextDelayMs / 1000)}s]`);
       } catch (e: any) {
         await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: String(e?.message).slice(0, 200) } });
       }

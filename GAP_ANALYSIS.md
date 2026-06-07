@@ -115,7 +115,11 @@ PLUS (Nexa tem e n8n não): Inbox visual, Dashboard, CRM, Kill Switch runtime, g
 - [x] **Auto-refresh de login** ✅ — interceptor axios renova o token no 401 (fila p/ 1 refresh, repete a request; se falhar → /login). Backend /auth/refresh já existia (rotação). VALIDADO.
 - [x] **Backup do banco** ✅ — scripts/backup.ps1 (pg_dump via docker, data/hora, retém 14, restauração documentada). VALIDADO (110KB, 26 tabelas).
 - [x] **Dedup inbound (processed_message_ids)** ✅ — evita Nexa processar/responder a mesma msg WAHA 2x (reentrega). VALIDADO (2ª vez → "duplicada").
-- [ ] Agendar backup (Agendador de Tarefas do Windows) — opcional, manual por enquanto.
+- [x] Backup agendado ✅ — tarefa Windows "NexaBackupDiario" 02:00 (validado: LastTaskResult=0).
+- [x] **JWT secrets fortes** ✅ — JWT_SECRET/JWT_REFRESH_SECRET trocados de placeholder por chaves aleatórias (P0 do GPT). VALIDADO (login ok).
+- [x] **Delay sender 30-90s aleatório** ✅ (era 30s fixo) — anti-ban reforçado.
+- [x] **Idempotência de campanha** ✅ — claim atômico do alvo (queued→sending via updateMany; count===0 → outro tick pegou). Evita "mesma campanha 2x". seller_notifications (unique conversa) e followup (unique+stage) já eram idempotentes. VALIDADO.
+- [ ] Fixar versão do WAHA (infra do container de PRODUÇÃO; repinar reinicia sessão → fazer manual com cuidado) + onError já coberto no Nexa (try/catch Claude/WAHA).
 
 ## 🎯 PRIORIZAÇÃO SUGERIDA (ordem de ataque)
 
