@@ -119,7 +119,8 @@ PLUS (Nexa tem e n8n não): Inbox visual, Dashboard, CRM, Kill Switch runtime, g
 - [x] **JWT secrets fortes** ✅ — JWT_SECRET/JWT_REFRESH_SECRET trocados de placeholder por chaves aleatórias (P0 do GPT). VALIDADO (login ok).
 - [x] **Delay sender 30-90s aleatório** ✅ (era 30s fixo) — anti-ban reforçado.
 - [x] **Idempotência de campanha** ✅ — claim atômico do alvo (queued→sending via updateMany; count===0 → outro tick pegou). Evita "mesma campanha 2x". seller_notifications (unique conversa) e followup (unique+stage) já eram idempotentes. VALIDADO.
-- [ ] Fixar versão do WAHA (infra do container de PRODUÇÃO; repinar reinicia sessão → fazer manual com cuidado) + onError já coberto no Nexa (try/catch Claude/WAHA).
+- [x] **WAHA pinado** ✅ — por DIGEST (devlikeapro/waha@sha256:da28b2c... = mesma imagem GOWS) no C:\whatsapp-n8n-leads\docker-compose.yml. Reconectou WORKING sem QR. ATENÇÃO: recreate reseta webhooks da sessão → re-aplicados (n8n+Nexa). onError já coberto no Nexa.
+- [ ] Tornar webhooks do WAHA duráveis (env) p/ sobreviver a recreate — hoje via session config (some no recreate, reaplicar com PUT).
 
 ## 🎯 PRIORIZAÇÃO SUGERIDA (ordem de ataque)
 
