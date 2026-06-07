@@ -22,7 +22,7 @@ export class AuthService {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Credenciais inválidas');
 
-    return this.issueTokens(user.id, user.tenantId, user.role, ctx);
+    return this.issueTokens(user.id, user.tenantId, user.role, user.sellerId, user.permissions, ctx);
   }
 
   // Gera access (JWT curto) + refresh (longo, hash salvo na sessão)
@@ -30,10 +30,12 @@ export class AuthService {
     userId: string,
     tenantId: string | null,
     role: string,
+    sellerId: string | null,
+    permissions: string[],
     ctx: { userAgent?: string; ip?: string },
   ) {
     const accessToken = await this.jwt.signAsync(
-      { sub: userId, tenantId, role },
+      { sub: userId, tenantId, role, sellerId, permissions },
       { expiresIn: ACCESS_TTL },
     );
 
@@ -53,7 +55,7 @@ export class AuthService {
 
     // refresh token = sessionId.refreshRaw (para localizar a sessão no refresh)
     const refreshToken = `${session.id}.${refreshRaw}`;
-    return { accessToken, refreshToken, userId, tenantId, role };
+    return { accessToken, refreshToken, userId, tenantId, role, sellerId, permissions };
   }
 
   // Renova tokens validando o refresh contra a sessão (e checando revogação)
@@ -77,7 +79,7 @@ export class AuthService {
       where: { id: session.id },
       data: { revokedAt: new Date() },
     });
-    return this.issueTokens(session.userId, session.user.tenantId, session.user.role, ctx);
+    return this.issueTokens(session.userId, session.user.tenantId, session.user.role, session.user.sellerId, session.user.permissions, ctx);
   }
 
   // Logout = revogar a sessão
@@ -93,7 +95,7 @@ export class AuthService {
   async me(userId: string) {
     return this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, tenantId: true },
+      select: { id: true, email: true, name: true, role: true, tenantId: true, sellerId: true, permissions: true },
     });
   }
 }

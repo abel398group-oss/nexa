@@ -3,4 +3,65 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; margin: 0; }
-body { font-family: system-ui, -apple-system, sans-serif; }
+
+/* densidade compacta do HiperTMS (zoom 0.8) */
+html {
+  zoom: 0.8;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f4f5; /* base-100 (zinc claro, padrão TMS) */
+  color: #18181b;      /* base-content */
+}
+
+/* tokens de sidebar (HiperTMS) */
+:root {
+  --sidebar-bg: #2a2738;
+  --sidebar-hover: rgba(255, 255, 255, 0.07);
+  --sidebar-active: rgba(255, 255, 255, 0.13);
+  --sidebar-icon-accent: #6ec1ff;
+  --sidebar-text: rgba(255, 255, 255, 0.56);
+  --sidebar-text-hover: rgba(255, 255, 255, 0.93);
+  --sidebar-text-active: #f4f4f8;
+  --sidebar-section: rgba(255, 255, 255, 0.4);
+  --shadow-soft: 0 2px 8px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+}
+
+/* Componentes base no padrão HiperTMS (shadcn-like: rounded-md, h-9, azul) */
+@layer components {
+  .btn-primary {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-outline {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-base-300 bg-white px-4 text-sm font-medium text-base-content shadow-sm transition-colors hover:bg-base-100;
+  }
+  .btn-ghost {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-base-content transition-colors hover:bg-base-200;
+  }
+  .card { @apply rounded-xl border border-base-200 bg-white shadow-sm; }
+  .input {
+    @apply h-9 w-full rounded-md border border-base-300 bg-white px-3 text-sm shadow-sm outline-none transition-colors placeholder:text-base-content/45 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30;
+  }
+  .badge { @apply inline-flex w-fit items-center gap-1 rounded-full border border-base-200 px-2 py-0.5 text-xs font-medium; }
+}
+
+/* animações da mini-demo (HelpDemo) */
+.demo-fade { animation: demoFade .5s ease; }
+@keyframes demoFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.demo-cursor { animation: demoTap 1.1s ease-in-out infinite; }
+@keyframes demoTap { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-4px,-4px) scale(1.15); } }
+.demo-caret { animation: demoBlink 1s step-end infinite; }
+@keyframes demoBlink { 50% { opacity: 0; } }
+.demo-pop { animation: demoPop .5s ease .3s both; }
+@keyframes demoPop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+
+/* destaque do tour guiado: eleva o elemento acima do overlay + anel pulsante */
+.tour-highlight {
+  position: relative;
+  z-index: 70 !important;
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px #2563eb, 0 0 0 9999px rgba(0,0,0,0.001);
+  animation: tourPulse 1.4s ease-in-out infinite;
+}
+@keyframes tourPulse { 0%,100% { box-shadow: 0 0 0 3px #2563eb; } 50% { box-shadow: 0 0 0 6px rgba(37,99,235,.45); } }

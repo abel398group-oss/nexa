@@ -6,6 +6,8 @@ interface User {
   email: string;
   name?: string;
   role: string;
+  permissions?: string[];
+  sellerId?: string | null;
 }
 
 interface AuthCtx {

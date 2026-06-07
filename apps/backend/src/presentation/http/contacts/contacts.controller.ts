@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from '@/application/contacts/dto/create-contact.dto';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePerm('contacts')
 @Controller('contacts')
 export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}

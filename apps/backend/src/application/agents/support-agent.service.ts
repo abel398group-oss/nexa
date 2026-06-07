@@ -1,27 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
+import { AnthropicService, AI_MODEL } from '@/shared/ai/anthropic.service';
 
-const MODEL = process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001';
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = AI_MODEL;
 
 export interface AgentReply {
   draft: string;
   usedKnowledge: { id: string; title: string; score: number }[];
+  allowedFacts: string;
   confidence: 'high' | 'low';
   needsHuman: boolean;
   model: string;
   autonomyEnabled: boolean;
   autoSent: boolean;
+  usage?: { tokensIn: number; tokensOut: number; costUsd: number };
 }
 
 @Injectable()
 export class SupportAgentService {
   private readonly logger = new Logger('SupportAgent');
+  private lastUsage?: { tokensIn: number; tokensOut: number; costUsd: number };
 
   constructor(
     private readonly knowledge: KnowledgeService,
     private readonly conversations: ConversationsService,
+    private readonly ai: AnthropicService,
   ) {}
 
   private get autonomy(): boolean {
@@ -41,7 +45,7 @@ export class SupportAgentService {
     if (kb.length === 0) {
       const draft =
         'Não encontrei isso na nossa base ainda. Vou te conectar com um especialista pra te ajudar melhor. 🙂';
-      return this.finalize(tenantId, input, draft, usedKnowledge, 'low', true);
+      return this.finalize(tenantId, input, draft, usedKnowledge, '', 'low', true);
     }
 
     const context = kb
@@ -55,8 +59,15 @@ export class SupportAgentService {
           .join('\n')
       : '';
 
+    const greeting = (() => {
+      const h = new Date().getHours();
+      if (h >= 5 && h < 12) return 'Bom dia';
+      if (h >= 12 && h < 18) return 'Boa tarde';
+      return 'Boa noite';
+    })();
     const system =
       'Você é a Lia, assistente comercial da Nexa (vende o sistema HiperTMS para transportadoras). ' +
+      `Quando saudar, use a saudação adequada ao horário atual: "${greeting}" (não repita em toda mensagem). ` +
       'Responda em português do Brasil, de forma curta, cordial e objetiva (WhatsApp). ' +
       'Use SOMENTE as informações das Fontes fornecidas. Se a resposta não estiver nas Fontes, ' +
       'diga que vai checar com um especialista — NUNCA invente preços, prazos ou recursos. ' +
@@ -69,8 +80,11 @@ export class SupportAgentService {
 
     let draft: string;
     let confidence: 'high' | 'low' = 'high';
+    this.lastUsage = undefined;
     try {
-      draft = await this.callClaude(system, userMsg);
+      const u = await this.ai.completeWithUsage(system, userMsg, { maxTokens: 400 });
+      draft = u.text;
+      this.lastUsage = { tokensIn: u.tokensIn, tokensOut: u.tokensOut, costUsd: u.costUsd };
     } catch (e: any) {
       this.logger.warn(`Claude indisponível (${e?.message}) — fallback determinístico`);
       // fallback testável sem API: monta resposta a partir da fonte top-1
@@ -79,7 +93,7 @@ export class SupportAgentService {
     }
 
     const needsHuman = /especialista|humano|não encontrei|checar/i.test(draft);
-    return this.finalize(tenantId, input, draft, usedKnowledge, confidence, needsHuman);
+    return this.finalize(tenantId, input, draft, usedKnowledge, context, confidence, needsHuman);
   }
 
   private async finalize(
@@ -87,6 +101,7 @@ export class SupportAgentService {
     input: { question: string; conversationId?: string },
     draft: string,
     usedKnowledge: AgentReply['usedKnowledge'],
+    allowedFacts: string,
     confidence: 'high' | 'low',
     needsHuman: boolean,
   ): Promise<AgentReply> {
@@ -103,39 +118,13 @@ export class SupportAgentService {
     return {
       draft,
       usedKnowledge,
+      allowedFacts,
       confidence,
       needsHuman,
       model: MODEL,
       autonomyEnabled: this.autonomy,
       autoSent,
+      usage: this.lastUsage,
     };
-  }
-
-  private async callClaude(system: string, userMsg: string): Promise<string> {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ausente');
-
-    const res = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 400,
-        system,
-        messages: [{ role: 'user', content: userMsg }],
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Anthropic ${res.status}: ${body.slice(0, 160)}`);
-    }
-    const data: any = await res.json();
-    const text = data?.content?.[0]?.text?.trim();
-    if (!text) throw new Error('Resposta vazia da Anthropic');
-    return text;
   }
 }

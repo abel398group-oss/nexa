@@ -25,29 +25,29 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center bg-slate-100">
+    <div className="flex h-full items-center justify-center bg-zinc-100">
       <form onSubmit={onSubmit} className="w-80 rounded-xl bg-white p-8 shadow-lg">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-slate-800">Nexa</h1>
-          <p className="text-sm text-slate-500">Plataforma de IA Comercial</p>
+          <h1 className="text-2xl font-bold text-zinc-800">Nexa</h1>
+          <p className="text-sm text-zinc-500">Plataforma de IA Comercial</p>
         </div>
-        <label className="mb-1 block text-sm text-slate-600">Email</label>
+        <label className="mb-1 block text-sm text-zinc-600">Email</label>
         <input
-          className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="mb-4 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <label className="mb-1 block text-sm text-slate-600">Senha</label>
+        <label className="mb-1 block text-sm text-zinc-600">Senha</label>
         <input
           type="password"
-          className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="mb-4 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
         <button
           disabled={busy}
-          className="w-full rounded-lg bg-slate-800 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="w-full rounded-lg bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {busy ? 'Entrando...' : 'Entrar'}
         </button>

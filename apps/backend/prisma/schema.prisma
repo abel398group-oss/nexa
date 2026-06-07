@@ -109,6 +109,7 @@ enum UserRole {
   gestor
   operacional
   financeiro
+  vendedor
 }
 
 model User {
@@ -118,6 +119,8 @@ model User {
   passwordHash String    @map("password_hash")
   name         String?
   role         UserRole  @default(operacional)
+  sellerId     String?   @map("seller_id") // se role=vendedor, vincula ao cadastro Seller
+  permissions  String[]  @default([]) // áreas liberadas p/ não-admin (admin = tudo)
   isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
@@ -198,6 +201,12 @@ model AiConversation {
   startedAt     DateTime           @default(now()) @map("started_at")
   endedAt       DateTime?          @map("ended_at")
   createdAt     DateTime           @default(now()) @map("created_at")
+
+  assignedSellerId String?   @map("assigned_seller_id")
+  assignedSeller   Seller?   @relation(fields: [assignedSellerId], references: [id])
+  assignedAt       DateTime? @map("assigned_at")
+  outcome          String?   @map("outcome") // won | lost | null (resultado da venda)
+  outcomeAt        DateTime? @map("outcome_at")
 
   messages AiMessage[]
   actions  AiAction[]
@@ -430,4 +439,124 @@ model ProductConnectorCredential {
   @@index([tenantId])
   @@index([productId])
   @@map("product_connector_credentials")
+}
+
+// ===================== VENDEDORES / HANDOFF (Sprint 14 — paridade n8n) =====================
+model Seller {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  name          String
+  phone         String // WhatsApp do vendedor (ex 5511994327713)
+  active        Boolean  @default(true)
+  assignedCount Int      @default(0) @map("assigned_count") // round-robin balanceado
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  conversations AiConversation[]
+  notifications SellerNotification[]
+
+  @@index([tenantId])
+  @@map("sellers")
+}
+
+model SellerNotification {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  sellerId       String   @map("seller_id")
+  seller         Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  conversationId String   @map("conversation_id")
+  contactPhone   String   @map("contact_phone")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([conversationId]) // dedup: 1 notificação por conversa
+  @@index([tenantId])
+  @@map("seller_notifications")
+}
+
+// ===================== SENDER / NUMBER_POOL (Sprint 15 — disparo + anti-ban) =====================
+// Pool de números do WhatsApp p/ disparo, com limite diário (anti-ban).
+model SenderNumber {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  phone       String // número que envia (o da sessão WAHA)
+  sessionName String   @default("default") @map("session_name")
+  active       Boolean  @default(true)
+  dailyLimit   Int      @default(30) @map("daily_limit") // anti-ban
+  sentToday    Int      @default(0) @map("sent_today")
+  dayStamp     String?  @map("day_stamp") // YYYY-MM-DD do contador
+  hourlyLimit  Int      @default(8) @map("hourly_limit") // limite por hora (G6)
+  sentThisHour Int      @default(0) @map("sent_this_hour")
+  hourStamp    String?  @map("hour_stamp") // YYYY-MM-DD-HH
+  warmupStage  Int      @default(0) @map("warmup_stage") // aquecimento (G7)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("sender_numbers")
+}
+
+// Campanha de disparo (lista de leads + mensagem com {{nome}}).
+model Campaign {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  name      String
+  template  String // texto; suporta {{nome}}
+  status    String    @default("draft") // draft | running | paused | done
+  link      String? // link opcional anexado no texto (ex: portfólio no Drive)
+  mediaUrl  String?   @map("media_url") // arquivo anexado (PDF/Word) — URL servida pelo backend
+  mediaName String?   @map("media_name") // nome original do arquivo
+  sendLimit Int?      @map("send_limit") // quantos enviar (null = todos / até limite diário)
+  createdAt DateTime  @default(now()) @map("created_at")
+  startedAt DateTime? @map("started_at")
+
+  targets CampaignTarget[]
+
+  @@index([tenantId])
+  @@map("campaigns")
+}
+
+model CampaignTarget {
+  id         String    @id @default(uuid())
+  campaignId String    @map("campaign_id")
+  campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  tenantId   String    @map("tenant_id")
+  phone      String
+  name       String?
+  status     String    @default("queued") // queued | sent | failed | skipped
+  sentAt     DateTime? @map("sent_at")
+  error      String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([campaignId])
+  @@index([status])
+  @@map("campaign_targets")
+}
+
+// Monitoramento INTERNO de reclamações (cliente não sabe; só registro) — business-rules §11.
+model Complaint {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  phone          String
+  topic          String // lentidao | bug | preco | atendimento | fiscal | outro
+  excerpt        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("complaints")
+}
+
+// Follow-up automático (cadência 24h/72h pra quem não respondeu).
+model FollowUp {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @unique @map("conversation_id")
+  phone          String
+  name           String?
+  stage          Int      @default(0) // 0=aguarda stage1; 1=mandou stage1; 2=mandou stage2 (fim)
+  status         String   @default("pending") // pending | done | stopped (respondeu/optout)
+  nextRunAt      DateTime @map("next_run_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("follow_ups")
 }

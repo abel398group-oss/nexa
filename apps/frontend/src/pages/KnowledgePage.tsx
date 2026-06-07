@@ -49,33 +49,33 @@ export function KnowledgePage() {
   }
 
   return (
-    <div className="flex h-full bg-slate-50">
+    <div className="flex h-full bg-zinc-50">
       {/* lista */}
       <div className="flex w-96 flex-col border-r bg-white">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
-            <h1 className="font-bold text-slate-800">Conhecimento</h1>
-            <p className="text-xs text-slate-400">{total} itens · alimenta a Lia</p>
+            <h1 className="font-bold text-zinc-800">Conhecimento</h1>
+            <p className="text-xs text-zinc-400">{total} itens · alimenta a Lia</p>
           </div>
           <button
             onClick={importTms}
             disabled={busy}
-            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-lg bg-brand-600 px-3 py-2 text-xs text-white hover:bg-brand-500 disabled:opacity-50"
           >
             {busy ? 'Importando...' : '↓ Importar TMS'}
           </button>
         </div>
         {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700">{msg}</div>}
         <div className="flex-1 overflow-y-auto">
-          {items.length === 0 && <p className="p-5 text-sm text-slate-400">Vazio. Clique em "Importar TMS".</p>}
+          {items.length === 0 && <p className="p-5 text-sm text-zinc-400">Vazio. Clique em "Importar TMS".</p>}
           {items.map((k) => (
             <button
               key={k.id}
               onClick={() => open(k)}
-              className={`block w-full border-b px-5 py-3 text-left hover:bg-slate-50 ${sel?.id === k.id ? 'bg-slate-100' : ''}`}
+              className={`block w-full border-b px-5 py-3 text-left hover:bg-zinc-50 ${sel?.id === k.id ? 'bg-zinc-100' : ''}`}
             >
-              <div className="text-sm font-medium text-slate-700">{k.title}</div>
-              <div className="mt-0.5 text-xs text-slate-400">{k.category} · {k.topic}</div>
+              <div className="text-sm font-medium text-zinc-700">{k.title}</div>
+              <div className="mt-0.5 text-xs text-zinc-400">{k.category} · {k.topic}</div>
             </button>
           ))}
         </div>
@@ -84,19 +84,19 @@ export function KnowledgePage() {
       {/* detalhe */}
       <div className="flex-1 overflow-y-auto p-8">
         {!sel ? (
-          <div className="flex h-full items-center justify-center text-slate-400">Selecione um item</div>
+          <div className="flex h-full items-center justify-center text-zinc-400">Selecione um item</div>
         ) : (
           <div className="mx-auto max-w-2xl">
-            <div className="mb-2 text-xs uppercase text-slate-400">{sel.category} · {sel.topic}</div>
-            <h2 className="mb-4 text-2xl font-bold text-slate-800">{sel.title}</h2>
-            <div className="mb-6 rounded-xl bg-white p-6 text-sm leading-relaxed text-slate-700 shadow-sm">
+            <div className="mb-2 text-xs uppercase text-zinc-400">{sel.category} · {sel.topic}</div>
+            <h2 className="mb-4 text-2xl font-bold text-zinc-800">{sel.title}</h2>
+            <div className="mb-6 rounded-xl bg-white p-6 text-sm leading-relaxed text-zinc-700 shadow-sm">
               {sel.content}
             </div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-600">Versões (curadoria)</h3>
+            <h3 className="mb-2 text-sm font-semibold text-zinc-600">Versões (curadoria)</h3>
             <div className="space-y-2">
               {sel.versions?.map((v) => (
                 <div key={v.id} className="flex items-center justify-between rounded-lg bg-white px-4 py-2 text-sm shadow-sm">
-                  <span className="text-slate-600">v{v.version}</span>
+                  <span className="text-zinc-600">v{v.version}</span>
                   {v.approved ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
                       ✓ aprovada {v.reviewer && `· ${v.reviewer}`}
@@ -104,7 +104,7 @@ export function KnowledgePage() {
                   ) : (
                     <button
                       onClick={() => approve(v.id)}
-                      className="rounded-lg bg-slate-800 px-3 py-1 text-xs text-white hover:bg-slate-700"
+                      className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-700"
                     >
                       Aprovar
                     </button>

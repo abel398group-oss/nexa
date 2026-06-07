@@ -5,6 +5,61 @@
 
 ---
 
+## 🗺️ CHECKLIST VIVO (visão rápida)
+
+### ✅ FASE 1 — MVP da plataforma (Sprints 1-13) — CONCLUÍDA
+- [x] Auth, CRM, Conversas+WebSocket, Action Policy, Event bus/DLQ, Conector TMS, Billing
+- [x] Frontend (Login, Inbox, CRM, KB, Dashboard)
+- [x] IA: Support + Router + Sales + Supervisora + Kill Switch
+- [x] Observabilidade (tokens/custo/métricas)
+
+### ✅ FASE 2 — Conector WhatsApp — CONCLUÍDA
+- [x] WAHA → Nexa (inbound real validado)
+- [x] Nexa → WAHA (outbound real validado, com allowlist)
+
+### ⏳ FASE 3 — Paridade com n8n (pra poder DESLIGAR o n8n)
+- [x] **Bloco A — Vendedores/Handoff** ✅ (schema Seller+SellerNotification+assignedSellerId;
+      round-robin balanceado; notifica vendedor no WhatsApp; dedup por conversa; hook no orquestrador
+      (lead quente score≥70 OU human → handoff); tela Vendedores + badge no inbox. VALIDADO: lead score 85
+      → atribuído + notificado, assignedCount=1, badge "→ Vendedor")
+- [x] **Bloco B — Sender** ✅ (Campaign + CampaignTarget; template c/ {{nome}}; worker @Interval dispara
+      respeitando horário/limite/delay; cria conversa+outbound (vai pro WhatsApp+inbox); pula opted_out;
+      tela Disparo c/ progresso. VALIDADO: campanha disparou em ~12s, chegou no zap)
+- [x] **Bloco C — number_pool** ✅ (SenderNumber: limite diário 30, reset diário, horário comercial 7h-19h,
+      delay anti-ban 30s entre envios. VALIDADO: pool 1/30 hoje, gate de horário/limite no worker)
+- [x] **Bloco D — Follow-up** ✅ (FollowUp: cadência 24h/72h configurável; worker @Interval respeita
+      horário comercial; agenda no disparo; PARA quando lead responde/opt-out; personaliza {{nome}};
+      2 estágios. VALIDADO: followup_1 disparou + parou ao receber resposta)
+- [ ] Desligar webhook do n8n no WAHA (Nexa assume sozinho) — quando Abel validar o Nexa
+
+### Ajuda contextual ✅ — botão "? Ajuda" na topbar abre painel deslizante com o "como usar" DAQUELA tela
+(HelpDrawer.tsx, conteúdo por rota: dashboard/inbox/contacts/knowledge/sellers/campaigns; passos numerados + dica). VALIDADO.
++ Mini-demo ANIMADA em loop (HelpDemo.tsx, animação CSS) em TODAS as 6 telas — "janelinha" que passa os passos
+  sozinha (cursor/caret/pop + barra de progresso), tipo GIF. VALIDADO em todas.
++ TOUR GUIADO (GuidedTour.tsx) — 1ª vez (localStorage nexa_tour_done) destaca menu/Inbox/Disparo/Vendedores/Ajuda/
+  killswitch com cartão Próximo/Anterior/Pular + anel pulsante. Botão 🎓 Tour na topbar repete. VALIDADO.
+
+### KPIs de vendedores + anexo na campanha + quantidade de disparo ✅ (2026-06-07)
+- KPI vendedores: conversa ganha/perdida (botão no inbox ✅Ganhou/❌Perdeu → outcome); GET /metrics/sellers
+  (leads, em andamento, ganhos, perdidos, % conversão); tabela "Desempenho de vendas" na tela Vendedores. VALIDADO.
+- Campanha com ANEXO: upload PDF/Word (POST /campaigns/upload → uploads/ servido em /uploads, URL host.docker.internal)
+  + LINK opcional (vai no fim do texto) + WahaClient.sendFile envia o arquivo após o texto. UI: file input + link.
+- Campanha QUANTIDADE: sendLimit (radio Todos / Só N) + mostra limite diário; worker para ao atingir. VALIDADO (cap em 1).
+
+### 🎉 PARIDADE COM N8N ATINGIDA — Nexa já faz tudo que o n8n faz (+ inbox/dashboard/governança)
+
+### ⏳ FASE 4 — Produção
+- [ ] Hardening de segurança (ver AUDITORIA_TECNICA_N8N.md)
+- [ ] Deploy DigitalOcean (ficar 24/7)
+- [ ] Liberar allowlist do WAHA (enviar p/ clientes reais)
+- [ ] Validar billing real do TMS (com Uelder)
+- [ ] Domínio (nexalia.com / nexa.com.br)
+
+### 🔮 FASE 5 — Escala (futuro)
+- [ ] Multi-tenant, embeddings/pgvector, Flowise
+
+---
+
 ## ✅ FEITO
 
 ### Pré-Sprint / Setup
@@ -147,9 +202,56 @@
 - [x] **VALIDADO (IA real)**: frota 20 caminhões→sales/pricing/score 75; erro CT-e cliente→support/15;
       "falar com humano"→human/handoff; "PARAR"→optout/0 (regra)
 - [ ] Flowise (orquestração visual) — opcional, não bloqueia
-- [ ] Sprint 12 — Onboarding + Supervisora + Kill Switch (enforcement)
-- [ ] Sprint 13 — Observabilidade
-- [ ] Sprint 14+ — Multi-tenant + Escala
+### Sprint 12 — Supervisora IA + Kill Switch ✅ VALIDADO RODANDO
+- [x] SupervisorAgent: audita rascunho antes de enviar (alucinação, preço inventado, tom,
+      promessa exagerada, prompt-injection). Hard-blocks por regex (garantia/100%/vitalício).
+      Conservador: se IA da supervisora cair → NÃO aprova (exige humano).
+- [x] Ajuste fino: vendedora passa allowedFacts (catálogo de planos + KB) p/ supervisora não
+      reprovar venda legítima; prompt aceita pergunta de qualificação como correta
+- [x] AutonomyService (kill switch runtime, @Global) + GET/POST /admin/autonomy (com audit log)
+- [x] Orquestrador: auto-envio exige TUDO — autonomia ON + confiança alta + sem handoff +
+      supervisora aprovou. Senão devolve rascunho + blockedReason.
+- [x] Frontend: botão kill switch na nav (🤖 IA ON / ⏸️ IA OFF) liga/desliga em runtime
+- [x] **VALIDADO (API)**: OFF→bloqueia auto-envio; ON+venda legítima→supervisora aprova(low)+auto-envia;
+      hard-block de garantia→reprova(high). Toggle ON/OFF persistindo + audit log.
+- [x] **VALIDADO (UI)**: botão "⏸️ IA OFF"→clica→"🤖 IA ON" (backend confirma); voltei p/ OFF (seguro)
+- [ ] Onboarding pós-pagamento (welcome flow) — pendente (billing/provision já existe)
+### Sprint 13 — Observabilidade ✅ VALIDADO RODANDO
+- [x] Captura de tokens/custo: AnthropicService.completeWithUsage (input/output + custo est.)
+      preço configurável (AI_PRICE_IN/OUT); SupportAgent migrado p/ AnthropicService compartilhado
+- [x] addMessage estendido: metadata (aiGenerated/agent/risk) + tokensIn/out + estimatedCostUsd
+- [x] MetricsService.overview: contatos (leadStatus, opt-outs), conversas, mensagens
+      (in/out/aiGerada + % autônoma), tokens+custo, KB, billing, eventos+DLQ
+- [x] Rota GET /metrics/overview + Frontend DashboardPage (nav 📊, auto-refresh 10s)
+- [x] **VALIDADO**: 2 respostas autônomas → aiGerada=2 (18%), tokens 1007/186, custo US$0.0019;
+      dashboard mostra 7 contatos, 6 conversas, 21 msgs, KB 5, 18% IA, DLQ 0
+- [ ] Métricas por período + gráfico temporal — futuro
+
+## 🎉 MVP COMPLETO (Sprints 1-13) — backend + frontend validados rodando
+
+### Conector WhatsApp (WAHA → Nexa) ✅ ENDPOINT VALIDADO (falta plugar o WAHA)
+- [x] WhatsappService: normalize() replica lógica validada do n8n (fix @lid, opt-out, validação BR)
+- [x] process(): ignora fromMe → upsert contato → opt-out (LGPD) → acha/cria conversa aberta →
+      grava inbound (WebSocket→inbox) → se autonomia ON, Lia responde sozinha
+- [x] POST /webhooks/waha (público, token opcional via WAHA_WEBHOOK_TOKEN); tenant 'default'
+- [x] **VALIDADO (payload simulado)**: msg normal→inbox; autonomia ON→Lia auto-responde;
+      "PARAR"→contato opted_out. ZERO toque no WAHA/n8n até aqui.
+- [x] PLUGADO (paralelo): WAHA session config c/ 2 webhooks [n8n + Nexa]. Sessão reconectou
+      sem QR (auth salva). Inbound real do celular do Abel chegou no Nexa ✅.
+      WAHA container alcança Nexa via http://host.docker.internal:3001/api/webhooks/waha.
+
+### Emissor de saída (Nexa → WAHA → WhatsApp) ✅ VALIDADO RODANDO
+- [x] WahaClientService (shared/waha, @Global): sendText via POST /api/sendText (session/chatId/text no body)
+- [x] Allowlist de segurança (WAHA_SEND_ALLOWLIST) — só envia real p/ números listados (evita spam nos fakes)
+- [x] addMessage outbound → dispara WAHA automaticamente (manual OU Lia autônoma), failsafe try/catch
+- [x] .env backend: WAHA_API_URL=http://localhost:3018, WAHA_API_KEY, WAHA_SESSION=default,
+      WAHA_SEND_ALLOWLIST=5512988073788 (só Abel por enquanto)
+- [x] **VALIDADO**: WAHA sendText retornou msg ID p/ 5512988073788 (chegou no zap do Abel)
+- [ ] ⚠️ ATENÇÃO: n8n AINDA responde em paralelo → cliente recebe resposta DOBRADA se Nexa autonomia ON.
+      Antes de ligar Nexa autônomo p/ valer: remover webhook do n8n da session config do WAHA.
+- [ ] Outbound do n8n não aparece no Nexa (WAHA só manda evento 'message' = inbound). OK por ora.
+
+- [ ] Sprint 14+ — Multi-tenant + Escala (futuro)
 
 ---
 

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import {
@@ -9,7 +10,8 @@ import {
   ApproveVersionDto,
 } from '@/application/knowledge/dto/create-knowledge.dto';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePerm('knowledge')
 @Controller('knowledge')
 export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}

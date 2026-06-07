@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { IsBoolean } from 'class-validator';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { AuditService } from '@/shared/audit/audit.service';
 
@@ -9,7 +10,8 @@ class ToggleDto {
   @IsBoolean() enabled!: boolean;
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePerm('ai_control')
 @Controller('admin')
 export class AdminController {
   constructor(

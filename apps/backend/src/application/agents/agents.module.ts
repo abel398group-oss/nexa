@@ -6,10 +6,11 @@ import { SupervisorAgentService } from './supervisor-agent.service';
 import { ConversationAgentService } from './conversation-agent.service';
 import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
+import { SellersModule } from '@/application/sellers/sellers.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
 
 @Module({
-  imports: [KnowledgeModule, ConversationsModule],
+  imports: [KnowledgeModule, ConversationsModule, SellersModule],
   controllers: [AgentsController],
   providers: [
     SupportAgentService,

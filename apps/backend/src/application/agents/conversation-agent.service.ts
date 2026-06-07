@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConversationsService } from '@/application/conversations/conversations.service';
+import { SellersService } from '@/application/sellers/sellers.service';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { RouterAgentService, RouteDecision } from './router-agent.service';
 import { SalesAgentService } from './sales-agent.service';
@@ -17,7 +19,14 @@ export interface HandleResult {
   autonomyEnabled: boolean;
   autoSent: boolean;
   blockedReason?: string;
+  handoff?: { assigned: boolean; sellerName?: string; reason?: string };
 }
+
+// lead quente → vai pro vendedor
+const HOT_LEAD_SCORE = 70;
+// humanização: espera alguns segundos antes de auto-responder (parecer humano) — G5
+const HUMANIZE_MIN_MS = Number(process.env.HUMANIZE_MIN_MS ?? 3000);
+const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
 
 @Injectable()
 export class ConversationAgentService {
@@ -29,6 +38,8 @@ export class ConversationAgentService {
     private readonly support: SupportAgentService,
     private readonly supervisor: SupervisorAgentService,
     private readonly conversations: ConversationsService,
+    private readonly sellers: SellersService,
+    private readonly prisma: PrismaService,
     private readonly autonomy: AutonomyService,
   ) {}
 
@@ -52,6 +63,7 @@ export class ConversationAgentService {
     let needsHuman = false;
     let allowedFacts = '';
     let scripted = false; // respostas fixas (optout/human) não precisam de supervisora IA
+    let usage: { tokensIn: number; tokensOut: number; costUsd: number } | undefined;
 
     switch (route.agent) {
       case 'optout':
@@ -78,7 +90,8 @@ export class ConversationAgentService {
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;
         needsHuman = r.suggestedAction === 'handoff_human';
-        allowedFacts = r.usedKnowledge.map((k) => k.title).join('; ');
+        allowedFacts = r.allowedFacts;
+        usage = r.usage;
         break;
       }
 
@@ -89,7 +102,8 @@ export class ConversationAgentService {
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;
         needsHuman = r.needsHuman;
-        allowedFacts = r.usedKnowledge.map((k) => k.title).join('; ');
+        allowedFacts = r.allowedFacts;
+        usage = r.usage;
         break;
       }
     }
@@ -120,12 +134,51 @@ export class ConversationAgentService {
       } else if (!supervisorOk) {
         blockedReason = `bloqueado pela supervisora: ${supervisor?.issues.join(', ') || 'reprovado'}`;
       } else {
+        // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
+        const jitter = HUMANIZE_MIN_MS + (draft.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
+        await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
         await this.conversations.addMessage(tenantId, input.conversationId, {
           direction: 'outbound',
           content: draft,
           intent: route.intent,
+          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk },
+          tokensIn: usage?.tokensIn,
+          tokensOut: usage?.tokensOut,
+          estimatedCostUsd: usage?.costUsd,
         });
         autoSent = true;
+      }
+    }
+
+    // MONITORAMENTO INTERNO DE RECLAMAÇÕES (G4) — só registra, não muda a resposta ao cliente.
+    if (input.conversationId && route.isComplaint) {
+      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+      if (conv) {
+        await this.prisma.complaint.create({
+          data: {
+            tenantId,
+            conversationId: input.conversationId,
+            phone: conv.phone,
+            topic: route.complaintTopic ?? 'outro',
+            excerpt: input.message.slice(0, 200),
+          },
+        }).catch(() => null);
+      }
+    }
+
+    // HANDOFF: lead quente (sales + score alto) OU pediu humano → atribui + notifica vendedor.
+    // Dedup interno (1 notificação por conversa). Acontece independente da autonomia.
+    let handoff: HandleResult['handoff'];
+    const isHot = route.agent === 'sales' && route.leadScore >= HOT_LEAD_SCORE;
+    if (input.conversationId && (isHot || route.agent === 'human')) {
+      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+      if (conv) {
+        handoff = await this.sellers.handoff(tenantId, {
+          conversationId: input.conversationId,
+          contactPhone: conv.phone,
+          leadScore: route.leadScore,
+          summary: input.message.slice(0, 120),
+        });
       }
     }
 
@@ -140,6 +193,7 @@ export class ConversationAgentService {
       autonomyEnabled: this.autonomy.isEnabled(),
       autoSent,
       blockedReason,
+      handoff,
     };
   }
 }
