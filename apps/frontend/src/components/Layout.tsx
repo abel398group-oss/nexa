@@ -79,6 +79,12 @@ export function Layout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const hasHelp = !!HELP[location.pathname];
   const [tourOpen, setTourOpen] = useState(false);
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('nexa_theme', isDark ? 'dark' : 'light');
+    setDark(isDark);
+  }
 
   // tour automático na primeira vez
   useEffect(() => {
@@ -138,6 +144,13 @@ export function Layout() {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 bg-white px-6">
           <h1 className="text-base font-semibold text-base-content">{pageTitle}</h1>
           <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              title="Alternar tema claro/escuro"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-200"
+            >
+              {dark ? '☀️ Claro' : '🌙 Escuro'}
+            </button>
             <button
               onClick={() => setTourOpen(true)}
               title="Refazer o tour de apresentação"

@@ -1,0 +1,51 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 506 >>
+stream
+BT
+/F1 20 Tf
+60 770 Td
+(HiperTMS - Resumo do Produto) Tj
+/F1 11 Tf
+0 -36 TD
+(Sistema de gestao de transporte (TMS) para transportadoras.) Tj
+0 -22 TD
+(- Emissao de CT-e e MDF-e integrada a SEFAZ) Tj
+0 -22 TD
+(- Precificacao de fretes por rota e por cliente) Tj
+0 -22 TD
+(- Planos: Basico R\, Essencial R\, Profissional R\) Tj
+0 -22 TD
+(- Implantacao em 3 a 7 dias uteis) Tj
+0 -22 TD
+(- Integracoes: boletos, exportacao contabil, API REST) Tj
+0 -40 TD
+(Documento de TESTE gerado pela plataforma Nexa.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+868
+%%EOF

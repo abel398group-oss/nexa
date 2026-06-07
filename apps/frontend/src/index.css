@@ -46,6 +46,25 @@ body {
   .badge { @apply inline-flex w-fit items-center gap-1 rounded-full border border-base-200 px-2 py-0.5 text-xs font-medium; }
 }
 
+/* ===== MODO ESCURO (classe .dark no html) — padrão TMS ===== */
+.dark body { background: #09090b; color: #fafafa; }
+.dark .bg-white { background-color: #18181b !important; }
+.dark .bg-zinc-50 { background-color: #0f0f12 !important; }
+.dark .bg-zinc-100 { background-color: #27272a !important; }
+.dark .bg-base-100 { background-color: #09090b !important; }
+.dark .bg-base-200 { background-color: #27272a !important; }
+.dark .text-zinc-800, .dark .text-zinc-700, .dark .text-zinc-600 { color: #e4e4e7 !important; }
+.dark .text-zinc-500, .dark .text-zinc-400 { color: #a1a1aa !important; }
+.dark .text-base-content { color: #fafafa !important; }
+.dark .text-base-content\/80, .dark .text-base-content\/70, .dark .text-base-content\/75 { color: #d4d4d8 !important; }
+.dark .text-base-content\/60, .dark .text-base-content\/50, .dark .text-base-content\/45, .dark .text-base-content\/40 { color: #a1a1aa !important; }
+.dark .border, .dark .border-b, .dark .border-t, .dark .border-r, .dark .border-l { border-color: #27272a; }
+.dark .border-zinc-200, .dark .border-zinc-300, .dark .border-base-200, .dark .border-base-300 { border-color: #3f3f46 !important; }
+.dark .card { background-color: #18181b; border-color: #27272a; }
+.dark .input { background-color: #18181b; border-color: #3f3f46; color: #fafafa; }
+.dark .hover\:bg-zinc-50:hover, .dark .hover\:bg-base-100:hover, .dark .hover\:bg-base-200:hover { background-color: #27272a !important; }
+.dark .shadow-sm, .dark .shadow-xl, .dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+
 /* animações da mini-demo (HelpDemo) */
 .demo-fade { animation: demoFade .5s ease; }
 @keyframes demoFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }

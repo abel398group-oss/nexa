@@ -111,6 +111,11 @@ PLUS (Nexa tem e n8n não): Inbox visual, Dashboard, CRM, Kill Switch runtime, g
 
 ### ✅ Top 5 recomendados (valem mesmo local): E1 segurança, E7 Swagger, E6 health, E2 logging, E12 paginação padrão.
 
+## 🌙 Extras / piloto
+- [x] **Modo escuro** ✅ — toggle 🌙/☀️ na topbar, persiste (localStorage nexa_theme), darkMode:'class' + overrides CSS. VALIDADO (bg #09090b).
+- [x] **Allowlist LIBERADA** ✅ — WAHA_SEND_ALLOWLIST vazio (envia p/ qualquer número real). MODO PRODUÇÃO/PILOTO.
+- [x] PDF de teste (portfolio_tms_teste.pdf) + CSV de contatos (contatos_teste.csv, Patricia/Abel-7429 c/ números placeholder a preencher).
+
 ## 🔧 Melhorias pós-uso
 - [x] **Auto-refresh de login** ✅ — interceptor axios renova o token no 401 (fila p/ 1 refresh, repete a request; se falhar → /login). Backend /auth/refresh já existia (rotação). VALIDADO.
 - [x] **Backup do banco** ✅ — scripts/backup.ps1 (pg_dump via docker, data/hora, retém 14, restauração documentada). VALIDADO (110KB, 26 tabelas).
