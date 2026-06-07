@@ -26,6 +26,7 @@ import { ConnectorsModule } from './application/connectors/connectors.module';
 import { BillingModule } from './application/billing/billing.module';
 import { KnowledgeModule } from './application/knowledge/knowledge.module';
 import { AgentsModule } from './application/agents/agents.module';
+import { PlaybookModule } from './application/playbook/playbook.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -66,6 +67,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     BillingModule,
     KnowledgeModule,
     AgentsModule,
+    PlaybookModule,
     AdminModule,
     MetricsModule,
     WhatsappModule,

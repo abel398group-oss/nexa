@@ -553,6 +553,20 @@ model Complaint {
   @@map("complaints")
 }
 
+// Playbook de vendas editável pelo painel (objeções, tom, CTAs) — sem mexer no código.
+model SalesPlaybook {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique @map("tenant_id")
+  persona    String   @default("") // tom/identidade extra injetado no prompt
+  objections Json     @default("[]") // [{ objection, guidance }]
+  ctaCold    String   @default("") @map("cta_cold")
+  ctaWarm    String   @default("") @map("cta_warm")
+  ctaHot     String   @default("") @map("cta_hot")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("sales_playbook")
+}
+
 // Follow-up automático (cadência 24h/72h pra quem não respondeu).
 model FollowUp {
   id             String   @id @default(uuid())

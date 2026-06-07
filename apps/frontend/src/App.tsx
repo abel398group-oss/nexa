@@ -9,6 +9,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { SellersPage } from '@/pages/SellersPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { UsersPage } from '@/pages/UsersPage';
+import { PlaybookPage } from '@/pages/PlaybookPage';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/sellers" element={<SellersPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/playbook" element={<PlaybookPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>

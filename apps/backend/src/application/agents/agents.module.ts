@@ -7,10 +7,11 @@ import { ConversationAgentService } from './conversation-agent.service';
 import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { SellersModule } from '@/application/sellers/sellers.module';
+import { PlaybookModule } from '@/application/playbook/playbook.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
 
 @Module({
-  imports: [KnowledgeModule, ConversationsModule, SellersModule],
+  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule],
   controllers: [AgentsController],
   providers: [
     SupportAgentService,

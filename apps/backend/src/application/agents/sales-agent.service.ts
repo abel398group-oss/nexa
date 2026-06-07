@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AnthropicService, AI_MODEL } from '@/shared/ai/anthropic.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
+import { PlaybookService, PlaybookConfig } from '@/application/playbook/playbook.service';
 
 export interface SalesReply {
   draft: string;
@@ -29,17 +30,26 @@ export class SalesAgentService {
     private readonly ai: AnthropicService,
     private readonly knowledge: KnowledgeService,
     private readonly connectors: ConnectorsService,
+    private readonly playbook: PlaybookService,
   ) {}
+
+  // CTA progressivo: o próximo passo muda conforme o engajamento (lead score) — textos vêm do playbook editável.
+  private ctaGuidance(score: number, cfg: PlaybookConfig): { tier: string; guidance: string } {
+    if (score >= 70) return { tier: 'QUENTE', guidance: cfg.ctaHot };
+    if (score >= 40) return { tier: 'MORNO', guidance: cfg.ctaWarm };
+    return { tier: 'FRIO', guidance: cfg.ctaCold };
+  }
 
   // Conduz a venda: qualifica, recomenda plano, sugere próximo passo (NÃO executa — ADR 012).
   async sell(
     tenantId: string,
-    input: { question: string; productCode?: string; history?: string },
+    input: { question: string; productCode?: string; history?: string; leadScore?: number },
   ): Promise<SalesReply> {
     const productCode = input.productCode ?? 'hipertms';
-    const [kb, plans] = await Promise.all([
+    const [kb, plans, cfg] = await Promise.all([
       this.knowledge.retrieve(tenantId, input.question, 2),
       this.connectors.getPlans(productCode).catch(() => []),
+      this.playbook.get(tenantId),
     ]);
 
     const planTxt = plans
@@ -50,23 +60,35 @@ export class SalesAgentService {
     const allowedFacts =
       (planTxt ? `PLANOS:\n${planTxt}` : '') + (kbTxt ? `\n\nCONHECIMENTO:\n${kbTxt}` : '');
 
+    const { tier, guidance } = this.ctaGuidance(input.leadScore ?? 0, cfg);
+    const objectionsTxt = (cfg.objections ?? [])
+      .map((o) => `"${o.objection}" → ${o.guidance}`)
+      .join('\n');
+
     const system =
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
-      `Quando saudar, use a saudação adequada ao horário atual: "${SalesAgentService.greeting()}" (não repita saudação em toda mensagem). ` +
-      'Objetivo: avançar a venda de forma cordial e consultiva, em português do Brasil, curto (WhatsApp). ' +
-      'Qualifique o lead com no máximo UMA pergunta objetiva quando fizer sentido (porte da frota, volume de docs). ' +
-      'Recomende o plano adequado usando SOMENTE o catálogo fornecido (nunca invente preço/recurso). ' +
-      'Se o lead demonstrar intenção de fechar, conduza para o próximo passo. ' +
-      'Quando o lead estiver interessado, peça de forma natural o MELHOR e-mail (ou confirme o WhatsApp) ' +
-      'para o time comercial dar sequência — só peça uma vez, sem insistir. ' +
-      'Você NÃO fecha pagamento nem agenda sozinha — apenas sugere o próximo passo. ' +
-      'Ao final da resposta, em uma linha separada, escreva: ACTION=<none|create_payment|schedule_meeting|handoff_human>.';
+      (cfg.persona ? `${cfg.persona} ` : '') +
+      `Saudação do horário: "${SalesAgentService.greeting()}" — só cumprimente no PRIMEIRO contato, nunca repita em toda mensagem. ` +
+      'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use **negrito** e emojis com moderação.\n\n' +
+      'VOCÊ CONDUZ A VENDA POR ESTÁGIOS. Descubra em qual estágio a conversa está (pelo histórico) e cumpra o objetivo dele:\n' +
+      '1) SAUDAÇÃO: acolher e descobrir o motivo do contato.\n' +
+      '2) DESCOBERTA: entender a dor/operação (que problema ele quer resolver?).\n' +
+      '3) QUALIFICAÇÃO (BANT-lite): descobrir o que ainda não souber — porte da frota (Necessidade), volume de docs/mês, quem decide a compra (Autoridade) e urgência (Timing). Faça no MÁXIMO UMA pergunta por mensagem. NÃO repergunte o que o cliente já respondeu no histórico.\n' +
+      '4) PROPOSTA DE VALOR: recomende o plano adequado (SÓ do catálogo, nunca invente preço/recurso) e ligue 1-2 benefícios à dor dele.\n' +
+      '5) OBJEÇÕES: se houver resistência, trate com a biblioteca abaixo (adapte, não copie).\n' +
+      '6) CTA: conduza ao próximo passo conforme o engajamento (veja abaixo).\n' +
+      '7) HANDOFF: quando quente, encaminhe ao especialista.\n\n' +
+      `ENGAJAMENTO ATUAL DO LEAD: ${tier}. ${guidance}\n\n` +
+      (objectionsTxt ? `BIBLIOTECA DE OBJEÇÕES:\n${objectionsTxt}\n\n` : '') +
+      'REGRAS: nunca invente preço/recurso (use só o catálogo); uma pergunta por vez; não peça e-mail se o lead ainda está frio; ' +
+      'não fecha pagamento nem agenda sozinha — apenas conduz. ' +
+      'Ao final, em uma linha separada: ACTION=<none|create_payment|schedule_meeting|handoff_human>.';
 
     const user =
       `Catálogo de planos:\n${planTxt || '(indisponível)'}\n\n` +
       (kbTxt ? `Base de conhecimento:\n${kbTxt}\n\n` : '') +
-      (input.history ? `Histórico:\n${input.history}\n\n` : '') +
-      `Mensagem do lead: ${input.question}`;
+      (input.history ? `Histórico da conversa:\n${input.history}\n\n` : '') +
+      `Mensagem do lead AGORA: ${input.question}`;
 
     try {
       const u = await this.ai.completeWithUsage(system, user, { maxTokens: 450, temperature: 0.5 });

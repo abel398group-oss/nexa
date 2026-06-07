@@ -84,6 +84,7 @@ export class ConversationAgentService {
           question: input.message,
           productCode: input.productCode,
           history,
+          leadScore: route.leadScore,
         });
         draft = r.draft;
         suggestedAction = r.suggestedAction;
