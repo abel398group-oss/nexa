@@ -1,55 +1,73 @@
 # Roteiro de Teste Manual — Nexa (Lia / HiperTMS)
 
-> Estado atual: **banco limpo** (só o login admin), **n8n desligado**, **WAHA conectado e apontando só pro Nexa**.
+> **Atualizado.** Estado atual: **n8n desligado**, **WAHA conectado** apontando só pro Nexa,
+> **autonomia da IA LIGADA por padrão** (a Lia já responde sozinha — não precisa mais ligar a cada restart).
 > Número conectado (onde os leads mandam mensagem): **+55 12 99788-0659**
-> Login: `admin@nexa.local` / `admin123` — http://localhost:5173
+> Login admin: `admin@nexa.local` / `admin123` — http://localhost:5173
 
 ---
 
-## A melhor forma de testar: 2 frentes
+## 🆕 O que mudou desde a última versão
+- ✅ **A Lia agora VENDE com método** (playbook): saudação → descoberta → qualificação (BANT-lite) → proposta → objeções → CTA → handoff.
+- ✅ **CTA muda conforme o lead esquenta** (frio → explora; morno → demo; quente → pede e-mail/encaminha).
+- ✅ **Base de conhecimento enriquecida** (12 temas reais do HiperTMS: frota, motoristas, fiscal, precificação, financeiro, etc.).
+- ✅ **Nunca mais fica em silêncio** — se não puder responder com segurança, dá um aceno que mantém a conversa.
+- ✅ **Tela "Playbook IA"** pra editar objeções/tom/CTA sem código.
+- ✅ **Visual**: menu lateral retrátil (botão « Recolher), busca rápida **Ctrl+K**, telas com carregamento "esqueleto" (skeleton) e telas vazias bonitas.
 
-A IA tem dois caminhos. Vale testar os dois, mas o **mais importante é o INBOUND** (a resposta da Lia).
+---
+
+## A melhor forma de testar
 
 ### 🟢 Frente 1 — RESPOSTA da IA (inbound) — *teste principal*
-Simula um lead te chamando no WhatsApp. É aqui que se vê a Lia "pensando".
+A autonomia já está **LIGADA**. Do **seu celular**, mande mensagem para **+55 12 99788-0659** e acompanhe no **Inbox**.
 
-1. No topo do sistema, clique em **IA OFF → IA ON** (liga a autonomia / auto-resposta).
-2. Do **seu celular**, mande uma mensagem para **+55 12 99788-0659**.
-3. A Lia responde sozinha em alguns segundos. Acompanhe no **Inbox**.
-
-**Roteiros pra testar (mande um de cada vez, de números diferentes se puder):**
+**Roteiro de jornada (mande em sequência, como um lead real):**
 
 | O que mandar | O que DEVE acontecer |
 |---|---|
-| "Oi, queria saber sobre o sistema de vocês" | Lia se apresenta (Lia do HiperTMS), faz pergunta de qualificação |
-| "Quanto custa?" | Lia responde com os planos (Básico R$89 / Essencial R$299 / Profissional R$599) |
-| "Tenho 20 caminhões, quero contratar" | Lead **quente** → score sobe, pede e-mail, cria oportunidade e **avisa o vendedor** |
-| "Quero marcar uma reunião" | Lia tenta agendar / encaminha pra humano |
-| "Tô com um problema no sistema" | Roteia pro agente de **suporte** (usa base de conhecimento) |
-| "Que serviço de porcaria" (reclamação) | Detecta reclamação → registra → tom de contorno / handoff |
-| "SAIR" | Opt-out: marca como descadastrado, para de responder (LGPD) |
+| "oi" | Lia cumprimenta e pergunta o motivo do contato |
+| "tenho problema pra emitir CT-e" | Explica como o HiperTMS resolve (fiscal/SEFAZ) |
+| "como funciona o controle de motorista?" | Responde fundo (CNH, vencimento, diárias) |
+| "quantos caminhões / 800 docs por mês" | Qualifica e **recomenda o plano certo** |
+| "tá caro" | Rebate com **ROI** amarrado ao volume dele |
+| "quero contratar / sou eu que decido" | CTA forte: pede e-mail e encaminha pro especialista |
+| "SAIR" | Opt-out: descadastra e para de responder (LGPD) |
 
-✅ Checar depois: **Inbox** (conversa + score), **Painel** (métricas sobem), **Vendedores** (se cadastrou vendedor, ele recebe aviso do lead quente).
+✅ Confira depois: **Inbox** (a conversa aparece), **Painel** (métricas), e o **botão IA** no topo (liga/desliga a resposta automática a qualquer momento).
 
 ### 🔵 Frente 2 — DISPARO (outbound) — campanha em massa
-1. **Contatos → Importar** o arquivo `contatos_teste.csv` (já está pronto, com **seus próprios números** — seguro pra testar em você mesmo).
-2. **Disparo → Nova campanha**: escreve a mensagem (já vem um modelo da Lia do HiperTMS), opcional anexar PDF e link (use **https://www.hipertms.com.br**), define quantos enviar.
-3. **Iniciar**. Você recebe a mensagem no seu WhatsApp.
-4. **Responda** a mensagem → cai na Frente 1 (a Lia conversa de volta).
+1. **Contatos → Importar** o `contatos_teste.csv` (já tem seus 2 números — seguro).
+2. **Disparo → Nova campanha**: mensagem (modelo já vem pronto), opcional PDF + link (use **https://www.hipertms.com.br**), define quantos enviar.
+3. **Iniciar** → você recebe no WhatsApp. **Responda** → cai na Frente 1 (a Lia conversa de volta).
 
-> ⚠️ A lista de teste tem só os **seus 2 números** de propósito. Pra testar em outras pessoas, é só editar o `contatos_teste.csv`.
-> 🛡️ Proteções ativas: horário comercial (7h–19h), delay 30–90s entre envios, limite diário (aquecimento), rodapé "Responda SAIR".
+> 🛡️ Proteções: horário 7h-19h, delay 30-90s entre envios, limite diário (aquecimento), rodapé "Responda SAIR".
 
 ---
 
-## Antes de começar — checklist rápido
-- [ ] Cadastre 1 vendedor em **Vendedores** (pra testar o aviso de lead quente) — opcional
-- [ ] Confira a **Base de Conhecimento** (planos já estão lá)
-- [ ] Ligue a **IA (ON)** antes do teste inbound
-- [ ] Quando terminar, **IA OFF** pra não responder sozinho fora do teste
+## 🎯 Testar o Playbook IA (editar a Lia sem código)
+1. Menu **Playbook IA**.
+2. Edite uma **objeção** (ex.: mude a resposta de "tá caro") e clique **Salvar**.
+3. No WhatsApp, mande "tá caro" → a Lia responde com o **texto novo**. (Botão "Restaurar padrão" volta de fábrica.)
 
-## Se quiser religar o n8n depois
+## 🖥️ Testar o visual novo
+- **Recolher menu**: botão « no rodapé do menu lateral (vira só ícones; ele lembra como você deixou).
+- **Busca rápida**: aperte **Ctrl+K** → navegue por teclado.
+- **Modo escuro**: botão 🌙 no topo.
+
+---
+
+## Checklist rápido
+- [ ] IA já está **ON** (canto superior) — pode deixar ligada
+- [ ] Cadastre 1 vendedor em **Vendedores** (opcional, pra testar aviso de lead quente)
+- [ ] Base de conhecimento já vem preenchida (tela **Conhecimento**)
+
+## Religar o n8n (se algum dia precisar)
 ```
 docker start wa_leads_n8n wa_leads_n8n_worker
 ```
-(e re-adicionar o webhook do n8n no WAHA, se quiser ele respondendo junto)
+(e re-adicionar o webhook do n8n no WAHA)
+
+## ⏳ Ainda NÃO implementado (planejado)
+- **Lia fechar a venda sozinha** (gerar link de pagamento / self-checkout) — parado pra fazer depois.
+- **Handoff completo** (botão "Assumir" / pausar robô por conversa / pesquisa de satisfação) — planejado.

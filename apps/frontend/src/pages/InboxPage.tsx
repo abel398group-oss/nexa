@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { SkeletonList } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Conversation { id: string; phone: string; status: string; assignedSeller?: { name: string } | null; outcome?: string | null; }
 interface Message { id: string; direction: string; content: string; createdAt: string; }
@@ -14,11 +16,14 @@ export function InboxPage() {
   const [text, setText] = useState('');
   const [liaBusy, setLiaBusy] = useState(false);
   const [liaInfo, setLiaInfo] = useState('');
+  const [loadingConvs, setLoadingConvs] = useState(true);
   const socketRef = useRef<Socket | null>(null);
 
   // carrega conversas
   useEffect(() => {
-    api.get('/conversations').then((r) => setConvs(r.data.items));
+    api.get('/conversations')
+      .then((r) => setConvs(r.data.items))
+      .finally(() => setLoadingConvs(false));
   }, []);
 
   // conecta socket
@@ -84,8 +89,13 @@ export function InboxPage() {
           Conversas
         </div>
         <div className="flex-1 overflow-y-auto">
-          {convs.length === 0 && <p className="p-4 text-sm text-zinc-400">Nenhuma conversa ainda.</p>}
-          {convs.map((c) => (
+          {loadingConvs && <div className="p-3"><SkeletonList rows={5} /></div>}
+          {!loadingConvs && convs.length === 0 && (
+            <div className="p-3">
+              <EmptyState icon="💬" title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
+            </div>
+          )}
+          {!loadingConvs && convs.map((c) => (
             <button
               key={c.id}
               onClick={() => openConv(c)}

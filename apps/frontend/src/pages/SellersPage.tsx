@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { SkeletonList } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Seller {
   id: string;
@@ -19,11 +21,17 @@ export function SellersPage() {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [s, k] = await Promise.all([api.get('/sellers'), api.get('/metrics/sellers')]);
-    setItems(s.data);
-    setKpis(k.data);
+    setLoading(true);
+    try {
+      const [s, k] = await Promise.all([api.get('/sellers'), api.get('/metrics/sellers')]);
+      setItems(s.data);
+      setKpis(k.data);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -61,6 +69,9 @@ export function SellersPage() {
       {/* ===== KPIs de desempenho ===== */}
       <div className="mb-6">
         <h2 className="mb-2 text-sm font-semibold text-zinc-600">Desempenho de vendas</h2>
+        {loading ? (
+          <SkeletonList rows={2} />
+        ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
@@ -95,6 +106,7 @@ export function SellersPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       <form onSubmit={add} className="mb-6 rounded-xl bg-white p-4 shadow-sm">
@@ -113,6 +125,11 @@ export function SellersPage() {
       </form>
       {err && <p className="mb-4 text-sm text-red-500">{err}</p>}
 
+      {loading ? (
+        <SkeletonList rows={3} />
+      ) : items.length === 0 ? (
+        <EmptyState icon="🧑‍💼" title="Nenhum vendedor cadastrado" description="Adicione um vendedor no formulário acima — ele recebe os leads quentes." />
+      ) : (
       <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
         <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
           <tr>
@@ -144,6 +161,7 @@ export function SellersPage() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { SkeletonList } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Campaign {
   id: string;
@@ -24,6 +26,7 @@ export function CampaignsPage() {
   const [limitMode, setLimitMode] = useState<'all' | 'limit'>('all');
   const [sendLimit, setSendLimit] = useState(30);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -38,9 +41,14 @@ export function CampaignsPage() {
   }
 
   async function load() {
-    const [c, n] = await Promise.all([api.get('/campaigns'), api.get('/sender/numbers')]);
-    setItems(c.data);
-    setNumbers(n.data);
+    // não seta loading=true a cada poll (8s) — só o 1º load mostra skeleton
+    try {
+      const [c, n] = await Promise.all([api.get('/campaigns'), api.get('/sender/numbers')]);
+      setItems(c.data);
+      setNumbers(n.data);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
@@ -88,8 +96,16 @@ export function CampaignsPage() {
       </div>
 
       <div className="space-y-3">
-        {items.length === 0 && <p className="text-sm text-zinc-400">Nenhuma campanha ainda.</p>}
-        {items.map((c) => {
+        {loading && <SkeletonList rows={3} />}
+        {!loading && items.length === 0 && (
+          <EmptyState
+            icon="📣"
+            title="Nenhuma campanha ainda"
+            description="Crie uma campanha para disparar mensagens em massa com proteção anti-bloqueio."
+            action={<button onClick={() => setShow(true)} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">+ Nova campanha</button>}
+          />
+        )}
+        {!loading && items.map((c) => {
           const total = Object.values(c.counts).reduce((a, b) => a + b, 0);
           const sent = c.counts.sent ?? 0;
           const pct = total ? Math.round((sent / total) * 100) : 0;
