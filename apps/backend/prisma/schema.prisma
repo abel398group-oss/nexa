@@ -530,6 +530,15 @@ model CampaignTarget {
   @@map("campaign_targets")
 }
 
+// Dedup de mensagens inbound do WAHA — evita processar/responder a mesma 2x (reentrega/reconexão).
+model ProcessedMessage {
+  id        String   @id @default(uuid())
+  messageId String   @unique @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("processed_messages")
+}
+
 // Monitoramento INTERNO de reclamações (cliente não sabe; só registro) — business-rules §11.
 model Complaint {
   id             String   @id @default(uuid())

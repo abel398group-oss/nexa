@@ -27,3 +27,5 @@ logs/
 # docker volumes locais
 pgdata/
 redisdata/
+backups/
+uploads/

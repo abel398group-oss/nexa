@@ -101,8 +101,24 @@ export class WhatsappService {
     return p.fromMe === true || p._data?.Info?.IsFromMe === true;
   }
 
+  // extrai um ID estável da mensagem (p/ dedup)
+  private messageId(rawBody: any): string | null {
+    const p = rawBody?.payload || rawBody?.body?.payload || rawBody?.body || rawBody || {};
+    return p.id || p._data?.Info?.ID || p._data?.id || null;
+  }
+
   async process(rawBody: any, tenantId = 'default') {
     if (this.isFromMe(rawBody)) return { ignored: true, reason: 'fromMe' };
+
+    // DEDUP: se já processamos essa mensagem, ignora (evita resposta/processamento dobrado)
+    const msgId = this.messageId(rawBody);
+    if (msgId) {
+      try {
+        await this.prisma.processedMessage.create({ data: { messageId: msgId } });
+      } catch {
+        return { ignored: true, reason: 'duplicada' }; // unique violation = já processada
+      }
+    }
 
     const n = this.normalize(rawBody);
     if (!n.phone) return { ignored: true, reason: 'sem telefone' };

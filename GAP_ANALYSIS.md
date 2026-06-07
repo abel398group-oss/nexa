@@ -111,6 +111,12 @@ PLUS (Nexa tem e n8n não): Inbox visual, Dashboard, CRM, Kill Switch runtime, g
 
 ### ✅ Top 5 recomendados (valem mesmo local): E1 segurança, E7 Swagger, E6 health, E2 logging, E12 paginação padrão.
 
+## 🔧 Melhorias pós-uso
+- [x] **Auto-refresh de login** ✅ — interceptor axios renova o token no 401 (fila p/ 1 refresh, repete a request; se falhar → /login). Backend /auth/refresh já existia (rotação). VALIDADO.
+- [x] **Backup do banco** ✅ — scripts/backup.ps1 (pg_dump via docker, data/hora, retém 14, restauração documentada). VALIDADO (110KB, 26 tabelas).
+- [x] **Dedup inbound (processed_message_ids)** ✅ — evita Nexa processar/responder a mesma msg WAHA 2x (reentrega). VALIDADO (2ª vez → "duplicada").
+- [ ] Agendar backup (Agendador de Tarefas do Windows) — opcional, manual por enquanto.
+
 ## 🎯 PRIORIZAÇÃO SUGERIDA (ordem de ataque)
 
 1. **G1 (rodapé SAIR)** — LGPD, trivial, faço já.
