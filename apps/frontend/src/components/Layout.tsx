@@ -22,6 +22,7 @@ const items = [
   { to: '/knowledge', label: 'Conhecimento', icon: '📚', perm: 'knowledge' },
   { to: '/sellers', label: 'Vendedores', icon: '🧑‍💼', perm: 'sellers' },
   { to: '/campaigns', label: 'Disparo', icon: '📣', perm: 'campaigns' },
+  { to: '/playbook', label: 'Playbook IA', icon: '🎯', perm: 'ai_control' },
   { to: '/users', label: 'Usuários', icon: '🔐', perm: 'users' },
 ];
 
@@ -32,6 +33,7 @@ const titles: Record<string, string> = {
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',
   '/campaigns': 'Disparo de Leads',
+  '/playbook': 'Playbook de Vendas',
   '/users': 'Usuários & Acessos',
 };
 
