@@ -12,7 +12,7 @@ const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19);
 const OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
 const MSG = {
   1: 'Oi {{nome}}, passando pra saber se você teve a chance de ver minha mensagem sobre o sistema de gestão de fretes. Posso ajudar com alguma dúvida? 🙂' + OPT_OUT_FOOTER,
-  2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes da Hipervias, é só me chamar quando quiser. Abraço!' + OPT_OUT_FOOTER,
+  2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes do HiperTMS, é só me chamar quando quiser. Abraço!' + OPT_OUT_FOOTER,
 };
 
 @Injectable()

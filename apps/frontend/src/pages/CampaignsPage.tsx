@@ -15,7 +15,7 @@ export function CampaignsPage() {
   const [numbers, setNumbers] = useState<SenderNumber[]>([]);
   const [show, setShow] = useState(false);
   const [name, setName] = useState('');
-  const [template, setTemplate] = useState('Oi {{nome}}! Aqui é a Lia da Hipervias. Posso te apresentar nosso sistema de gestão de fretes?');
+  const [template, setTemplate] = useState('Oi {{nome}}! Aqui é a Lia do HiperTMS. Posso te apresentar nosso sistema de gestão de fretes?');
   const [fromContacts, setFromContacts] = useState(true);
   const [phonesText, setPhonesText] = useState('');
   const [link, setLink] = useState('');

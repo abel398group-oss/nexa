@@ -133,6 +133,12 @@ export class SenderService {
   @Interval(15000) // tenta a cada 15s; o delay real entre envios é controlado abaixo
   async tick() {
     try {
+      // fecha campanhas 'running' que já não têm alvo na fila (terminaram)
+      await this.prisma.campaign.updateMany({
+        where: { status: 'running', targets: { none: { status: 'queued' } } },
+        data: { status: 'done' },
+      });
+
       if (!this.withinBusinessHours()) return;
 
       // pega uma campanha rodando com alvo na fila

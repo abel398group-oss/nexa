@@ -25,7 +25,7 @@ async function main() {
     update: {},
     create: {
       code: 'hipertms',
-      name: 'Hipervias TMS',
+      name: 'HiperTMS',
       connector: 'HiperTmsConnector',
       status: 'active',
     },
