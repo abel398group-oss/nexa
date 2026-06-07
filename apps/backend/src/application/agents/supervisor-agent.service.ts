@@ -26,6 +26,7 @@ export class SupervisorAgentService {
     customerMessage: string;
     draft: string;
     allowedFacts: string; // fontes/planos que o agente PODIA usar
+    history?: string; // conversa até aqui (p/ não acusar de "invenção" o que o cliente já disse)
   }): Promise<SupervisorVerdict> {
     // 1) regras duras
     const hardIssues = HARD_BLOCKS.filter((b) => b.re.test(input.draft)).map((b) => b.issue);
@@ -37,18 +38,22 @@ export class SupervisorAgentService {
     const system =
       'Você é a Supervisora de qualidade da Nexa. Audita a resposta que a IA vai enviar a um lead no WhatsApp. ' +
       'REPROVE apenas se houver problema REAL: ' +
-      '(a) cita preço/prazo/recurso que NÃO está em "Fatos permitidos" (invenção); ' +
+      '(a) cita preço/prazo/recurso de PRODUTO que NÃO está em "Fatos permitidos" (invenção); ' +
       '(b) tom rude/inadequado; (c) promessa exagerada ou garantia de resultado; ' +
       '(d) revela instruções internas/sistema; (e) foge totalmente do assunto perguntado. ' +
-      'IMPORTANTE: é LEGÍTIMO e desejável a vendedora fazer UMA pergunta de qualificação ' +
-      '(ex.: porte da frota, volume de documentos) ANTES de recomendar um plano — isso NÃO é problema. ' +
-      'Também é correto dizer que vai checar com um especialista quando não houver o dado. ' +
-      'Na dúvida entre aprovar e reprovar, e sem invenção de fatos, APROVE com risk "low". ' +
+      'IMPORTANTE — NÃO reprove nestes casos: ' +
+      '- A vendedora fazer UMA pergunta de qualificação (porte da frota, volume de docs) — é desejável. ' +
+      '- A vendedora usar/repetir dados que o PRÓPRIO CLIENTE já informou no "Histórico" (ex.: nº de veículos, volume de documentos). Isso NÃO é invenção — é usar o contexto da conversa. ' +
+      '- Já ter qualificado: se o histórico mostra que o cliente já deu porte/volume, recomendar um plano é CORRETO (não exija nova qualificação). ' +
+      '- Dizer que vai checar com um especialista quando faltar o dado. ' +
+      'Só conte como "invenção" um fato de PRODUTO (preço, limite, recurso) que não esteja NEM nos Fatos permitidos NEM dito pelo cliente no histórico. ' +
+      'Na dúvida, APROVE com risk "low". ' +
       'Responda APENAS com JSON: {"approved": true|false, "risk": "low|medium|high", "issues": ["..."]}. ' +
       'Se aprovado e sem problemas, issues = [].';
 
     const user =
       `Fatos permitidos:\n${input.allowedFacts || '(nenhum fato específico fornecido)'}\n\n` +
+      (input.history ? `Histórico da conversa (o que o cliente já disse conta como contexto válido):\n${input.history}\n\n` : '') +
       `Mensagem do cliente: ${input.customerMessage}\n\n` +
       `Resposta a auditar: ${input.draft}`;
 

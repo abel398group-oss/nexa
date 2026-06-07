@@ -115,33 +115,43 @@ export class ConversationAgentService {
         customerMessage: input.message,
         draft,
         allowedFacts,
+        history,
       });
     }
 
-    // AUTO-ENVIO: precisa de TODOS: kill switch ON + confiança alta + sem handoff +
-    // supervisora aprovou (ou resposta fixa segura) + tem conversa.
+    // AUTO-ENVIO: com a autonomia LIGADA, a Lia NUNCA fica em silêncio (é um bot de vendas).
+    // - kill switch OFF → não envia (rascunho aguarda humano).
+    // - rascunho reprovado pela supervisora OU confiança baixa → envia um ACENO SEGURO
+    //   (nunca o conteúdo suspeito, mas também nunca silêncio).
+    // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
     let autoSent = false;
     let blockedReason: string | undefined;
     const supervisorOk = scripted || supervisor?.approved === true;
+    // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
+    // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
+    const SAFE_FALLBACK =
+      'Posso te explicar como o HiperTMS organiza documentos, emissão de CT-e/MDF-e, precificação e financeiro — e te indicar o plano ideal pro seu porte. O que você quer ver primeiro? 🙂';
 
     if (input.conversationId) {
       if (!this.autonomy.isEnabled()) {
         blockedReason = 'autonomia desligada (kill switch) — rascunho aguardando humano';
-      } else if (needsHuman) {
-        blockedReason = 'precisa de humano';
-      } else if (confidence !== 'high') {
-        blockedReason = 'confiança baixa';
-      } else if (!supervisorOk) {
-        blockedReason = `bloqueado pela supervisora: ${supervisor?.issues.join(', ') || 'reprovado'}`;
       } else {
+        let outbound = draft;
+        if (!supervisorOk) {
+          outbound = SAFE_FALLBACK;
+          blockedReason = `rascunho reprovado pela supervisora (enviado aceno seguro): ${supervisor?.issues.join(', ') || 'reprovado'}`;
+        } else if (confidence !== 'high') {
+          outbound = SAFE_FALLBACK;
+          blockedReason = 'confiança baixa (enviado aceno seguro)';
+        }
         // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
-        const jitter = HUMANIZE_MIN_MS + (draft.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
+        const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
         await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
         await this.conversations.addMessage(tenantId, input.conversationId, {
           direction: 'outbound',
-          content: draft,
+          content: outbound,
           intent: route.intent,
-          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk },
+          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk, fallback: outbound !== draft },
           tokensIn: usage?.tokensIn,
           tokensOut: usage?.tokensOut,
           estimatedCostUsd: usage?.costUsd,

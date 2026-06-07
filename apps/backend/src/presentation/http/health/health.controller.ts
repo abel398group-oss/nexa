@@ -1,11 +1,15 @@
 import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { AutonomyService } from '@/shared/governance/autonomy.service';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly autonomy: AutonomyService,
+  ) {}
 
   private async dbOk(): Promise<boolean> {
     try {
@@ -23,7 +27,7 @@ export class HealthController {
     return {
       status: db === 'ok' ? 'ok' : 'degraded',
       db,
-      aiAutonomyEnabled: process.env.AI_AUTONOMY_ENABLED === 'true', // kill switch (ADR 012)
+      aiAutonomyEnabled: this.autonomy.isEnabled(), // kill switch (ADR 012) — reflete o toggle em runtime
       ts: new Date().toISOString(),
     };
   }

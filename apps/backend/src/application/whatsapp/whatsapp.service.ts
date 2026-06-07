@@ -168,8 +168,15 @@ export class WhatsappService {
     if (this.autonomy.isEnabled() && !rateLimited) {
       this.lastProcessed.set(n.phone, Date.now());
       agentResult = await this.agent.handle(tenantId, { message: n.text, conversationId: conv.id });
+      // diagnóstico: por que respondeu ou não (visível no log)
+      this.logger.log(
+        `Decisão IA p/ ${n.phone}: agente=${agentResult?.route?.agent} score=${agentResult?.route?.leadScore} ` +
+          `autoSent=${agentResult?.autoSent}${agentResult?.blockedReason ? ` BLOQUEIO="${agentResult.blockedReason}"` : ''}`,
+      );
     } else if (rateLimited) {
-      this.logger.debug(`Rate-limit: ${n.phone} (msg guardada, sem reprocessar IA)`);
+      this.logger.warn(`Rate-limit: ${n.phone} (msg guardada, SEM resposta da IA — última há <${RATE_LIMIT_MS / 1000}s)`);
+    } else if (!this.autonomy.isEnabled()) {
+      this.logger.warn(`Autonomia OFF: ${n.phone} (msg guardada, SEM resposta automática)`);
     }
 
     return {

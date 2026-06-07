@@ -84,3 +84,9 @@ body {
   animation: tourPulse 1.4s ease-in-out infinite;
 }
 @keyframes tourPulse { 0%,100% { box-shadow: 0 0 0 3px #2563eb; } 50% { box-shadow: 0 0 0 6px rgba(37,99,235,.45); } }
+
+/* sombra elevada (drawers, command palette) + animações de slide */
+.shadow-elevated { box-shadow: 0 10px 40px -10px rgba(0,0,0,.35); }
+.dark .shadow-elevated { box-shadow: 0 10px 40px -8px rgba(0,0,0,.7); }
+@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }

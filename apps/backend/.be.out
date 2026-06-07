@@ -1,0 +1,134 @@
+[11:39:05.983] [32mINFO[39m (18868): [36mStarting Nest application...[39m [90m{"context":"NestFactory"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mAutonomia inicial: LIGADA[39m [90m{"context":"Autonomy"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mPrismaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mAiModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mGovernanceModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mWahaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mPassportModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mThrottlerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.983] [32mINFO[39m (18868): [36mJwtModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConfigHostModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mDiscoveryModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAuditModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mEventsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mLoggerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConfigModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mScheduleModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mEventEmitterModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAppModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAdminModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConnectorsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mContactsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConversationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mSellersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMetricsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mUsersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mWhatsappModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mActionsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mBillingModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mKnowledgeModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mFollowUpModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAuthModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mSenderModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAgentsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mWebSocket /ws inicializado[39m [90m{"context":"ConversationsGateway"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConversationsGateway subscribed to the "join" message[39m [90m{"context":"WebSocketsController"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mHealthController {/api/health}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/health/live, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/health/ready, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAuthController {/api/auth}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/auth/login, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/auth/refresh, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/auth/logout, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/auth/me, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mProductsController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/products, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/products/:code/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/plans, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mContactsController {/api/contacts}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/contacts, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/contacts/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/contacts, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/contacts/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/contacts/import, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mConversationsController {/api/conversations}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations/:id/messages, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations/:id/outcome, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/conversations/:id/messages, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mActionsController {/api/actions}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/actions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/actions/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mBillingController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/billing/payment-request, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/billing/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/webhooks/asaas, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mKnowledgeController {/api/knowledge}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge/import/:productCode, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge/:id/versions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/knowledge/versions/:versionId/approve, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAgentsController {/api/agent}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/agent/ask, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/agent/handle, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mSellersController {/api/sellers}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/sellers, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/sellers/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mAdminController {/api/admin}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/admin/autonomy, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/admin/autonomy, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMetricsController {/api/metrics}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/metrics/overview, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/metrics/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mWhatsappController {/api/webhooks}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mMapped {/api/webhooks/waha, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.984] [32mINFO[39m (18868): [36mFollowUpController {/api/followups}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/followups, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mSenderController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/campaigns, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/campaigns, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/campaigns/upload, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/campaigns/:id/start, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/campaigns/:id/pause, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/sender/numbers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mUsersController {/api/users}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/users/areas, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/users, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/users, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/users/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mMapped {/api/users/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:39:05.985] [32mINFO[39m (18868): [36mNest application successfully started[39m [90m{"context":"NestApplication"}[39m
+[11:39:12.331] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/health"},"correlationId":"fdd911aa-339e-44a0-8bea-2d91fa2c6351","res":{"statusCode":200},"responseTime":15}[39m
+[11:40:31.687] [32mINFO[39m (18868): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB01E2ED6A2A24BC1487E)[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"239595ce-6dac-42c9-8674-e94c9a3281fa","context":"Conversations"}[39m
+[11:40:31.687] [32mINFO[39m (18868): [36mDecisão IA p/ 5511917747429: agente=sales score=15 autoSent=true[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"239595ce-6dac-42c9-8674-e94c9a3281fa","context":"WhatsApp"}[39m
+[11:40:31.688] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"239595ce-6dac-42c9-8674-e94c9a3281fa","res":{"statusCode":201},"responseTime":8513}[39m
+[11:40:55.548] [32mINFO[39m (18868): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB0E828C27EEC48D10259)[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"231d2a75-9951-43a3-a769-ca32178ed181","context":"Conversations"}[39m
+[11:40:55.548] [32mINFO[39m (18868): [36mDecisão IA p/ 5511917747429: agente=sales score=60 autoSent=true[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"231d2a75-9951-43a3-a769-ca32178ed181","context":"WhatsApp"}[39m
+[11:40:55.549] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"231d2a75-9951-43a3-a769-ca32178ed181","res":{"statusCode":201},"responseTime":7717}[39m
+[11:41:05.459] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/auth/me"},"correlationId":"dbf61005-1fc5-4667-892f-638b1726a144","res":{"statusCode":304},"responseTime":18}[39m
+[11:41:05.468] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/auth/me"},"correlationId":"df9d0a86-fe06-49fa-9426-501b8565ce0a","res":{"statusCode":304},"responseTime":5}[39m
+[11:41:05.487] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/admin/autonomy"},"correlationId":"c9de61fc-98c2-4901-bd99-73ce650e1b46","res":{"statusCode":200},"responseTime":2}[39m
+[11:41:05.498] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/admin/autonomy"},"correlationId":"5c0d4a66-281b-43aa-bf85-7177134998f6","res":{"statusCode":304},"responseTime":1}[39m
+[11:41:05.503] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations"},"correlationId":"3c3617f3-43b3-4fa5-9b54-4588bafc870a","res":{"statusCode":304},"responseTime":15}[39m
+[11:41:05.515] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations"},"correlationId":"170922c0-8a88-4f89-8b3a-a00a3e8c0bc0","res":{"statusCode":304},"responseTime":8}[39m
+[11:41:08.080] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/d0e96208-3433-46d7-997f-3c3edc050b3e/messages"},"correlationId":"70791476-b911-4051-8515-04df2950850a","res":{"statusCode":200},"responseTime":9}[39m
+[11:41:42.036] [32mINFO[39m (18868): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB0FD3D2B05C3EC9A365E)[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"f66b924c-4579-4868-b867-0326efb4fd46","context":"Conversations"}[39m
+[11:41:42.036] [32mINFO[39m (18868): [36mDecisão IA p/ 5511917747429: agente=sales score=35 autoSent=true[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"f66b924c-4579-4868-b867-0326efb4fd46","context":"WhatsApp"}[39m
+[11:41:42.037] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"f66b924c-4579-4868-b867-0326efb4fd46","res":{"statusCode":201},"responseTime":8287}[39m
+[11:42:32.046] [32mINFO[39m (18868): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB0C7B85D18F99EB2569F)[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"9c01bb1d-8842-40df-a2fc-b9b2b4d8796c","context":"Conversations"}[39m
+[11:42:32.046] [32mINFO[39m (18868): [36mDecisão IA p/ 5511917747429: agente=sales score=60 autoSent=true BLOQUEIO="rascunho reprovado pela supervisora (enviado aceno seguro): Apresentou plano Básico sem antes qualificar o cliente. A mensagem 'conhecer melhor' é vaga e poderia referir-se a qualquer necessidade. Seria mais apropriado fazer uma pergunta de qualificação (ex.: porte da frota, volume de documentos, número de usuários) ANTES de recomendar um plano específico., Mencionou 'Suporte via chat' no plano Básico, informação que NÃO consta nos 'Fatos permitidos'. Isso é invenção de detalhe não autorizado."[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"9c01bb1d-8842-40df-a2fc-b9b2b4d8796c","context":"WhatsApp"}[39m
+[11:42:32.047] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"9c01bb1d-8842-40df-a2fc-b9b2b4d8796c","res":{"statusCode":201},"responseTime":10004}[39m
+[11:43:16.187] [32mINFO[39m (18868): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB02A7DA0C330F7AE5F3F)[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"506b5e71-e728-4c87-9932-9693d3420312","context":"Conversations"}[39m
+[11:43:16.187] [32mINFO[39m (18868): [36mDecisão IA p/ 5511917747429: agente=sales score=10 autoSent=true BLOQUEIO="rascunho reprovado pela supervisora (enviado aceno seguro): Invenção de fato: a resposta afirma que o cliente tem 'volume de 100 docs/mês', mas essa informação NÃO foi fornecida pelo cliente (que apenas respondeu 'ok'). Isso é uma suposição não autorizada que pode levar a recomendação incorreta de plano., Falta de qualificação: antes de recomendar o plano Básico, a vendedora deveria ter perguntado sobre o volume de documentos, número de usuários e necessidades específicas do cliente — não deveria assumir dados."[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"506b5e71-e728-4c87-9932-9693d3420312","context":"WhatsApp"}[39m
+[11:43:16.188] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/webhooks/waha"},"correlationId":"506b5e71-e728-4c87-9932-9693d3420312","res":{"statusCode":201},"responseTime":9803}[39m
+[11:44:38.869] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"91fd8838-e677-4cb4-833a-f4aa0ae1ab6a","res":{"statusCode":201},"responseTime":243}[39m
+[11:44:50.523] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"a0dc50ed-93cf-49a8-aebc-4b1088bc27f6","res":{"statusCode":201},"responseTime":11582}[39m
+[11:44:54.752] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"d904de1e-534d-4b4c-9ef8-c799e97353a0","res":{"statusCode":201},"responseTime":4116}[39m
+[11:44:58.244] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"f9a0ffc1-27bd-41f3-9bd5-646199c65dd3","res":{"statusCode":201},"responseTime":3452}[39m
+[11:45:04.694] [32mINFO[39m (18868): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"6dcb7b10-5747-45af-b302-6d3f691dfb81","res":{"statusCode":201},"responseTime":6392}[39m

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { SkeletonList } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Contact {
   id: string;
@@ -25,11 +27,17 @@ export function ContactsPage() {
   const [showImport, setShowImport] = useState(false);
   const [csv, setCsv] = useState('');
   const [importMsg, setImportMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const r = await api.get('/contacts', { params: { search: search || undefined, limit: 100 } });
-    setItems(r.data.items);
-    setTotal(r.data.total);
+    setLoading(true);
+    try {
+      const r = await api.get('/contacts', { params: { search: search || undefined, limit: 100 } });
+      setItems(r.data.items);
+      setTotal(r.data.total);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -132,6 +140,20 @@ export function ContactsPage() {
 
       {/* tabela */}
       <div className="flex-1 overflow-auto p-6">
+        {loading ? (
+          <SkeletonList rows={6} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon="👥"
+            title={search ? 'Nenhum contato encontrado' : 'Nenhum contato ainda'}
+            description={search ? 'Tente outro termo de busca.' : 'Importe sua lista ou cadastre o primeiro contato.'}
+            action={
+              <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
+                ↑ Importar contatos
+              </button>
+            }
+          />
+        ) : (
         <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
           <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
             <tr>
@@ -161,6 +183,7 @@ export function ContactsPage() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
 
       {/* modal novo contato */}

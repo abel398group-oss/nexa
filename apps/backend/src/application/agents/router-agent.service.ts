@@ -108,7 +108,9 @@ export class RouterAgentService {
       case 'not_now':
       case 'unknown':
       default:
-        return 'support'; // resposta cordial padrão; não some
+        // bot é de VENDAS: saudação/abertura vaga vai p/ a Lia comercial (cumprimenta + qualifica),
+        // não pro suporte (que responde "não achei na base"). Suporte só p/ support_question explícito.
+        return 'sales';
     }
   }
 }
