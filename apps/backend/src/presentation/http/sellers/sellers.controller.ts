@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 import { SellersService } from '@/application/sellers/sellers.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -13,6 +13,10 @@ class CreateSellerDto {
 }
 class ActiveDto {
   @IsBoolean() active!: boolean;
+}
+class UpdateSellerDto {
+  @IsOptional() @IsString() @MinLength(2) name?: string;
+  @IsOptional() @IsString() @MinLength(10) phone?: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -34,5 +38,15 @@ export class SellersController {
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
     return this.sellers.setActive(tenantId ?? 'default', id, dto.active);
+  }
+
+  @Patch(':id')
+  update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateSellerDto) {
+    return this.sellers.update(tenantId ?? 'default', id, dto);
+  }
+
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sellers.remove(tenantId ?? 'default', id);
   }
 }

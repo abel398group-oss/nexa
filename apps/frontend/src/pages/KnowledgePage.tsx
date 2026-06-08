@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useToast } from '@/contexts/ToastContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }
 interface KB {
@@ -18,6 +20,11 @@ export function KnowledgePage() {
   const [sel, setSel] = useState<KB | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [eTitle, setETitle] = useState('');
+  const [eContent, setEContent] = useState('');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   async function load() {
     const r = await api.get('/knowledge', { params: { limit: 100 } });
@@ -29,6 +36,48 @@ export function KnowledgePage() {
   async function open(k: KB) {
     const r = await api.get(`/knowledge/${k.id}`);
     setSel(r.data);
+    setEditing(false);
+  }
+
+  function startEdit() {
+    if (!sel) return;
+    setETitle(sel.title);
+    setEContent(sel.content);
+    setEditing(true);
+  }
+  async function saveEdit() {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await api.patch(`/knowledge/${sel.id}`, { title: eTitle, content: eContent });
+      toast.success('Conhecimento atualizado! A Lia já usa o novo texto.');
+      setEditing(false);
+      await load();
+      const r = await api.get(`/knowledge/${sel.id}`);
+      setSel(r.data);
+    } catch {
+      toast.error('Erro ao salvar.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function del() {
+    if (!sel) return;
+    const ok = await confirm({
+      title: 'Excluir conhecimento',
+      message: `Excluir "${sel.title}"? A Lia deixa de usar essa informação.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/knowledge/${sel.id}`);
+      toast.success('Conhecimento excluído.');
+      setSel(null);
+      await load();
+    } catch {
+      toast.error('Erro ao excluir.');
+    }
   }
 
   async function importTms() {
@@ -87,11 +136,33 @@ export function KnowledgePage() {
           <div className="flex h-full items-center justify-center text-zinc-400">Selecione um item</div>
         ) : (
           <div className="mx-auto max-w-2xl">
-            <div className="mb-2 text-xs uppercase text-zinc-400">{sel.category} · {sel.topic}</div>
-            <h2 className="mb-4 text-2xl font-bold text-zinc-800">{sel.title}</h2>
-            <div className="mb-6 rounded-xl bg-white p-6 text-sm leading-relaxed text-zinc-700 shadow-sm">
-              {sel.content}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs uppercase text-zinc-400">{sel.category} · {sel.topic}</div>
+              {!editing && (
+                <div className="flex gap-1">
+                  <button onClick={startEdit} title="Editar" className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100">✏️ Editar</button>
+                  <button onClick={del} title="Excluir" className="rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50">🗑️ Excluir</button>
+                </div>
+              )}
             </div>
+
+            {editing ? (
+              <div className="mb-6 space-y-3">
+                <input className="input w-full text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
+                <textarea className="input h-56 w-full py-2 text-sm leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">{busy ? 'Salvando...' : 'Salvar'}</button>
+                  <button onClick={() => setEditing(false)} className="rounded-lg px-4 py-2 text-sm text-zinc-500 hover:bg-zinc-100">Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="mb-4 text-2xl font-bold text-zinc-800">{sel.title}</h2>
+                <div className="mb-6 whitespace-pre-line rounded-xl bg-white p-6 text-sm leading-relaxed text-zinc-700 shadow-sm">
+                  {sel.content}
+                </div>
+              </>
+            )}
             <h3 className="mb-2 text-sm font-semibold text-zinc-600">Versões (curadoria)</h3>
             <div className="space-y-2">
               {sel.versions?.map((v) => (

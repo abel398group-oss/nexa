@@ -86,7 +86,24 @@ export class SenderService {
     const seen = new Set<string>();
     targets = targets.filter((t) => (seen.has(t.phone) ? false : seen.add(t.phone)));
 
-    return this.prisma.campaign.create({
+    // quantos foram PULADOS por opt-out (transparência LGPD)
+    let skippedOptOut = 0;
+    if (dto.fromContacts) {
+      skippedOptOut = await this.prisma.contact.count({ where: { tenantId, status: 'opted_out' } });
+    } else if (targets.length) {
+      skippedOptOut = await this.prisma.contact.count({
+        where: { tenantId, status: 'opted_out', phone: { in: targets.map((t) => t.phone) } },
+      });
+      // remove da lista quem está opted_out (mesmo em envio manual)
+      const optedOut = await this.prisma.contact.findMany({
+        where: { tenantId, status: 'opted_out', phone: { in: targets.map((t) => t.phone) } },
+        select: { phone: true },
+      });
+      const blocked = new Set(optedOut.map((o) => o.phone));
+      targets = targets.filter((t) => !blocked.has(t.phone));
+    }
+
+    const campaign = await this.prisma.campaign.create({
       data: {
         tenantId,
         name: dto.name,
@@ -99,6 +116,7 @@ export class SenderService {
       },
       include: { _count: { select: { targets: true } } },
     });
+    return { ...campaign, included: targets.length, skippedOptOut };
   }
 
   async listCampaigns(tenantId: string) {
@@ -122,6 +140,12 @@ export class SenderService {
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  async removeCampaign(tenantId: string, id: string) {
+    // alvos têm cascade; apaga a campanha (e o histórico de envios dela)
+    const r = await this.prisma.campaign.deleteMany({ where: { id, tenantId } });
+    return { ok: r.count > 0 };
   }
 
   // ---------- worker de disparo ----------

@@ -48,6 +48,18 @@ export class ContactsService {
     return this.prisma.contact.update({ where: { id }, data: { ...dto } });
   }
 
+  async remove(tenantId: string, id: string) {
+    await this.findOne(tenantId, id); // valida que é do tenant
+    await this.prisma.contact.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // reativa um contato que tinha optado por sair (uso MANUAL pelo admin, com consentimento)
+  async reactivate(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    return this.prisma.contact.update({ where: { id }, data: { status: 'active', optOutAt: null } });
+  }
+
   // Import em lote (CSV já parseado em array). Idempotente por phone.
   async importMany(tenantId: string, contacts: CreateContactDto[]) {
     let created = 0;

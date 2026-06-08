@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -39,5 +39,15 @@ export class ContactsController {
   @Post('import')
   import(@CurrentTenant() tenantId: string, @Body() body: { contacts: CreateContactDto[] }) {
     return this.contacts.importMany(tenantId ?? 'default', body.contacts ?? []);
+  }
+
+  @Patch(':id/reactivate')
+  reactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.reactivate(tenantId ?? 'default', id);
+  }
+
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.remove(tenantId ?? 'default', id);
   }
 }

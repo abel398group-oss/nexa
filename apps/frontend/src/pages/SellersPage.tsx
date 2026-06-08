@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
@@ -24,7 +25,9 @@ export function SellersPage() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState<string | null>(null);
   const toast = useToast();
+  const confirm = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -43,14 +46,19 @@ export function SellersPage() {
     setBusy(true);
     setErr('');
     try {
-      await api.post('/sellers', {
-        name: name.trim(),
-        phone: phone.trim(),
-        email: email.trim() || undefined,
-        password: password.trim() || undefined,
-      });
-      setName(''); setPhone(''); setEmail(''); setPassword('');
-      toast.success('Vendedor adicionado!');
+      if (editId) {
+        await api.patch(`/sellers/${editId}`, { name: name.trim(), phone: phone.trim() });
+        toast.success('Vendedor atualizado!');
+      } else {
+        await api.post('/sellers', {
+          name: name.trim(),
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          password: password.trim() || undefined,
+        });
+        toast.success('Vendedor adicionado!');
+      }
+      setName(''); setPhone(''); setEmail(''); setPassword(''); setEditId(null);
       await load();
     } catch (e: any) {
       const m = e?.response?.data?.message;
@@ -59,6 +67,33 @@ export function SellersPage() {
       toast.error(txt);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openEdit(s: Seller) {
+    setEditId(s.id);
+    setName(s.name);
+    setPhone(s.phone);
+    setErr('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function cancelEdit() {
+    setEditId(null); setName(''); setPhone(''); setErr('');
+  }
+  async function del(s: Seller) {
+    const ok = await confirm({
+      title: 'Excluir vendedor',
+      message: `Excluir ${s.name}? As conversas dele ficam sem responsável e o login (se houver) é desvinculado.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/sellers/${s.id}`);
+      toast.success('Vendedor excluído.');
+      await load();
+    } catch {
+      toast.error('Erro ao excluir.');
     }
   }
 
@@ -121,13 +156,24 @@ export function SellersPage() {
           <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="E-mail de login (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="Senha (mín. 6)" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {!editId && (
+            <>
+              <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="E-mail de login (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input type="password" className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="Senha (mín. 6)" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </>
+          )}
           <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">
-            + Adicionar
+            {editId ? 'Salvar' : '+ Adicionar'}
           </button>
+          {editId && (
+            <button type="button" onClick={cancelEdit} className="rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100">
+              Cancelar
+            </button>
+          )}
         </div>
-        <p className="text-xs text-zinc-400">Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).</p>
+        <p className="text-xs text-zinc-400">
+          {editId ? 'Editando vendedor — altere o nome/WhatsApp e salve.' : 'Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).'}
+        </p>
       </form>
       {err && <p className="mb-4 text-sm text-red-500">{err}</p>}
 
@@ -157,9 +203,13 @@ export function SellersPage() {
                 <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>
               </td>
               <td className="px-4 py-3 text-right">
-                <button onClick={() => toggle(s)} className="rounded-lg border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-50">
-                  {s.active ? 'Desativar' : 'Ativar'}
-                </button>
+                <div className="flex items-center justify-end gap-1">
+                  <button onClick={() => toggle(s)} className="rounded-lg border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-50">
+                    {s.active ? 'Desativar' : 'Ativar'}
+                  </button>
+                  <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100">✏️</button>
+                  <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
+                </div>
               </td>
             </tr>
           ))}

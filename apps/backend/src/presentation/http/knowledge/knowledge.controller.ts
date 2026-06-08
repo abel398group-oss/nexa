@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -38,6 +38,16 @@ export class KnowledgeController {
     @Param('productCode') productCode: string,
   ) {
     return this.knowledge.importFromConnector(tenantId ?? 'default', productCode);
+  }
+
+  @Patch(':id')
+  update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: any) {
+    return this.knowledge.update(tenantId ?? 'default', id, dto);
+  }
+
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.knowledge.remove(tenantId ?? 'default', id);
   }
 
   @Post(':id/versions')

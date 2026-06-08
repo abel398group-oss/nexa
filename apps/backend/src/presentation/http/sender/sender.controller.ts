@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -71,6 +71,11 @@ export class SenderController {
   @Post('campaigns/:id/pause')
   pause(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.sender.setStatus(tenantId ?? 'default', id, 'paused');
+  }
+
+  @Delete('campaigns/:id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sender.removeCampaign(tenantId ?? 'default', id);
   }
 
   @Get('sender/numbers')

@@ -96,6 +96,22 @@ export function CampaignsPage() {
     await load();
   }
   async function pause(id: string) { await api.post(`/campaigns/${id}/pause`); toast.info('Campanha pausada.'); await load(); }
+  async function del(c: Campaign) {
+    const ok = await confirm({
+      title: 'Excluir campanha',
+      message: `Excluir a campanha "${c.name}"? O histórico de envios dela também será apagado.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/campaigns/${c.id}`);
+      toast.success('Campanha excluída.');
+      await load();
+    } catch {
+      toast.error('Erro ao excluir.');
+    }
+  }
 
   return (
     <div className="h-full overflow-auto bg-zinc-50 p-8">
@@ -137,6 +153,7 @@ export function CampaignsPage() {
                   {c.status === 'running' && (
                     <button onClick={() => pause(c.id)} className="rounded-lg bg-amber-500 px-3 py-1 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
                   )}
+                  <button onClick={() => del(c)} title="Excluir campanha" className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-red-500 hover:bg-red-50">🗑️</button>
                 </div>
               </div>
               <p className="mt-2 text-xs text-zinc-500">{c.template}</p>

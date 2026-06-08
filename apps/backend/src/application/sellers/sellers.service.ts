@@ -42,6 +42,26 @@ export class SellersService {
     return this.prisma.seller.updateMany({ where: { id, tenantId }, data: { active } });
   }
 
+  async update(tenantId: string, id: string, dto: { name?: string; phone?: string }) {
+    const r = await this.prisma.seller.updateMany({
+      where: { id, tenantId },
+      data: { ...(dto.name ? { name: dto.name } : {}), ...(dto.phone ? { phone: dto.phone } : {}) },
+    });
+    if (r.count === 0) throw new NotFoundException('Vendedor não encontrado');
+    return this.prisma.seller.findFirst({ where: { id, tenantId } });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const seller = await this.prisma.seller.findFirst({ where: { id, tenantId } });
+    if (!seller) throw new NotFoundException('Vendedor não encontrado');
+    // desvincula pra não quebrar FK (conversas atribuídas e login do vendedor)
+    await this.prisma.aiConversation.updateMany({ where: { assignedSellerId: id }, data: { assignedSellerId: null } });
+    await this.prisma.user.updateMany({ where: { sellerId: id }, data: { sellerId: null } });
+    // notificações têm cascade; remove o vendedor
+    await this.prisma.seller.delete({ where: { id } });
+    return { ok: true };
+  }
+
   // Round-robin balanceado: escolhe o vendedor ativo com MENOS atribuições.
   private async pickSeller(tenantId: string) {
     return this.prisma.seller.findFirst({

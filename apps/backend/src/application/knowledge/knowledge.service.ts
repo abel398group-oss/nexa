@@ -103,6 +103,32 @@ export class KnowledgeService {
     });
   }
 
+  // edita o conteúdo do conhecimento direto (uso pelo painel)
+  async update(
+    tenantId: string,
+    id: string,
+    dto: { title?: string; content?: string; topic?: string; category?: string; tags?: string[] },
+  ) {
+    await this.findOne(tenantId, id);
+    return this.prisma.aiKnowledgeBase.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.content !== undefined ? { content: dto.content } : {}),
+        ...(dto.topic !== undefined ? { topic: dto.topic } : {}),
+        ...(dto.category !== undefined ? { category: dto.category } : {}),
+        ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
+      },
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    await this.prisma.aiKnowledgeVersion.deleteMany({ where: { knowledgeId: id } });
+    await this.prisma.aiKnowledgeBase.delete({ where: { id } });
+    return { ok: true };
+  }
+
   // Importa conhecimento de um produto conectado (TMS) → idempotente por (tenant, title)
   async importFromConnector(tenantId: string, productCode: string) {
     const connector = this.connectors.get(productCode);
