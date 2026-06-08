@@ -36,4 +36,11 @@ export class ConnectorsService {
   async getPlans(productCode: string) {
     return this.get(productCode).getPlans();
   }
+
+  // Verifica se o telefone já tem cadastro no produto.
+  // phone: formato E.164 brasileiro (ex: "5511999990000")
+  async lookupCustomer(productCode: string, phone: string) {
+    const customer = await this.get(productCode).lookupCustomer(phone);
+    return { found: customer !== null, customer };
+  }
 }

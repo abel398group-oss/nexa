@@ -24,6 +24,16 @@ export interface KnowledgeItem {
   tags?: string[];
 }
 
+// Cliente já cadastrado no produto (TMS, ERP, etc.)
+export interface TmsCustomer {
+  externalId: string;        // ID no sistema externo
+  name: string;
+  email?: string;
+  plan?: string;             // plano contratado (ex: "Essencial")
+  status: 'active' | 'inactive' | 'trial' | 'suspended';
+  registeredAt?: string;     // ISO date
+}
+
 export interface Connector {
   readonly productCode: string;
 
@@ -51,4 +61,8 @@ export interface Connector {
 
   // suspende acesso (inadimplência/cancelamento)
   suspendAccess(input: { externalTenantId: string }): Promise<{ ok: boolean }>;
+
+  // verifica se o telefone já tem cadastro no produto
+  // Retorna null se não encontrado ou conector não configurado.
+  lookupCustomer(phone: string): Promise<TmsCustomer | null>;
 }

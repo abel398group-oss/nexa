@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { Connector, Plan, PaymentRequestResult, KnowledgeItem } from './connector.interface';
+import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer } from './connector.interface';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
@@ -94,5 +94,43 @@ export class HiperTmsConnector implements Connector {
   async suspendAccess(_input: { externalTenantId: string }) {
     // TODO(real): chama TMS p/ suspender
     return { ok: true };
+  }
+
+  // Verifica se o telefone já tem cadastro no HiperTMS.
+  // Quando TMS_API_BASE_URL estiver configurado: chama a API real.
+  // Enquanto não estiver: retorna null (lead ainda não é cliente).
+  async lookupCustomer(phone: string): Promise<TmsCustomer | null> {
+    if (!this.configured) {
+      return null; // TMS não configurado — lead ainda é prospect
+    }
+    try {
+      // Usa o tenantId padrão se não configurado (ambiente dev/local)
+      const tenantId = process.env.TMS_TENANT_ID ?? 'default';
+      const url =
+        `${process.env.TMS_API_BASE_URL}/api/companies/by-phone` +
+        `?phone=${encodeURIComponent(phone)}&tenantId=${encodeURIComponent(tenantId)}`;
+
+      const res = await fetch(url, {
+        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
+
+      const data = await res.json() as { found: boolean; company: any };
+      if (!data.found || !data.company) return null;
+
+      const c = data.company;
+      return {
+        externalId:   String(c.externalId),
+        name:         c.name ?? '',
+        email:        c.email ?? undefined,
+        plan:         c.plan ?? undefined,
+        status:       c.status === 'ACTIVE' ? 'active' : c.status === 'INACTIVE' ? 'inactive' : 'active',
+        registeredAt: c.createdAt ?? undefined,
+      };
+    } catch (err: any) {
+      this.logger.warn(`lookupCustomer(${phone}) falhou: ${err?.message}`);
+      return null;
+    }
   }
 }

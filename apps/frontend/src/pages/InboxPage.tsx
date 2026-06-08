@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Conversation { id: string; phone: string; status: string; assignedSeller?: { name: string } | null; outcome?: string | null; }
 interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
+interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; registeredAt?: string; }
+interface TmsLookup { found: boolean; customer: TmsCustomer | null; }
 
 // hora HH:MM
 function hora(iso: string) {
@@ -29,6 +31,7 @@ export function InboxPage() {
   const [text, setText] = useState('');
   const [liaBusy, setLiaBusy] = useState(false);
   const [liaInfo, setLiaInfo] = useState('');
+  const [tmsLookup, setTmsLookup] = useState<TmsLookup | null>(null);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -57,11 +60,16 @@ export function InboxPage() {
     if (threadRef.current) threadRef.current.scrollTop = 0;
   }, [active?.id, messages.length]);
 
-  // abre conversa
+  // abre conversa + consulta TMS
   function openConv(c: Conversation) {
     setActive(c);
+    setTmsLookup(null);
     api.get(`/conversations/${c.id}/messages`).then((r) => setMessages(r.data));
     socketRef.current?.emit('join', { conversationId: c.id });
+    // consulta TMS em paralelo — não bloqueia abertura da conversa
+    api.get(`/connectors/lookup?phone=${encodeURIComponent(c.phone)}`)
+      .then((r) => setTmsLookup(r.data))
+      .catch(() => setTmsLookup({ found: false, customer: null }));
   }
 
   async function send() {
@@ -149,7 +157,26 @@ export function InboxPage() {
         ) : (
           <>
             <div className="flex items-center justify-between border-b bg-white px-4 py-3">
-              <span className="font-medium text-base-content">{active.phone}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-base-content">{active.phone}</span>
+                {/* Badge TMS */}
+                {tmsLookup === null && (
+                  <span className="rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/40">verificando TMS…</span>
+                )}
+                {tmsLookup?.found && tmsLookup.customer && (
+                  <span
+                    title={`${tmsLookup.customer.name}${tmsLookup.customer.plan ? ` · Plano: ${tmsLookup.customer.plan}` : ''}${tmsLookup.customer.email ? ` · ${tmsLookup.customer.email}` : ''} · Status: ${tmsLookup.customer.status}`}
+                    className="inline-flex cursor-default items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700"
+                  >
+                    ✅ Cliente TMS{tmsLookup.customer.plan ? ` — ${tmsLookup.customer.plan}` : ''}
+                  </span>
+                )}
+                {tmsLookup !== null && !tmsLookup.found && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2.5 py-0.5 text-[11px] text-base-content/50">
+                    🆕 Prospect
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5">
                 <span className="mr-1 text-xs text-base-content/50">Resultado:</span>
                 <button
@@ -160,8 +187,8 @@ export function InboxPage() {
                   onClick={() => setOutcome(active.outcome === 'lost' ? null : 'lost')}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active.outcome === 'lost' ? 'bg-red-600 text-white' : 'border border-base-300 text-base-content/70 hover:bg-base-100'}`}
                 >❌ Perdeu</button>
-              </div>
-            </div>
+              </div>{/* fim dos botões resultado */}
+            </div>{/* fim do header da conversa */}
             <div ref={threadRef} className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4">
               {[...messages].reverse().map((m) => (
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
