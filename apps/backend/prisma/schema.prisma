@@ -223,10 +223,13 @@ model AiMessage {
   estimatedCostUsd Decimal?         @map("estimated_cost_usd") @db.Decimal(10, 6)
   actualCostUsd    Decimal?         @map("actual_cost_usd") @db.Decimal(10, 6)
   latencyMs        Int?             @map("latency_ms")
+  externalId       String?          @map("external_id") // id da msg no WhatsApp (p/ casar recibos)
+  ack              Int              @default(0) // 0 pend,1 enviado ✓,2 entregue ✓✓,3 lido ✓✓azul
   createdAt        DateTime         @default(now()) @map("created_at")
 
   @@index([conversationId])
   @@index([correlationId])
+  @@index([externalId])
   @@map("ai_messages")
 }
 

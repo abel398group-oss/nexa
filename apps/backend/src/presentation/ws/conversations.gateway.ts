@@ -38,4 +38,10 @@ export class ConversationsGateway implements OnGatewayInit {
   handleMessageCreated(payload: { conversationId: string; message: unknown }) {
     this.server.to(`conv:${payload.conversationId}`).emit('message', payload.message);
   }
+
+  // Recibo (✓✓) atualizado → avisa a sala da conversa pra atualizar o check ao vivo
+  @OnEvent('message.updated')
+  handleMessageUpdated(payload: { conversationId: string; id: string; ack: number }) {
+    this.server.to(`conv:${payload.conversationId}`).emit('message:ack', { id: payload.id, ack: payload.ack });
+  }
 }

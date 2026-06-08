@@ -112,6 +112,12 @@ export class ConversationsService {
       const r = await this.waha.sendText(conv.phone, dto.content);
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);
+        if (r.externalId) {
+          // guarda o id do WhatsApp + marca ENVIADO (✓) p/ casar os recibos depois
+          await this.prisma.aiMessage.update({ where: { id: message.id }, data: { externalId: r.externalId, ack: 1 } });
+          (message as any).externalId = r.externalId;
+          (message as any).ack = 1;
+        }
       } else {
         this.logger.warn(`WhatsApp NÃO enviado p/ ${conv.phone}: ${r.reason}`);
       }

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
@@ -35,7 +36,22 @@ export class WhatsappService {
     private readonly followup: FollowUpService,
     private readonly autonomy: AutonomyService,
     private readonly notifications: NotificationsService,
+    private readonly emitter: EventEmitter2,
   ) {}
+
+  // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
+  async handleAck(rawBody: any) {
+    const p = rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {};
+    const id = p.id?._serialized ?? p.id ?? p._data?.id?._serialized ?? p._data?.Info?.ID ?? null;
+    const ack = Number(p.ack ?? p._data?.ack ?? 0);
+    if (!id || !ack || ack < 1) return { ignored: true, reason: 'sem id/ack' };
+    const msg = await this.prisma.aiMessage.findFirst({ where: { externalId: String(id) } });
+    if (!msg) return { ignored: true, reason: 'msg não encontrada' };
+    if (ack <= msg.ack) return { ignored: true, reason: 'ack não avança' };
+    await this.prisma.aiMessage.update({ where: { id: msg.id }, data: { ack } });
+    this.emitter.emit('message.updated', { conversationId: msg.conversationId, id: msg.id, ack }); // ao vivo
+    return { ok: true, ack };
+  }
 
   // Replica a normalização validada do MVP n8n (fix @lid, opt-out, validação BR).
   normalize(rawBody: any): Normalized {

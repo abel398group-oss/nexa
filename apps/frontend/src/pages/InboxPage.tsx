@@ -6,7 +6,20 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Conversation { id: string; phone: string; status: string; assignedSeller?: { name: string } | null; outcome?: string | null; }
-interface Message { id: string; direction: string; content: string; createdAt: string; }
+interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
+
+// hora HH:MM
+function hora(iso: string) {
+  try { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+}
+// recibo estilo WhatsApp, em TEXTO (mais legível na bolha azul que o ✓)
+function Recibo({ ack }: { ack?: number }) {
+  const a = ack ?? 0;
+  if (a >= 3) return <span className="font-semibold text-sky-200" title="Lido">✓✓ lido</span>;
+  if (a === 2) return <span className="text-white/75" title="Entregue, não lido">✓✓ entregue</span>;
+  if (a >= 1) return <span className="text-white/75" title="Enviado, não recebido">✓ enviado</span>;
+  return <span className="text-white/60" title="Enviando">🕓 enviando</span>;
+}
 
 export function InboxPage() {
   const { user } = useAuth();
@@ -32,6 +45,10 @@ export function InboxPage() {
     const s = io('/', { path: '/ws', transports: ['websocket'] });
     socketRef.current = s;
     s.on('message', (msg: Message) => setMessages((prev) => [...prev, msg]));
+    // recibo (✓✓) atualizado ao vivo
+    s.on('message:ack', (d: { id: string; ack: number }) =>
+      setMessages((prev) => prev.map((m) => (m.id === d.id ? { ...m, ack: d.ack } : m))),
+    );
     return () => { s.close(); };
   }, []);
 
@@ -144,11 +161,15 @@ export function InboxPage() {
                 >❌ Perdeu</button>
               </div>
             </div>
-            <div ref={threadRef} className="flex-1 space-y-2 overflow-y-auto p-4">
+            <div ref={threadRef} className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4">
               {[...messages].reverse().map((m) => (
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${m.direction === 'outbound' ? 'bg-brand-500 text-white' : 'bg-white text-zinc-700 shadow'}`}>
-                    {m.content}
+                    <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
+                    <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.direction === 'outbound' ? 'text-white/70' : 'text-zinc-400'}`}>
+                      <span>{hora(m.createdAt)}</span>
+                      {m.direction === 'outbound' && <Recibo ack={m.ack} />}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -13,8 +13,12 @@ export class WhatsappController {
     if (expected && token !== expected) {
       throw new ForbiddenException('token inválido');
     }
-    // só processa eventos de mensagem
     const event = body?.event ?? body?.body?.event;
+    // recibos de entrega/leitura (✓✓) → atualiza o status da mensagem
+    if (event === 'message.ack') {
+      return this.whatsapp.handleAck(body);
+    }
+    // só processa eventos de mensagem nova
     if (event && event !== 'message') {
       return { ignored: true, reason: `evento ${event}` };
     }
