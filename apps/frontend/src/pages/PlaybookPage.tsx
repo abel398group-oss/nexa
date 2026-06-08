@@ -11,6 +11,7 @@ interface Playbook {
   ctaCold: string;
   ctaWarm: string;
   ctaHot: string;
+  signupUrl: string;
 }
 
 export function PlaybookPage() {
@@ -103,6 +104,20 @@ export function PlaybookPage() {
               placeholder="(opcional) Como a Lia deve soar..."
               value={pb.persona}
               onChange={(e) => set('persona', e.target.value)}
+            />
+          </section>
+
+          {/* Link de cadastro (fechamento) */}
+          <section className="card space-y-2 p-5">
+            <h2 className="text-sm font-semibold text-base-content">Link de cadastro (fechamento)</h2>
+            <p className="text-xs text-base-content/50">
+              Quando o lead quer contratar, a Lia manda este link pra ele criar a conta no site (onde o pagamento é feito).
+            </p>
+            <input
+              className="input w-full text-sm"
+              placeholder="https://www.hipertms.com.br/signup"
+              value={pb.signupUrl}
+              onChange={(e) => set('signupUrl', e.target.value)}
             />
           </section>
 

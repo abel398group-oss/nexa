@@ -92,17 +92,6 @@ enum DlqStatus {
   discarded
 }
 
-enum BillingRequestStatus {
-  requested
-  processing
-  link_sent
-  pending_payment
-  confirmed
-  failed
-  expired
-  cancelled
-}
-
 // ===================== AUTH (Sprint 2) =====================
 enum UserRole {
   admin
