@@ -18,9 +18,11 @@ async function bootstrap() {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());
   // whitelist+forbidNonWhitelisted = proteção contra mass-assignment
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
   app.setGlobalPrefix('api'); // todas as rotas sob /api
-  app.enableCors({ origin: true, credentials: true }); // cookie HttpOnly (auth)
+  // CORS restrito: permite apenas origens explícitas definidas em CORS_ORIGINS (dev + produção)
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',');
+  app.enableCors({ origin: allowedOrigins, credentials: true }); // cookie HttpOnly (auth)
 
   // Swagger / OpenAPI (E7 — padrão TMS). Desabilita em produção.
   if (process.env.NODE_ENV !== 'production') {

@@ -1,16 +1,19 @@
 import { Body, Controller, ForbiddenException, Post, Query } from '@nestjs/common';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
 
-// Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token opcional.
+// Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token OBRIGATÓRIO.
 @Controller('webhooks')
 export class WhatsappController {
   constructor(private readonly whatsapp: WhatsappService) {}
 
   @Post('waha')
   async waha(@Body() body: any, @Query('token') token?: string) {
-    // se WAHA_WEBHOOK_TOKEN estiver configurado, exige ?token= igual
+    // WAHA_WEBHOOK_TOKEN é OBRIGATÓRIO — rejeita se não configurado ou se token não bate
     const expected = process.env.WAHA_WEBHOOK_TOKEN;
-    if (expected && token !== expected) {
+    if (!expected) {
+      throw new ForbiddenException('WAHA_WEBHOOK_TOKEN não configurado — configure a variável de ambiente');
+    }
+    if (token !== expected) {
       throw new ForbiddenException('token inválido');
     }
     const event = body?.event ?? body?.body?.event;

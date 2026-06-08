@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
+import { WahaBootstrapService } from './waha-bootstrap.service';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
@@ -10,6 +11,6 @@ import { WhatsappController } from '@/presentation/http/whatsapp/whatsapp.contro
 @Module({
   imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule],
   controllers: [WhatsappController],
-  providers: [WhatsappService],
+  providers: [WhatsappService, WahaBootstrapService],
 })
 export class WhatsappModule {}
