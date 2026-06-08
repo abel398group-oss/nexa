@@ -15,6 +15,7 @@ export default defineConfig({
     allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app', '.ngrok.io'],
     proxy: {
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:3001', changeOrigin: true },
       '/ws': { target: 'http://localhost:3001', ws: true },
     },
   },

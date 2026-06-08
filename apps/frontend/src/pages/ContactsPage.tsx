@@ -244,11 +244,11 @@ export function ContactsPage() {
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
           <SkeletonList rows={6} />
-        ) : items.length === 0 ? (
+        ) : shown.length === 0 ? (
           <EmptyState
             icon="👥"
-            title={search ? 'Nenhum contato encontrado' : 'Nenhum contato ainda'}
-            description={search ? 'Tente outro termo de busca.' : 'Importe sua lista ou cadastre o primeiro contato.'}
+            title={search || filtro !== 'todos' ? 'Nenhum contato encontrado' : 'Nenhum contato ainda'}
+            description={search || filtro !== 'todos' ? 'Tente outro filtro ou termo de busca.' : 'Importe sua lista ou cadastre o primeiro contato.'}
             action={
               <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
                 ↑ Importar contatos
@@ -268,12 +268,14 @@ export function ContactsPage() {
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-400">Nenhum contato.</td></tr>
-            )}
-            {items.map((c) => (
-              <tr key={c.id} className="border-b last:border-0 hover:bg-zinc-50">
-                <td className="px-4 py-3 font-medium text-zinc-700">{c.name || '—'}</td>
+            {shown.map((c) => (
+              <tr key={c.id} className={`border-b last:border-0 hover:bg-zinc-50 ${c.status === 'opted_out' ? 'opacity-60' : ''}`}>
+                <td className="px-4 py-3 font-medium text-zinc-700">
+                  {c.name || '—'}
+                  {c.status === 'opted_out' && (
+                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">🚫 descadastrado</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-zinc-600">{c.phone}</td>
                 <td className="px-4 py-3 text-zinc-600">{c.company || '—'}</td>
                 <td className="px-4 py-3">
@@ -284,6 +286,9 @@ export function ContactsPage() {
                 <td className="px-4 py-3 text-xs text-zinc-400">{c.source || '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
+                    {c.status === 'opted_out' && (
+                      <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50">↩️ Reativar</button>
+                    )}
                     <button onClick={() => openEdit(c)} title="Editar" className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100">✏️</button>
                     <button onClick={() => del(c)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
                   </div>

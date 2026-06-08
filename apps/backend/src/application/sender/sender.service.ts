@@ -221,6 +221,16 @@ export class SenderService {
 
       let text = this.render(campaign.template, target.name);
       if (campaign.link) text += `\n\n${campaign.link}`; // anexa o link no texto
+      // anexo como LINK público (WAHA grátis não envia arquivo; link funciona).
+      // MEDIA_PUBLIC_BASE = base pública que o cliente acessa (ex.: túnel/domínio).
+      const mediaBase = process.env.MEDIA_PUBLIC_BASE;
+      if (campaign.mediaUrl && mediaBase) {
+        const idx = campaign.mediaUrl.indexOf('/uploads/');
+        if (idx >= 0) {
+          const publicUrl = mediaBase.replace(/\/$/, '') + campaign.mediaUrl.slice(idx);
+          text += `\n\n📎 ${campaign.mediaName || 'Material'}: ${publicUrl}`;
+        }
+      }
       try {
         // acha/cria conversa e envia (addMessage outbound dispara o WAHA + aparece no inbox)
         let conv = await this.prisma.aiConversation.findFirst({ where: { tenantId: campaign.tenantId, phone: target.phone, status: 'open' } });

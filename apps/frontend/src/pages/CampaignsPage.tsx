@@ -71,10 +71,12 @@ export function CampaignsPage() {
       if (link.trim()) payload.link = link.trim();
       if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
       if (limitMode === 'limit') payload.sendLimit = sendLimit;
-      await api.post('/campaigns', payload);
+      const r = await api.post('/campaigns', payload);
       setShow(false);
       setName(''); setLink(''); setMedia(null); setLimitMode('all');
-      toast.success('Campanha criada!');
+      const inc = r.data?.included ?? r.data?._count?.targets ?? 0;
+      const skip = r.data?.skippedOptOut ?? 0;
+      toast.success(`Campanha criada! ${inc} contato(s)${skip > 0 ? ` · ${skip} pulado(s) por opt-out` : ''}.`);
       await load();
     } catch {
       toast.error('Erro ao criar campanha.');
