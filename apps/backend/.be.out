@@ -709,3 +709,4 @@
 [08:41:01.198] [32mINFO[39m (17992): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"81013dd0-5ea9-47b5-818e-171228703fe8","res":{"statusCode":304},"responseTime":11}[39m
 [08:42:00.773] [32mINFO[39m (17992): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"110519ec-e828-4a6b-adbb-b89f82b8fa02","res":{"statusCode":304},"responseTime":12}[39m
 [08:42:00.812] [32mINFO[39m (17992): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d646acda-caca-4dc0-8161-114c38c814bb","res":{"statusCode":304},"responseTime":5}[39m
+[08:42:37.636] [32mINFO[39m (17992): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"98685546-8b25-4c5f-ada3-be84ca734c37","res":{"statusCode":304},"responseTime":4}[39m
