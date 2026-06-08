@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { MetricsService } from '@/application/metrics/metrics.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
@@ -9,9 +9,14 @@ export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}
 
   @Get('overview')
-  overview(@CurrentTenant() tenantId: string, @CurrentUser() user: any) {
+  overview(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     const sellerId = user?.role === 'vendedor' ? (user.sellerId ?? '__none__') : undefined;
-    return this.metrics.overview(tenantId ?? 'default', sellerId);
+    return this.metrics.overview(tenantId ?? 'default', sellerId, { from, to });
   }
 
   @Get('sellers')

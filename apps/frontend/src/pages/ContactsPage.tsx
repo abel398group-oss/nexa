@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useToast } from '@/contexts/ToastContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 
@@ -28,6 +29,7 @@ export function ContactsPage() {
   const [csv, setCsv] = useState('');
   const [importMsg, setImportMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   async function load() {
     setLoading(true);
@@ -59,6 +61,7 @@ export function ContactsPage() {
       });
       setForm(empty);
       setShowForm(false);
+      toast.success('Contato salvo!');
       await load();
     } catch (e: any) {
       const msg = e?.response?.data?.message;
@@ -83,13 +86,14 @@ export function ContactsPage() {
           return { phone: (phone || '').replace(/\D/g, ''), name: name || undefined, company: company || undefined, source: 'import' };
         })
         .filter((c) => c.phone.length >= 12);
-      if (contacts.length === 0) { setImportMsg('Nenhum telefone válido (use 55+DDD+número).'); return; }
+      if (contacts.length === 0) { toast.error('Nenhum telefone válido (use 55+DDD+número).'); setBusy(false); return; }
       const r = await api.post('/contacts/import', { contacts });
-      setImportMsg(`✅ ${r.data.imported} contatos importados.`);
+      toast.success(`${r.data.imported} contatos importados.`);
       setCsv('');
+      setShowImport(false);
       await load();
     } catch (e: any) {
-      setImportMsg('Erro ao importar.');
+      toast.error('Erro ao importar contatos.');
     } finally {
       setBusy(false);
     }

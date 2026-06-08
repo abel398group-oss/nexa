@@ -11,6 +11,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true, // aceita conexões externas (túnel)
+    allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app', '.ngrok.io'],
     proxy: {
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
       '/ws': { target: 'http://localhost:3001', ws: true },

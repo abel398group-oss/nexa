@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useToast } from '@/contexts/ToastContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 
 interface Objection { objection: string; guidance: string }
@@ -15,7 +17,8 @@ export function PlaybookPage() {
   const [pb, setPb] = useState<Playbook | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -48,28 +51,31 @@ export function PlaybookPage() {
   async function save() {
     if (!pb) return;
     setSaving(true);
-    setMsg('');
     try {
       const r = await api.put('/playbook', pb);
       setPb(r.data);
-      setMsg('✅ Playbook salvo! A Lia já usa as novas instruções.');
+      toast.success('Playbook salvo! A Lia já usa as novas instruções.');
     } catch {
-      setMsg('❌ Erro ao salvar.');
+      toast.error('Erro ao salvar o playbook.');
     } finally {
       setSaving(false);
-      setTimeout(() => setMsg(''), 4000);
     }
   }
   async function reset() {
-    if (!confirm('Restaurar o playbook de fábrica? Suas edições serão perdidas.')) return;
+    const ok = await confirm({
+      title: 'Restaurar playbook',
+      message: 'Restaurar o playbook de fábrica? Suas edições serão perdidas.',
+      variant: 'warning',
+      confirmLabel: 'Restaurar',
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const r = await api.post('/playbook/reset');
       setPb(r.data);
-      setMsg('↩️ Playbook restaurado para o padrão.');
+      toast.info('Playbook restaurado para o padrão.');
     } finally {
       setSaving(false);
-      setTimeout(() => setMsg(''), 4000);
     }
   }
 
@@ -166,7 +172,6 @@ export function PlaybookPage() {
               ↩️ Restaurar padrão
             </button>
             <div className="flex items-center gap-3">
-              {msg && <span className="text-xs text-base-content/70">{msg}</span>}
               <button onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-sm disabled:opacity-50">
                 {saving ? 'Salvando...' : 'Salvar playbook'}
               </button>

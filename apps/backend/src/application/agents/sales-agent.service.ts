@@ -43,7 +43,7 @@ export class SalesAgentService {
   // Conduz a venda: qualifica, recomenda plano, sugere próximo passo (NÃO executa — ADR 012).
   async sell(
     tenantId: string,
-    input: { question: string; productCode?: string; history?: string; leadScore?: number },
+    input: { question: string; productCode?: string; history?: string; leadScore?: number; ongoing?: boolean },
   ): Promise<SalesReply> {
     const productCode = input.productCode ?? 'hipertms';
     const [kb, plans, cfg] = await Promise.all([
@@ -65,10 +65,15 @@ export class SalesAgentService {
       .map((o) => `"${o.objection}" → ${o.guidance}`)
       .join('\n');
 
+    const ongoing = input.ongoing ?? !!(input.history && input.history.trim().length > 0);
+    const greetingRule = ongoing
+      ? 'IMPORTANTE: a conversa JÁ ESTÁ EM ANDAMENTO. NÃO cumprimente de novo (proibido "bom dia/boa tarde/olá/oi" e proibido se reapresentar). Responda direto ao ponto. '
+      : `Este é o PRIMEIRO contato: cumprimente UMA vez com "${SalesAgentService.greeting()}" e apresente-se brevemente. `;
+
     const system =
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
       (cfg.persona ? `${cfg.persona} ` : '') +
-      `Saudação do horário: "${SalesAgentService.greeting()}" — só cumprimente no PRIMEIRO contato, nunca repita em toda mensagem. ` +
+      greetingRule +
       'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use **negrito** e emojis com moderação.\n\n' +
       'VOCÊ CONDUZ A VENDA POR ESTÁGIOS. Descubra em qual estágio a conversa está (pelo histórico) e cumpra o objetivo dele:\n' +
       '1) SAUDAÇÃO: acolher e descobrir o motivo do contato.\n' +
@@ -80,7 +85,11 @@ export class SalesAgentService {
       '7) HANDOFF: quando quente, encaminhe ao especialista.\n\n' +
       `ENGAJAMENTO ATUAL DO LEAD: ${tier}. ${guidance}\n\n` +
       (objectionsTxt ? `BIBLIOTECA DE OBJEÇÕES:\n${objectionsTxt}\n\n` : '') +
-      'REGRAS: nunca invente preço/recurso (use só o catálogo); uma pergunta por vez; não peça e-mail se o lead ainda está frio; ' +
+      'REGRAS: nunca invente preço/recurso (use só o catálogo). ' +
+      'PROIBIDO prometer/afirmar o que NÃO estiver no catálogo/base: teste grátis ou período de teste, desconto, aplicativo/app mobile, ' +
+      'integração específica, prazo de implantação ou qualquer recurso não listado. Se o cliente pedir algo assim e não constar nos fatos, ' +
+      'diga com naturalidade que vai confirmar com o time — NUNCA invente. ' +
+      'Uma pergunta por vez; não peça e-mail se o lead ainda está frio; ' +
       'não fecha pagamento nem agenda sozinha — apenas conduz. ' +
       'Ao final, em uma linha separada: ACTION=<none|create_payment|schedule_meeting|handoff_human>.';
 
@@ -94,7 +103,16 @@ export class SalesAgentService {
       const u = await this.ai.completeWithUsage(system, user, { maxTokens: 450, temperature: 0.5 });
       const raw = u.text;
       const action = this.parseAction(raw);
-      const draft = raw.replace(/ACTION=.*/i, '').trim();
+      let draft = raw.replace(/ACTION=.*/i, '').trim();
+      // GARANTIA: se a conversa já está em andamento, remove saudação no início (o modelo às vezes insiste)
+      if (ongoing) {
+        const before = draft;
+        // remove saudação no começo + tudo que não for letra (emoji, pontuação, quebras) até o conteúdo real
+        draft = draft
+          .replace(/^[^a-zA-ZÀ-ÿ]*(bom dia|boa tarde|boa noite|ol[áa]|oi)[^a-zA-ZÀ-ÿ]*?(tudo bem\??|tudo certo\??)?[^a-zA-ZÀ-ÿ]*/i, '')
+          .trimStart();
+        if (draft && draft !== before) draft = draft.charAt(0).toUpperCase() + draft.slice(1);
+      }
       return {
         draft,
         suggestedAction: action,

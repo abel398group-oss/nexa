@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/contexts/ToastContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { Badge, statusVariant } from '@/components/ui/Badge';
 
 interface Campaign {
   id: string;
@@ -27,6 +30,8 @@ export function CampaignsPage() {
   const [sendLimit, setSendLimit] = useState(30);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -69,19 +74,28 @@ export function CampaignsPage() {
       await api.post('/campaigns', payload);
       setShow(false);
       setName(''); setLink(''); setMedia(null); setLimitMode('all');
+      toast.success('Campanha criada!');
       await load();
+    } catch {
+      toast.error('Erro ao criar campanha.');
     } finally {
       setBusy(false);
     }
   }
 
-  async function start(id: string) { await api.post(`/campaigns/${id}/start`); await load(); }
-  async function pause(id: string) { await api.post(`/campaigns/${id}/pause`); await load(); }
-
-  const statusColor: Record<string, string> = {
-    draft: 'bg-zinc-100 text-zinc-600', running: 'bg-emerald-100 text-emerald-700',
-    paused: 'bg-amber-100 text-amber-700', done: 'bg-sky-100 text-sky-700',
-  };
+  async function start(id: string, name: string) {
+    const ok = await confirm({
+      title: 'Iniciar disparo',
+      message: `Iniciar a campanha "${name}"? Mensagens reais serão enviadas no WhatsApp (respeitando horário e limites).`,
+      variant: 'info',
+      confirmLabel: 'Iniciar disparo',
+    });
+    if (!ok) return;
+    await api.post(`/campaigns/${id}/start`);
+    toast.success('Campanha iniciada 🚀');
+    await load();
+  }
+  async function pause(id: string) { await api.post(`/campaigns/${id}/pause`); toast.info('Campanha pausada.'); await load(); }
 
   return (
     <div className="h-full overflow-auto bg-zinc-50 p-8">
@@ -114,11 +128,11 @@ export function CampaignsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="font-semibold text-zinc-800">{c.name}</span>
-                  <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${statusColor[c.status]}`}>{c.status}</span>
+                  <span className="ml-2"><Badge variant={statusVariant(c.status)}>{c.status}</Badge></span>
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <button onClick={() => start(c.id)} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-500">▶ Iniciar</button>
+                    <button onClick={() => start(c.id, c.name)} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-500">▶ Iniciar</button>
                   )}
                   {c.status === 'running' && (
                     <button onClick={() => pause(c.id)} className="rounded-lg bg-amber-500 px-3 py-1 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>

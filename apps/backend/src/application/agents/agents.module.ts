@@ -8,10 +8,11 @@ import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { SellersModule } from '@/application/sellers/sellers.module';
 import { PlaybookModule } from '@/application/playbook/playbook.module';
+import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
 
 @Module({
-  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule],
+  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule],
   controllers: [AgentsController],
   providers: [
     SupportAgentService,

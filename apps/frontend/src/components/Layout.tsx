@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { HelpDrawer, HELP } from '@/components/HelpDrawer';
 import { GuidedTour, TourStep } from '@/components/GuidedTour';
 import { CommandPalette, Command } from '@/components/ui/CommandPalette';
+import { DateRangeProvider } from '@/contexts/DateRangeContext';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa! 👋', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
@@ -69,6 +72,55 @@ function KillSwitch() {
       <span>{on ? '🤖' : '⏸️'}</span>
       IA {on === null ? '...' : on ? 'ON' : 'OFF'}
     </button>
+  );
+}
+
+function AccountMenu() {
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isAdmin = user?.role === 'admin';
+  const email = user?.email ?? '';
+  const name = (user as any)?.name || email.split('@')[0] || 'Usuário';
+  const initials = name.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Minha conta"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white transition-transform hover:scale-105"
+      >
+        {initials}
+      </button>
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
+          <div className="flex items-center gap-3 border-b border-base-200 px-4 py-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">{initials}</span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-base-content">{name}</div>
+              <div className="truncate text-xs text-base-content/50">{email}</div>
+            </div>
+          </div>
+          <div className="px-4 py-2 text-[11px] text-base-content/50">
+            {isAdmin ? '👑 Administrador' : '🧑‍💼 Vendedor'}
+          </div>
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-2 border-t border-base-200 px-4 py-2.5 text-left text-sm text-base-content/70 transition-colors hover:bg-base-100"
+          >
+            ⏻ Sair
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -142,6 +194,7 @@ export function Layout() {
   }
 
   return (
+    <DateRangeProvider>
     <div className="flex h-full">
       {/* ===== SIDEBAR larga (midnight enterprise) ===== */}
       <aside
@@ -208,6 +261,7 @@ export function Layout() {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 bg-white px-6">
           <h1 className="text-base font-semibold text-base-content">{pageTitle}</h1>
           <div className="flex items-center gap-3">
+            {location.pathname === '/dashboard' && <DateRangePicker />}
             <button
               onClick={() => setCmdOpen(true)}
               title="Busca rápida (Ctrl+K)"
@@ -241,12 +295,8 @@ export function Layout() {
               </button>
             )}
             {(isAdmin || perms.includes('ai_control')) && <KillSwitch />}
-            <button
-              onClick={logout}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-200"
-            >
-              ⏻ Sair
-            </button>
+            <NotificationBell />
+            <AccountMenu />
           </div>
         </header>
         {/* conteúdo */}
@@ -259,5 +309,6 @@ export function Layout() {
       {tourOpen && <GuidedTour steps={TOUR_STEPS} onClose={closeTour} />}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
     </div>
+    </DateRangeProvider>
   );
 }

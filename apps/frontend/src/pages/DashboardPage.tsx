@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useDateRange } from '@/contexts/DateRangeContext';
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -36,16 +37,22 @@ function chips(obj: Record<string, number>) {
 
 export function DashboardPage() {
   const [m, setM] = useState<Overview | null>(null);
+  const { range } = useDateRange();
 
   async function load() {
-    const r = await api.get('/metrics/overview');
+    const params: any = {};
+    if (range.from) params.from = range.from;
+    if (range.to) params.to = range.to;
+    const r = await api.get('/metrics/overview', { params });
     setM(r.data);
   }
   useEffect(() => {
     load();
     const t = setInterval(load, 10000); // auto-refresh a cada 10s
     return () => clearInterval(t);
-  }, []);
+    // recarrega quando o período muda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.from, range.to]);
 
   if (!m) return <div className="flex h-full items-center justify-center text-zinc-400">Carregando métricas...</div>;
 
@@ -54,7 +61,7 @@ export function DashboardPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-800">Dashboard</h1>
-          <p className="text-xs text-zinc-400">Visão geral · atualiza a cada 10s</p>
+          <p className="text-xs text-zinc-400">Período: <strong className="text-zinc-600">{range.label}</strong> · atualiza a cada 10s</p>
         </div>
         <button onClick={load} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm hover:bg-zinc-50">
           ↻ Atualizar

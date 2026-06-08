@@ -553,6 +553,21 @@ model Complaint {
   @@map("complaints")
 }
 
+// Notificações do painel (sino) — alertas pro time (lead quente, reclamação, opt-out).
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  type      String // hot_lead | complaint | opt_out | info
+  title     String
+  body      String   @default("")
+  link      String? // rota no painel (ex.: /inbox)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, read])
+  @@map("notifications")
+}
+
 // Playbook de vendas editável pelo painel (objeções, tom, CTAs) — sem mexer no código.
 model SalesPlaybook {
   id         String   @id @default(uuid())

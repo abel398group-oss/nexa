@@ -4,10 +4,11 @@ import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
 import { FollowUpModule } from '@/application/followup/followup.module';
+import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { WhatsappController } from '@/presentation/http/whatsapp/whatsapp.controller';
 
 @Module({
-  imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule],
+  imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule],
   controllers: [WhatsappController],
   providers: [WhatsappService],
 })

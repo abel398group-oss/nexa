@@ -5,6 +5,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
 import { FollowUpService } from '@/application/followup/followup.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 
 interface Normalized {
   phone: string;
@@ -33,6 +34,7 @@ export class WhatsappService {
     private readonly agent: ConversationAgentService,
     private readonly followup: FollowUpService,
     private readonly autonomy: AutonomyService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Replica a normalização validada do MVP n8n (fix @lid, opt-out, validação BR).
@@ -138,6 +140,12 @@ export class WhatsappService {
       const optConv = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
       if (optConv) await this.followup.stop(optConv.id, 'opt-out');
       this.logger.warn(`Opt-out de ${n.phone}`);
+      await this.notifications.create(tenantId, {
+        type: 'opt_out',
+        title: '🚫 Opt-out',
+        body: `${n.phone} pediu para não receber mais mensagens.`,
+        link: '/contacts',
+      });
       return { ok: true, phone: n.phone, optOut: true };
     }
 

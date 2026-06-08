@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/contexts/ToastContext';
+import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
   id: string;
@@ -22,6 +24,7 @@ export function SellersPage() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   async function load() {
     setLoading(true);
@@ -47,10 +50,13 @@ export function SellersPage() {
         password: password.trim() || undefined,
       });
       setName(''); setPhone(''); setEmail(''); setPassword('');
+      toast.success('Vendedor adicionado!');
       await load();
     } catch (e: any) {
       const m = e?.response?.data?.message;
-      setErr(Array.isArray(m) ? m.join(', ') : m || 'Erro');
+      const txt = Array.isArray(m) ? m.join(', ') : m || 'Erro';
+      setErr(txt);
+      toast.error(txt);
     } finally {
       setBusy(false);
     }
@@ -148,9 +154,7 @@ export function SellersPage() {
               <td className="px-4 py-3 text-zinc-600">{s.phone}</td>
               <td className="px-4 py-3 text-zinc-600">{s.assignedCount}</td>
               <td className="px-4 py-3">
-                <span className={`rounded-full px-2 py-0.5 text-xs ${s.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                  {s.active ? 'ativo' : 'inativo'}
-                </span>
+                <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>
               </td>
               <td className="px-4 py-3 text-right">
                 <button onClick={() => toggle(s)} className="rounded-lg border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-50">

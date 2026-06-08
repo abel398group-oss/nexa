@@ -6,8 +6,19 @@ export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Visão geral pro dashboard. Se sellerId vier, escopa à carteira do vendedor.
-  async overview(tenantId: string, sellerId?: string) {
+  // range opcional (from/to ISO) filtra métricas por data de criação.
+  async overview(tenantId: string, sellerId?: string, range?: { from?: string; to?: string }) {
     if (sellerId) return this.sellerOverview(tenantId, sellerId);
+    // filtro de período (createdAt) — aplicado só nas métricas de atividade
+    const dw: any =
+      range?.from || range?.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: new Date(range.from) } : {}),
+              ...(range.to ? { lte: new Date(`${range.to}T23:59:59.999`) } : {}),
+            },
+          }
+        : {};
     const [
       contactsTotal,
       contactsByLead,
@@ -22,28 +33,28 @@ export class MetricsService {
       eventsByStatus,
       dlqTotal,
     ] = await Promise.all([
-      this.prisma.contact.count({ where: { tenantId } }),
-      this.prisma.contact.groupBy({ by: ['leadStatus'], where: { tenantId }, _count: true }),
-      this.prisma.contact.count({ where: { tenantId, status: 'opted_out' } }),
-      this.prisma.aiConversation.count({ where: { tenantId } }),
-      this.prisma.aiConversation.groupBy({ by: ['status'], where: { tenantId }, _count: true }),
-      this.prisma.aiMessage.groupBy({ by: ['direction'], where: { tenantId }, _count: true }),
+      this.prisma.contact.count({ where: { tenantId, ...dw } }),
+      this.prisma.contact.groupBy({ by: ['leadStatus'], where: { tenantId, ...dw }, _count: true }),
+      this.prisma.contact.count({ where: { tenantId, status: 'opted_out', ...dw } }),
+      this.prisma.aiConversation.count({ where: { tenantId, ...dw } }),
+      this.prisma.aiConversation.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
+      this.prisma.aiMessage.groupBy({ by: ['direction'], where: { tenantId, ...dw }, _count: true }),
       this.prisma.aiMessage.count({
-        where: { tenantId, direction: 'outbound', metadata: { path: ['aiGenerated'], equals: true } },
+        where: { tenantId, direction: 'outbound', metadata: { path: ['aiGenerated'], equals: true }, ...dw },
       }),
       this.prisma.aiMessage.aggregate({
-        where: { tenantId },
+        where: { tenantId, ...dw },
         _sum: { tokensIn: true, tokensOut: true, estimatedCostUsd: true },
       }),
       this.prisma.aiKnowledgeBase.count({ where: { tenantId } }),
-      this.prisma.aiBillingRequest.groupBy({ by: ['status'], where: { tenantId }, _count: true }),
-      this.prisma.domainEvent.groupBy({ by: ['status'], where: { tenantId }, _count: true }),
+      this.prisma.aiBillingRequest.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
+      this.prisma.domainEvent.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
       this.prisma.eventDlq.count({ where: { tenantId } }),
     ]);
 
     const [complaintsTotal, complaintsByTopic] = await Promise.all([
-      this.prisma.complaint.count({ where: { tenantId } }),
-      this.prisma.complaint.groupBy({ by: ['topic'], where: { tenantId }, _count: true }),
+      this.prisma.complaint.count({ where: { tenantId, ...dw } }),
+      this.prisma.complaint.groupBy({ by: ['topic'], where: { tenantId, ...dw }, _count: true }),
     ]);
 
     const asMap = (rows: any[], key: string) =>

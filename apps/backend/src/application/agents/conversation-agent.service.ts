@@ -7,6 +7,7 @@ import { RouterAgentService, RouteDecision } from './router-agent.service';
 import { SalesAgentService } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
 import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.service';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 
 export interface HandleResult {
   route: RouteDecision;
@@ -41,6 +42,7 @@ export class ConversationAgentService {
     private readonly sellers: SellersService,
     private readonly prisma: PrismaService,
     private readonly autonomy: AutonomyService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -49,12 +51,13 @@ export class ConversationAgentService {
     input: { message: string; conversationId?: string; productCode?: string },
   ): Promise<HandleResult> {
     const route = await this.router.route(input.message);
-    const history = input.conversationId
-      ? (await this.conversations.getMessages(tenantId, input.conversationId))
-          .slice(-6)
-          .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
-          .join('\n')
-      : '';
+    const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
+    // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
+    const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
+    const history = msgs
+      .slice(-6)
+      .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
+      .join('\n');
 
     let draft = '';
     let suggestedAction = 'none';
@@ -85,6 +88,7 @@ export class ConversationAgentService {
           productCode: input.productCode,
           history,
           leadScore: route.leadScore,
+          ongoing: liaAlreadyTalked,
         });
         draft = r.draft;
         suggestedAction = r.suggestedAction;
@@ -107,6 +111,16 @@ export class ConversationAgentService {
         usage = r.usage;
         break;
       }
+    }
+
+    // NUNCA cumprimentar 2x (vale p/ QUALQUER agente — sales, support): se a Lia já falou nesta
+    // conversa, remove uma saudação no início do rascunho (o modelo às vezes insiste).
+    if (liaAlreadyTalked && draft && !scripted) {
+      const before = draft;
+      draft = draft
+        .replace(/^[^a-zA-ZÀ-ÿ]*(bom dia|boa tarde|boa noite|ol[áa]|oi)[^a-zA-ZÀ-ÿ]*?(tudo bem\??|tudo certo\??)?[^a-zA-ZÀ-ÿ]*/i, '')
+        .trimStart();
+      if (draft && draft !== before) draft = draft.charAt(0).toUpperCase() + draft.slice(1);
     }
 
     // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
@@ -174,6 +188,12 @@ export class ConversationAgentService {
             excerpt: input.message.slice(0, 200),
           },
         }).catch(() => null);
+        await this.notifications.create(tenantId, {
+          type: 'complaint',
+          title: `😠 Reclamação (${route.complaintTopic ?? 'outro'})`,
+          body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
+          link: '/inbox',
+        });
       }
     }
 
@@ -189,6 +209,12 @@ export class ConversationAgentService {
           contactPhone: conv.phone,
           leadScore: route.leadScore,
           summary: input.message.slice(0, 120),
+        });
+        await this.notifications.create(tenantId, {
+          type: isHot ? 'hot_lead' : 'info',
+          title: isHot ? `🔥 Lead quente (score ${route.leadScore})` : '🙋 Lead pediu atendente',
+          body: `${conv.phone}${handoff?.sellerName ? ` → ${handoff.sellerName}` : ''}: "${input.message.slice(0, 80)}"`,
+          link: '/inbox',
         });
       }
     }

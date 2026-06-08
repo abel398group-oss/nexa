@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { ConfirmProvider } from '@/contexts/ConfirmContext';
 import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { InboxPage } from '@/pages/InboxPage';
@@ -19,6 +21,8 @@ function Protected({ children }: { children: JSX.Element }) {
 
 export default function App() {
   return (
+    <ToastProvider>
+    <ConfirmProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -43,5 +47,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ConfirmProvider>
+    </ToastProvider>
   );
 }

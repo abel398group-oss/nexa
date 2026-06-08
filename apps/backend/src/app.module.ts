@@ -27,6 +27,7 @@ import { BillingModule } from './application/billing/billing.module';
 import { KnowledgeModule } from './application/knowledge/knowledge.module';
 import { AgentsModule } from './application/agents/agents.module';
 import { PlaybookModule } from './application/playbook/playbook.module';
+import { NotificationsModule } from './application/notifications/notifications.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -68,6 +69,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     KnowledgeModule,
     AgentsModule,
     PlaybookModule,
+    NotificationsModule,
     AdminModule,
     MetricsModule,
     WhatsappModule,
