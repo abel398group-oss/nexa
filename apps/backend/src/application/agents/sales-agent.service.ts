@@ -6,7 +6,7 @@ import { PlaybookService, PlaybookConfig } from '@/application/playbook/playbook
 
 export interface SalesReply {
   draft: string;
-  suggestedAction: 'none' | 'create_payment' | 'schedule_meeting' | 'handoff_human';
+  suggestedAction: 'none' | 'schedule_meeting' | 'handoff_human';
   usedKnowledge: { id: string; title: string }[];
   allowedFacts: string; // catálogo de planos + KB que a vendedora PODIA usar (p/ supervisora)
   confidence: 'high' | 'low';
@@ -90,8 +90,10 @@ export class SalesAgentService {
       'integração específica, prazo de implantação ou qualquer recurso não listado. Se o cliente pedir algo assim e não constar nos fatos, ' +
       'diga com naturalidade que vai confirmar com o time — NUNCA invente. ' +
       'Uma pergunta por vez; não peça e-mail se o lead ainda está frio; ' +
-      'não fecha pagamento nem agenda sozinha — apenas conduz. ' +
-      'Ao final, em uma linha separada: ACTION=<none|create_payment|schedule_meeting|handoff_human>.';
+      'não cobra nem processa pagamento — o cliente finaliza no site. ' +
+      `FECHAMENTO: quando o lead quiser contratar, envie o LINK DE CADASTRO: ${cfg.signupUrl} — ` +
+      'oriente a criar a conta lá (onde ele escolhe o plano e finaliza) e ofereça ajuda se travar. NÃO peça pagamento aqui. ' +
+      'Ao final, em uma linha separada: ACTION=<none|schedule_meeting|handoff_human>.';
 
     const user =
       `Catálogo de planos:\n${planTxt || '(indisponível)'}\n\n` +
@@ -132,7 +134,7 @@ export class SalesAgentService {
   }
 
   private parseAction(raw: string): SalesReply['suggestedAction'] {
-    const m = raw.match(/ACTION=\s*(none|create_payment|schedule_meeting|handoff_human)/i);
+    const m = raw.match(/ACTION=\s*(none|schedule_meeting|handoff_human)/i);
     return (m?.[1]?.toLowerCase() as SalesReply['suggestedAction']) ?? 'none';
   }
 }

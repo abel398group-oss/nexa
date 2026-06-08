@@ -23,7 +23,6 @@ import { ConversationsModule } from './application/conversations/conversations.m
 import { EventsModule } from './application/events/events.module';
 import { ActionsModule } from './application/actions/actions.module';
 import { ConnectorsModule } from './application/connectors/connectors.module';
-import { BillingModule } from './application/billing/billing.module';
 import { KnowledgeModule } from './application/knowledge/knowledge.module';
 import { AgentsModule } from './application/agents/agents.module';
 import { PlaybookModule } from './application/playbook/playbook.module';
@@ -65,7 +64,6 @@ import { HealthController } from './presentation/http/health/health.controller';
     ContactsModule,
     ConversationsModule,
     ActionsModule,
-    BillingModule,
     KnowledgeModule,
     AgentsModule,
     PlaybookModule,

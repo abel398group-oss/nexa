@@ -17,6 +17,8 @@ class ActiveDto {
 class UpdateSellerDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
   @IsOptional() @IsString() @MinLength(10) phone?: string;
+  @IsOptional() @IsString() email?: string; // cria/troca o login do vendedor
+  @IsOptional() @IsString() @MinLength(6) password?: string; // cria/reseta a senha
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

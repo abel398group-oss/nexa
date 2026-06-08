@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
@@ -12,13 +12,20 @@ export class SellersService {
     private readonly waha: WahaClientService,
   ) {}
 
-  list(tenantId: string) {
-    return this.prisma.seller.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
+  async list(tenantId: string) {
+    const sellers = await this.prisma.seller.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
+    const ids = sellers.map((s) => s.id);
+    const users = ids.length
+      ? await this.prisma.user.findMany({ where: { sellerId: { in: ids } }, select: { sellerId: true, email: true } })
+      : [];
+    const map = new Map(users.map((u) => [u.sellerId, u.email]));
+    return sellers.map((s) => ({ ...s, loginEmail: map.get(s.id) ?? null })); // mostra se tem login
   }
 
   // cria vendedor; se vier email+senha, cria também o LOGIN (role=vendedor) vinculado
   async create(tenantId: string, dto: { name: string; phone: string; email?: string; password?: string }) {
-    const seller = await this.prisma.seller.create({ data: { tenantId, name: dto.name, phone: dto.phone } });
+    const phone = (dto.phone || '').replace(/\D/g, ''); // só números (WhatsApp exige)
+    const seller = await this.prisma.seller.create({ data: { tenantId, name: dto.name, phone } });
     if (dto.email && dto.password) {
       const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
       if (!exists) {
@@ -42,12 +49,49 @@ export class SellersService {
     return this.prisma.seller.updateMany({ where: { id, tenantId }, data: { active } });
   }
 
-  async update(tenantId: string, id: string, dto: { name?: string; phone?: string }) {
-    const r = await this.prisma.seller.updateMany({
-      where: { id, tenantId },
-      data: { ...(dto.name ? { name: dto.name } : {}), ...(dto.phone ? { phone: dto.phone } : {}) },
-    });
-    if (r.count === 0) throw new NotFoundException('Vendedor não encontrado');
+  async update(
+    tenantId: string,
+    id: string,
+    dto: { name?: string; phone?: string; email?: string; password?: string },
+  ) {
+    const seller = await this.prisma.seller.findFirst({ where: { id, tenantId } });
+    if (!seller) throw new NotFoundException('Vendedor não encontrado');
+
+    const phone = dto.phone ? dto.phone.replace(/\D/g, '') : undefined; // só números
+    const data: any = { ...(dto.name ? { name: dto.name } : {}), ...(phone ? { phone } : {}) };
+    if (Object.keys(data).length) {
+      await this.prisma.seller.update({ where: { id }, data }); // só atualiza se houver mudança
+    }
+
+    // gerencia o LOGIN vinculado (criar / trocar e-mail / resetar senha)
+    if (dto.email || dto.password) {
+      const user = await this.prisma.user.findFirst({ where: { sellerId: id } });
+      try {
+        if (user) {
+          const data: any = {};
+          if (dto.email) data.email = dto.email.trim();
+          if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 10);
+          if (Object.keys(data).length) await this.prisma.user.update({ where: { id: user.id }, data });
+        } else if (dto.email && dto.password) {
+          await this.prisma.user.create({
+            data: {
+              tenantId,
+              email: dto.email.trim(),
+              passwordHash: await bcrypt.hash(dto.password, 10),
+              name: dto.name ?? seller?.name ?? 'Vendedor',
+              role: 'vendedor',
+              sellerId: id,
+              permissions: ['dashboard', 'inbox'],
+            },
+          });
+        } else if (dto.email && !dto.password) {
+          throw new BadRequestException('Para criar o login, informe e-mail E senha.');
+        }
+      } catch (e: any) {
+        if (e?.code === 'P2002') throw new BadRequestException('Esse e-mail já está em uso por outro usuário.');
+        throw e;
+      }
+    }
     return this.prisma.seller.findFirst({ where: { id, tenantId } });
   }
 

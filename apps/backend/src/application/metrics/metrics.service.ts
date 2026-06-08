@@ -29,7 +29,6 @@ export class MetricsService {
       aiMessages,
       tokenAgg,
       knowledgeTotal,
-      billingByStatus,
       eventsByStatus,
       dlqTotal,
     ] = await Promise.all([
@@ -47,7 +46,6 @@ export class MetricsService {
         _sum: { tokensIn: true, tokensOut: true, estimatedCostUsd: true },
       }),
       this.prisma.aiKnowledgeBase.count({ where: { tenantId } }),
-      this.prisma.aiBillingRequest.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
       this.prisma.domainEvent.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
       this.prisma.eventDlq.count({ where: { tenantId } }),
     ]);
@@ -85,7 +83,6 @@ export class MetricsService {
         estimatedCostUsd: Number(tokenAgg._sum.estimatedCostUsd ?? 0),
       },
       knowledge: { total: knowledgeTotal },
-      billing: { byStatus: asMap(billingByStatus, 'status') },
       events: { byStatus: asMap(eventsByStatus, 'status'), dlq: dlqTotal },
       complaints: { total: complaintsTotal, byTopic: asMap(complaintsByTopic, 'topic') },
     };
@@ -144,7 +141,6 @@ export class MetricsService {
       messages: { inbound, outbound, aiGenerated: aiMessages, aiSharePct: outbound > 0 ? Math.round((aiMessages / outbound) * 100) : 0 },
       ai: { tokensIn: 0, tokensOut: 0, estimatedCostUsd: 0 },
       knowledge: { total: 0 },
-      billing: { byStatus: {} },
       events: { byStatus: {}, dlq: 0 },
       complaints: { total: complaintsTotal, byTopic: {} },
       scope: 'vendedor',

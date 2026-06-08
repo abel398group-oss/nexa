@@ -12,6 +12,7 @@ interface Seller {
   phone: string;
   active: boolean;
   assignedCount: number;
+  loginEmail?: string | null;
 }
 interface Kpi { id: string; name: string; leads: number; emAndamento: number; ganhos: number; perdidos: number; taxaConversao: number; }
 
@@ -47,7 +48,12 @@ export function SellersPage() {
     setErr('');
     try {
       if (editId) {
-        await api.patch(`/sellers/${editId}`, { name: name.trim(), phone: phone.trim() });
+        await api.patch(`/sellers/${editId}`, {
+          name: name.trim(),
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          password: password.trim() || undefined,
+        });
         toast.success('Vendedor atualizado!');
       } else {
         await api.post('/sellers', {
@@ -74,11 +80,13 @@ export function SellersPage() {
     setEditId(s.id);
     setName(s.name);
     setPhone(s.phone);
+    setEmail(s.loginEmail || '');
+    setPassword('');
     setErr('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function cancelEdit() {
-    setEditId(null); setName(''); setPhone(''); setErr('');
+    setEditId(null); setName(''); setPhone(''); setEmail(''); setPassword(''); setErr('');
   }
   async function del(s: Seller) {
     const ok = await confirm({
@@ -156,12 +164,8 @@ export function SellersPage() {
           <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          {!editId && (
-            <>
-              <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="E-mail de login (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <input type="password" className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="Senha (mín. 6)" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </>
-          )}
+          <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="password" className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
           <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">
             {editId ? 'Salvar' : '+ Adicionar'}
           </button>
@@ -172,7 +176,9 @@ export function SellersPage() {
           )}
         </div>
         <p className="text-xs text-zinc-400">
-          {editId ? 'Editando vendedor — altere o nome/WhatsApp e salve.' : 'Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).'}
+          {editId
+            ? 'Editando — altere nome/WhatsApp. Pra dar/trocar login: preencha e-mail + senha. Pra só resetar a senha: deixe o e-mail e digite a nova senha.'
+            : 'Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).'}
         </p>
       </form>
       {err && <p className="mb-4 text-sm text-red-500">{err}</p>}
@@ -196,7 +202,10 @@ export function SellersPage() {
           {items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-400">Nenhum vendedor. Adicione um acima.</td></tr>}
           {items.map((s) => (
             <tr key={s.id} className="border-b last:border-0">
-              <td className="px-4 py-3 font-medium text-zinc-700">{s.name}</td>
+              <td className="px-4 py-3 font-medium text-zinc-700">
+                {s.name}
+                <div className="text-[11px] font-normal text-zinc-400">{s.loginEmail ? `🔑 ${s.loginEmail}` : 'sem login'}</div>
+              </td>
               <td className="px-4 py-3 text-zinc-600">{s.phone}</td>
               <td className="px-4 py-3 text-zinc-600">{s.assignedCount}</td>
               <td className="px-4 py-3">

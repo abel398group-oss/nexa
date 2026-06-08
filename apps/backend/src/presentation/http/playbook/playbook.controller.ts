@@ -11,6 +11,7 @@ class UpdatePlaybookDto {
   @IsOptional() @IsString() ctaCold?: string;
   @IsOptional() @IsString() ctaWarm?: string;
   @IsOptional() @IsString() ctaHot?: string;
+  @IsOptional() @IsString() signupUrl?: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

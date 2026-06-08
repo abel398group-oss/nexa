@@ -8,7 +8,6 @@ interface Overview {
   messages: { inbound: number; outbound: number; aiGenerated: number; aiSharePct: number };
   ai: { tokensIn: number; tokensOut: number; estimatedCostUsd: number };
   knowledge: { total: number };
-  billing: { byStatus: Record<string, number> };
   events: { byStatus: Record<string, number>; dlq: number };
   complaints: { total: number; byTopic: Record<string, number> };
 }
@@ -84,10 +83,6 @@ export function DashboardPage() {
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-zinc-600">Leads por estágio</div>
           {chips(m.contacts.byLeadStatus)}
-        </div>
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-zinc-600">Cobranças</div>
-          {chips(m.billing.byStatus)}
         </div>
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-zinc-600">Eventos</div>

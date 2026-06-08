@@ -1,688 +1,200 @@
-[09:44:50.415] [32mINFO[39m (3364): [36mStarting Nest application...[39m [90m{"context":"NestFactory"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAutonomia inicial: LIGADA[39m [90m{"context":"Autonomy"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mPrismaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAiModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mGovernanceModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mWahaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mPassportModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mThrottlerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mJwtModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mConfigHostModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mDiscoveryModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAuditModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mEventsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mLoggerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mConfigModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mScheduleModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mEventEmitterModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAdminModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAppModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mConnectorsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mContactsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mConversationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mSellersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mPlaybookModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mNotificationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mMetricsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mUsersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mWhatsappModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mActionsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mBillingModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mKnowledgeModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mFollowUpModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAuthModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mSenderModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mAgentsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mWebSocket /ws inicializado[39m [90m{"context":"ConversationsGateway"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mConversationsGateway subscribed to the "join" message[39m [90m{"context":"WebSocketsController"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mHealthController {/api/health}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mMapped {/api/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.416] [32mINFO[39m (3364): [36mMapped {/api/health/live, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/health/ready, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mAuthController {/api/auth}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/auth/login, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/auth/refresh, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/auth/logout, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/auth/me, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mProductsController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/products, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/products/:code/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/plans, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mContactsController {/api/contacts}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts/import, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts/:id/reactivate, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/contacts/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mConversationsController {/api/conversations}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations/:id/messages, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations/:id/outcome, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/conversations/:id/messages, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mActionsController {/api/actions}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/actions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/actions/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mBillingController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/billing/payment-request, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/billing/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/webhooks/asaas, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mKnowledgeController {/api/knowledge}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/import/:productCode, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/:id/versions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/knowledge/versions/:versionId/approve, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mAgentsController {/api/agent}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/agent/ask, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/agent/handle, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mSellersController {/api/sellers}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sellers, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sellers/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sellers/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sellers/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mPlaybookController {/api/playbook}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/playbook, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/playbook, PUT} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/playbook/reset, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mNotificationsController {/api/notifications}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/notifications, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/notifications/read-all, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/notifications/:id/read, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mAdminController {/api/admin}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/admin/autonomy, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/admin/autonomy, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMetricsController {/api/metrics}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/metrics/overview, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/metrics/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mWhatsappController {/api/webhooks}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/webhooks/waha, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mFollowUpController {/api/followups}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/followups, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mSenderController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns/upload, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns/:id/start, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns/:id/pause, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/campaigns/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/sender/numbers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mUsersController {/api/users}:[39m [90m{"context":"RoutesResolver"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/users/areas, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/users, GET} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/users, POST} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/users/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mMapped {/api/users/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
-[09:44:50.417] [32mINFO[39m (3364): [36mNest application successfully started[39m [90m{"context":"NestApplication"}[39m
-[09:44:50.943] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5c3abffd-688c-4068-a91b-56c41703680d","res":{"statusCode":304},"responseTime":136}[39m
-[09:45:18.755] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a6f73685-f376-466d-bf59-f72c517c0324","res":{"statusCode":200},"responseTime":14}[39m
-[09:45:20.803] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5ea3f36b-cbe7-49e0-b417-5734978c56cc","res":{"statusCode":304},"responseTime":14}[39m
-[09:45:29.428] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"d98631bc-3057-4c7b-a09d-1da1c2d45275","res":{"statusCode":201},"responseTime":223}[39m
-[09:45:29.575] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/campaigns"},"correlationId":"8f45c5f2-487c-4028-b15b-18b7879fd3d1","res":{"statusCode":201},"responseTime":48}[39m
-[09:45:29.659] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/campaigns/c9540cc1-d4e6-40b6-b2f8-5794dce68ac3/start"},"correlationId":"5b9cba05-eb75-4962-a5f1-407b26ba22d9","res":{"statusCode":201},"responseTime":22}[39m
-[09:45:36.490] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5512988073788 (true_5512988073788@c.us_3EB0E3AEF85D71A5EF0574)[39m [90m{"context":"Conversations"}[39m
-[09:45:36.514] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[09:45:36.546] [32mINFO[39m (3364): [36mDisparo p/ 5512988073788 (campanha Teste Anexo Link) [5/30 hoje; próx em 59s][39m [90m{"context":"Sender"}[39m
-[09:45:48.765] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"10ae901b-3e6f-487b-8559-5927deefc31f","res":{"statusCode":304},"responseTime":16}[39m
-[09:45:51.157] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ba542a0d-428b-4ac4-b4a0-f6ccaaf433ef","res":{"statusCode":304},"responseTime":4}[39m
-[09:46:18.755] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"88905d4c-138b-4177-b9fa-b2fce91ad71d","res":{"statusCode":304},"responseTime":15}[39m
-[09:46:20.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"f0e4c577-e203-4a5b-a279-b08dc5ae7b44","res":{"statusCode":304},"responseTime":15}[39m
-[09:46:28.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"91315113-34a8-4404-b660-992665263dd7","res":{"statusCode":200},"responseTime":8}[39m
-[09:46:28.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"b69c44e6-b555-4ba9-ab44-43b77cd65c59","res":{"statusCode":304},"responseTime":8}[39m
-[09:46:28.743] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ec97e6eb-c927-4457-a4e1-3fc7a5d8ceac","res":{"statusCode":304},"responseTime":5}[39m
-[09:46:28.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"60b2e216-1c6c-4818-8b28-2bef037ec05e","res":{"statusCode":304},"responseTime":8}[39m
-[09:46:36.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"18602042-53d0-488e-a9a4-94bbeefcacbc","res":{"statusCode":304},"responseTime":17}[39m
-[09:46:36.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"9435500a-47a9-462b-8d5e-998cd58a05af","res":{"statusCode":304},"responseTime":15}[39m
-[09:46:44.492] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"352194d0-6172-4a79-927a-43976d96ed8c","res":{"statusCode":304},"responseTime":5}[39m
-[09:46:44.495] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ab0efbea-20fa-453c-a023-cfb8a2b58838","res":{"statusCode":304},"responseTime":6}[39m
-[09:46:48.754] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c22d154f-604b-47de-9abf-4e39a0d29ca1","res":{"statusCode":304},"responseTime":11}[39m
-[09:46:50.639] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"05126422-5ed2-4b2b-abd4-4d688abacf3f","res":{"statusCode":304},"responseTime":10}[39m
-[09:46:52.521] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"106fc0bd-9ae4-49d7-aed2-4b28e861cb64","res":{"statusCode":304},"responseTime":11}[39m
-[09:46:52.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"11eb2dad-b0f4-4809-882f-df7d40b2e92a","res":{"statusCode":304},"responseTime":17}[39m
-[09:47:00.795] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5fbb5243-6dbe-4cb1-93e0-d31c7efc7404","res":{"statusCode":304},"responseTime":2}[39m
-[09:47:00.798] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3963c4e8-c82a-41c8-a3fd-3eb5317f5f68","res":{"statusCode":304},"responseTime":7}[39m
-[09:47:08.783] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b68f4e06-b51e-45da-ab05-436a7c582215","res":{"statusCode":304},"responseTime":5}[39m
-[09:47:08.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ba735161-eed9-4e3b-81a2-dd3244bcde47","res":{"statusCode":304},"responseTime":9}[39m
-[09:47:16.772] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f6889e01-056c-4bff-9768-aff8aab597a0","res":{"statusCode":304},"responseTime":4}[39m
-[09:47:16.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f6ae0cf3-e281-4cd2-abfd-c46b8021d52d","res":{"statusCode":304},"responseTime":5}[39m
-[09:47:20.776] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1c7ff93a-4b83-41ed-a79a-74173e70b544","res":{"statusCode":304},"responseTime":7}[39m
-[09:47:24.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"70894ecd-937d-413d-93bf-9b30ddaa1d13","res":{"statusCode":304},"responseTime":4}[39m
-[09:47:24.789] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ac84a6a7-50bc-472f-97b5-c7f3e37dc237","res":{"statusCode":304},"responseTime":7}[39m
-[09:47:32.795] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e3c4f8a0-0378-4af0-8f3b-4d7d4b7857b2","res":{"statusCode":304},"responseTime":9}[39m
-[09:47:32.803] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cf5cd893-9796-4ca3-8e17-b8a75673c502","res":{"statusCode":304},"responseTime":14}[39m
-[09:47:40.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"673850dd-07bf-4c17-88b0-1eb7f800fe70","res":{"statusCode":304},"responseTime":4}[39m
-[09:47:40.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"795f2122-9ef0-4690-adc1-7c5719b44e3f","res":{"statusCode":304},"responseTime":5}[39m
-[09:47:48.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"70757fcb-b075-48de-b903-dbb9f776c452","res":{"statusCode":304},"responseTime":3}[39m
-[09:47:48.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4099d29b-394d-4d36-8640-6cb4753b27a3","res":{"statusCode":304},"responseTime":5}[39m
-[09:47:50.761] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"72d585a1-151c-4553-b2a8-21b0f99b1589","res":{"statusCode":304},"responseTime":5}[39m
-[09:47:56.771] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c0cee9c3-d537-4683-86fb-1c3b185795ee","res":{"statusCode":304},"responseTime":3}[39m
-[09:47:56.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"23d31c51-bfda-46b1-b71a-f5b142709267","res":{"statusCode":304},"responseTime":5}[39m
-[09:48:00.749] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"717d708a-9cb2-4db6-b0a3-a2e0f7141ff4","res":{"statusCode":304},"responseTime":4}[39m
-[09:48:04.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5b198fc6-3b74-4db7-abdd-27e7e8dd6e7a","res":{"statusCode":304},"responseTime":5}[39m
-[09:48:04.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"90473719-07dd-4d19-b0fc-c3cd7c61e150","res":{"statusCode":304},"responseTime":4}[39m
-[09:48:12.771] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cd7cc07b-03d2-47e9-8f21-fd0fb1f5450d","res":{"statusCode":401},"responseTime":4}[39m
-[09:48:12.772] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"74b136af-d263-4747-b652-1e44c82b3ab4","res":{"statusCode":401},"responseTime":1}[39m
-[09:48:13.044] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"c06415fa-cf53-446c-9823-219c9f361b38","res":{"statusCode":201},"responseTime":207}[39m
-[09:48:13.106] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"86cecd0d-8c88-43eb-8c56-953465b7ad16","res":{"statusCode":304},"responseTime":4}[39m
-[09:48:13.110] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d0815437-5da8-4bba-9721-e1be0831e3ff","res":{"statusCode":304},"responseTime":5}[39m
-[09:48:20.803] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d99a377d-4244-43bf-90d8-916e8b1411f4","res":{"statusCode":304},"responseTime":16}[39m
-[09:48:20.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ba60b941-191e-4bc4-895d-4c6cbe6ebaff","res":{"statusCode":304},"responseTime":15}[39m
-[09:48:20.939] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d3bea382-bf14-4805-8942-3a45d206979e","res":{"statusCode":304},"responseTime":147}[39m
-[09:48:28.797] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2dd8106f-9445-4aae-9f3e-4d9523308be9","res":{"statusCode":304},"responseTime":19}[39m
-[09:48:28.808] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e4e8bca7-762a-4286-b631-e251035c9eb8","res":{"statusCode":304},"responseTime":33}[39m
-[09:48:36.780] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"cfb79f95-ed32-4294-ad86-afda7a16d3cb","res":{"statusCode":304},"responseTime":3}[39m
-[09:48:36.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"9bd22ab7-8747-4e52-a67e-efde526a3f6c","res":{"statusCode":304},"responseTime":10}[39m
-[09:48:44.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"861d23f4-c918-447d-83fb-4481784fa016","res":{"statusCode":304},"responseTime":6}[39m
-[09:48:44.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"34e6f513-3e97-4521-9fd8-b8574dee4f22","res":{"statusCode":304},"responseTime":8}[39m
-[09:48:50.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"bf560512-6e72-41e5-a1c5-8802c0eafa67","res":{"statusCode":304},"responseTime":10}[39m
-[09:48:52.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"035b0533-e382-4b9b-b7ba-d164d1cda6ae","res":{"statusCode":304},"responseTime":13}[39m
-[09:48:52.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"cd4f454b-47f2-406c-bc8b-c7a53f37af30","res":{"statusCode":304},"responseTime":11}[39m
-[09:49:00.754] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8ec25330-b3b2-4757-8c62-8e83bc5d6fde","res":{"statusCode":304},"responseTime":10}[39m
-[09:49:00.803] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d74f6e63-95a3-42f3-a00c-1692d5557c0a","res":{"statusCode":304},"responseTime":6}[39m
-[09:49:00.806] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"54eb80d7-1a06-4d67-a207-306d96107263","res":{"statusCode":304},"responseTime":10}[39m
-[09:49:08.812] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0df96388-2e3a-4c97-8845-e13d87690f9a","res":{"statusCode":304},"responseTime":13}[39m
-[09:49:08.814] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"bd923ab9-1498-481c-a766-c7a400689724","res":{"statusCode":304},"responseTime":13}[39m
-[09:49:16.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b9b24a2a-70b1-41e2-b0c5-f5d7586d363b","res":{"statusCode":304},"responseTime":4}[39m
-[09:49:16.796] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"bcb6584e-065e-4ec0-95b5-57a3ec0a5e0f","res":{"statusCode":304},"responseTime":8}[39m
-[09:49:20.762] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8dc2aaaf-3e06-4bfe-879c-ddc84eb96ba2","res":{"statusCode":304},"responseTime":5}[39m
-[09:49:24.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"40c4a53c-e49e-4e40-b2d6-bb9e8fe9998b","res":{"statusCode":304},"responseTime":3}[39m
-[09:49:24.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0678f105-a827-4b1b-9f22-fea31153396f","res":{"statusCode":304},"responseTime":5}[39m
-[09:49:32.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a3202a10-ac50-48fc-9c71-465fe52da7a2","res":{"statusCode":304},"responseTime":5}[39m
-[09:49:32.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e2ee6497-eef8-4804-841d-278bc722d2cc","res":{"statusCode":304},"responseTime":7}[39m
-[09:49:40.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e9e43669-cbb3-4c25-b734-c7594fde167c","res":{"statusCode":304},"responseTime":12}[39m
-[09:49:40.538] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"81819ec1-ac43-45e2-8536-ddb50ddb9d47","res":{"statusCode":304},"responseTime":16}[39m
-[09:49:48.782] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b879baef-82bb-43b2-bed8-b9ca55b4e4e5","res":{"statusCode":304},"responseTime":4}[39m
-[09:49:48.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"51ea3b36-96aa-4ed2-a318-039e3b8e5b4e","res":{"statusCode":304},"responseTime":6}[39m
-[09:49:50.762] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"902909bf-9c80-404e-a928-2a7bdba3d981","res":{"statusCode":304},"responseTime":4}[39m
-[09:49:56.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"90efe2bc-3ab9-42eb-90f7-0f0cac061dc6","res":{"statusCode":304},"responseTime":9}[39m
-[09:49:56.620] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"4a1f8487-6f4b-49eb-bde5-5a87d98d6189","res":{"statusCode":304},"responseTime":117}[39m
-[09:50:00.736] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a452ee96-fb3c-4253-a934-422abbcd0233","res":{"statusCode":401},"responseTime":1}[39m
-[09:50:00.961] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"70dfafac-b370-4d31-88b5-75c64e1ee7cd","res":{"statusCode":201},"responseTime":212}[39m
-[09:50:00.990] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"63b9c628-58e3-421c-82d6-979578044fe4","res":{"statusCode":304},"responseTime":11}[39m
-[09:50:04.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ab0225a9-5381-4bfe-9023-86406d2ca918","res":{"statusCode":304},"responseTime":6}[39m
-[09:50:04.796] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f586424d-1796-45b1-81fc-de6951129c5e","res":{"statusCode":304},"responseTime":29}[39m
-[09:50:12.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d726e061-76c4-4cc7-aee2-10865651b827","res":{"statusCode":304},"responseTime":7}[39m
-[09:50:12.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d5e02938-98d3-41a2-8f1c-51b09b5410f8","res":{"statusCode":304},"responseTime":10}[39m
-[09:50:20.789] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"418f6a4c-c566-4a9c-b56c-60129467de5b","res":{"statusCode":304},"responseTime":13}[39m
-[09:50:20.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"75dc07d5-cd3f-487c-9190-a7f08d348759","res":{"statusCode":304},"responseTime":11}[39m
-[09:50:20.923] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"882ef9df-5b32-488e-8321-7583567689c1","res":{"statusCode":304},"responseTime":140}[39m
-[09:50:28.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"de4ffabe-51f8-42ac-9ca1-7178cc72fb2a","res":{"statusCode":304},"responseTime":8}[39m
-[09:50:28.793] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f6e3ab79-2503-4417-a770-9627b4ec14ca","res":{"statusCode":304},"responseTime":13}[39m
-[09:50:36.793] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e88a7d0e-a94a-4f5e-81d8-08d464a6341f","res":{"statusCode":304},"responseTime":11}[39m
-[09:50:36.795] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e1273e5c-60a9-4536-b969-802bc396bc49","res":{"statusCode":304},"responseTime":16}[39m
-[09:50:44.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"1de3b7ee-19ef-4e7f-9cde-449cc68eab62","res":{"statusCode":304},"responseTime":10}[39m
-[09:50:44.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"459e79f3-357c-4fb9-bc85-57442d431770","res":{"statusCode":304},"responseTime":10}[39m
-[09:50:50.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"42a19ba8-b999-4f82-a33a-3f8996a57c3b","res":{"statusCode":304},"responseTime":10}[39m
-[09:50:52.771] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3015ebe9-820b-4272-82cd-ab220b7d62ce","res":{"statusCode":304},"responseTime":6}[39m
-[09:50:52.771] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"524dc253-0cd9-47fc-97fd-0af8352ebd68","res":{"statusCode":304},"responseTime":4}[39m
-[09:51:00.744] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4be22307-7e3e-4cea-a3ab-1816007df0ec","res":{"statusCode":304},"responseTime":9}[39m
-[09:51:00.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"17173d4d-8760-4cb5-bd67-ea2bd511f340","res":{"statusCode":304},"responseTime":2}[39m
-[09:51:00.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f98f3507-e4a5-4691-95b3-3e98194fd35a","res":{"statusCode":304},"responseTime":5}[39m
-[09:51:08.783] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ae5ed8a2-12a1-44a3-912c-6104cb33e874","res":{"statusCode":304},"responseTime":8}[39m
-[09:51:08.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"a6fb7089-c97c-4d6a-ae8a-b494db830915","res":{"statusCode":304},"responseTime":9}[39m
-[09:51:16.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2dfe596c-19ec-4682-a010-c3e1c8d88923","res":{"statusCode":304},"responseTime":7}[39m
-[09:51:16.810] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3fc26cd1-5c64-435a-8a9f-57b708d730af","res":{"statusCode":304},"responseTime":14}[39m
-[09:51:20.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a76ed5b9-e31e-4483-9efa-ed9661d7d487","res":{"statusCode":304},"responseTime":10}[39m
-[09:51:24.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5d115367-9530-400e-8430-2e6190b49752","res":{"statusCode":304},"responseTime":5}[39m
-[09:51:24.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"2f8a8ee7-b804-443c-a261-77b80c7451b1","res":{"statusCode":304},"responseTime":9}[39m
-[09:51:32.783] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a10e818d-0ae8-472e-9c93-8be4f60451c4","res":{"statusCode":304},"responseTime":5}[39m
-[09:51:32.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ccbc28ba-a506-4d59-9b61-86daed7099f9","res":{"statusCode":304},"responseTime":6}[39m
-[09:51:40.778] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c212c427-5005-4de7-b7b2-1a58140dcbf3","res":{"statusCode":304},"responseTime":5}[39m
-[09:51:40.779] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0b2686f6-6aa2-43a8-909b-33e5949aa331","res":{"statusCode":304},"responseTime":8}[39m
-[09:51:48.799] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"dc6dc652-eec2-4c30-be5a-347348848fb0","res":{"statusCode":304},"responseTime":7}[39m
-[09:51:48.804] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d68cbc9e-4d7f-4aaf-9c89-c3bd960a4dfc","res":{"statusCode":304},"responseTime":8}[39m
-[09:51:50.778] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e840c5a2-52a8-4022-83f4-5145de2839bd","res":{"statusCode":304},"responseTime":10}[39m
-[09:51:56.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"765cd9ed-8292-49d4-a71f-0f685bb25a66","res":{"statusCode":304},"responseTime":5}[39m
-[09:51:56.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5db36677-657a-4f9d-b7ad-399cb51b495d","res":{"statusCode":304},"responseTime":7}[39m
-[09:52:00.749] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a5cdf6ae-aec9-45e6-a036-a2e6bb8e9f3f","res":{"statusCode":304},"responseTime":10}[39m
-[09:52:04.801] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"43b22fdc-e57c-4785-9764-f482bc3121a1","res":{"statusCode":304},"responseTime":9}[39m
-[09:52:04.820] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f2263480-e8e4-457d-8110-f2da92bea83a","res":{"statusCode":304},"responseTime":5}[39m
-[09:52:12.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"143ec1a4-2b29-40d0-8ef0-f1f3c09c698a","res":{"statusCode":304},"responseTime":3}[39m
-[09:52:12.776] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"98534857-41aa-4237-9a6f-5bf898cbaad5","res":{"statusCode":304},"responseTime":6}[39m
-[09:52:20.779] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f56cb76b-c712-4501-b926-ff30ae9b81d6","res":{"statusCode":304},"responseTime":4}[39m
-[09:52:20.781] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"32103da7-d15d-4eaa-98fa-fd5bfb8ae086","res":{"statusCode":304},"responseTime":5}[39m
-[09:52:20.781] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e88edc23-d9bf-47e3-becf-7d5af6fe4852","res":{"statusCode":304},"responseTime":4}[39m
-[09:52:28.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"57d194e8-a717-4ba6-a00c-abaa9df4cadc","res":{"statusCode":304},"responseTime":7}[39m
-[09:52:28.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2306c784-db10-4466-90ea-21990f5a738e","res":{"statusCode":304},"responseTime":6}[39m
-[09:52:36.794] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"524cf5db-e9ef-404d-ac3f-8d7553876061","res":{"statusCode":304},"responseTime":13}[39m
-[09:52:36.796] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"65a1e7c6-4590-4edc-a4a6-907dbf430820","res":{"statusCode":304},"responseTime":11}[39m
-[09:52:44.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"63e38f67-8303-4e29-96cd-1750a7a24655","res":{"statusCode":304},"responseTime":5}[39m
-[09:52:44.776] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"01525f28-1d0f-4bd3-9fe3-feae74a53fff","res":{"statusCode":304},"responseTime":8}[39m
-[09:52:50.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"06e475c0-99d0-49c3-9a92-d23e738672be","res":{"statusCode":304},"responseTime":7}[39m
-[09:52:52.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8d74b2d8-df4b-41ad-a4f7-db24478ad507","res":{"statusCode":304},"responseTime":13}[39m
-[09:52:52.781] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"24b601ed-4b67-4008-81dc-d3aff8d846a8","res":{"statusCode":304},"responseTime":12}[39m
-[09:53:00.750] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8a720a31-71c5-4615-b816-692fd1ec3384","res":{"statusCode":304},"responseTime":12}[39m
-[09:53:00.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"753f8151-ecff-42af-b556-920b52df7525","res":{"statusCode":304},"responseTime":4}[39m
-[09:53:00.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5d75fbe3-a6b3-4e37-b408-ad1f7b99a502","res":{"statusCode":304},"responseTime":7}[39m
-[09:53:08.796] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"9ed96468-f08d-4d3f-9d52-52f8ad5dc490","res":{"statusCode":304},"responseTime":8}[39m
-[09:53:08.808] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cb6065ca-28d7-4a5c-b42e-e1162f0d6909","res":{"statusCode":304},"responseTime":18}[39m
-[09:53:16.806] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6a6af28d-224d-4028-a515-74034e523cb9","res":{"statusCode":304},"responseTime":12}[39m
-[09:53:16.807] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e567b7a2-10bf-437a-9485-7f4f699d38f2","res":{"statusCode":304},"responseTime":16}[39m
-[09:53:20.782] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"21fa2769-769b-4aee-8106-ffeb0015a08f","res":{"statusCode":304},"responseTime":10}[39m
-[09:53:24.781] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"bbe91637-7f53-4f13-b3f5-91aae33e0a46","res":{"statusCode":304},"responseTime":6}[39m
-[09:53:24.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4dd4abd2-1168-474b-b4eb-7d5b8654f43d","res":{"statusCode":304},"responseTime":7}[39m
-[09:53:32.793] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"8b44d33d-e74b-4912-bbff-f9cbcc78da52","res":{"statusCode":304},"responseTime":8}[39m
-[09:53:32.799] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c0c95782-a095-49ea-b7da-75ac61fae2de","res":{"statusCode":304},"responseTime":17}[39m
-[09:53:40.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5dafdb37-07b3-4cdf-8df7-3eaa808de5cc","res":{"statusCode":304},"responseTime":8}[39m
-[09:53:40.796] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5684e875-b083-4123-8953-086bd8d38de8","res":{"statusCode":304},"responseTime":16}[39m
-[09:53:48.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"09d6f65a-e1af-4bb6-b2aa-db4190e5c3d4","res":{"statusCode":304},"responseTime":5}[39m
-[09:53:48.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"15834f81-416b-420d-845f-3131ea453f0d","res":{"statusCode":304},"responseTime":5}[39m
-[09:53:50.789] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"26e0f40e-0c2c-41ad-82a6-642df28b8f27","res":{"statusCode":304},"responseTime":11}[39m
-[09:53:56.803] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5647609e-2e30-47dd-8503-b122e0176701","res":{"statusCode":304},"responseTime":4}[39m
-[09:53:56.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"dbb06d46-cb51-4e8e-a3e8-f544fb14b932","res":{"statusCode":304},"responseTime":8}[39m
-[09:54:00.758] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7012f7dc-50a9-4d82-9ae3-095d20aead6c","res":{"statusCode":304},"responseTime":11}[39m
-[09:54:04.778] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d6319e7b-8224-4f29-8398-6e3b17ec6939","res":{"statusCode":304},"responseTime":4}[39m
-[09:54:04.780] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"78fe2abd-f35f-4372-b1be-bbc364513e26","res":{"statusCode":304},"responseTime":7}[39m
-[09:54:12.785] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"98f39f0b-a5b2-457e-a254-ae2ad15fc800","res":{"statusCode":304},"responseTime":5}[39m
-[09:54:12.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d69de10c-83c0-4ec9-8407-6fcbdecd1268","res":{"statusCode":304},"responseTime":9}[39m
-[09:54:20.800] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"94c50fe2-392e-458a-b3a5-f508eaf10830","res":{"statusCode":304},"responseTime":12}[39m
-[09:54:20.811] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2deae107-30e1-49a2-aa92-f23401caba88","res":{"statusCode":304},"responseTime":7}[39m
-[09:54:20.942] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"65575f0f-7f1a-4868-8720-cb37c0df245b","res":{"statusCode":304},"responseTime":151}[39m
-[09:54:28.792] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"affe3be4-315e-48a7-a2b4-e32d7322e56f","res":{"statusCode":304},"responseTime":6}[39m
-[09:54:28.793] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3fa6ed99-2ae9-48a1-b135-ccfb1cbf3824","res":{"statusCode":304},"responseTime":9}[39m
-[09:54:36.782] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0b72352a-0b2a-41a0-bb0c-662685fbdb9e","res":{"statusCode":304},"responseTime":7}[39m
-[09:54:36.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0ea50d9a-f1cc-4089-943e-485f4808abbf","res":{"statusCode":304},"responseTime":14}[39m
-[09:54:44.779] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"bc178e29-1d3b-44f7-a274-ef459ef18747","res":{"statusCode":304},"responseTime":4}[39m
-[09:54:44.780] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3d076ba1-d324-433b-afa8-a883a9b6da7e","res":{"statusCode":304},"responseTime":9}[39m
-[09:54:50.801] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4a4271c5-78f5-4189-b8b5-cad8c808d772","res":{"statusCode":304},"responseTime":12}[39m
-[09:54:52.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"399b4882-5c25-46ac-8eee-fc7a51af0248","res":{"statusCode":304},"responseTime":8}[39m
-[09:54:52.789] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8eaaf0e5-79a7-4e59-9aaa-6b40e5539cb7","res":{"statusCode":304},"responseTime":16}[39m
-[09:55:00.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f4f25f70-988b-49cc-9ab3-8a124c033683","res":{"statusCode":304},"responseTime":6}[39m
-[09:55:00.797] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d4bcf644-861e-4de4-ab8e-1afdef060cf7","res":{"statusCode":304},"responseTime":9}[39m
-[09:55:00.892] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"9a43fa84-c863-4b04-9ba2-1285377ce837","res":{"statusCode":304},"responseTime":152}[39m
-[09:56:00.868] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c4016a05-f229-4441-8a9c-4db493409b7b","res":{"statusCode":304},"responseTime":128}[39m
-[09:56:01.203] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"682ac613-2276-4d9c-a640-17dfc8c2bb3c","res":{"statusCode":304},"responseTime":9}[39m
-[09:56:01.205] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a8cbc878-edc9-4381-b6e4-22468de2da49","res":{"statusCode":304},"responseTime":14}[39m
-[09:56:01.329] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0a1c6718-6e30-4ada-88e9-cfd2a53e9716","res":{"statusCode":304},"responseTime":133}[39m
-[09:57:00.765] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"91c7eae3-e0bb-463f-a52e-90cbe7dbb8fe","res":{"statusCode":304},"responseTime":12}[39m
-[09:57:00.975] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e1c4d1f1-e8b2-4e34-908e-f242a427065f","res":{"statusCode":304},"responseTime":5}[39m
-[09:57:00.976] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"07414f30-aa68-441d-87e3-3bdbb8a03c7b","res":{"statusCode":304},"responseTime":3}[39m
-[09:57:00.977] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4f399223-96ee-4a10-a91f-7b1481dc90fe","res":{"statusCode":304},"responseTime":8}[39m
-[09:57:39.184] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"614fe8d9-74cc-412a-8efa-d4bf6b032ba3","res":{"statusCode":304},"responseTime":6}[39m
-[09:57:39.188] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"acd17da5-5a42-423f-b612-2cab397c4f67","res":{"statusCode":304},"responseTime":8}[39m
-[09:57:39.190] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"1f873592-1de9-47d6-ad27-8493d5fcca78","res":{"statusCode":304},"responseTime":9}[39m
-[09:57:40.501] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"90749dee-de08-49f4-81c6-6a3c830bf8f6","res":{"statusCode":304},"responseTime":6}[39m
-[09:57:40.506] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ecc05f3f-887c-4f41-9e31-27d539e259f3","res":{"statusCode":304},"responseTime":13}[39m
-[09:57:48.495] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"90b62d1b-8853-4246-91b7-7eaee98d02ef","res":{"statusCode":304},"responseTime":7}[39m
-[09:57:48.498] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b82266e8-875e-463c-9f41-318ef45c7456","res":{"statusCode":304},"responseTime":6}[39m
-[09:57:50.620] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e8699955-4023-4b1b-a8dd-8f176648f588","res":{"statusCode":304},"responseTime":10}[39m
-[09:57:56.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"7a9d855f-2216-408d-861c-3910e9a667ed","res":{"statusCode":304},"responseTime":7}[39m
-[09:57:56.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8d9e27e4-13bf-47ed-90aa-17fd09547e16","res":{"statusCode":304},"responseTime":8}[39m
-[09:58:00.737] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c16617ef-8fc2-4610-a467-c5357398c637","res":{"statusCode":304},"responseTime":6}[39m
-[09:58:04.511] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d1ade698-03c9-4814-88f8-218c20331cc4","res":{"statusCode":304},"responseTime":8}[39m
-[09:58:04.521] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0b2fff87-9465-4318-92cf-a8d6e6d8f414","res":{"statusCode":304},"responseTime":15}[39m
-[09:58:12.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"129fa312-ed3d-4851-b651-b87bb4dcfdcb","res":{"statusCode":304},"responseTime":10}[39m
-[09:58:12.539] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d50d2ff7-e3fa-4c22-afc4-cbc49835859a","res":{"statusCode":304},"responseTime":18}[39m
-[09:58:20.512] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"dfae02b3-6cc5-499c-ba8b-bdda3c4cdcb4","res":{"statusCode":304},"responseTime":8}[39m
-[09:58:20.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f64a80a3-475e-4fb4-9789-801584910e31","res":{"statusCode":304},"responseTime":13}[39m
-[09:58:20.603] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8e384079-cad5-4fac-8b6a-bc4f1bcbe626","res":{"statusCode":304},"responseTime":6}[39m
-[09:58:23.336] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/campaigns/upload"},"correlationId":"b14e3fe4-3df4-4b35-a10f-f52ae599df31","res":{"statusCode":201},"responseTime":11}[39m
-[09:58:28.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e50f224c-8a53-45d1-88a1-969df641f0e4","res":{"statusCode":304},"responseTime":11}[39m
-[09:58:28.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"13547e89-3d6b-4e4f-83c6-f813857a31fe","res":{"statusCode":304},"responseTime":13}[39m
-[09:58:31.250] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/campaigns"},"correlationId":"5d4e195c-1644-422c-a762-2df62296b533","res":{"statusCode":201},"responseTime":31}[39m
-[09:58:31.311] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"4b54ca78-fc1f-4a30-bfe4-ba8c56d34385","res":{"statusCode":304},"responseTime":3}[39m
-[09:58:31.312] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"9f737ac6-3327-4a95-887d-02fa5df1468d","res":{"statusCode":200},"responseTime":6}[39m
-[09:58:36.522] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"935a3a15-840c-4054-b486-470cd75d7955","res":{"statusCode":304},"responseTime":9}[39m
-[09:58:36.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c7f29930-2c99-4be6-8f6b-c085e70ab160","res":{"statusCode":304},"responseTime":15}[39m
-[09:58:44.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f47f52cd-8af2-41ca-bca7-2817d409376f","res":{"statusCode":304},"responseTime":9}[39m
-[09:58:44.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"1f7cf178-a495-44c3-9083-aa8bbfa4080b","res":{"statusCode":304},"responseTime":10}[39m
-[09:58:50.646] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ce4e53f2-cd25-435b-8d8c-c1678e3ea5f5","res":{"statusCode":304},"responseTime":17}[39m
-[09:58:52.501] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b2bba9b7-2ae7-4fd8-b03a-9d3a8d8f9657","res":{"statusCode":304},"responseTime":7}[39m
-[09:58:52.507] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f015ed0e-4473-4e12-9a79-028465350123","res":{"statusCode":304},"responseTime":17}[39m
-[09:59:00.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"81d90d14-ec23-4287-9899-51c3d09230c7","res":{"statusCode":304},"responseTime":9}[39m
-[09:59:00.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"6005a130-c3e7-4f87-88e5-b7e41ac0c1bd","res":{"statusCode":304},"responseTime":15}[39m
-[09:59:00.756] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"24210399-a9c4-494f-a9fa-b25c669ef320","res":{"statusCode":304},"responseTime":6}[39m
-[09:59:08.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6fcd715e-a88a-4ccb-949a-6096baf1e3ee","res":{"statusCode":304},"responseTime":11}[39m
-[09:59:08.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c3ce0283-a6f6-42a8-add4-a987ec282548","res":{"statusCode":304},"responseTime":21}[39m
-[09:59:16.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c0bb28f6-f2bf-44a5-866e-89a4bb18ddc7","res":{"statusCode":304},"responseTime":8}[39m
-[09:59:16.534] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"6a409fdd-fe07-4a46-9de9-7bffbe566e64","res":{"statusCode":304},"responseTime":15}[39m
-[09:59:20.622] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ed9fdd3b-f2b3-49fd-846a-8e1f94323e38","res":{"statusCode":304},"responseTime":10}[39m
-[09:59:24.511] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"dc86ffc6-ff4c-4adc-abb3-ec5ccb900dac","res":{"statusCode":304},"responseTime":8}[39m
-[09:59:24.605] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"55cd4961-e2b8-40dc-b2f6-cc6b5e67dcdd","res":{"statusCode":304},"responseTime":100}[39m
-[09:59:32.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"db4a8bb0-44aa-4596-8aba-545d3f47d409","res":{"statusCode":304},"responseTime":5}[39m
-[09:59:32.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c2caf9f0-b43c-4226-9ea8-5c2a72178724","res":{"statusCode":304},"responseTime":21}[39m
-[09:59:40.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f9196ddd-6e83-4bc5-a129-42d4c15902e1","res":{"statusCode":304},"responseTime":12}[39m
-[09:59:40.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"310e7bc0-e8ed-4547-80e8-807f6125ca1e","res":{"statusCode":304},"responseTime":17}[39m
-[09:59:48.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"9e984cf6-6c21-4116-a7eb-b0bc13865e54","res":{"statusCode":304},"responseTime":9}[39m
-[09:59:48.538] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"391ed54c-dd4e-4290-8aa3-c508f2f0e235","res":{"statusCode":304},"responseTime":13}[39m
-[09:59:50.615] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d2a46dbd-edc9-4b9c-866e-7daa77fa1f86","res":{"statusCode":304},"responseTime":9}[39m
-[09:59:56.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"47e20b8a-4e59-42b9-9d11-0e3160a37276","res":{"statusCode":304},"responseTime":11}[39m
-[09:59:56.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"dbb63f7f-9d5c-4370-8931-2c053a1d9c66","res":{"statusCode":304},"responseTime":18}[39m
-[10:00:00.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"eb9f8def-4919-49e9-ac42-c13aef9ef595","res":{"statusCode":304},"responseTime":16}[39m
-[10:00:04.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"538d3f92-9dd9-4db8-b736-e35768a22711","res":{"statusCode":304},"responseTime":6}[39m
-[10:00:04.627] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"79651109-17ff-4446-bc77-f9c3e22caca0","res":{"statusCode":304},"responseTime":112}[39m
-[10:00:12.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"239b6a74-220a-4c88-9827-691fd8223c28","res":{"statusCode":304},"responseTime":18}[39m
-[10:00:12.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c8a2703d-9730-465b-8014-e35caaa1c3dc","res":{"statusCode":304},"responseTime":20}[39m
-[10:00:20.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5cb5eba2-6eb7-4c44-a558-961f487d18bc","res":{"statusCode":304},"responseTime":9}[39m
-[10:00:20.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e509bcb0-2054-4023-8fd6-d6d87e629a10","res":{"statusCode":304},"responseTime":14}[39m
-[10:00:20.636] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"913ce5b3-e428-4feb-ab0b-42057f7faa40","res":{"statusCode":304},"responseTime":9}[39m
-[10:00:28.522] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3c53d05c-c8fa-4974-9155-fb4faf05076a","res":{"statusCode":304},"responseTime":12}[39m
-[10:00:28.528] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"b094a1e2-4e5f-4473-b67c-bc1d9086b052","res":{"statusCode":304},"responseTime":20}[39m
-[10:00:36.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"da3d54bf-8d59-4a1a-9b35-d171ae09a3d2","res":{"statusCode":304},"responseTime":5}[39m
-[10:00:36.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"93cd2c2f-5bd0-44f9-9b25-8129e0bdfbc1","res":{"statusCode":304},"responseTime":10}[39m
-[10:00:44.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"92cff6d1-37c2-40fd-ada1-dcc421ff3422","res":{"statusCode":304},"responseTime":12}[39m
-[10:00:44.536] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"422f2e26-3d09-429f-a41f-48cfe076dfc2","res":{"statusCode":304},"responseTime":17}[39m
-[10:00:50.636] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"9e198006-b0e3-446b-8c4a-3aa203cbded2","res":{"statusCode":304},"responseTime":12}[39m
-[10:00:52.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"7d107402-b8fa-42f2-bd0b-ca23f1b2e04a","res":{"statusCode":304},"responseTime":15}[39m
-[10:00:52.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0e715a07-a323-49fe-9ecc-07628c16c6d6","res":{"statusCode":304},"responseTime":11}[39m
-[10:01:00.528] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6c6671a9-1b0c-4d8b-a366-40dc622eb6e2","res":{"statusCode":304},"responseTime":12}[39m
-[10:01:00.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e76a0d4d-3e7d-4455-9548-5863734d4f68","res":{"statusCode":304},"responseTime":18}[39m
-[10:01:00.759] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"f8cd46ea-bb92-4bd9-8699-47934ab89bd4","res":{"statusCode":304},"responseTime":7}[39m
-[10:01:08.503] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"859640ca-e1c6-494b-a368-cfa008c000dc","res":{"statusCode":304},"responseTime":3}[39m
-[10:01:08.610] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"861bd9a8-0f7f-4d21-8902-aad1209333fc","res":{"statusCode":304},"responseTime":109}[39m
-[10:01:16.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"8d24fce0-fdbc-47f7-9630-3e64b37db2e6","res":{"statusCode":304},"responseTime":14}[39m
-[10:01:16.535] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8b8d00be-7b15-4042-ad8c-57a9ecbab61c","res":{"statusCode":304},"responseTime":15}[39m
-[10:01:20.617] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1d2a125d-3a18-487c-bebe-5e34c43fd382","res":{"statusCode":304},"responseTime":10}[39m
-[10:01:24.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"7442c8ff-da37-4d15-b8f2-c087ddf430d7","res":{"statusCode":304},"responseTime":4}[39m
-[10:01:24.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f7019721-f407-439c-a50d-56ee8ab0c992","res":{"statusCode":304},"responseTime":5}[39m
-[10:01:32.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6becffdf-00bb-4495-8bc2-17a6517f6eaf","res":{"statusCode":304},"responseTime":11}[39m
-[10:01:32.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"985b6687-4bc8-438c-a42d-d2a597c2f3d8","res":{"statusCode":304},"responseTime":17}[39m
-[10:01:40.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2f6ae4e6-cbf8-4511-9bac-ef74acb6b1b7","res":{"statusCode":304},"responseTime":7}[39m
-[10:01:40.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"2d16a05b-8026-4ea5-ab38-f989bcd715ea","res":{"statusCode":304},"responseTime":12}[39m
-[10:01:48.518] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"fa426be0-f45e-437a-a25c-e5de8a8d8020","res":{"statusCode":304},"responseTime":6}[39m
-[10:01:48.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8e78b5c1-57a5-4bb0-baf5-cdd6403fea8d","res":{"statusCode":304},"responseTime":11}[39m
-[10:01:50.626] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c8e3bd9e-6c22-43ec-a5fc-42227cdd715b","res":{"statusCode":304},"responseTime":20}[39m
-[10:01:56.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"599bb2c3-f5c6-4767-9b41-a436f2749d9e","res":{"statusCode":304},"responseTime":8}[39m
-[10:01:56.535] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"6630169e-378c-4589-8cfb-eb1f61132902","res":{"statusCode":304},"responseTime":13}[39m
-[10:02:00.769] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0153e33d-e9ce-427c-bbbf-fb1804552c0b","res":{"statusCode":304},"responseTime":10}[39m
-[10:02:04.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"aa73ffa7-12f0-4a67-8e70-3b06dc995968","res":{"statusCode":304},"responseTime":12}[39m
-[10:02:04.537] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d584032f-c891-443e-b51b-2eceb1423219","res":{"statusCode":304},"responseTime":17}[39m
-[10:02:12.511] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"614ea0d5-345b-4886-9478-9e38263ebc93","res":{"statusCode":304},"responseTime":6}[39m
-[10:02:12.515] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"574d2ccf-4822-4ed0-991f-010b06239e9e","res":{"statusCode":304},"responseTime":7}[39m
-[10:02:20.505] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"72972792-c176-40db-9feb-9a0d2ea4ec38","res":{"statusCode":304},"responseTime":7}[39m
-[10:02:20.509] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8bca06d0-3b34-4804-93a4-39bdf0f10e37","res":{"statusCode":304},"responseTime":9}[39m
-[10:02:20.618] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0afc2b80-1b8b-4e82-8111-18ba4555d8f9","res":{"statusCode":304},"responseTime":13}[39m
-[10:02:28.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e38498e8-7a2b-4bbd-b2c8-6b724030a9b7","res":{"statusCode":304},"responseTime":9}[39m
-[10:02:28.537] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"673f74d6-73af-464b-8208-67e8481927b6","res":{"statusCode":304},"responseTime":13}[39m
-[10:02:36.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"317e5797-a894-4a76-9f76-cd0e2dd62e36","res":{"statusCode":304},"responseTime":8}[39m
-[10:02:36.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"2c97b260-7b98-4f05-9da9-03115851f296","res":{"statusCode":304},"responseTime":16}[39m
-[10:02:44.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"25b8ed76-d86e-4a66-bdfb-901fe1770e5f","res":{"statusCode":304},"responseTime":8}[39m
-[10:02:44.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"6b11c6ef-b1d5-4785-8e21-c3c741fc03c2","res":{"statusCode":304},"responseTime":13}[39m
-[10:02:50.650] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c96a2939-3fba-4433-bf41-d4471b3f8d5c","res":{"statusCode":304},"responseTime":10}[39m
-[10:02:52.501] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"70cbf7cc-cb39-426f-a6bf-7a6369fb607e","res":{"statusCode":304},"responseTime":8}[39m
-[10:02:52.512] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4e24e2a2-f77e-4f01-b7f2-437233383ecd","res":{"statusCode":304},"responseTime":17}[39m
-[10:03:00.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c8203bd0-390b-4685-9d86-7f53417cbd22","res":{"statusCode":304},"responseTime":7}[39m
-[10:03:00.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"2ca4da87-fe9a-4beb-9171-347b49b2ab76","res":{"statusCode":304},"responseTime":15}[39m
-[10:03:00.753] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8aae9e0d-96d5-455c-bcf0-75359eae7563","res":{"statusCode":304},"responseTime":10}[39m
-[10:03:08.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"41df8060-2ba0-4645-b93f-1eddc16a83fa","res":{"statusCode":304},"responseTime":8}[39m
-[10:03:08.540] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f4a3c045-2476-4bec-8fc8-bff6eece4e29","res":{"statusCode":304},"responseTime":18}[39m
-[10:03:16.515] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e3ffc39c-2221-461a-8ec4-e02b37ffff50","res":{"statusCode":401},"responseTime":1}[39m
-[10:03:16.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c252cdf9-bcbd-43b5-8913-93ecbb3ef66a","res":{"statusCode":401},"responseTime":1}[39m
-[10:03:16.802] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"0c9f4019-767a-4a47-85c7-510bb510148f","res":{"statusCode":201},"responseTime":210}[39m
-[10:03:16.859] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"70087681-7570-42b3-b915-18db815205df","res":{"statusCode":304},"responseTime":4}[39m
-[10:03:16.864] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d9ff2421-d787-4799-ae64-b70c48a089d9","res":{"statusCode":304},"responseTime":4}[39m
-[10:03:20.610] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"602a415b-351b-405e-b235-d041b686a0a7","res":{"statusCode":304},"responseTime":8}[39m
-[10:03:24.502] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"616c6333-be9f-4bba-ab42-61f0a567ea73","res":{"statusCode":304},"responseTime":4}[39m
-[10:03:24.504] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"79c50824-5cb6-43f4-9320-85ea7fec95a6","res":{"statusCode":304},"responseTime":7}[39m
-[10:03:32.582] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"514f9160-84fe-4fb8-8138-caabf19915bc","res":{"statusCode":304},"responseTime":8}[39m
-[10:03:32.589] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cd585364-34ee-48de-9a35-82d91041cd16","res":{"statusCode":304},"responseTime":13}[39m
-[10:03:40.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"972b04d4-c529-422c-92aa-ac35ff654ef5","res":{"statusCode":304},"responseTime":11}[39m
-[10:03:40.518] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"1c7806a6-62df-40d1-a52e-92fa2cfee83a","res":{"statusCode":304},"responseTime":17}[39m
-[10:03:48.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0c31df6f-2c85-45e5-97f1-e9574dff5dbe","res":{"statusCode":304},"responseTime":8}[39m
-[10:03:48.522] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"de6a1d2a-b460-4147-90c0-ebcededf663b","res":{"statusCode":304},"responseTime":14}[39m
-[10:03:50.612] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0179e637-cf24-45d7-9812-2e7b4a870964","res":{"statusCode":304},"responseTime":5}[39m
-[10:03:56.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"9f1d986c-1b8a-44f7-b94a-3c521b421afd","res":{"statusCode":304},"responseTime":5}[39m
-[10:03:56.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"bdf35adb-b475-47ea-ae2f-032c2f27521e","res":{"statusCode":304},"responseTime":12}[39m
-[10:04:00.768] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1f92e13b-7ba2-4d23-a355-2423097da36c","res":{"statusCode":304},"responseTime":8}[39m
-[10:04:04.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a02b5985-1938-4a3d-916c-1a98d0c2c103","res":{"statusCode":304},"responseTime":8}[39m
-[10:04:04.533] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"36be282d-d27c-4682-9c3a-8cc9b822e93f","res":{"statusCode":304},"responseTime":15}[39m
-[10:04:12.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c444fee4-235e-40b9-a2a2-3d5ad18714d3","res":{"statusCode":304},"responseTime":10}[39m
-[10:04:12.536] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4fcc02e2-6c0b-4983-af2a-ddd003f6f7de","res":{"statusCode":304},"responseTime":19}[39m
-[10:04:20.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"43d74f3a-a959-48bb-86bf-ced239ac80c4","res":{"statusCode":304},"responseTime":8}[39m
-[10:04:20.536] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d8e53fa7-5c0e-495d-8ff5-88d3e0620047","res":{"statusCode":304},"responseTime":14}[39m
-[10:04:20.618] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a25365bf-f28c-4ede-b118-81080ac65daf","res":{"statusCode":304},"responseTime":9}[39m
-[10:04:28.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b0983de1-8655-4f58-bad4-65267fa72d1a","res":{"statusCode":304},"responseTime":10}[39m
-[10:04:28.534] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5cc5dbdd-2216-4bac-a048-a808cce84a99","res":{"statusCode":304},"responseTime":31}[39m
-[10:04:36.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c035ff09-2354-4bbf-8fd8-6b848000775e","res":{"statusCode":304},"responseTime":20}[39m
-[10:04:36.526] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"fbaf400d-ad30-4fb5-822d-c75d15f8c37c","res":{"statusCode":304},"responseTime":18}[39m
-[10:04:44.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"7e965aa8-e9dc-4a25-9bd1-7250e35d797c","res":{"statusCode":304},"responseTime":8}[39m
-[10:04:44.539] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ab7a9268-6ea4-4e06-baba-db601f642788","res":{"statusCode":304},"responseTime":17}[39m
-[10:04:50.641] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"b26b813c-75b9-4d11-acb1-f009a8afeab0","res":{"statusCode":304},"responseTime":20}[39m
-[10:04:52.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f6251605-bc4d-46aa-af18-37b4714481e6","res":{"statusCode":304},"responseTime":11}[39m
-[10:04:52.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4a93f6d0-4a73-4b24-b212-93fe866a8970","res":{"statusCode":304},"responseTime":23}[39m
-[10:05:00.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"409eabdc-3520-44a0-86ab-c14bd0e8d737","res":{"statusCode":304},"responseTime":8}[39m
-[10:05:00.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5a088b22-fd23-44c0-a52e-bf02714c8372","res":{"statusCode":304},"responseTime":13}[39m
-[10:05:00.755] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5766173f-5838-4247-87db-d5e7aa80aa32","res":{"statusCode":401},"responseTime":3}[39m
-[10:05:00.999] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"ee848aab-5544-450f-8fd8-807727eaec14","res":{"statusCode":201},"responseTime":223}[39m
-[10:05:01.020] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"716cf0bb-f837-4e05-a878-a708d3b32edc","res":{"statusCode":304},"responseTime":5}[39m
-[10:05:08.538] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"7592cce6-7e09-495a-a466-caff0cfc1b2b","res":{"statusCode":304},"responseTime":12}[39m
-[10:05:08.718] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"851f90cf-f6e3-48c3-8ece-4d985d8f970b","res":{"statusCode":304},"responseTime":189}[39m
-[10:05:16.526] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"7a052a36-fdc5-4c33-8747-3dae7cfc2d3f","res":{"statusCode":304},"responseTime":18}[39m
-[10:05:16.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e91566b0-5445-4bb5-bbd7-2d18b82659b5","res":{"statusCode":304},"responseTime":17}[39m
-[10:05:20.638] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0bd79181-aad8-4a7d-8953-1e1ac0ab62da","res":{"statusCode":304},"responseTime":18}[39m
-[10:05:24.499] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"4a1f0c27-30fd-4787-8c8c-e542cbda94e0","res":{"statusCode":304},"responseTime":3}[39m
-[10:05:24.503] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"a90da627-9918-4999-8c1c-802a1f233962","res":{"statusCode":304},"responseTime":9}[39m
-[10:05:32.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a2df8278-5cda-4048-8c39-dc11e33984c7","res":{"statusCode":304},"responseTime":8}[39m
-[10:05:32.539] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"625c3696-5af3-4973-9bd5-a67ded28b199","res":{"statusCode":304},"responseTime":18}[39m
-[10:05:40.521] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a15ff2b0-274c-43f6-95d1-199ea000cfc2","res":{"statusCode":304},"responseTime":8}[39m
-[10:05:40.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"726c3ddf-4a96-4855-87ff-28944889b0bd","res":{"statusCode":304},"responseTime":15}[39m
-[10:05:48.522] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"1a57a76a-7b57-4263-a022-be7f7d1a705a","res":{"statusCode":304},"responseTime":8}[39m
-[10:05:48.533] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3ddcd1a3-93ee-4304-893e-d6f83daf7786","res":{"statusCode":304},"responseTime":17}[39m
-[10:05:50.617] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0c392ce9-cf00-421a-b678-ab2f8919fd47","res":{"statusCode":304},"responseTime":6}[39m
-[10:05:56.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6814bb5e-d2bd-4939-bb90-9f5b20478433","res":{"statusCode":304},"responseTime":8}[39m
-[10:05:56.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e7196586-030b-461d-9af6-49c46d5fae96","res":{"statusCode":304},"responseTime":18}[39m
-[10:06:00.777] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"707452bd-500a-4f92-848a-a83186734738","res":{"statusCode":304},"responseTime":14}[39m
-[10:06:04.522] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"41124580-57e0-4d97-a810-cf22159abd18","res":{"statusCode":304},"responseTime":11}[39m
-[10:06:04.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3d8494ed-f214-47f5-b6fe-5e6ffaba97ce","res":{"statusCode":304},"responseTime":19}[39m
-[10:06:12.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0fba7867-8f37-4f8e-8b6c-1fc94f912fff","res":{"statusCode":304},"responseTime":12}[39m
-[10:06:12.711] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5192ad95-a000-4304-bd17-7cf8750ba827","res":{"statusCode":304},"responseTime":204}[39m
-[10:06:20.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"75a4a3d5-270d-4dc5-ae11-d16c44494ea1","res":{"statusCode":304},"responseTime":11}[39m
-[10:06:20.526] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"08e4ccf2-c9a4-4a40-a9d9-55ea56876352","res":{"statusCode":304},"responseTime":26}[39m
-[10:06:20.627] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"752254a1-256a-48b3-9802-fe7313158024","res":{"statusCode":304},"responseTime":20}[39m
-[10:06:28.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3bbdcdb9-fa87-4dec-8295-7ef6ff571d26","res":{"statusCode":304},"responseTime":8}[39m
-[10:06:28.518] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"75c7a8f6-f32d-4530-9593-4141161d031c","res":{"statusCode":304},"responseTime":18}[39m
-[10:06:36.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"57319918-4fed-4c5e-9a27-02e7bf36fe82","res":{"statusCode":304},"responseTime":11}[39m
-[10:06:36.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0e6a59f6-0051-488b-9d73-09e7367075c2","res":{"statusCode":304},"responseTime":17}[39m
-[10:06:44.509] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"40a5b62a-b112-480a-8dc2-5141951ba308","res":{"statusCode":304},"responseTime":8}[39m
-[10:06:44.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ea707ae6-a70e-4df9-9b15-8379f8bc2b7c","res":{"statusCode":304},"responseTime":16}[39m
-[10:06:50.637] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ab4a3608-4ee0-4354-b89b-efb5425c0a86","res":{"statusCode":304},"responseTime":13}[39m
-[10:06:52.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3d54e52d-875d-492a-8702-1edadaa8300c","res":{"statusCode":304},"responseTime":19}[39m
-[10:06:52.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"d16af57e-ba47-4193-96c2-dded8538f7ea","res":{"statusCode":304},"responseTime":19}[39m
-[10:07:00.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ca046bdf-d6af-4f09-978c-ce96777ffab1","res":{"statusCode":304},"responseTime":11}[39m
-[10:07:00.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"eecd4abf-d0cd-4a5b-9083-dbcef8f48efc","res":{"statusCode":304},"responseTime":15}[39m
-[10:07:00.755] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7eb35781-9103-4c70-9080-c0b32bf04580","res":{"statusCode":304},"responseTime":7}[39m
-[10:07:08.537] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"140bc809-d0f0-436c-8252-b10e3f98fc80","res":{"statusCode":304},"responseTime":11}[39m
-[10:07:08.539] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"662c24c4-af98-4295-a39e-578d9d56cf88","res":{"statusCode":304},"responseTime":15}[39m
-[10:07:16.521] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6e55e19d-dde8-4de8-8aed-ffb84d3bf0c5","res":{"statusCode":304},"responseTime":11}[39m
-[10:07:16.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0d807b43-618d-4471-88a4-0aec52896729","res":{"statusCode":304},"responseTime":13}[39m
-[10:07:20.622] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"6d997110-d409-47d5-98f1-f09b8397c788","res":{"statusCode":304},"responseTime":10}[39m
-[10:07:24.512] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3136f691-b9ff-405c-b7b8-d5f04d087da9","res":{"statusCode":304},"responseTime":4}[39m
-[10:07:24.515] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ada3a287-1aa7-421c-9e04-f4634984bcc0","res":{"statusCode":304},"responseTime":6}[39m
-[10:07:32.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e73fb6f0-551f-42ec-ac6a-75984ffb1c21","res":{"statusCode":304},"responseTime":11}[39m
-[10:07:32.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5d2314f0-7273-4466-9b36-4d4fe1158cfe","res":{"statusCode":304},"responseTime":12}[39m
-[10:07:40.533] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"62fc1884-da10-428b-8ef5-4d345c47224b","res":{"statusCode":304},"responseTime":8}[39m
-[10:07:40.543] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3913b8f6-fb47-496a-ad98-5cc30ab44a5e","res":{"statusCode":304},"responseTime":16}[39m
-[10:07:48.508] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f8ea5766-9c73-41a0-8d52-0208fc465da6","res":{"statusCode":304},"responseTime":4}[39m
-[10:07:48.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"6de5ee87-3afe-4603-af61-dac22819de44","res":{"statusCode":304},"responseTime":9}[39m
-[10:07:50.637] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"9bb99a43-da55-4405-b749-597e76377a03","res":{"statusCode":304},"responseTime":9}[39m
-[10:07:56.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e8562d75-6605-47e5-b695-2ef4fb485210","res":{"statusCode":304},"responseTime":11}[39m
-[10:07:56.533] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"9ad5d316-596b-4aab-8acb-74c04ba515c8","res":{"statusCode":304},"responseTime":15}[39m
-[10:08:00.755] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"f86daa84-247c-4337-bdb8-26e9c634950c","res":{"statusCode":304},"responseTime":10}[39m
-[10:08:04.528] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e52f5320-3b41-43d3-bd1c-ccd753826c99","res":{"statusCode":304},"responseTime":6}[39m
-[10:08:04.534] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c5065dfe-3101-4569-8dcb-24cc7e783469","res":{"statusCode":304},"responseTime":15}[39m
-[10:08:12.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"1aece0a2-9dac-459c-b8d6-2e84ca5b75e5","res":{"statusCode":304},"responseTime":7}[39m
-[10:08:12.538] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"03a07555-2429-4309-883b-1496c0fa99a4","res":{"statusCode":304},"responseTime":17}[39m
-[10:08:20.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2cb1e916-c666-4b39-b3de-bf4162f6b501","res":{"statusCode":304},"responseTime":6}[39m
-[10:08:20.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ccc51a9c-8d66-48be-ae7c-92def30f459a","res":{"statusCode":304},"responseTime":11}[39m
-[10:08:20.606] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ba4d6b61-121f-405d-9381-e0ba08255d39","res":{"statusCode":304},"responseTime":7}[39m
-[10:08:28.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"45045712-e216-4184-bfe0-e4b4f170f6d2","res":{"statusCode":304},"responseTime":7}[39m
-[10:08:28.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"275fc1fd-0479-40ee-9237-57d629f67289","res":{"statusCode":304},"responseTime":13}[39m
-[10:08:36.526] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3d145c30-501d-4261-8aa1-36173c00d5ad","res":{"statusCode":304},"responseTime":7}[39m
-[10:08:36.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ed850e3d-5a4c-474e-995d-f74479440c99","res":{"statusCode":304},"responseTime":14}[39m
-[10:08:44.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"47062be1-549f-4758-9216-3d22811829a1","res":{"statusCode":304},"responseTime":11}[39m
-[10:08:44.533] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"a4dcb483-7928-41ca-b385-aafc4778225a","res":{"statusCode":304},"responseTime":16}[39m
-[10:08:50.633] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"b034fc32-c5ad-4ebc-8264-a4de2a4a009d","res":{"statusCode":304},"responseTime":9}[39m
-[10:08:52.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"7cd7e1dc-3b3a-4a6d-9547-eced7f0ee10d","res":{"statusCode":304},"responseTime":14}[39m
-[10:08:52.530] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f38fcfe3-2b81-40e4-9232-672174562d6d","res":{"statusCode":304},"responseTime":8}[39m
-[10:09:00.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0e1d4335-9b0a-413a-968b-ab534cf446e6","res":{"statusCode":304},"responseTime":11}[39m
-[10:09:00.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"1581b246-0ace-4387-93f0-ae6ecc512eeb","res":{"statusCode":304},"responseTime":16}[39m
-[10:09:00.751] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"61086946-76f2-43af-80cb-96ddb0ad41ed","res":{"statusCode":304},"responseTime":5}[39m
-[10:09:08.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"83ee0c9c-fa2b-4aab-a215-057fdf02128a","res":{"statusCode":304},"responseTime":7}[39m
-[10:09:08.524] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"beaef809-14da-410a-b86e-21d8701423af","res":{"statusCode":304},"responseTime":10}[39m
-[10:09:16.529] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3199fcc8-9f50-418d-8799-74cf8c4f4a96","res":{"statusCode":304},"responseTime":10}[39m
-[10:09:16.534] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"fff59ee1-10a0-4702-9b3c-c43ab4d5af95","res":{"statusCode":304},"responseTime":12}[39m
-[10:09:20.622] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7a473154-a547-4fb1-8f67-e3e8cf303e1b","res":{"statusCode":304},"responseTime":10}[39m
-[10:09:24.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"17ed639c-15cc-4061-b072-b4feaee80dcb","res":{"statusCode":304},"responseTime":3}[39m
-[10:09:24.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"27b4646f-c3b1-4814-8c27-e7270ae04de7","res":{"statusCode":304},"responseTime":6}[39m
-[10:09:32.519] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e8558941-e5e6-4643-82a9-d47e6df95bbf","res":{"statusCode":304},"responseTime":18}[39m
-[10:09:32.636] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"22515143-ce57-4f03-a849-1d0f76254854","res":{"statusCode":304},"responseTime":132}[39m
-[10:09:40.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"22212c16-da3c-4fe0-afcb-603591ef9b10","res":{"statusCode":304},"responseTime":7}[39m
-[10:09:40.531] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0b37f80b-2bc7-4a5b-88bf-f656aec2062d","res":{"statusCode":304},"responseTime":19}[39m
-[10:09:48.513] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b9d173f7-5214-4398-af29-a70a9600e91f","res":{"statusCode":304},"responseTime":6}[39m
-[10:09:48.516] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"7079fee7-23dc-463c-8054-7f58fa070ff4","res":{"statusCode":304},"responseTime":11}[39m
-[10:09:50.634] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4c1ed371-d171-4a0f-b33a-a0e1bda518ca","res":{"statusCode":304},"responseTime":20}[39m
-[10:09:56.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"fbc86d08-4231-4ae7-8b3f-357fa842b75c","res":{"statusCode":304},"responseTime":7}[39m
-[10:09:56.520] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5f46cff4-07f0-4c08-a8ca-09e8513cee01","res":{"statusCode":304},"responseTime":11}[39m
-[10:10:00.774] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7567fc64-00af-4942-880f-444817008952","res":{"statusCode":304},"responseTime":13}[39m
-[10:10:04.514] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"bec51761-de53-429e-b69d-a3edd2680207","res":{"statusCode":304},"responseTime":8}[39m
-[10:10:04.526] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0d561d92-3346-4050-b29a-31dc21a6194a","res":{"statusCode":304},"responseTime":17}[39m
-[10:10:12.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"f24c73bb-0584-451b-848c-237e3ddf45f5","res":{"statusCode":304},"responseTime":8}[39m
-[10:10:12.709] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5d7b2beb-062f-4063-a5b4-35802da88f4a","res":{"statusCode":304},"responseTime":174}[39m
-[10:10:20.536] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"91d8b6ea-e75b-4d2f-b8d7-51affdce3598","res":{"statusCode":304},"responseTime":19}[39m
-[10:10:20.541] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"664088e4-2c43-44dc-b667-3506dc99ab7e","res":{"statusCode":304},"responseTime":22}[39m
-[10:10:20.604] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"2b8d4043-9316-430a-8bd0-1285b82bd336","res":{"statusCode":304},"responseTime":6}[39m
-[10:10:28.510] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"fbc81e08-b962-4708-9483-63bcd02d2fba","res":{"statusCode":304},"responseTime":8}[39m
-[10:10:28.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"9a19d8bb-cec9-48fc-98ad-9e4cfc6e3f24","res":{"statusCode":304},"responseTime":18}[39m
-[10:10:36.515] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d6280c70-f3aa-43b9-815e-078f29198d64","res":{"statusCode":304},"responseTime":7}[39m
-[10:10:36.517] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cd6152e6-41ab-4211-ab61-1aa91b8231e7","res":{"statusCode":304},"responseTime":11}[39m
-[10:10:44.525] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6a89c158-ad9e-4b11-92a8-6ee2282b345d","res":{"statusCode":304},"responseTime":11}[39m
-[10:10:44.532] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"fe91aa35-efb8-491f-930e-91640286d1a4","res":{"statusCode":304},"responseTime":17}[39m
-[10:10:50.652] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"400361e7-510f-4dfb-b020-9568da48dff2","res":{"statusCode":304},"responseTime":20}[39m
-[10:10:52.498] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"28796565-7f28-43df-bf04-c5b27db1ec40","res":{"statusCode":304},"responseTime":15}[39m
-[10:10:52.505] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"98e50116-477a-42c5-b8a4-cd887d6c57e1","res":{"statusCode":304},"responseTime":10}[39m
-[10:11:00.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"b80c1365-084e-4788-944a-4f233381fb56","res":{"statusCode":304},"responseTime":7}[39m
-[10:11:00.536] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e00dc7a4-40d9-47dc-bb29-9874b2c6ada9","res":{"statusCode":304},"responseTime":19}[39m
-[10:11:00.772] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ea7be933-c415-4f5a-9148-07d21f15276a","res":{"statusCode":304},"responseTime":13}[39m
-[10:11:08.768] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"a11ff09a-b57d-4fcc-8087-7422a1164943","res":{"statusCode":304},"responseTime":3}[39m
-[10:11:08.769] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"b8a3626a-4923-40d0-8537-1fed032a3d99","res":{"statusCode":304},"responseTime":7}[39m
-[10:11:16.771] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"5fdedd24-bd55-428a-b733-47df8f734c53","res":{"statusCode":304},"responseTime":4}[39m
-[10:11:16.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c0d429d6-5587-4dee-a3f4-580e87fe5f53","res":{"statusCode":304},"responseTime":7}[39m
-[10:11:20.794] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"2b2efbd4-5f86-4f3e-b11a-0e7616634183","res":{"statusCode":304},"responseTime":10}[39m
-[10:11:24.802] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"e7cfdd6a-7485-4fa8-a14c-7c4c8af088d6","res":{"statusCode":304},"responseTime":8}[39m
-[10:11:24.810] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ad1b9a02-40f7-4f34-b0a6-c7a6257ee481","res":{"statusCode":304},"responseTime":14}[39m
-[10:11:32.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"47571cc1-73b0-42ed-bf04-d52703615f6b","res":{"statusCode":304},"responseTime":9}[39m
-[10:11:32.800] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0f628591-7e45-4c6c-85cb-4362ac115475","res":{"statusCode":304},"responseTime":18}[39m
-[10:11:40.798] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"0f21b111-9d03-435f-b8dc-4c503c628905","res":{"statusCode":304},"responseTime":8}[39m
-[10:11:40.804] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"cff59741-ad5f-4d59-b528-0bff8db70e47","res":{"statusCode":304},"responseTime":11}[39m
-[10:11:48.809] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"6b2f90fa-aa67-4005-a14c-8f7717935f69","res":{"statusCode":304},"responseTime":11}[39m
-[10:11:48.997] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"c604a79a-4664-4987-85fb-ea3a71b9d0e4","res":{"statusCode":304},"responseTime":202}[39m
-[10:11:50.762] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"976a095c-0927-457f-b0ca-f5fb84b0b2ac","res":{"statusCode":304},"responseTime":8}[39m
-[10:11:56.504] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"df66a570-3c97-4719-b80f-c478d4ff9fb5","res":{"statusCode":304},"responseTime":3}[39m
-[10:11:56.508] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"b157d35a-c8e5-467a-81b4-468fd250b48c","res":{"statusCode":304},"responseTime":8}[39m
-[10:12:00.732] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"25beef85-f64c-4266-8748-c4e5f58792b6","res":{"statusCode":304},"responseTime":5}[39m
-[10:12:04.523] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"80c6a7e3-fc9a-4b13-ae50-1a829abbc3d9","res":{"statusCode":304},"responseTime":13}[39m
-[10:12:04.527] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"f966e3bf-d3db-41bf-b283-82b7ea75936a","res":{"statusCode":304},"responseTime":19}[39m
-[10:12:09.549] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/notifications/bfed5c9e-862f-4b17-b2a2-ccd6ce3b763b/read"},"correlationId":"0f504405-8dcd-4bea-86f6-26977a1ab3b5","res":{"statusCode":200},"responseTime":21}[39m
-[10:12:09.641] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/contacts?limit=100"},"correlationId":"c9049f94-68ea-47bc-a057-59b0e9b538c7","res":{"statusCode":200},"responseTime":12}[39m
-[10:12:09.896] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/contacts?limit=100"},"correlationId":"24a0b80e-b051-4024-9321-b21bdb85cd5f","res":{"statusCode":304},"responseTime":4}[39m
-[10:12:11.782] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/notifications/272ed069-d98c-40da-93fa-27e8527c2c2b/read"},"correlationId":"1b54a47a-6c07-424c-a2a8-c60e8c927d69","res":{"statusCode":200},"responseTime":9}[39m
-[10:12:13.961] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/notifications/b669f2dc-d90e-4ba3-bc47-a6193027b812/read"},"correlationId":"5f65b20d-9feb-4af4-b5d2-011164080b18","res":{"statusCode":200},"responseTime":11}[39m
-[10:12:17.185] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/notifications/bfed5c9e-862f-4b17-b2a2-ccd6ce3b763b/read"},"correlationId":"da87880f-8e38-4879-b0fe-15c2a29b51af","res":{"statusCode":200},"responseTime":10}[39m
-[10:12:19.550] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/notifications/b669f2dc-d90e-4ba3-bc47-a6193027b812/read"},"correlationId":"fbf1c02b-af64-4739-98bf-da95b0ab29ab","res":{"statusCode":200},"responseTime":12}[39m
-[10:12:20.614] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"593370dd-0af4-47fe-a7ca-a76009123894","res":{"statusCode":200},"responseTime":13}[39m
-[10:12:50.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"b39eebbb-aa75-4207-a343-61aade074d48","res":{"statusCode":304},"responseTime":12}[39m
-[10:13:00.739] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"05187acd-e37e-4dce-bde5-8cd97b795915","res":{"statusCode":200},"responseTime":8}[39m
-[10:13:14.968] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"3aca3ea8-f780-41c7-a789-46c8e7f41089","res":{"statusCode":201},"responseTime":217}[39m
-[10:13:15.004] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"7ba0300f-7034-4524-9af5-c6d83f337b94","res":{"statusCode":200},"responseTime":6}[39m
-[10:13:15.150] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/campaigns/41df498b-2761-4a67-8068-1cd697d18730/start"},"correlationId":"2318d3ea-514a-4b62-a2c8-0498160f6223","res":{"statusCode":201},"responseTime":15}[39m
-[10:13:20.782] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"cb838c41-8ce0-42d2-b849-a870ef9bc50a","res":{"statusCode":304},"responseTime":6}[39m
-[10:13:22.807] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5512988073788 (true_5512988073788@c.us_3EB01EAE782E18D96D3A92)[39m [90m{"context":"Conversations"}[39m
-[10:13:22.833] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[10:13:22.881] [32mINFO[39m (3364): [36mDisparo p/ 5512988073788 (campanha Teste 2) [6/30 hoje; próx em 50s][39m [90m{"context":"Sender"}[39m
-[10:13:50.790] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4a9845dd-3071-4415-a95c-942fc7380802","res":{"statusCode":304},"responseTime":13}[39m
-[10:14:00.735] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5802493b-d3bf-459d-8cd1-fb18d021dddd","res":{"statusCode":304},"responseTime":5}[39m
-[10:14:20.616] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d6508e74-bfe1-4212-8c2b-7feb00e48d75","res":{"statusCode":304},"responseTime":4}[39m
-[10:14:22.448] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5511994327713 (true_5511994327713@c.us_3EB04940FE1217565F95E1)[39m [90m{"context":"Conversations"}[39m
-[10:14:22.458] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[10:14:22.486] [32mINFO[39m (3364): [36mDisparo p/ 5511994327713 (campanha Teste 2) [7/30 hoje; próx em 83s][39m [90m{"context":"Sender"}[39m
-[10:14:50.637] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"dab2e9e0-2a06-40ce-b21d-8addbd125b88","res":{"statusCode":304},"responseTime":13}[39m
-[10:14:54.546] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"4e65ad0a-1870-480c-8076-17e096f8a513","res":{"statusCode":200},"responseTime":7}[39m
-[10:14:54.551] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"fa5a87c0-4a2e-4f13-9d74-e5f97ee91c8c","res":{"statusCode":200},"responseTime":4}[39m
-[10:14:54.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ae0b2ef7-11fa-4202-bb4b-900de149d392","res":{"statusCode":304},"responseTime":4}[39m
-[10:14:54.807] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ee834aa0-2293-40e7-a2fc-cd1fe4730683","res":{"statusCode":304},"responseTime":6}[39m
-[10:15:00.763] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"9a399a09-92f3-4128-84d7-7d8dcf69141a","res":{"statusCode":304},"responseTime":10}[39m
-[10:15:02.563] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c5159b6f-6529-4117-bbe6-5e95a0eadb3a","res":{"statusCode":304},"responseTime":3}[39m
-[10:15:02.567] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"3cf66503-97a7-48ee-bb9a-0d52a13b16e3","res":{"statusCode":304},"responseTime":5}[39m
-[10:15:10.574] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"2e1554d1-48a8-4bf1-af99-3a489b719151","res":{"statusCode":304},"responseTime":5}[39m
-[10:15:10.575] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"43b0d033-0e65-4232-8120-511e44d9f4b8","res":{"statusCode":304},"responseTime":9}[39m
-[10:15:18.583] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"d6f2f2e2-2114-46b9-9e5d-0769becb8718","res":{"statusCode":304},"responseTime":7}[39m
-[10:15:18.603] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"b3faeb47-4168-49e4-abc4-c3b95d844f80","res":{"statusCode":304},"responseTime":30}[39m
-[10:15:20.652] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"251d7a5c-ead0-4b65-8a15-7c9167aa5e94","res":{"statusCode":304},"responseTime":22}[39m
-[10:15:26.577] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"cb1f411e-6835-4be9-90c8-84364a0fbacc","res":{"statusCode":304},"responseTime":7}[39m
-[10:15:26.718] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"e6c5f246-29f0-47c9-8cd0-48890fe0d6e8","res":{"statusCode":304},"responseTime":151}[39m
-[10:15:34.585] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"ab6639b8-63b0-4fcc-a353-4ddbaf8de132","res":{"statusCode":304},"responseTime":19}[39m
-[10:15:34.587] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"5eb1b9f4-b4c9-4ae4-b906-1a1b49683a5c","res":{"statusCode":304},"responseTime":24}[39m
-[10:15:42.792] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"8de2d8e3-bf78-4d08-acb2-0b4f0350a145","res":{"statusCode":304},"responseTime":6}[39m
-[10:15:42.793] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"88e96811-672a-4e27-a898-4b8ad078d18b","res":{"statusCode":304},"responseTime":8}[39m
-[10:15:50.807] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"51ea4c67-fc92-49e9-a9e6-74917edbe57d","res":{"statusCode":304},"responseTime":17}[39m
-[10:15:50.810] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8c3adae5-27f2-44db-87f2-6f2fa452622a","res":{"statusCode":304},"responseTime":17}[39m
-[10:15:50.960] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"651df0b3-001f-44c7-9417-9bee3137fc46","res":{"statusCode":304},"responseTime":164}[39m
-[10:15:52.893] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5511974869142 (true_5511974869142@c.us_3EB041DC3DCAF7E4B865CE)[39m [90m{"context":"Conversations"}[39m
-[10:15:52.902] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[10:15:52.932] [32mINFO[39m (3364): [36mDisparo p/ 5511974869142 (campanha Teste 2) [8/30 hoje; próx em 31s][39m [90m{"context":"Sender"}[39m
-[10:15:58.778] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"8eb4a1f8-7437-4b60-82b1-e80d261d843d","res":{"statusCode":200},"responseTime":7}[39m
-[10:15:58.787] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"ca750bfd-d5de-465a-832b-31ac7d9c6cb8","res":{"statusCode":200},"responseTime":15}[39m
-[10:16:00.761] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4af4272e-f19a-426f-bfe5-150db7c1c719","res":{"statusCode":304},"responseTime":18}[39m
-[10:16:06.798] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"14a781a9-d813-4dff-9a2e-4c5bb7f86bb5","res":{"statusCode":304},"responseTime":8}[39m
-[10:16:06.808] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"31270a9d-e3b7-48f3-8dd7-1f94372159b7","res":{"statusCode":304},"responseTime":15}[39m
-[10:16:14.564] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"82bee2d5-7bd0-4918-8c39-5ede3a3c9fd2","res":{"statusCode":304},"responseTime":3}[39m
-[10:16:14.567] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"a4b7a420-c184-4cc4-805a-9d393b3234f8","res":{"statusCode":304},"responseTime":8}[39m
-[10:16:20.613] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"afaa23df-60ff-4375-ad13-a85e5065c5bd","res":{"statusCode":304},"responseTime":8}[39m
-[10:16:22.781] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"3e351676-3b32-4d6c-b850-f8bff1705101","res":{"statusCode":304},"responseTime":4}[39m
-[10:16:22.784] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"adaa9376-d254-400c-b0db-9ab754c1f408","res":{"statusCode":304},"responseTime":6}[39m
-[10:16:30.704] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"23b01078-8c18-418c-85f3-b3dbc75df869","res":{"statusCode":304},"responseTime":6}[39m
-[10:16:30.707] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"1d51f07f-6de0-43aa-97ab-f88f4b29c7f8","res":{"statusCode":304},"responseTime":8}[39m
-[10:16:37.512] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5512996262968 (true_5512996262968@c.us_3EB01CD2BB18DB35586245)[39m [90m{"context":"Conversations"}[39m
-[10:16:37.533] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[10:16:37.593] [32mINFO[39m (3364): [36mDisparo p/ 5512996262968 (campanha Teste 2) [9/30 hoje; próx em 62s][39m [90m{"context":"Sender"}[39m
-[10:16:38.551] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sender/numbers"},"correlationId":"c9fc6172-533a-4e17-b7b9-fe62fb7b5a51","res":{"statusCode":200},"responseTime":5}[39m
-[10:16:38.556] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/campaigns"},"correlationId":"0c7a6c4e-bf5e-44fb-b2d2-31cf5b7e796a","res":{"statusCode":200},"responseTime":11}[39m
-[10:16:41.616] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/overview?from=2026-05-10&to=2026-06-08"},"correlationId":"992edb5b-5df9-4a6f-9be8-93babd40ea52","res":{"statusCode":200},"responseTime":251}[39m
-[10:16:41.874] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/overview?from=2026-05-10&to=2026-06-08"},"correlationId":"cc10e0ef-4516-4261-9312-53fd0f6b375e","res":{"statusCode":304},"responseTime":25}[39m
-[10:16:43.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"9fff0c28-91aa-4072-b55c-44d812b2ef38","res":{"statusCode":304},"responseTime":7}[39m
-[10:16:43.810] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/sellers"},"correlationId":"9f0fb3ac-c2ff-4f62-be5e-3466918109de","res":{"statusCode":304},"responseTime":14}[39m
-[10:16:44.050] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"76559955-165e-4c0c-b678-da29ffcba1d9","res":{"statusCode":304},"responseTime":4}[39m
-[10:16:44.074] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/sellers"},"correlationId":"876e863f-c3c4-46cd-a9a9-ac9fed23d150","res":{"statusCode":304},"responseTime":7}[39m
-[10:16:50.766] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"81de37fc-1d30-4878-ae80-7b44c7295463","res":{"statusCode":304},"responseTime":7}[39m
-[10:17:00.775] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d06de641-43de-4f62-8ea9-e227bd44a95b","res":{"statusCode":304},"responseTime":21}[39m
-[10:17:20.788] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1b8a56db-a62d-4871-9dd2-a806a6372822","res":{"statusCode":304},"responseTime":8}[39m
-[10:17:52.562] [32mINFO[39m (3364): [36mWhatsApp enviado p/ 5511917747429 (true_5511917747429@c.us_3EB0AF5B2B830A95F4917F)[39m [90m{"context":"Conversations"}[39m
-[10:17:52.573] [31mERROR[39m (3364): [36mWAHA sendFile 422: {"message":"The feature is available only in Plus version for 'GOWS' engine. Check this out: https://waha.devlike.pro/","error":"Unprocessable Entity","statusCo[39m [90m{"context":"WahaClient"}[39m
-[10:17:52.607] [32mINFO[39m (3364): [36mDisparo p/ 5511917747429 (campanha Teste 2) [10/30 hoje; próx em 84s][39m [90m{"context":"Sender"}[39m
-[10:17:59.940] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"3aeafd02-6b5c-483b-87be-331f4259b918","res":{"statusCode":304},"responseTime":6}[39m
-[10:18:00.756] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"23f236bd-edb0-4e54-9600-3d1c4ca69838","res":{"statusCode":304},"responseTime":10}[39m
-[10:18:20.795] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c4d45e02-8393-4779-a3df-a74685a7296a","res":{"statusCode":401},"responseTime":3}[39m
-[10:18:21.040] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"39bcb77c-e13e-42f3-9206-aaa911eb51a1","res":{"statusCode":201},"responseTime":180}[39m
-[10:18:21.097] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0df548ec-4250-46b4-bb9e-7a75c57ff661","res":{"statusCode":304},"responseTime":4}[39m
-[10:18:50.805] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e3aa357d-432b-4dc9-803f-62c69c30717a","res":{"statusCode":304},"responseTime":12}[39m
-[10:19:00.765] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e76a1e66-98cd-464b-ba97-613c3f79c7e4","res":{"statusCode":304},"responseTime":12}[39m
-[10:19:52.199] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"2c14ccb5-85c4-4316-9ddc-b580b9eb8d22","res":{"statusCode":304},"responseTime":12}[39m
-[10:20:00.754] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c4336fff-8cfb-4455-83b8-10fdee3f6333","res":{"statusCode":401},"responseTime":3}[39m
-[10:20:00.951] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"784339bd-37e8-4b4c-a48e-c64526d9662a","res":{"statusCode":201},"responseTime":178}[39m
-[10:20:00.965] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"973196ae-69ee-48fb-81cb-e1d808042ce3","res":{"statusCode":304},"responseTime":4}[39m
-[10:20:53.185] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d953f1fe-2c5b-4cd1-adf8-86f15ee30c3f","res":{"statusCode":304},"responseTime":12}[39m
-[10:21:00.751] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e5fb3284-6f19-49b8-bc5a-1cd2a3c1b64a","res":{"statusCode":304},"responseTime":9}[39m
-[10:21:54.386] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"be7c4e64-7f8d-4078-b995-0a3aa4f79c03","res":{"statusCode":304},"responseTime":197}[39m
-[10:22:00.773] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"19c2712a-dbf6-4ebb-91b3-dd786034bb7e","res":{"statusCode":304},"responseTime":17}[39m
-[10:22:20.786] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0f6927fb-ca1e-4670-8c66-afc92f5c03f6","res":{"statusCode":304},"responseTime":5}[39m
-[10:22:50.797] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"33cfca0d-c185-4dcb-8683-3ee07ac99ac7","res":{"statusCode":304},"responseTime":7}[39m
-[10:23:00.751] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e94952cf-ceda-4107-a767-6a5b98e67455","res":{"statusCode":304},"responseTime":10}[39m
-[10:23:20.806] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"33627c94-fa68-45f8-9265-edbcb1c1bdd5","res":{"statusCode":304},"responseTime":12}[39m
-[10:24:00.761] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"6be03557-5353-4f20-90ef-629ac2f764af","res":{"statusCode":304},"responseTime":10}[39m
-[10:24:01.192] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8c7c76d4-ac8f-4794-b481-10f4eddb7158","res":{"statusCode":304},"responseTime":8}[39m
-[10:25:00.757] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0234485d-6c38-4a7b-99e9-fc9a46503bd5","res":{"statusCode":304},"responseTime":13}[39m
-[10:25:00.791] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a22f0841-bf9d-4bf6-9072-f11c26d6c6d9","res":{"statusCode":304},"responseTime":6}[39m
-[10:26:00.749] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a8af705b-135f-4aab-9417-98b6f27d0ee6","res":{"statusCode":304},"responseTime":6}[39m
-[10:26:00.795] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"85b5598c-9c5a-4ddd-b626-2e5cc8b1c0dd","res":{"statusCode":304},"responseTime":4}[39m
-[10:26:01.544] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/health"},"correlationId":"269c87f1-9eca-4311-a5d5-ed2f87f5ebfb","res":{"statusCode":200},"responseTime":5}[39m
-[10:27:00.886] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5a10e26b-c2d6-41f0-b198-39262afc20bc","res":{"statusCode":304},"responseTime":139}[39m
-[10:27:00.900] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"33b49219-9860-457e-93d8-5629b539f144","res":{"statusCode":304},"responseTime":113}[39m
-[10:28:00.763] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a5b55145-e91d-445c-ad81-d193b2df7833","res":{"statusCode":304},"responseTime":16}[39m
-[10:28:00.809] [32mINFO[39m (3364): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"91a31865-52f7-4531-8640-5bd3460b78a6","res":{"statusCode":304},"responseTime":10}[39m
+[10:58:26.755] [32mINFO[39m (2068): [36mStarting Nest application...[39m [90m{"context":"NestFactory"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mAutonomia inicial: LIGADA[39m [90m{"context":"Autonomy"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mPrismaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mAiModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mGovernanceModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mWahaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mPassportModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mThrottlerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mJwtModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mConfigHostModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mDiscoveryModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mAuditModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mEventsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mLoggerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mConfigModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mScheduleModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mEventEmitterModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mAdminModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mAppModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mConnectorsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mContactsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mConversationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mSellersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.756] [32mINFO[39m (2068): [36mPlaybookModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mNotificationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMetricsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mUsersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mWhatsappModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mActionsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mBillingModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mKnowledgeModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mFollowUpModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mAuthModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mSenderModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mAgentsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mWebSocket /ws inicializado[39m [90m{"context":"ConversationsGateway"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mConversationsGateway subscribed to the "join" message[39m [90m{"context":"WebSocketsController"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mHealthController {/api/health}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/health/live, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/health/ready, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mAuthController {/api/auth}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/auth/login, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/auth/refresh, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/auth/logout, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/auth/me, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mProductsController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/products, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/products/:code/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/plans, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mContactsController {/api/contacts}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts/import, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts/:id/reactivate, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/contacts/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mConversationsController {/api/conversations}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations/:id/messages, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations/:id/outcome, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/conversations/:id/messages, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mActionsController {/api/actions}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/actions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/actions/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mBillingController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/billing/payment-request, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/billing/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/webhooks/asaas, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mKnowledgeController {/api/knowledge}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/import/:productCode, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/:id/versions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/knowledge/versions/:versionId/approve, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mAgentsController {/api/agent}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/agent/ask, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/agent/handle, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mSellersController {/api/sellers}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sellers, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sellers/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sellers/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sellers/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mPlaybookController {/api/playbook}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/playbook, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/playbook, PUT} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/playbook/reset, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mNotificationsController {/api/notifications}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/notifications, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/notifications/read-all, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/notifications/:id/read, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mAdminController {/api/admin}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/admin/autonomy, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/admin/autonomy, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMetricsController {/api/metrics}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/metrics/overview, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/metrics/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mWhatsappController {/api/webhooks}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/webhooks/waha, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mFollowUpController {/api/followups}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/followups, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mSenderController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns/upload, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns/:id/start, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns/:id/pause, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/campaigns/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/sender/numbers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mUsersController {/api/users}:[39m [90m{"context":"RoutesResolver"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/users/areas, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/users, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/users, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/users/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mMapped {/api/users/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[10:58:26.757] [32mINFO[39m (2068): [36mNest application successfully started[39m [90m{"context":"NestApplication"}[39m
+[10:58:32.255] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"5d43f1e2-f81e-4a03-94dc-1f869285ead8","res":{"statusCode":201},"responseTime":236}[39m
+[10:58:32.317] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"cf7633f5-7d63-41ff-ba23-50ca8b7195c8","res":{"statusCode":200},"responseTime":32}[39m
+[10:58:32.563] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/sellers/1de36072-88ee-4ae6-8714-5a30dc4e4074"},"correlationId":"8c0dd8fc-e61b-468c-aee3-3075d94a02c9","res":{"statusCode":200},"responseTime":112}[39m
+[10:58:32.608] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"df327e63-cf7a-450f-b9bc-bd689bf588a1","res":{"statusCode":200},"responseTime":6}[39m
+[10:59:00.768] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"cdc3a1fb-d20f-49ba-9049-d0244fded504","res":{"statusCode":304},"responseTime":23}[39m
+[10:59:00.794] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8a537be4-02c0-4d9d-83bc-137b9a80a832","res":{"statusCode":304},"responseTime":7}[39m
+[11:00:00.769] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"29650957-f867-43a0-ad31-778859c31d6e","res":{"statusCode":304},"responseTime":16}[39m
+[11:00:00.817] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e672bce7-c37e-4ad2-8234-c3bb51f95b5a","res":{"statusCode":304},"responseTime":5}[39m
+[11:00:10.411] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/auth/me"},"correlationId":"e653be32-18e9-4d7e-950b-b6af90641455","res":{"statusCode":304},"responseTime":6}[39m
+[11:00:10.633] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/auth/me"},"correlationId":"7932581f-f309-4bdd-81bb-ce6888f2ed0b","res":{"statusCode":304},"responseTime":4}[39m
+[11:00:10.683] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/admin/autonomy"},"correlationId":"ed0d6f5a-02d8-4cca-9060-d8537ae07981","res":{"statusCode":304},"responseTime":1}[39m
+[11:00:10.693] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0c671e4e-fbb4-4a10-ba31-76329203bdba","res":{"statusCode":304},"responseTime":7}[39m
+[11:00:10.703] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"ffab146f-dae6-475b-a8a1-16143a53b630","res":{"statusCode":200},"responseTime":12}[39m
+[11:00:10.704] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/sellers"},"correlationId":"2c290a96-bb91-44fd-b8fa-a42ec886f965","res":{"statusCode":304},"responseTime":15}[39m
+[11:00:10.751] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"73c44fd8-3359-436e-b7ea-3674673fc0b1","res":{"statusCode":304},"responseTime":4}[39m
+[11:00:10.956] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/admin/autonomy"},"correlationId":"3604d77b-e967-491b-be71-da10b7a0974c","res":{"statusCode":304},"responseTime":1}[39m
+[11:00:10.982] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/sellers"},"correlationId":"dcf2bd46-ee73-46dc-9ae3-09690d14211d","res":{"statusCode":304},"responseTime":7}[39m
+[11:00:10.996] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"876018c8-bea1-4d4d-8d23-b9d074bf96a2","res":{"statusCode":304},"responseTime":6}[39m
+[11:00:40.731] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"14041498-8283-4fa6-a63e-9e7b4b953bd7","res":{"statusCode":304},"responseTime":12}[39m
+[11:00:47.823] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"PATCH","url":"/api/sellers/1de36072-88ee-4ae6-8714-5a30dc4e4074"},"correlationId":"abc3593a-9775-4074-ab2d-87109120198c","res":{"statusCode":200},"responseTime":130}[39m
+[11:00:47.891] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/sellers"},"correlationId":"923cff4c-43b1-4426-9679-7ab23d44a44b","res":{"statusCode":304},"responseTime":10}[39m
+[11:00:47.906] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/sellers"},"correlationId":"e871ffd5-ed6f-4478-b133-e7900d94f071","res":{"statusCode":200},"responseTime":5}[39m
+[11:01:00.754] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"619e8057-4d95-45cf-98c4-9f167fa733b1","res":{"statusCode":304},"responseTime":12}[39m
+[11:01:11.212] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1e1e9b00-f0b8-420d-80d9-968aa0142554","res":{"statusCode":304},"responseTime":11}[39m
+[11:01:40.784] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8e7f3c96-81bb-41fc-bed6-32cdf2230e94","res":{"statusCode":304},"responseTime":8}[39m
+[11:02:00.733] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7ba1a45b-76f3-4cb8-a2db-97d54807c19d","res":{"statusCode":304},"responseTime":5}[39m
+[11:02:10.800] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8ace4d4c-0a02-42e6-beaa-752bae7c200c","res":{"statusCode":304},"responseTime":10}[39m
+[11:02:40.815] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7972e1a9-7f0c-4151-97a6-a1a0558e784d","res":{"statusCode":304},"responseTime":13}[39m
+[11:03:00.747] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"010d48a2-b4d3-4d7b-9ae8-f207483bbea1","res":{"statusCode":304},"responseTime":5}[39m
+[11:03:10.799] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"932a3d3d-a138-482d-b9bc-930c1aef7ef9","res":{"statusCode":304},"responseTime":10}[39m
+[11:03:40.956] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"511ebbb0-35de-416f-b1ed-552aae3197f6","res":{"statusCode":304},"responseTime":105}[39m
+[11:04:00.862] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"684c129d-4311-4077-a679-3b3a6c836711","res":{"statusCode":304},"responseTime":122}[39m
+[11:04:42.168] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"66f3c553-5ec5-471a-81a2-b53819348dce","res":{"statusCode":401},"responseTime":5}[39m
+[11:04:42.641] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"ab781e66-0753-4067-a57e-e16d6aa738e9","res":{"statusCode":201},"responseTime":241}[39m
+[11:04:42.724] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"08fd1aa8-dd60-4981-9a86-9df1f716a22d","res":{"statusCode":304},"responseTime":14}[39m
+[11:05:00.741] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5b940481-02cb-4fd4-afb4-2bf3cd5b0034","res":{"statusCode":401},"responseTime":3}[39m
+[11:05:00.948] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"2bbb01cf-9235-4c68-aa1b-177b89a0f27a","res":{"statusCode":201},"responseTime":192}[39m
+[11:05:00.971] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"3040ece8-1356-4387-a7ad-ae4c1a1e0599","res":{"statusCode":304},"responseTime":7}[39m
+[11:05:43.170] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a8d2bfe8-adc3-4c7d-ad5c-bcabb9da8fe9","res":{"statusCode":304},"responseTime":11}[39m
+[11:06:00.746] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"6c7906e9-9ac8-4ee2-9722-ad91835b03f7","res":{"statusCode":304},"responseTime":6}[39m
+[11:06:10.777] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"55bbe1df-1658-4e1f-a5c7-616e94bcb32f","res":{"statusCode":304},"responseTime":4}[39m
+[11:06:40.790] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1dd1f057-f25e-4db2-8419-e4f1678565db","res":{"statusCode":304},"responseTime":4}[39m
+[11:07:00.741] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"56717cd4-aa3c-4bdc-8126-a55f3b2037aa","res":{"statusCode":304},"responseTime":5}[39m
+[11:07:42.170] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"1cd2d3f8-51bb-4369-a3fb-95757a1355cd","res":{"statusCode":304},"responseTime":13}[39m
+[11:08:00.744] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"004e2f9d-c730-44c5-8f2d-39fb6fa9c7da","res":{"statusCode":304},"responseTime":6}[39m
+[11:08:10.793] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"dc29e6bf-96c0-40c1-a225-73d0315ebb44","res":{"statusCode":304},"responseTime":4}[39m
+[11:08:40.782] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"cd3f42a6-8792-42df-a684-3ef6fa2b6115","res":{"statusCode":304},"responseTime":5}[39m
+[11:09:00.755] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a98c7369-6bf7-456f-8bcf-0ca1fbdb1016","res":{"statusCode":304},"responseTime":8}[39m
+[11:09:42.299] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"caec1c8a-deac-4adc-aa34-ad1dd5f41343","res":{"statusCode":304},"responseTime":117}[39m
+[11:10:00.752] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"865b48ca-44fe-4b53-bd21-c6211416fb38","res":{"statusCode":304},"responseTime":15}[39m
+[11:10:00.919] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations"},"correlationId":"35399ada-5a9d-40c6-8926-edb6d6b2f070","res":{"statusCode":304},"responseTime":18}[39m
+[11:10:01.192] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations"},"correlationId":"4b1ee83c-dc36-4fd7-a0d4-7b2717abd737","res":{"statusCode":304},"responseTime":6}[39m
+[11:10:06.323] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/9fddf4ea-0933-4607-90c8-8cb23989dcde/messages"},"correlationId":"c49d43f7-b1dd-43ac-9822-4ed76b1cd713","res":{"statusCode":200},"responseTime":14}[39m
+[11:10:07.363] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/3d10e886-255c-4759-ae7d-22f8e1400aea/messages"},"correlationId":"76802e51-5030-4caf-b82f-2cd953015d23","res":{"statusCode":200},"responseTime":5}[39m
+[11:10:09.191] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/9b124ad6-4a57-4a88-b821-2dbdf79bf6b5/messages"},"correlationId":"32c0e1f0-b4bb-43a6-9c04-b22d252d2b76","res":{"statusCode":200},"responseTime":7}[39m
+[11:10:10.696] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5a457eed-26ef-401f-a5b1-c9678b39a2b0","res":{"statusCode":304},"responseTime":4}[39m
+[11:10:14.279] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/d0e96208-3433-46d7-997f-3c3edc050b3e/messages"},"correlationId":"ce37ccf2-682c-41b6-96bb-5d22296abee3","res":{"statusCode":200},"responseTime":12}[39m
+[11:10:17.717] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/9b124ad6-4a57-4a88-b821-2dbdf79bf6b5/messages"},"correlationId":"35e4562e-b231-442c-b458-32dfc1261140","res":{"statusCode":304},"responseTime":6}[39m
+[11:10:21.174] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/66837d2e-ce30-4320-9f9d-287440671f18/messages"},"correlationId":"c9faba7b-4541-4c98-92c3-4642d2b0d234","res":{"statusCode":200},"responseTime":7}[39m
+[11:10:31.096] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/3d10e886-255c-4759-ae7d-22f8e1400aea/messages"},"correlationId":"7e083444-5638-48d3-bada-887ce11a5fe3","res":{"statusCode":304},"responseTime":6}[39m
+[11:10:32.204] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/conversations/9fddf4ea-0933-4607-90c8-8cb23989dcde/messages"},"correlationId":"383b2a9b-f374-4d0c-8ac6-aff3791fab60","res":{"statusCode":304},"responseTime":6}[39m
+[11:10:40.791] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c9dc6401-7a04-4252-92d0-82c22847ab5d","res":{"statusCode":304},"responseTime":9}[39m
+[11:11:00.737] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"00dd01de-6a6a-42cf-bff8-41d874b3f496","res":{"statusCode":304},"responseTime":5}[39m
+[11:11:10.793] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ae433117-df56-48fd-9602-deee08058291","res":{"statusCode":304},"responseTime":4}[39m
+[11:11:40.800] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"99aebba9-d847-4273-a97f-774fb6fb0026","res":{"statusCode":304},"responseTime":11}[39m
+[11:12:00.756] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"948f0010-61ea-44d4-ae27-27794be717c4","res":{"statusCode":304},"responseTime":8}[39m
+[11:12:42.170] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ed7fb6fc-5fc3-4f9f-8213-4a02c4ae462a","res":{"statusCode":304},"responseTime":6}[39m
+[11:13:00.752] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0d3ec789-a72d-43a4-8c92-4bc831977ea2","res":{"statusCode":304},"responseTime":8}[39m
+[11:13:10.796] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d849aa6a-153f-49aa-9c5f-2753667fbc5f","res":{"statusCode":304},"responseTime":10}[39m
+[11:13:40.805] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"00bc2431-f02e-482f-84f3-95fe1ca4a76c","res":{"statusCode":304},"responseTime":12}[39m
+[11:14:00.770] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"079df5a1-9dbf-40ba-a8bd-00b6372d464b","res":{"statusCode":304},"responseTime":21}[39m
+[11:14:42.170] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"921918e5-b533-44e7-b38e-bb91ce4b3706","res":{"statusCode":304},"responseTime":8}[39m
+[11:15:00.896] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"03a937e0-53e1-4fd8-a346-4508c5fcbeac","res":{"statusCode":304},"responseTime":150}[39m
+[11:15:43.174] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"fe56c964-65d3-4478-9a77-e15526953aba","res":{"statusCode":304},"responseTime":10}[39m
+[11:16:00.751] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"f1d6c5c2-b3fc-490a-8b67-8c50d40a24b7","res":{"statusCode":304},"responseTime":8}[39m
+[11:16:44.164] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"b91b87b9-2cc2-4597-8418-c3a8970bdba4","res":{"statusCode":304},"responseTime":5}[39m
+[11:17:00.749] [32mINFO[39m (2068): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"3e459316-ffe9-4577-b29d-4fb15f98ea43","res":{"statusCode":304},"responseTime":5}[39m

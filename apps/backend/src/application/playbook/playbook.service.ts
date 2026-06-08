@@ -11,6 +11,7 @@ export interface PlaybookConfig {
   ctaCold: string;
   ctaWarm: string;
   ctaHot: string;
+  signupUrl: string; // link de cadastro no site do TMS (fechamento)
 }
 
 // Defaults = o playbook que já estava no código. Servem de base e de fallback.
@@ -28,7 +29,8 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
   ctaWarm:
     'Há interesse. Avance: ofereça uma demonstração rápida ou um teste, e colete UM dado de qualificação que ainda falte (porte da frota, volume de docs ou quem decide). CTA médio.',
   ctaHot:
-    'O lead está pronto. Faça um CTA forte: peça o MELHOR e-mail (ou confirme o WhatsApp) para um especialista dar sequência/fechar, ou ofereça começar agora. Use ACTION=handoff_human (ou create_payment se ele já quer pagar).',
+    'O lead está pronto. Conduza pro cadastro: envie o LINK DE CADASTRO e oriente a criar a conta no site (lá ele finaliza). Ofereça ajuda se travar. Se preferir falar com alguém, use ACTION=handoff_human.',
+  signupUrl: 'https://www.hipertms.com.br/signup',
 };
 
 @Injectable()
@@ -47,6 +49,7 @@ export class PlaybookService {
           ctaCold: PLAYBOOK_DEFAULTS.ctaCold,
           ctaWarm: PLAYBOOK_DEFAULTS.ctaWarm,
           ctaHot: PLAYBOOK_DEFAULTS.ctaHot,
+          signupUrl: PLAYBOOK_DEFAULTS.signupUrl,
         },
       });
     }
@@ -56,6 +59,7 @@ export class PlaybookService {
       ctaCold: row.ctaCold || PLAYBOOK_DEFAULTS.ctaCold,
       ctaWarm: row.ctaWarm || PLAYBOOK_DEFAULTS.ctaWarm,
       ctaHot: row.ctaHot || PLAYBOOK_DEFAULTS.ctaHot,
+      signupUrl: (row as any).signupUrl || PLAYBOOK_DEFAULTS.signupUrl,
     };
   }
 
@@ -71,6 +75,7 @@ export class PlaybookService {
         ...(dto.ctaCold !== undefined ? { ctaCold: dto.ctaCold } : {}),
         ...(dto.ctaWarm !== undefined ? { ctaWarm: dto.ctaWarm } : {}),
         ...(dto.ctaHot !== undefined ? { ctaHot: dto.ctaHot } : {}),
+        ...(dto.signupUrl !== undefined ? { signupUrl: dto.signupUrl } : {}),
       },
       create: {
         tenantId,
@@ -79,6 +84,7 @@ export class PlaybookService {
         ctaCold: dto.ctaCold ?? PLAYBOOK_DEFAULTS.ctaCold,
         ctaWarm: dto.ctaWarm ?? PLAYBOOK_DEFAULTS.ctaWarm,
         ctaHot: dto.ctaHot ?? PLAYBOOK_DEFAULTS.ctaHot,
+        signupUrl: dto.signupUrl ?? PLAYBOOK_DEFAULTS.signupUrl,
       },
     });
     return this.get(tenantId);
