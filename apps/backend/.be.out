@@ -1,0 +1,169 @@
+[11:19:15.804] [32mINFO[39m (5880): [36mStarting Nest application...[39m [90m{"context":"NestFactory"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mAutonomia inicial: LIGADA[39m [90m{"context":"Autonomy"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mPrismaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mAiModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mGovernanceModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mWahaModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mPassportModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mThrottlerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mJwtModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mConfigHostModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mDiscoveryModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mAuditModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mEventsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mLoggerModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mConfigModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mScheduleModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mEventEmitterModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mAppModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.804] [32mINFO[39m (5880): [36mAdminModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mConnectorsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mContactsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mConversationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mSellersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mPlaybookModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mNotificationsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMetricsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mUsersModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mWhatsappModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mActionsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mKnowledgeModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mFollowUpModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mAuthModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mSenderModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mAgentsModule dependencies initialized[39m [90m{"context":"InstanceLoader"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mWebSocket /ws inicializado[39m [90m{"context":"ConversationsGateway"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mConversationsGateway subscribed to the "join" message[39m [90m{"context":"WebSocketsController"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mHealthController {/api/health}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/health/live, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/health/ready, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mAuthController {/api/auth}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/auth/login, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/auth/refresh, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/auth/logout, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/auth/me, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mProductsController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/products, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/products/:code/health, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/plans, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mContactsController {/api/contacts}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts/import, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts/:id/reactivate, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/contacts/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mConversationsController {/api/conversations}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations/:id/messages, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations/:id/outcome, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/conversations/:id/messages, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mActionsController {/api/actions}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/actions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/actions/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mKnowledgeController {/api/knowledge}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/:id, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/import/:productCode, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/:id/versions, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/knowledge/versions/:versionId/approve, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mAgentsController {/api/agent}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/agent/ask, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/agent/handle, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mSellersController {/api/sellers}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sellers, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sellers/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sellers/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sellers/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mPlaybookController {/api/playbook}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/playbook, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/playbook, PUT} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/playbook/reset, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mNotificationsController {/api/notifications}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/notifications, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/notifications/read-all, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/notifications/:id/read, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mAdminController {/api/admin}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/admin/autonomy, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/admin/autonomy, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMetricsController {/api/metrics}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/metrics/overview, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/metrics/sellers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mWhatsappController {/api/webhooks}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/webhooks/waha, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mFollowUpController {/api/followups}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/followups, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mSenderController {/api}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns/upload, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns/:id/start, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns/:id/pause, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/campaigns/:id, DELETE} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/sender/numbers, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mUsersController {/api/users}:[39m [90m{"context":"RoutesResolver"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/users/areas, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/users, GET} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/users, POST} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/users/:id, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mMapped {/api/users/:id/active, PATCH} route[39m [90m{"context":"RouterExplorer"}[39m
+[11:19:15.805] [32mINFO[39m (5880): [36mNest application successfully started[39m [90m{"context":"NestApplication"}[39m
+[11:19:21.980] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/health"},"correlationId":"d5ca28f5-bd1f-4b59-bee2-f47892c91cb1","res":{"statusCode":200},"responseTime":11}[39m
+[11:19:38.907] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"45a9a3ab-5dac-4f3a-a6b7-0e14438fc733","res":{"statusCode":201},"responseTime":246}[39m
+[11:19:38.988] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/playbook"},"correlationId":"57098de9-b52d-44a0-aa89-bc27382a3cf0","res":{"statusCode":200},"responseTime":45}[39m
+[11:19:47.173] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"21ea3e96-5aa5-40ef-9bd5-7e97e1447296","res":{"statusCode":401},"responseTime":4}[39m
+[11:19:47.597] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"78ea699f-9e29-4185-b3ea-cd1152c8cef5","res":{"statusCode":201},"responseTime":177}[39m
+[11:19:47.669] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"45192816-b407-452e-a64e-365f673c6c43","res":{"statusCode":200},"responseTime":12}[39m
+[11:19:47.690] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"39962ce1-cc6d-4626-932b-2be26e66ce5b","res":{"statusCode":201},"responseTime":8572}[39m
+[11:19:47.976] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/metrics/overview"},"correlationId":"28eb09d3-aa84-45e3-ba8d-3477009fe331","res":{"statusCode":200},"responseTime":244}[39m
+[11:19:48.006] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/billing/payment-request"},"correlationId":"c293b96a-21a3-4a37-a751-b3de47c6eb44","res":{"statusCode":404},"responseTime":1}[39m
+[11:20:00.757] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e28d8617-e435-4c2c-a5f8-f74d46bd2abb","res":{"statusCode":401},"responseTime":3}[39m
+[11:20:00.983] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"7dc7aa4c-3526-4432-88d5-f6bf337ccb9a","res":{"statusCode":201},"responseTime":212}[39m
+[11:20:01.010] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"977cb341-a91d-49b9-baf5-e25547d13868","res":{"statusCode":200},"responseTime":11}[39m
+[11:20:16.011] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/login"},"correlationId":"4f0601ad-3928-4648-bc6e-04528220e466","res":{"statusCode":201},"responseTime":226}[39m
+[11:20:16.054] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/playbook/reset"},"correlationId":"5307721c-4ab1-478d-b210-dea109b030fe","res":{"statusCode":201},"responseTime":14}[39m
+[11:20:24.315] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/agent/handle"},"correlationId":"dfb9e061-a1de-4517-a3d1-a2d59f392833","res":{"statusCode":201},"responseTime":8238}[39m
+[11:20:48.206] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"7b2f10f4-e26d-43bf-88f5-8b78f9bd82a6","res":{"statusCode":304},"responseTime":19}[39m
+[11:21:00.755] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"97b2e544-56d0-4225-a19b-59306d0abb70","res":{"statusCode":304},"responseTime":7}[39m
+[11:21:49.174] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"500302db-b716-45a3-aa01-ae75858eaf66","res":{"statusCode":304},"responseTime":8}[39m
+[11:22:00.759] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"8fd3ec88-e37c-42df-b999-8a70ac6585ec","res":{"statusCode":304},"responseTime":9}[39m
+[11:22:50.182] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e27dc21c-04fd-4079-b86b-6b4db8655de6","res":{"statusCode":304},"responseTime":7}[39m
+[11:23:00.758] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e2bf6503-0d6a-4eb2-8a6c-131826ddaba6","res":{"statusCode":304},"responseTime":10}[39m
+[11:23:51.184] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0057b739-f922-4cfa-a1b5-187624cf4501","res":{"statusCode":304},"responseTime":5}[39m
+[11:24:00.768] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"f7324c96-e5aa-4c03-9a9f-983ea782627a","res":{"statusCode":304},"responseTime":15}[39m
+[11:24:52.345] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"53e2e4b5-4c56-44e7-999d-cc0548776557","res":{"statusCode":304},"responseTime":172}[39m
+[11:25:00.752] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"97855eed-f473-41c9-b81c-ba2d960b5bd3","res":{"statusCode":304},"responseTime":10}[39m
+[11:25:53.203] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"af87bbb6-5c44-4239-8f42-03be31bf1520","res":{"statusCode":304},"responseTime":12}[39m
+[11:26:00.749] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"c010ad0b-3e47-4a30-8266-301497c45a27","res":{"statusCode":304},"responseTime":11}[39m
+[11:26:54.173] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"3715b9ae-450e-4615-b497-b97aa96ed91b","res":{"statusCode":304},"responseTime":13}[39m
+[11:27:00.764] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"2e6c3fe8-e405-4967-845a-eeb9ea4683ab","res":{"statusCode":304},"responseTime":13}[39m
+[11:27:55.185] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"33f1817d-1e1a-4361-b38a-e8dc3d156ea7","res":{"statusCode":304},"responseTime":13}[39m
+[11:28:00.748] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"d43fa989-552f-418f-967d-342434155c6d","res":{"statusCode":304},"responseTime":8}[39m
+[11:28:56.180] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"a4635e36-c8d0-4eac-aa1d-b7ff7d50a147","res":{"statusCode":304},"responseTime":14}[39m
+[11:29:00.744] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"b9f7d481-e5b8-4e6e-b3a9-33ad285044af","res":{"statusCode":304},"responseTime":8}[39m
+[11:29:57.307] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"88a1d094-f3d7-46e4-9ba3-9181e5164872","res":{"statusCode":304},"responseTime":137}[39m
+[11:30:00.761] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"cc51b853-d04b-4ae1-882e-8bdbca764343","res":{"statusCode":304},"responseTime":7}[39m
+[11:30:58.199] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4b4cf3a4-c9d1-49e0-819b-3987a8f65890","res":{"statusCode":304},"responseTime":13}[39m
+[11:31:00.748] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"ce72c09d-202d-419d-96f1-3463793f5c2b","res":{"statusCode":304},"responseTime":9}[39m
+[11:31:59.276] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4f2eb933-af6c-4603-b0a2-ba63ebf9052a","res":{"statusCode":304},"responseTime":12}[39m
+[11:32:00.763] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"29430d3f-2655-4c80-b159-fcb00515a6de","res":{"statusCode":304},"responseTime":10}[39m
+[11:33:00.193] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"01df63fd-23d5-4414-88cb-f8b84655666c","res":{"statusCode":304},"responseTime":14}[39m
+[11:33:00.753] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"728954a6-751c-4ca7-8adb-6230cdc91c17","res":{"statusCode":304},"responseTime":10}[39m
+[11:34:00.755] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"5a8a51b7-03ab-4036-a010-128bb4b10dcc","res":{"statusCode":304},"responseTime":11}[39m
+[11:34:01.278] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"cce7bb00-df35-4d92-9dee-5db7be85e49b","res":{"statusCode":304},"responseTime":9}[39m
+[11:35:00.758] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"0de72c99-b8cb-43a2-82bf-e08afc5f5b6e","res":{"statusCode":401},"responseTime":3}[39m
+[11:35:00.805] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"4322f997-e2f0-4406-a188-88d767642ba2","res":{"statusCode":401},"responseTime":3}[39m
+[11:35:00.985] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"78cad656-08c1-4ff8-a6b0-4b29a7a56017","res":{"statusCode":201},"responseTime":207}[39m
+[11:35:01.031] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"POST","url":"/api/auth/refresh"},"correlationId":"e76384d3-3576-4033-9772-e21a6d63c290","res":{"statusCode":201},"responseTime":160}[39m
+[11:35:01.100] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"fd853099-b5f3-4833-80e2-937003864d7f","res":{"statusCode":304},"responseTime":107}[39m
+[11:35:01.190] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"475415c4-5a4c-4251-914a-67f2fc708731","res":{"statusCode":304},"responseTime":101}[39m
+[11:36:00.762] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"e2968f2f-1b58-4f28-8779-ec2b8668ceb3","res":{"statusCode":304},"responseTime":17}[39m
+[11:36:00.798] [32mINFO[39m (5880): [36mrequest completed[39m [90m{"req":{"method":"GET","url":"/api/notifications"},"correlationId":"167d3afc-f3a9-4a3f-b9b6-12970aa9cc1a","res":{"statusCode":304},"responseTime":7}[39m
