@@ -14,6 +14,9 @@
 - ✅ **Nunca mais fica em silêncio** — se não puder responder com segurança, dá um aceno que mantém a conversa.
 - ✅ **Tela "Playbook IA"** pra editar objeções/tom/CTA sem código.
 - ✅ **Visual**: menu lateral retrátil (botão « Recolher), busca rápida **Ctrl+K**, telas com carregamento "esqueleto" (skeleton) e telas vazias bonitas.
+- ✅ **Calendário de período** no Painel (filtra os indicadores por data).
+- ✅ **Polimento**: avisos flutuantes (toasts), modal de confirmação, selos de status coloridos, **menu de conta (avatar)** e **🔔 sino de notificações** (lead quente, reclamação, opt-out).
+- ✅ **Blindagem da IA**: cumprimenta só 1x e **não inventa oferta** — se pedirem teste grátis/app/desconto que não existe, ela diz "vou confirmar com o time".
 
 ---
 
@@ -32,6 +35,8 @@ A autonomia já está **LIGADA**. Do **seu celular**, mande mensagem para **+55 
 | "quantos caminhões / 800 docs por mês" | Qualifica e **recomenda o plano certo** |
 | "tá caro" | Rebate com **ROI** amarrado ao volume dele |
 | "quero contratar / sou eu que decido" | CTA forte: pede e-mail e encaminha pro especialista |
+| "tem teste grátis? / tem app?" | **Não inventa** — diz que vai confirmar com o time |
+| "vcs são uns golpistas" (agressivo) | Não revida; encaminha pro humano |
 | "SAIR" | Opt-out: descadastra e para de responder (LGPD) |
 
 ✅ Confira depois: **Inbox** (a conversa aparece), **Painel** (métricas), e o **botão IA** no topo (liga/desliga a resposta automática a qualquer momento).
@@ -54,6 +59,14 @@ A autonomia já está **LIGADA**. Do **seu celular**, mande mensagem para **+55 
 - **Recolher menu**: botão « no rodapé do menu lateral (vira só ícones; ele lembra como você deixou).
 - **Busca rápida**: aperte **Ctrl+K** → navegue por teclado.
 - **Modo escuro**: botão 🌙 no topo.
+- **Calendário**: no Painel, botão 📅 (escolhe o período dos indicadores).
+- **🔔 Sino**: alerta lead quente / reclamação / opt-out (clique leva pra conversa).
+- **Toasts**: ao salvar algo, aparece um aviso verde no canto.
+- **Menu de conta**: avatar no canto superior direito → nome, e-mail e Sair.
+
+## 🌐 Compartilhar com outra pessoa (ex.: Uelder no celular)
+- O link `localhost:5173` só funciona no SEU PC. Para acesso externo, use o **túnel** (link `https://...trycloudflare.com` que eu gero).
+- ⚠️ O túnel só funciona com o **seu PC ligado** e é **temporário** (muda a cada vez). É pra teste — uso definitivo seria o deploy.
 
 ---
 

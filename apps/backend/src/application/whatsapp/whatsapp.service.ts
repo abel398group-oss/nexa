@@ -133,20 +133,45 @@ export class WhatsappService {
 
     // 2) opt-out tem precedência (LGPD)
     if (n.isOptOut) {
+      const wasOptedOut = contact.status === 'opted_out'; // já estava? (evita confirmar/notificar 2x)
       await this.prisma.contact.update({
         where: { id: contact.id },
         data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() },
       });
       const optConv = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
-      if (optConv) await this.followup.stop(optConv.id, 'opt-out');
-      this.logger.warn(`Opt-out de ${n.phone}`);
-      await this.notifications.create(tenantId, {
-        type: 'opt_out',
-        title: '🚫 Opt-out',
-        body: `${n.phone} pediu para não receber mais mensagens.`,
-        link: '/contacts',
-      });
-      return { ok: true, phone: n.phone, optOut: true };
+      if (optConv) {
+        // registra a mensagem do cliente no histórico
+        await this.conversations.addMessage(tenantId, optConv.id, { direction: 'inbound', content: n.text }).catch(() => null);
+        await this.followup.stop(optConv.id, 'opt-out');
+        // confirmação educada — só na PRIMEIRA vez (transacional/LGPD, independe da autonomia)
+        if (!wasOptedOut) {
+          await this.conversations
+            .addMessage(tenantId, optConv.id, {
+              direction: 'outbound',
+              content: 'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏',
+              intent: 'opt_out_ack',
+            })
+            .catch(() => null);
+        }
+      }
+      this.logger.warn(`Opt-out de ${n.phone}${wasOptedOut ? ' (já estava)' : ''}`);
+      if (!wasOptedOut) {
+        await this.notifications.create(tenantId, {
+          type: 'opt_out',
+          title: '🚫 Opt-out',
+          body: `${n.phone} pediu para não receber mais mensagens.`,
+          link: '/contacts',
+        });
+      }
+      return { ok: true, phone: n.phone, optOut: true, confirmed: !wasOptedOut };
+    }
+
+    // 2b) contato JÁ optou por sair → a IA não responde mais nada (LGPD). Só registra p/ o humano ver.
+    if (contact.status === 'opted_out') {
+      const oc = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
+      if (oc) await this.conversations.addMessage(tenantId, oc.id, { direction: 'inbound', content: n.text }).catch(() => null);
+      this.logger.warn(`Contato opted_out enviou msg (${n.phone}) — IA NÃO responde`);
+      return { ok: true, phone: n.phone, ignored: true, reason: 'contato optou por sair' };
     }
 
     // 3) acha conversa aberta do telefone ou cria nova

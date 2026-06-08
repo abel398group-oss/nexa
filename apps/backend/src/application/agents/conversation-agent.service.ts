@@ -70,7 +70,7 @@ export class ConversationAgentService {
 
     switch (route.agent) {
       case 'optout':
-        draft = 'Pronto, você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar. Obrigada! 🙏';
+        draft = 'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏';
         suggestedAction = 'handoff_human';
         scripted = true;
         break;
@@ -194,6 +194,17 @@ export class ConversationAgentService {
           body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
           link: '/inbox',
         });
+      }
+    }
+
+    // OPT-OUT detectado pela IA (ex.: "exit", "me remove daqui") → persiste o descadastro (LGPD).
+    if (input.conversationId && route.agent === 'optout') {
+      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+      if (conv) {
+        await this.prisma.contact
+          .updateMany({ where: { tenantId, phone: conv.phone }, data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() } })
+          .catch(() => null);
+        await this.notifications.create(tenantId, { type: 'opt_out', title: '🚫 Opt-out', body: `${conv.phone} pediu para sair.`, link: '/contacts' });
       }
     }
 
