@@ -12,23 +12,32 @@ interface Overview {
   complaints: { total: number; byTopic: Record<string, number> };
 }
 
+// cores dark-safe para cada accent (light usa a cor vibrante, dark usa versão clara)
+const ACCENT_COLOR: Record<string, string> = {
+  'text-brand-600':    'var(--accent-brand)',
+  'text-amber-600':    'var(--accent-amber)',
+  'text-red-600':      'var(--accent-red)',
+  'text-zinc-800':     'var(--text-primary)',
+};
+
 function Card({ label, value, hint, accent }: { label: string; value: string | number; hint?: string; accent?: string }) {
+  const color = accent ? (ACCENT_COLOR[accent] ?? 'var(--text-primary)') : 'var(--text-primary)';
   return (
-    <div className="rounded-xl bg-white p-5 shadow-sm">
-      <div className="text-xs uppercase tracking-wide text-zinc-400">{label}</div>
-      <div className={`mt-1 text-3xl font-bold ${accent ?? 'text-zinc-800'}`}>{value}</div>
-      {hint && <div className="mt-1 text-xs text-zinc-400">{hint}</div>}
+    <div className="card p-5">
+      <div className="text-xs uppercase tracking-wide text-base-content/50">{label}</div>
+      <div className="mt-1 text-3xl font-bold" style={{ color }}>{value}</div>
+      {hint && <div className="mt-1 text-xs text-base-content/50">{hint}</div>}
     </div>
   );
 }
 
 function chips(obj: Record<string, number>) {
   const e = Object.entries(obj).filter(([k]) => k !== 'null');
-  if (e.length === 0) return <span className="text-xs text-zinc-400">—</span>;
+  if (e.length === 0) return <span className="text-xs text-base-content/40">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {e.map(([k, v]) => (
-        <span key={k} className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">{k}: {v}</span>
+        <span key={k} className="rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70">{k}: {v}</span>
       ))}
     </div>
   );
@@ -53,16 +62,16 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to]);
 
-  if (!m) return <div className="flex h-full items-center justify-center text-zinc-400">Carregando métricas...</div>;
+  if (!m) return <div className="flex h-full items-center justify-center text-base-content/40">Carregando métricas...</div>;
 
   return (
-    <div className="h-full overflow-auto bg-zinc-50 p-8">
+    <div className="h-full overflow-auto bg-base-100 p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-800">Dashboard</h1>
-          <p className="text-xs text-zinc-400">Período: <strong className="text-zinc-600">{range.label}</strong> · atualiza a cada 10s</p>
+          <h1 className="text-xl font-bold text-base-content">Dashboard</h1>
+          <p className="text-xs text-base-content/50">Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s</p>
         </div>
-        <button onClick={load} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm hover:bg-zinc-50">
+        <button onClick={load} className="btn-outline h-9 px-4 text-sm">
           ↻ Atualizar
         </button>
       </div>
@@ -75,21 +84,21 @@ export function DashboardPage() {
         <Card label="IA autônoma" value={`${m.messages.aiSharePct}%`} accent="text-brand-600" hint={`${m.messages.aiGenerated} respostas enviadas pela IA`} />
         <Card label="Tokens" value={(m.ai.tokensIn + m.ai.tokensOut).toLocaleString('pt-BR')} hint={`${m.ai.tokensIn} in · ${m.ai.tokensOut} out`} />
         <Card label="Custo IA (est.)" value={`US$ ${m.ai.estimatedCostUsd.toFixed(4)}`} accent="text-amber-600" hint="estimado pelos tokens" />
-        <Card label="DLQ (erros)" value={m.events.dlq} accent={m.events.dlq > 0 ? 'text-red-600' : 'text-zinc-800'} hint="eventos com falha" />
-        <Card label="Reclamações" value={m.complaints.total} accent={m.complaints.total > 0 ? 'text-red-600' : 'text-zinc-800'} hint="monitor interno" />
+        <Card label="DLQ (erros)" value={m.events.dlq} accent={m.events.dlq > 0 ? 'text-red-600' : undefined} hint="eventos com falha" />
+        <Card label="Reclamações" value={m.complaints.total} accent={m.complaints.total > 0 ? 'text-red-600' : undefined} hint="monitor interno" />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-zinc-600">Leads por estágio</div>
+        <div className="card p-5">
+          <div className="mb-2 text-sm font-semibold text-base-content/70">Leads por estágio</div>
           {chips(m.contacts.byLeadStatus)}
         </div>
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-zinc-600">Eventos</div>
+        <div className="card p-5">
+          <div className="mb-2 text-sm font-semibold text-base-content/70">Eventos</div>
           {chips(m.events.byStatus)}
         </div>
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-zinc-600">Reclamações por tema</div>
+        <div className="card p-5">
+          <div className="mb-2 text-sm font-semibold text-base-content/70">Reclamações por tema</div>
           {chips(m.complaints.byTopic)}
         </div>
       </div>

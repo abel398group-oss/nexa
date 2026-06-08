@@ -188,7 +188,7 @@ export function ContactsPage() {
       warm: 'bg-amber-100 text-amber-700',
       cold: 'bg-sky-100 text-sky-700',
     };
-    return map[s ?? ''] || 'bg-zinc-100 text-zinc-500';
+    return map[s ?? ''] || 'bg-base-200 text-base-content/60';
   };
 
   const optOutCount = items.filter((c) => c.status === 'opted_out').length;
@@ -197,16 +197,16 @@ export function ContactsPage() {
   );
 
   return (
-    <div className="flex h-full flex-col bg-zinc-50">
+    <div className="flex h-full flex-col bg-base-100">
       {/* header */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-4">
+      <div className="flex items-center justify-between border-b border-base-200 bg-white px-6 py-4">
         <div>
-          <h1 className="text-lg font-bold text-zinc-800">Contatos</h1>
-          <p className="text-xs text-zinc-400">{total} cadastrados{optOutCount > 0 && ` · ${optOutCount} descadastrado(s)`}</p>
+          <h1 className="text-lg font-bold text-base-content">Contatos</h1>
+          <p className="text-xs text-base-content/50">{total} cadastrados{optOutCount > 0 && ` · ${optOutCount} descadastrado(s)`}</p>
         </div>
         <div className="flex gap-2">
           <select
-            className="rounded-lg border border-zinc-300 px-2 py-2 text-sm"
+            className="input w-auto"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value as any)}
             title="Filtrar por situação"
@@ -216,27 +216,15 @@ export function ContactsPage() {
             <option value="optout">Só descadastrados</option>
           </select>
           <input
-            className="w-64 rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="input w-64"
             placeholder="Buscar nome, telefone, empresa..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && load()}
           />
-          <button onClick={load} className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50">
-            Buscar
-          </button>
-          <button
-            onClick={() => { setShowImport(true); setImportMsg(''); }}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-          >
-            ↑ Importar
-          </button>
-          <button
-            onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700"
-          >
-            + Novo
-          </button>
+          <button onClick={load} className="btn-outline">Buscar</button>
+          <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="btn-outline">↑ Importar</button>
+          <button onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }} className="btn-primary">+ Novo</button>
         </div>
       </div>
 
@@ -256,8 +244,8 @@ export function ContactsPage() {
             }
           />
         ) : (
-        <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
-          <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
+        <table className="w-full overflow-hidden rounded-xl text-sm" style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+          <thead className="border-b text-left text-xs uppercase" style={{ background: 'var(--surface-muted)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             <tr>
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">Telefone</th>
@@ -269,28 +257,28 @@ export function ContactsPage() {
           </thead>
           <tbody>
             {shown.map((c) => (
-              <tr key={c.id} className={`border-b last:border-0 hover:bg-zinc-50 ${c.status === 'opted_out' ? 'opacity-60' : ''}`}>
-                <td className="px-4 py-3 font-medium text-zinc-700">
+              <tr key={c.id} className={`border-b last:border-0 hover:bg-base-100 ${c.status === 'opted_out' ? 'opacity-60' : ''}`} style={{ borderColor: 'var(--border)' }}>
+                <td className="px-4 py-3 font-medium text-base-content">
                   {c.name || '—'}
                   {c.status === 'opted_out' && (
                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">🚫 descadastrado</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-zinc-600">{c.phone}</td>
-                <td className="px-4 py-3 text-zinc-600">{c.company || '—'}</td>
+                <td className="px-4 py-3 text-base-content/80">{c.phone}</td>
+                <td className="px-4 py-3 text-base-content/80">{c.company || '—'}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${badge(c.leadStatus)}`}>
                     {c.leadStatus || 'novo'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-400">{c.source || '—'}</td>
+                <td className="px-4 py-3 text-xs text-base-content/50">{c.source || '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
                     {c.status === 'opted_out' && (
-                      <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50">↩️ Reativar</button>
+                      <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-100">↩️ Reativar</button>
                     )}
-                    <button onClick={() => openEdit(c)} title="Editar" className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100">✏️</button>
-                    <button onClick={() => del(c)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
+                    <button onClick={() => openEdit(c)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✏️</button>
+                    <button onClick={() => del(c)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-100">🗑️</button>
                   </div>
                 </td>
               </tr>
@@ -306,9 +294,10 @@ export function ContactsPage() {
           <form
             onClick={(e) => e.stopPropagation()}
             onSubmit={save}
-            className="w-96 rounded-xl bg-white p-6 shadow-xl"
+            className="w-96 rounded-xl p-6 shadow-xl"
+            style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
           >
-            <h2 className="mb-4 text-lg font-bold text-zinc-800">{editId ? 'Editar contato' : 'Novo contato'}</h2>
+            <h2 className="mb-4 text-lg font-bold text-base-content">{editId ? 'Editar contato' : 'Novo contato'}</h2>
             {[
               { k: 'phone', label: 'Telefone (55DDDxxxxxxxx)', ph: '5511999998888' },
               { k: 'name', label: 'Nome', ph: 'João Silva' },

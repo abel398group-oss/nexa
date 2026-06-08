@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from '@/application/auth/auth.service';
 import { AuditService } from '@/shared/audit/audit.service';
+import { UsersService } from '@/application/users/users.service';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentUser } from '@/shared/decorators/current-user.decorator';
 
@@ -26,7 +28,29 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly users: UsersService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  // ─── SETUP: cria o primeiro admin ────────────────────────────────────────────
+  // Só funciona se NÃO existir nenhum usuário com role=admin no banco.
+  // Depois que o admin existir, este endpoint retorna 400 e fica bloqueado.
+  // Uso: POST /auth/setup  { "email": "...", "password": "...", "name": "..." }
+  @Post('setup')
+  async setup(@Body() body: { email: string; password: string; name?: string }) {
+    const adminExists = await this.prisma.user.findFirst({ where: { role: 'admin' } });
+    if (adminExists) throw new BadRequestException('Setup já realizado — admin já existe.');
+    if (!body.email || !body.password || body.password.length < 6) {
+      throw new BadRequestException('Email e senha (mín. 6 chars) são obrigatórios.');
+    }
+    const user = await this.users.create('default', {
+      email: body.email,
+      password: body.password,
+      name: body.name ?? 'Administrador',
+      role: 'admin',
+    });
+    return { ok: true, message: 'Admin criado com sucesso. Use /auth/login para entrar.', email: user.email };
+  }
 
   @Post('login')
   async login(

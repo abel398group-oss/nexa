@@ -124,6 +124,40 @@ function AccountMenu() {
   );
 }
 
+function MoreMenu({ dark, onToggleTheme, onTour }: { dark: boolean; onToggleTheme: () => void; onTour: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Mais opções"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
+      >
+        ⋯
+      </button>
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
+          <button
+            onClick={() => { onTour(); setOpen(false); }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-base-content/70 transition-colors hover:bg-base-100"
+          >
+            🎓 Refazer tour
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -199,7 +233,7 @@ export function Layout() {
       {/* ===== SIDEBAR larga (midnight enterprise) ===== */}
       <aside
         style={{ width: collapsed ? '4rem' : '15rem', minWidth: collapsed ? '4rem' : '15rem' }}
-        className="flex shrink-0 flex-col overflow-hidden bg-sidebar text-white/90"
+        className="flex shrink-0 flex-col overflow-hidden bg-sidebar text-white/90 transition-[width,min-width] duration-200 ease-in-out"
       >
         <div className={`flex h-14 items-center ${collapsed ? 'justify-center px-0' : 'gap-2 px-5'}`}>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
@@ -260,8 +294,9 @@ export function Layout() {
         {/* topbar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 bg-white px-6">
           <h1 className="text-base font-semibold text-base-content">{pageTitle}</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {location.pathname === '/dashboard' && <DateRangePicker />}
+            {/* busca rápida — sempre visível */}
             <button
               onClick={() => setCmdOpen(true)}
               title="Busca rápida (Ctrl+K)"
@@ -270,20 +305,7 @@ export function Layout() {
               🔍 Buscar
               <kbd className="rounded border border-base-300 bg-base-100 px-1 text-[10px] text-base-content/50">Ctrl K</kbd>
             </button>
-            <button
-              onClick={toggleTheme}
-              title="Alternar tema claro/escuro"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-200"
-            >
-              {dark ? '☀️ Claro' : '🌙 Escuro'}
-            </button>
-            <button
-              onClick={() => setTourOpen(true)}
-              title="Refazer o tour de apresentação"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-200"
-            >
-              🎓 Tour
-            </button>
+            {/* ajuda contextual — só aparece quando existe */}
             {hasHelp && (
               <button
                 onClick={() => setHelpOpen(true)}
@@ -294,8 +316,21 @@ export function Layout() {
                 ? Ajuda
               </button>
             )}
+            {/* kill switch — visível para quem tem permissão */}
             {(isAdmin || perms.includes('ai_control')) && <KillSwitch />}
+            {/* dark mode — sempre visível */}
+            <button
+              onClick={toggleTheme}
+              title="Alternar tema claro/escuro"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
+            >
+              {dark ? '☀️' : '🌙'}
+            </button>
+            {/* notificações */}
             <NotificationBell />
+            {/* menu secundário: tour */}
+            <MoreMenu dark={dark} onToggleTheme={toggleTheme} onTour={() => setTourOpen(true)} />
+            {/* avatar / conta */}
             <AccountMenu />
           </div>
         </header>

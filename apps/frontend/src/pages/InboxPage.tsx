@@ -122,10 +122,11 @@ export function InboxPage() {
             <button
               key={c.id}
               onClick={() => openConv(c)}
-              className={`block w-full border-b px-4 py-3 text-left text-sm hover:bg-zinc-50 ${active?.id === c.id ? 'bg-zinc-100' : ''}`}
+              className={`block w-full border-b px-4 py-3 text-left text-sm hover:bg-base-100 ${active?.id === c.id ? 'bg-base-200' : ''}`}
+              style={{ borderColor: 'var(--border)' }}
             >
-              <div className="font-medium text-zinc-700">{c.phone}</div>
-              <div className="flex items-center gap-1 text-xs text-zinc-400">
+              <div className="font-medium text-base-content">{c.phone}</div>
+              <div className="flex items-center gap-1 text-xs text-base-content/50">
                 {c.status}
                 {c.assignedSeller && (
                   <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
@@ -136,37 +137,37 @@ export function InboxPage() {
             </button>
           ))}
         </div>
-        <div className="border-t p-3 text-xs text-zinc-400">{user?.email}</div>
+        <div className="border-t p-3 text-xs text-base-content/40" style={{ borderColor: 'var(--border)' }}>{user?.email}</div>
       </aside>
 
       {/* thread */}
-      <main className="flex flex-1 flex-col bg-zinc-50">
+      <main className="flex flex-1 flex-col bg-base-100">
         {!active ? (
-          <div className="flex flex-1 items-center justify-center text-zinc-400">
+          <div className="flex flex-1 items-center justify-center text-base-content/40">
             Selecione uma conversa
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between border-b bg-white px-4 py-3">
-              <span className="font-medium text-zinc-700">{active.phone}</span>
+              <span className="font-medium text-base-content">{active.phone}</span>
               <div className="flex items-center gap-1.5">
-                <span className="mr-1 text-xs text-zinc-400">Resultado:</span>
+                <span className="mr-1 text-xs text-base-content/50">Resultado:</span>
                 <button
                   onClick={() => setOutcome(active.outcome === 'won' ? null : 'won')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active.outcome === 'won' ? 'bg-emerald-600 text-white' : 'border border-zinc-300 text-zinc-600 hover:bg-zinc-50'}`}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active.outcome === 'won' ? 'bg-emerald-600 text-white' : 'border border-base-300 text-base-content/70 hover:bg-base-100'}`}
                 >✅ Ganhou</button>
                 <button
                   onClick={() => setOutcome(active.outcome === 'lost' ? null : 'lost')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active.outcome === 'lost' ? 'bg-red-600 text-white' : 'border border-zinc-300 text-zinc-600 hover:bg-zinc-50'}`}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active.outcome === 'lost' ? 'bg-red-600 text-white' : 'border border-base-300 text-base-content/70 hover:bg-base-100'}`}
                 >❌ Perdeu</button>
               </div>
             </div>
             <div ref={threadRef} className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4">
               {[...messages].reverse().map((m) => (
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${m.direction === 'outbound' ? 'bg-brand-500 text-white' : 'bg-white text-zinc-700 shadow'}`}>
+                  <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${m.direction === 'outbound' ? 'bg-brand-500 text-white' : 'bg-[var(--surface)] text-base-content shadow-sm'}`}>
                     <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
-                    <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.direction === 'outbound' ? 'text-white/70' : 'text-zinc-400'}`}>
+                    <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.direction === 'outbound' ? 'text-white/70' : 'text-base-content/40'}`}>
                       <span>{hora(m.createdAt)}</span>
                       {m.direction === 'outbound' && <Recibo ack={m.ack} />}
                     </div>
@@ -186,7 +187,8 @@ export function InboxPage() {
                   {liaBusy ? '...' : '✨ Lia'}
                 </button>
                 <input
-                  className="flex-1 rounded-full border border-zinc-300 px-4 py-2 text-sm"
+                  className="flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                  style={{ borderColor: 'var(--border-input)', background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                   placeholder="Digite uma mensagem..."
                   value={text}
                   onChange={(e) => setText(e.target.value)}

@@ -175,59 +175,56 @@ export class ConversationAgentService {
       }
     }
 
+    // BUG-08 fix: busca a conversa UMA vez e reutiliza nos três blocos abaixo.
+    // Antes havia 3 findOne independentes para o mesmo conversationId (3 queries extras por mensagem).
+    const conv = input.conversationId
+      ? await this.conversations.findOne(tenantId, input.conversationId).catch(() => null)
+      : null;
+
     // MONITORAMENTO INTERNO DE RECLAMAÇÕES (G4) — só registra, não muda a resposta ao cliente.
-    if (input.conversationId && route.isComplaint) {
-      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
-      if (conv) {
-        await this.prisma.complaint.create({
-          data: {
-            tenantId,
-            conversationId: input.conversationId,
-            phone: conv.phone,
-            topic: route.complaintTopic ?? 'outro',
-            excerpt: input.message.slice(0, 200),
-          },
-        }).catch(() => null);
-        await this.notifications.create(tenantId, {
-          type: 'complaint',
-          title: `😠 Reclamação (${route.complaintTopic ?? 'outro'})`,
-          body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
-          link: '/inbox',
-        });
-      }
+    if (conv && route.isComplaint) {
+      await this.prisma.complaint.create({
+        data: {
+          tenantId,
+          conversationId: input.conversationId!,
+          phone: conv.phone,
+          topic: route.complaintTopic ?? 'outro',
+          excerpt: input.message.slice(0, 200),
+        },
+      }).catch(() => null);
+      await this.notifications.create(tenantId, {
+        type: 'complaint',
+        title: `😠 Reclamação (${route.complaintTopic ?? 'outro'})`,
+        body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
+        link: '/inbox',
+      });
     }
 
     // OPT-OUT detectado pela IA (ex.: "exit", "me remove daqui") → persiste o descadastro (LGPD).
-    if (input.conversationId && route.agent === 'optout') {
-      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
-      if (conv) {
-        await this.prisma.contact
-          .updateMany({ where: { tenantId, phone: conv.phone }, data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() } })
-          .catch(() => null);
-        await this.notifications.create(tenantId, { type: 'opt_out', title: '🚫 Opt-out', body: `${conv.phone} pediu para sair.`, link: '/contacts' });
-      }
+    if (conv && route.agent === 'optout') {
+      await this.prisma.contact
+        .updateMany({ where: { tenantId, phone: conv.phone }, data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() } })
+        .catch(() => null);
+      await this.notifications.create(tenantId, { type: 'opt_out', title: '🚫 Opt-out', body: `${conv.phone} pediu para sair.`, link: '/contacts' });
     }
 
     // HANDOFF: lead quente (sales + score alto) OU pediu humano → atribui + notifica vendedor.
     // Dedup interno (1 notificação por conversa). Acontece independente da autonomia.
     let handoff: HandleResult['handoff'];
     const isHot = route.agent === 'sales' && route.leadScore >= HOT_LEAD_SCORE;
-    if (input.conversationId && (isHot || route.agent === 'human')) {
-      const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
-      if (conv) {
-        handoff = await this.sellers.handoff(tenantId, {
-          conversationId: input.conversationId,
-          contactPhone: conv.phone,
-          leadScore: route.leadScore,
-          summary: input.message.slice(0, 120),
-        });
-        await this.notifications.create(tenantId, {
-          type: isHot ? 'hot_lead' : 'info',
-          title: isHot ? `🔥 Lead quente (score ${route.leadScore})` : '🙋 Lead pediu atendente',
-          body: `${conv.phone}${handoff?.sellerName ? ` → ${handoff.sellerName}` : ''}: "${input.message.slice(0, 80)}"`,
-          link: '/inbox',
-        });
-      }
+    if (conv && (isHot || route.agent === 'human')) {
+      handoff = await this.sellers.handoff(tenantId, {
+        conversationId: input.conversationId ?? '',
+        contactPhone: conv.phone,
+        leadScore: route.leadScore,
+        summary: input.message.slice(0, 120),
+      });
+      await this.notifications.create(tenantId, {
+        type: isHot ? 'hot_lead' : 'info',
+        title: isHot ? `🔥 Lead quente (score ${route.leadScore})` : '🙋 Lead pediu atendente',
+        body: `${conv.phone}${handoff?.sellerName ? ` → ${handoff.sellerName}` : ''}: "${input.message.slice(0, 80)}"`,
+        link: '/inbox',
+      });
     }
 
     return {

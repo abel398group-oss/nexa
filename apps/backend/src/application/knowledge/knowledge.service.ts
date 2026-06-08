@@ -36,8 +36,14 @@ export class KnowledgeService {
 
   // Recupera os KB mais relevantes p/ uma pergunta (retrieval p/ a Lia).
   // Scoring textual simples (título>tags>tópico>conteúdo). pgvector entra depois.
+  // P3 fix: limita a 100 artigos para scoring em memória — evita carregar toda a base
+  // com bases grandes (500+ artigos = +1MB por chamada). Fix definitivo: GIN index no Postgres.
   async retrieve(tenantId: string, query: string, topN = 3) {
-    const all = await this.prisma.aiKnowledgeBase.findMany({ where: { tenantId } });
+    const all = await this.prisma.aiKnowledgeBase.findMany({
+      where: { tenantId },
+      take: 100,
+      orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
+    });
     const terms = query
       .toLowerCase()
       .normalize('NFD')
@@ -130,15 +136,23 @@ export class KnowledgeService {
   }
 
   // Importa conhecimento de um produto conectado (TMS) → idempotente por (tenant, title)
+  // P6 fix: substituído o findFirst dentro do loop (N queries seriais) por
+  // um único findMany com map em memória O(1) — de N queries para 1.
   async importFromConnector(tenantId: string, productCode: string) {
     const connector = this.connectors.get(productCode);
     const items = await connector.getKnowledge();
+
+    // 1 query busca todos os títulos existentes de uma vez
+    const existingList = await this.prisma.aiKnowledgeBase.findMany({
+      where: { tenantId, title: { in: items.map((i) => i.title) } },
+      select: { id: true, title: true, content: true },
+    });
+    const existingMap = new Map(existingList.map((e) => [e.title, e]));
+
     let created = 0;
     let updated = 0;
     for (const it of items) {
-      const existing = await this.prisma.aiKnowledgeBase.findFirst({
-        where: { tenantId, title: it.title },
-      });
+      const existing = existingMap.get(it.title);
       if (existing) {
         // novo conteúdo → nova versão (não aprovada) se mudou
         if (existing.content !== it.content) {

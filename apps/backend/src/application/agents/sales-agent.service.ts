@@ -74,7 +74,8 @@ export class SalesAgentService {
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
       (cfg.persona ? `${cfg.persona} ` : '') +
       greetingRule +
-      'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use **negrito** e emojis com moderação.\n\n' +
+      'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use emojis com moderação. ' +
+      'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente.\n\n' +
       'VOCÊ CONDUZ A VENDA POR ESTÁGIOS. Descubra em qual estágio a conversa está (pelo histórico) e cumpra o objetivo dele:\n' +
       '1) SAUDAÇÃO: acolher e descobrir o motivo do contato.\n' +
       '2) DESCOBERTA: entender a dor/operação (que problema ele quer resolver?).\n' +
@@ -106,6 +107,8 @@ export class SalesAgentService {
       const raw = u.text;
       const action = this.parseAction(raw);
       let draft = raw.replace(/ACTION=.*/i, '').trim();
+      // Remove formatação markdown — WhatsApp não renderiza, aparece como lixo visual
+      draft = SalesAgentService.stripMarkdown(draft);
       // GARANTIA: se a conversa já está em andamento, remove saudação no início (o modelo às vezes insiste)
       if (ongoing) {
         const before = draft;
@@ -131,6 +134,20 @@ export class SalesAgentService {
         `quantos veículos/motoristas a sua operação tem hoje? 🚚`;
       return { draft, suggestedAction: 'none', usedKnowledge: [], allowedFacts, confidence: 'low', model: AI_MODEL };
     }
+  }
+
+  // Remove formatação markdown (negrito, itálico, código, cabeçalhos, listas)
+  // para que o texto fique limpo no WhatsApp onde markdown não é renderizado.
+  static stripMarkdown(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '$1')   // **negrito** → negrito
+      .replace(/\*(.+?)\*/g, '$1')        // *itálico* → itálico
+      .replace(/__(.+?)__/g, '$1')        // __negrito__ → negrito
+      .replace(/_(.+?)_/g, '$1')          // _itálico_ → itálico
+      .replace(/`{1,3}(.+?)`{1,3}/g, '$1') // `código` → código
+      .replace(/^#{1,6}\s+/gm, '')        // # Título → Título
+      .replace(/^\s*[-*+]\s+/gm, '• ')   // - item → • item (lista limpa)
+      .trim();
   }
 
   private parseAction(raw: string): SalesReply['suggestedAction'] {

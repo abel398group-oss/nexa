@@ -265,8 +265,9 @@ export class SenderService {
   }
 
   // saudação por horário (Brasília) — business-rules §10
+  // BUG-06 fix: usar hora UTC-3 (Brasília) — getHours() retorna UTC em containers Linux.
   static greeting(): string {
-    const h = new Date().getHours();
+    const h = (new Date().getUTCHours() - 3 + 24) % 24;
     if (h >= 5 && h < 12) return 'Bom dia';
     if (h >= 12 && h < 18) return 'Boa tarde';
     return 'Boa noite';
@@ -280,8 +281,10 @@ export class SenderService {
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
-    // garante rodapé de opt-out (LGPD) se ainda não houver
-    if (!/sair/i.test(txt)) txt += SenderService.OPT_OUT_FOOTER;
+    // BUG-09 fix: verificação anterior /sair/i causava falso positivo em frases como
+    // "Saia na frente da concorrência" — o footer não era adicionado, violando LGPD.
+    // Agora verifica o texto exato do rodapé.
+    if (!txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;
     return txt;
   }
 }

@@ -44,21 +44,28 @@ export class EventsService {
 
   // WORKER: a cada 5s pega eventos 'created', despacha e marca 'processed'.
   // Falha → retry com backoff; após MAX_RETRIES → DLQ.
+  // P1 fix: claim atômico via updateMany (WHERE status='created') antes de processar.
+  // Evita que múltiplos pods processem o mesmo evento simultaneamente (TOCTOU).
   @Interval(5000)
   async processOutbox() {
-    const pending = await this.prisma.domainEvent.findMany({
+    // CLAIM ATÔMICO: tenta marcar até 20 eventos 'created' → 'processing' de uma vez.
+    // Apenas o pod que ganhou a corrida (afetou N > 0 registros) prossegue.
+    // Outros pods que chegaram ao mesmo tempo encontram status != 'created' e pulam.
+    const claimResult = await this.prisma.domainEvent.updateMany({
       where: { status: 'created' },
+      data: { status: 'processing' },
+    });
+    if (claimResult.count === 0) return;
+
+    // Busca exatamente os eventos que este pod acabou de marcar
+    const pending = await this.prisma.domainEvent.findMany({
+      where: { status: 'processing' },
       orderBy: { createdAt: 'asc' },
       take: 20,
     });
 
     for (const ev of pending) {
       try {
-        await this.prisma.domainEvent.update({
-          where: { id: ev.id },
-          data: { status: 'processing' },
-        });
-
         // despacha: consumidores reagem a 'domain.<eventType>'
         await this.emitter.emitAsync(`domain.${ev.eventType}`, ev);
 

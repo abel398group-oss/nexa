@@ -94,15 +94,32 @@ export class AnthropicService {
     return { text, tokensIn, tokensOut, costUsd: estimateCost(tokensIn, tokensOut) };
   }
 
-  // Completa esperando JSON; extrai o 1º objeto {...} da resposta.
+  // Completa esperando JSON; extrai e parseia o 1º objeto JSON válido da resposta.
+  // BUG-10 fix: regex greedy /\{[\s\S]*\}/ podia capturar do 1º ao último '}', produzindo
+  // JSON inválido quando o modelo incluía múltiplos objetos ou explicava exemplos.
+  // Solução: tenta parsear candidatos em ordem até encontrar um JSON válido.
   async completeJson<T = any>(
     system: string,
     user: string,
     opts: { maxTokens?: number } = {},
   ): Promise<T> {
     const raw = await this.complete(system, user, { maxTokens: opts.maxTokens ?? 300, temperature: 0 });
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`JSON não encontrado na resposta: ${raw.slice(0, 120)}`);
-    return JSON.parse(match[0]) as T;
+    // Extrai todos os candidatos {...} em ordem de aparição (non-greedy)
+    const candidates = [...raw.matchAll(/\{[\s\S]*?\}/g)].map((m) => m[0]);
+    // Tenta parsear do maior para o menor (objeto mais completo primeiro)
+    const sorted = candidates.sort((a, b) => b.length - a.length);
+    for (const candidate of sorted) {
+      try {
+        return JSON.parse(candidate) as T;
+      } catch {
+        // tenta o próximo candidato
+      }
+    }
+    // Fallback: tenta parsear a resposta inteira
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      throw new Error(`JSON não encontrado na resposta: ${raw.slice(0, 120)}`);
+    }
   }
 }

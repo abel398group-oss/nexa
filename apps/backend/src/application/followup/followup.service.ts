@@ -59,8 +59,11 @@ export class FollowUpService {
   }
 
   private withinBusinessHours(): boolean {
-    const h = new Date().getHours();
-    return h >= BUSINESS_START && h < BUSINESS_END;
+    // BUG-06 fix: usar hora de Brasília (UTC-3) — new Date().getHours() retorna UTC em containers Linux.
+    // A solução definitiva é TZ=America/Sao_Paulo no .env / docker-compose (já adicionado).
+    // Este fallback garante o comportamento correto mesmo sem a variável de ambiente.
+    const brHour = (new Date().getUTCHours() - 3 + 24) % 24;
+    return brHour >= BUSINESS_START && brHour < BUSINESS_END;
   }
 
   @Interval(20000) // checa a cada 20s

@@ -83,7 +83,8 @@ export function UsersPage() {
                     <button
                       key={a}
                       onClick={() => savePerms(u, togglePerm(u.permissions, a))}
-                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 bg-white text-base-content/50'}`}
+                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'}`}
+                      style={!on ? { background: 'var(--surface)' } : undefined}
                     >
                       {on ? '✓ ' : ''}{AREA_LABEL[a]}
                     </button>
@@ -97,7 +98,7 @@ export function UsersPage() {
 
       {show && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30" onClick={() => setShow(false)}>
-          <form onClick={(e) => e.stopPropagation()} onSubmit={create} className="w-[26rem] rounded-xl bg-white p-6 shadow-xl">
+          <form onClick={(e) => e.stopPropagation()} onSubmit={create} className="w-[26rem] rounded-xl p-6 shadow-xl" style={{ background: 'var(--surface)' }}>
             <h2 className="mb-4 text-lg font-bold text-base-content">Novo usuário</h2>
             <input className="input mb-2" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <input className="input mb-2" placeholder="E-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
