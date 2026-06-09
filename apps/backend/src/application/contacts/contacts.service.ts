@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/create-contact.dto';
+import { normalizePhone } from '@/shared/utils/phone.util';
 
 @Injectable()
 export class ContactsService {
@@ -35,11 +36,12 @@ export class ContactsService {
   }
 
   async create(tenantId: string, dto: CreateContactDto) {
+    const phone = normalizePhone(dto.phone) || dto.phone; // garante formato canônico
     // upsert por (tenantId, phone) — não duplica
     return this.prisma.contact.upsert({
-      where: { tenantId_phone: { tenantId, phone: dto.phone } },
-      update: { ...dto, tags: dto.tags ?? undefined },
-      create: { tenantId, ...dto, tags: dto.tags ?? [] },
+      where: { tenantId_phone: { tenantId, phone } },
+      update: { ...dto, phone, tags: dto.tags ?? undefined },
+      create: { tenantId, ...dto, phone, tags: dto.tags ?? [] },
     });
   }
 
@@ -64,10 +66,11 @@ export class ContactsService {
   async importMany(tenantId: string, contacts: CreateContactDto[]) {
     let created = 0;
     for (const c of contacts) {
+      const phone = normalizePhone(c.phone) || c.phone;
       await this.prisma.contact.upsert({
-        where: { tenantId_phone: { tenantId, phone: c.phone } },
+        where: { tenantId_phone: { tenantId, phone } },
         update: {},
-        create: { tenantId, ...c, tags: c.tags ?? [] },
+        create: { tenantId, ...c, phone, tags: c.tags ?? [] },
       });
       created++;
     }

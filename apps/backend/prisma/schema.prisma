@@ -42,8 +42,11 @@ enum CustomerStage {
 
 enum ConversationStatus {
   open
+  waiting_customer   // aguardando resposta do lead
+  waiting_internal   // aguardando ação interna (vendedor, suporte)
   escalated
-  closed
+  opt_out            // lead pediu descadastro — fecha imediatamente
+  closed             // fechado por regra automática ou ação manual
 }
 
 enum MessageDirection {
@@ -194,16 +197,36 @@ model AiConversation {
   assignedSellerId String?   @map("assigned_seller_id")
   assignedSeller   Seller?   @relation(fields: [assignedSellerId], references: [id])
   assignedAt       DateTime? @map("assigned_at")
-  outcome          String?   @map("outcome") // won | lost | null (resultado da venda)
+  lastActivityAt   DateTime? @map("last_activity_at") // atualizado a cada msg — base da regra de 7 dias
+  outcome          String?   @map("outcome") // won | lost | no_response | opt_out (resultado da venda)
   outcomeAt        DateTime? @map("outcome_at")
 
-  messages AiMessage[]
-  actions  AiAction[]
+  messages      AiMessage[]
+  actions       AiAction[]
+  stageHistory  ConversationStageHistory[]
 
   @@index([tenantId])
   @@index([correlationId])
   @@index([contactId])
   @@map("ai_conversations")
+}
+
+// Histórico de mudanças de status e outcome — fonte para relatórios comerciais.
+// Grava de→para sempre que status ou outcome muda (janitor, opt_out, won/lost, reabertura).
+model ConversationStageHistory {
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  fromStatus     String?   @map("from_status")
+  toStatus       String    @map("to_status")
+  fromOutcome    String?   @map("from_outcome")
+  toOutcome      String?   @map("to_outcome")
+  reason         String?   // inatividade_7d | opt_out | won | lost | reaberta | manual
+  changedAt      DateTime  @default(now()) @map("changed_at")
+
+  @@index([conversationId])
+  @@index([changedAt])
+  @@map("conversation_stage_history")
 }
 
 model AiMessage {

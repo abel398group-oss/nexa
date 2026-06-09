@@ -39,13 +39,77 @@ export class ConversationsService {
     return conv;
   }
 
-  // marca resultado da venda (won/lost) — alimenta os KPIs dos vendedores
+  // Fecha uma conversa com motivo (outcome). Grava histórico de stage.
+  // Regras de fechamento:
+  //   opt_out     → imediato (LGPD)
+  //   won/lost    → imediato (venda concluída ou perdida)
+  //   no_response → janitor após 7 dias (somente leads, não clientes ativos)
+  async closeConversation(
+    tenantId: string,
+    id: string,
+    outcome: 'won' | 'lost' | 'no_response' | 'opt_out',
+    reason?: string,
+  ) {
+    const conv = await this.findOne(tenantId, id);
+    const toStatus = outcome === 'opt_out' ? 'opt_out' : 'closed';
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.update({
+        where: { id },
+        data: { status: toStatus as any, outcome, outcomeAt: now, endedAt: now },
+      }),
+      // Ajuste 4: grava histórico de mudança de status/outcome
+      this.prisma.conversationStageHistory.create({
+        data: {
+          conversationId: id,
+          fromStatus: conv.status as string,
+          toStatus,
+          fromOutcome: conv.outcome ?? null,
+          toOutcome: outcome,
+          reason: reason ?? outcome,
+          changedAt: now,
+        },
+      }),
+    ]);
+
+    return { id, status: toStatus, outcome };
+  }
+
+  // Atalho para quando o vendedor marca won/lost no Inbox — fecha junto
   async setOutcome(tenantId: string, id: string, outcome: 'won' | 'lost' | null) {
-    await this.findOne(tenantId, id);
+    const conv = await this.findOne(tenantId, id);
+    if (outcome === 'won' || outcome === 'lost') {
+      return this.closeConversation(tenantId, id, outcome, outcome);
+    }
+    // null = desfaz o outcome (reabre a conversa — Ajuste 2)
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.update({
+        where: { id },
+        data: { outcome: null, outcomeAt: null, status: 'open' as any, endedAt: null },
+      }),
+      this.prisma.conversationStageHistory.create({
+        data: {
+          conversationId: id,
+          fromStatus: conv.status as string,
+          toStatus: 'open',
+          fromOutcome: conv.outcome ?? null,
+          toOutcome: null,
+          reason: 'reaberta_manual',
+          changedAt: now,
+        },
+      }),
+    ]);
+    return { id, status: 'open', outcome: null };
+  }
+
+  // Atualiza last_activity_at — chamado sempre que uma mensagem é gravada
+  async touchActivity(conversationId: string) {
     return this.prisma.aiConversation.update({
-      where: { id },
-      data: { outcome, outcomeAt: outcome ? new Date() : null },
-    });
+      where: { id: conversationId },
+      data: { lastActivityAt: new Date() },
+    }).catch(() => null); // não bloqueia se a conversa já foi fechada
   }
 
   async getMessages(tenantId: string, id: string) {
@@ -104,6 +168,9 @@ export class ConversationsService {
         estimatedCostUsd: dto.estimatedCostUsd,
       },
     });
+    // atualiza timestamp de última atividade (base da regra de auto-fechamento em 7 dias)
+    await this.touchActivity(conv.id);
+
     // tempo real: empurra para a sala da conversa (WebSocket)
     this.events.emit('message.created', { conversationId: conv.id, message });
 

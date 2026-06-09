@@ -159,6 +159,8 @@ export class WhatsappService {
         // registra a mensagem do cliente no histórico
         await this.conversations.addMessage(tenantId, optConv.id, { direction: 'inbound', content: n.text }).catch(() => null);
         await this.followup.stop(optConv.id, 'opt-out');
+        // fecha a conversa imediatamente (Regra 1 — opt_out é imediato)
+        await this.conversations.closeConversation(tenantId, optConv.id, 'opt_out').catch(() => null);
         // confirmação educada — só na PRIMEIRA vez (transacional/LGPD, independe da autonomia)
         if (!wasOptedOut) {
           await this.conversations
@@ -190,17 +192,40 @@ export class WhatsappService {
       return { ok: true, phone: n.phone, ignored: true, reason: 'contato optou por sair' };
     }
 
-    // 3) acha conversa aberta do telefone ou cria nova
+    // 3) acha conversa aberta ou fechada (mas não opt_out) do telefone
+    //    Ajuste 2: conversa CLOSED pode ser reaberta — o lead voltou.
+    //    opt_out NÃO reabre automaticamente (LGPD).
     let conv = await this.prisma.aiConversation.findFirst({
-      where: { tenantId, phone: n.phone, status: 'open' },
+      where: { tenantId, phone: n.phone, status: { in: ['open', 'waiting_customer', 'waiting_internal', 'escalated', 'closed'] as any } },
       orderBy: { startedAt: 'desc' },
     });
     if (!conv) {
+      // sem histórico → cria nova conversa
       conv = await this.conversations.create(tenantId, {
         contactId: contact.id,
         phone: n.phone,
         sourceChannel: 'whatsapp',
       });
+    } else if ((conv.status as string) === 'closed') {
+      // lead voltou após fechamento → reabre e grava histórico
+      this.logger.log(`Conversa ${conv.id} reaberta — lead ${n.phone} voltou após fechamento`);
+      await this.prisma.$transaction([
+        this.prisma.aiConversation.update({
+          where: { id: conv.id },
+          data: { status: 'open' as any, endedAt: null, lastActivityAt: new Date() },
+        }),
+        this.prisma.conversationStageHistory.create({
+          data: {
+            conversationId: conv.id,
+            fromStatus: 'closed',
+            toStatus: 'open',
+            fromOutcome: (conv as any).outcome ?? null,
+            toOutcome: (conv as any).outcome ?? null, // preserva outcome anterior como histórico
+            reason: 'reaberta_lead_retornou',
+          },
+        }),
+      ]);
+      conv = { ...conv, status: 'open' as any, endedAt: null };
     }
 
     // 4) grava a mensagem inbound (empurra pro inbox via WebSocket)
