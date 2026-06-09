@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer } from './connector.interface';
+import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
@@ -365,6 +365,35 @@ export class HiperTmsConnector implements Connector {
   async suspendAccess(_input: { externalTenantId: string }) {
     // TODO(real): chama TMS p/ suspender
     return { ok: true };
+  }
+
+  // ── Diagnóstico de suporte — stubs (ADR 015 D3) ─────────────────────────
+  // TODO(real): integrar com API do TMS antes do deploy DigitalOcean
+
+  async getDocumentStatus(_externalId: string, _type: 'cte' | 'mdfe'): Promise<DocumentStatus | null> {
+    if (!this.configured) return null;
+    // TODO(real): GET ${TMS_API_BASE_URL}/fiscal/documents/${externalId}?type=${type}
+    this.logger.warn('getDocumentStatus STUB — integração real pendente');
+    return null;
+  }
+
+  async getRejectionInfo(code: string): Promise<RejectionInfo | null> {
+    // Tabela local de rejeições comuns SEFAZ — base para diagnóstico offline
+    const known: Record<string, RejectionInfo> = {
+      '562': { code: '562', message: 'Rejeição: CT-e já cancelado', category: 'operacional', suggestedAction: 'Emitir novo CT-e' },
+      '539': { code: '539', message: 'Rejeição: CFOP inválido para a UF', category: 'fiscal', suggestedAction: 'Verificar CFOP no cadastro da operação' },
+      '204': { code: '204', message: 'Rejeição: Duplicidade de CT-e', category: 'operacional', suggestedAction: 'Verificar se CT-e já foi emitido com o mesmo número' },
+      '581': { code: '581', message: 'Rejeição: Certificado digital inválido/expirado', category: 'cadastro', suggestedAction: 'Renovar certificado digital PFX em Configurações → Fiscal → Certificados' },
+      '999': { code: '999', message: 'Rejeição genérica do sistema', category: 'sistema', suggestedAction: 'Acionar suporte técnico com o XML do CT-e' },
+    };
+    return known[code] ?? null;
+  }
+
+  async getContractStatus(externalId: string): Promise<ContractStatus | null> {
+    if (!this.configured) return null;
+    // TODO(real): GET ${TMS_API_BASE_URL}/tenants/${externalId}/contract
+    this.logger.warn('getContractStatus STUB — integração real pendente');
+    return null;
   }
 
   // Verifica se o telefone já tem cadastro no HiperTMS.

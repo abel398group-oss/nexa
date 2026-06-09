@@ -4,6 +4,10 @@ import { RouterAgentService } from './router-agent.service';
 import { SalesAgentService } from './sales-agent.service';
 import { SupervisorAgentService } from './supervisor-agent.service';
 import { ConversationAgentService } from './conversation-agent.service';
+import { CaseClassifierAgentService } from './case-classifier-agent.service';
+import { DiagnosticAgentService } from './diagnostic-agent.service';
+import { ResolutionAgentService } from './resolution-agent.service';
+import { EscalationAgentService } from './escalation-agent.service';
 import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { SellersModule } from '@/application/sellers/sellers.module';
@@ -16,12 +20,19 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
   imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule],
   controllers: [AgentsController],
   providers: [
+    // Infra
+    TmsLookupService,
+    // Agentes de suporte — pipeline ADR 015
+    CaseClassifierAgentService,
+    DiagnosticAgentService,
+    ResolutionAgentService,
+    EscalationAgentService,
+    // Agentes principais
     SupportAgentService,
     RouterAgentService,
     SalesAgentService,
     SupervisorAgentService,
     ConversationAgentService,
-    TmsLookupService,
   ],
   exports: [SupportAgentService, ConversationAgentService],
 })

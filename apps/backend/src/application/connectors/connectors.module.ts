@@ -8,6 +8,6 @@ import { ProductsController } from '@/presentation/http/products/products.contro
 @Module({
   controllers: [ProductsController],
   providers: [ConnectorsService, HiperTmsConnector],
-  exports: [ConnectorsService],
+  exports: [ConnectorsService, HiperTmsConnector],
 })
 export class ConnectorsModule {}

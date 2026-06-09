@@ -34,6 +34,34 @@ export interface TmsCustomer {
   registeredAt?: string;     // ISO date
 }
 
+// Status de documento fiscal (CT-e, MDF-e) — leitura via Connector (ADR 015 D3)
+export interface DocumentStatus {
+  documentId: string;
+  type: 'cte' | 'mdfe';
+  status: 'authorized' | 'cancelled' | 'rejected' | 'pending' | 'unknown';
+  issuedAt?: string;
+  rejectionCode?: string;
+  rejectionMessage?: string;
+}
+
+// Código/motivo de rejeição SEFAZ — diagnóstico de CT-e/MDF-e
+export interface RejectionInfo {
+  code: string;
+  message: string;
+  category: 'cadastro' | 'fiscal' | 'operacional' | 'sistema' | 'unknown';
+  suggestedAction?: string;
+}
+
+// Status de contrato/acesso do cliente no TMS
+export interface ContractStatus {
+  externalId: string;
+  plan: string;
+  status: 'active' | 'suspended' | 'trial' | 'cancelled';
+  expiresAt?: string;
+  documentsUsed?: number;
+  documentsLimit?: number;
+}
+
 export interface Connector {
   readonly productCode: string;
 
@@ -65,4 +93,15 @@ export interface Connector {
   // verifica se o telefone já tem cadastro no produto
   // Retorna null se não encontrado ou conector não configurado.
   lookupCustomer(phone: string): Promise<TmsCustomer | null>;
+
+  // ── Diagnóstico de suporte (ADR 015 D3) — leitura read-only ──────────────
+
+  // Status de um documento fiscal (CT-e ou MDF-e) pelo número/chave
+  getDocumentStatus(externalId: string, type: 'cte' | 'mdfe'): Promise<DocumentStatus | null>;
+
+  // Detalhes de uma rejeição SEFAZ pelo código
+  getRejectionInfo(code: string): Promise<RejectionInfo | null>;
+
+  // Status do contrato/plano do cliente pelo externalId
+  getContractStatus(externalId: string): Promise<ContractStatus | null>;
 }

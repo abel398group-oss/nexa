@@ -42,6 +42,51 @@ export class ConversationJanitorService {
 
   @Interval(60 * 60 * 1000) // roda a cada hora
   async closeInactiveConversations() {
+    // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
+    await this.closeResolvedSupport();
+    // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
+    await this.closeInactiveLeads();
+  }
+
+  // Branch de suporte: fecha conversas marcadas como resolvidas (resolvedAt set)
+  // há mais de 48h sem nova mensagem do cliente.
+  private async closeResolvedSupport() {
+    const now = new Date();
+    const resolved = await this.prisma.aiConversation.findMany({
+      where: {
+        customerStage: { in: ['cliente_ativo', 'cliente_novo'] as any },
+        status: { notIn: ['closed', 'opt_out'] as any },
+        autoCloseAt: { lte: now },
+      } as any,
+      select: { id: true },
+    });
+
+    if (!resolved.length) return;
+
+    const ids = resolved.map((c) => c.id);
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, endedAt: now },
+      }),
+      this.prisma.conversationStageHistory.createMany({
+        data: ids.map((id) => ({
+          conversationId: id,
+          fromStatus: 'open',
+          toStatus: 'closed',
+          fromOutcome: null,
+          toOutcome: 'resolved',
+          reason: 'resolvido_48h',
+          changedAt: now,
+        })),
+      }),
+    ]);
+
+    this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved)`);
+  }
+
+  // Branch comercial original (leads)
+  private async closeInactiveLeads() {
     const cutoff = new Date(Date.now() - INACTIVITY_DAYS * 24 * 60 * 60 * 1000);
 
     // Ajuste 1: só fecha open e waiting_customer.

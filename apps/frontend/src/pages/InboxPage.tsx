@@ -9,6 +9,7 @@ import { ConversationOutcomeBadge } from '@/components/conversation/Conversation
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
 import { ConversationTimeline } from '@/components/conversation/ConversationTimeline';
 import { isWaitingInternalStale } from '@/lib/conversation-status';
+import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
 
 interface Conversation {
   id: string;
@@ -17,6 +18,9 @@ interface Conversation {
   outcome?: string | null;
   lastActivityAt?: string | null;
   assignedSeller?: { name: string } | null;
+  customerStage?: string | null;
+  ticketCategory?: string | null;
+  ticketPriority?: string | null;
 }
 interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
@@ -190,6 +194,13 @@ export function InboxPage() {
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
                   {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
+                  {(c.ticketCategory || c.ticketPriority) && (
+                    <TicketCategoryBadge
+                      category={c.ticketCategory}
+                      priority={c.ticketPriority}
+                      compact
+                    />
+                  )}
                   {c.assignedSeller && (
                     <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
                       🧑‍💼 {c.assignedSeller.name}
@@ -227,6 +238,14 @@ export function InboxPage() {
                 />
                 {active.outcome && (
                   <ConversationOutcomeBadge outcome={active.outcome} size="md" />
+                )}
+
+                {/* ticket category/priority — suporte */}
+                {(active.ticketCategory || active.ticketPriority) && (
+                  <TicketCategoryBadge
+                    category={active.ticketCategory}
+                    priority={active.ticketPriority}
+                  />
                 )}
 
                 {/* badge TMS */}

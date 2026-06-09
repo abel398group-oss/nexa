@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { AnthropicService, AI_MODEL } from '@/shared/ai/anthropic.service';
-import { SalesAgentService } from './sales-agent.service';
+import { CaseClassifierAgentService } from './case-classifier-agent.service';
+import { DiagnosticAgentService } from './diagnostic-agent.service';
+import { ResolutionAgentService } from './resolution-agent.service';
+import { EscalationAgentService } from './escalation-agent.service';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 
 const MODEL = AI_MODEL;
 
@@ -16,48 +19,37 @@ export interface AgentReply {
   autonomyEnabled: boolean;
   autoSent: boolean;
   usage?: { tokensIn: number; tokensOut: number; costUsd: number };
+  // suporte extra
+  ticketCategory?: string;
+  ticketPriority?: string;
+  rootCause?: string | null;
+  resolved?: boolean;
 }
 
 @Injectable()
 export class SupportAgentService {
   private readonly logger = new Logger('SupportAgent');
-  private lastUsage?: { tokensIn: number; tokensOut: number; costUsd: number };
 
   constructor(
-    private readonly knowledge: KnowledgeService,
     private readonly conversations: ConversationsService,
     private readonly ai: AnthropicService,
+    private readonly classifier: CaseClassifierAgentService,
+    private readonly diagnostic: DiagnosticAgentService,
+    private readonly resolution: ResolutionAgentService,
+    private readonly escalation: EscalationAgentService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  // NOTA BUG-02 + BUG-03: autonomy getter removido daqui.
-  // O auto-envio era feito em finalize() causando double-send (SupportAgent + ConversationAgentService).
-  // O envio é responsabilidade exclusiva do orquestrador (ConversationAgentService — ADR 012).
-  // O kill switch em runtime (AutonomyService) só é respeitado no orquestrador.
-
-  // A Lia responde uma pergunta usando a base de conhecimento (RAG).
-  // Sempre retorna RASCUNHO — o orquestrador decide se envia (ADR 012).
   async ask(
     tenantId: string,
     input: {
       question: string;
       conversationId?: string;
-      tmsCustomer?: { name: string; role?: string; tenantName?: string; isAdmin: boolean };
+      tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string } | null;
     },
   ): Promise<AgentReply> {
-    const kb = await this.knowledge.retrieve(tenantId, input.question, 3);
-    const usedKnowledge = kb.map((k) => ({ id: k.id, title: k.title, score: k.score }));
 
-    // sem conhecimento relevante → escala p/ humano (não inventa)
-    if (kb.length === 0) {
-      const draft =
-        'Não encontrei isso na nossa base ainda. Vou te conectar com um especialista pra te ajudar melhor. 🙂';
-      return this.finalize(input, draft, usedKnowledge, '', 'low', true);
-    }
-
-    const context = kb
-      .map((k, i) => `[Fonte ${i + 1}: ${k.title}]\n${k.content}`)
-      .join('\n\n');
-
+    // Histórico recente
     const history = input.conversationId
       ? (await this.conversations.getMessages(tenantId, input.conversationId))
           .slice(-6)
@@ -65,69 +57,88 @@ export class SupportAgentService {
           .join('\n')
       : '';
 
-    // BUG-06 fix: hora de Brasília (UTC-3) para saudação correta em containers Linux
-    const greeting = (() => {
-      const h = (new Date().getUTCHours() - 3 + 24) % 24;
-      if (h >= 5 && h < 12) return 'Bom dia';
-      if (h >= 12 && h < 18) return 'Boa tarde';
-      return 'Boa noite';
-    })();
-    // Contexto TMS: se o cliente já é usuário do HiperTMS, a Lia age como suporte prioritário
-    const tmsCtx = input.tmsCustomer;
-    const tmsBlock = tmsCtx
-      ? `CONTEXTO IMPORTANTE: Você está atendendo ${tmsCtx.name}, que JÁ É CLIENTE ATIVO do HiperTMS` +
-        (tmsCtx.tenantName ? ` (empresa: ${tmsCtx.tenantName})` : '') +
-        (tmsCtx.isAdmin ? ', perfil ADMINISTRADOR' : ', perfil usuário') +
-        '. NÃO tente vender — ele já é cliente. ' +
-        'Foque em resolver a dúvida ou problema dele com o sistema. ' +
-        'Se não souber a resposta, escale para o suporte humano.\n\n'
-      : '';
+    // ── 1. CLASSIFICAÇÃO ────────────────────────────────────────────────────
+    const classification = await this.classifier.classify(input.question, history);
+    this.logger.debug(`[Support] classificação: ${classification.category}/${classification.priority}`);
 
-    const system =
-      (tmsCtx
-        ? 'Você é a Lia, assistente de SUPORTE da Nexa para clientes do HiperTMS. '
-        : 'Você é a Lia, assistente comercial da Nexa (vende o sistema HiperTMS para transportadoras). ') +
-      `Quando saudar, use a saudação adequada ao horário atual: "${greeting}" (não repita em toda mensagem). ` +
-      'Responda em português do Brasil, de forma curta, cordial e objetiva (WhatsApp). ' +
-      'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente. ' +
-      tmsBlock +
-      'Use SOMENTE as informações das Fontes fornecidas. Se a resposta não estiver nas Fontes, ' +
-      'diga que vai checar com um especialista — NUNCA invente preços, prazos ou recursos. ' +
-      'Se a dúvida exigir decisão humana (negociação, desconto, contrato), sinalize.';
+    // ── 2. DIAGNÓSTICO ──────────────────────────────────────────────────────
+    const tmsForDiag = input.tmsCustomer?.externalId
+      ? { externalId: input.tmsCustomer.externalId, name: input.tmsCustomer.name, plan: input.tmsCustomer.plan }
+      : null;
 
-    const userMsg =
-      `Fontes da base de conhecimento:\n${context}\n\n` +
-      (history ? `Histórico recente:\n${history}\n\n` : '') +
-      `Pergunta do cliente: ${input.question}`;
+    const diag = await this.diagnostic.diagnose({
+      message: input.question,
+      category: classification.category,
+      history,
+      tmsCustomer: tmsForDiag,
+    });
 
-    let draft: string;
-    let confidence: 'high' | 'low' = 'high';
-    this.lastUsage = undefined;
-    try {
-      const u = await this.ai.completeWithUsage(system, userMsg, { maxTokens: 400 });
-      // Remove markdown — WhatsApp não renderiza, aparece como asteriscos literais
-      draft = SalesAgentService.stripMarkdown(u.text);
-      this.lastUsage = { tokensIn: u.tokensIn, tokensOut: u.tokensOut, costUsd: u.costUsd };
-    } catch (e: any) {
-      this.logger.warn(`Claude indisponível (${e?.message}) — fallback determinístico`);
-      // fallback testável sem API: monta resposta a partir da fonte top-1
-      draft = `${kb[0].content}\n\n(Posso detalhar mais se quiser! 🙂)`;
-      confidence = 'low';
+    // Se diagnóstico precisa de mais info → retorna perguntas
+    if (diag.needsMoreInfo && diag.questionsToAsk.length > 0) {
+      const draft = diag.questionsToAsk.join('\n');
+      await this.persistTicketFields(input.conversationId, classification.category, classification.priority, null);
+      return this.buildReply(draft, [], '', 'high', false, classification, null, false);
     }
 
-    const needsHuman = /especialista|humano|não encontrei|checar/i.test(draft);
-    return this.finalize(input, draft, usedKnowledge, context, confidence, needsHuman);
+    // ── 3. RESOLUÇÃO ────────────────────────────────────────────────────────
+    const resol = await this.resolution.resolve({
+      tenantId,
+      message: input.question,
+      category: classification.category,
+      priority: classification.priority,
+      diagnostic: diag,
+      history,
+      tmsCustomer: input.tmsCustomer ? { name: input.tmsCustomer.name } : null,
+    });
+
+    // ── 4. ESCALONAMENTO ────────────────────────────────────────────────────
+    const escalationDecision = this.escalation.decide({
+      category: classification.category,
+      priority: classification.priority,
+      diagnostic: diag,
+      resolution: resol,
+      requiresHumanFromClassifier: classification.requiresHuman,
+    });
+
+    let draft = escalationDecision.escalate ? escalationDecision.message : resol.draft;
+    const needsHuman = escalationDecision.escalate;
+
+    // Se IA resolveu → marca resolvedAt e agenda autoCloseAt (+48h)
+    if (!needsHuman && resol.resolved) {
+      await this.markResolved(input.conversationId);
+    }
+
+    // Persistir campos de ticket na conversa
+    await this.persistTicketFields(
+      input.conversationId,
+      classification.category,
+      classification.priority,
+      diag.rootCause ?? null,
+    );
+
+    return this.buildReply(
+      draft,
+      resol.usedKnowledge,
+      '',
+      resol.confidence,
+      needsHuman,
+      classification,
+      diag.rootCause ?? null,
+      resol.resolved,
+    );
   }
 
-  // BUG-02 fix: finalize() nunca envia mensagem — apenas monta e retorna o rascunho.
-  // O ConversationAgentService (orquestrador) é o único responsável pelo auto-envio.
-  private finalize(
-    input: { question: string; conversationId?: string },
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  private buildReply(
     draft: string,
     usedKnowledge: AgentReply['usedKnowledge'],
     allowedFacts: string,
     confidence: 'high' | 'low',
     needsHuman: boolean,
+    classification: { category: string; priority: string },
+    rootCause: string | null,
+    resolved: boolean,
   ): AgentReply {
     return {
       draft,
@@ -136,9 +147,47 @@ export class SupportAgentService {
       confidence,
       needsHuman,
       model: MODEL,
-      autonomyEnabled: false, // decisão de autonomia fica no orquestrador
-      autoSent: false,        // nunca envia daqui — BUG-02
-      usage: this.lastUsage,
+      autonomyEnabled: false,
+      autoSent: false,
+      ticketCategory: classification.category,
+      ticketPriority: classification.priority,
+      rootCause,
+      resolved,
     };
+  }
+
+  private async persistTicketFields(
+    conversationId: string | undefined,
+    category: string,
+    priority: string,
+    rootCause: string | null,
+  ) {
+    if (!conversationId) return;
+    try {
+      await this.prisma.aiConversation.update({
+        where: { id: conversationId },
+        data: {
+          ticketCategory: category,
+          ticketPriority: priority,
+          ...(rootCause ? { rootCause } : {}),
+        },
+      });
+    } catch (e: any) {
+      this.logger.warn(`persistTicketFields falhou: ${e?.message}`);
+    }
+  }
+
+  private async markResolved(conversationId: string | undefined) {
+    if (!conversationId) return;
+    try {
+      const now = new Date();
+      const autoCloseAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // +48h
+      await this.prisma.aiConversation.update({
+        where: { id: conversationId },
+        data: { resolvedAt: now, autoCloseAt },
+      });
+    } catch (e: any) {
+      this.logger.warn(`markResolved falhou: ${e?.message}`);
+    }
   }
 }

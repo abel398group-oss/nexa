@@ -198,8 +198,13 @@ model AiConversation {
   assignedSeller   Seller?   @relation(fields: [assignedSellerId], references: [id])
   assignedAt       DateTime? @map("assigned_at")
   lastActivityAt   DateTime? @map("last_activity_at") // atualizado a cada msg — base da regra de 7 dias
-  outcome          String?   @map("outcome") // won | lost | no_response | opt_out (resultado da venda)
+  outcome          String?   @map("outcome") // won | lost | no_response | opt_out | resolved
   outcomeAt        DateTime? @map("outcome_at")
+  resolvedAt       DateTime? @map("resolved_at") // quando IA marcou como resolvido (suporte)
+  autoCloseAt      DateTime? @map("auto_close_at") // timestamp p/ fechar automaticamente (resolvido+48h)
+  ticketCategory   String?   @map("ticket_category") // fiscal | cte | mdfe | frete | financeiro | ...
+  ticketPriority   String?   @map("ticket_priority") // critical | high | medium | low
+  rootCause        String?   @map("root_cause") // causa-raiz classificada pelo DiagnosticAgent
 
   messages      AiMessage[]
   actions       AiAction[]
