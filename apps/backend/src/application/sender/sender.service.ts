@@ -5,6 +5,7 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -27,6 +28,7 @@ export class SenderService {
     private readonly conversations: ConversationsService,
     private readonly followup: FollowUpService,
     private readonly waha: WahaClientService,
+    private readonly tmsLookup: TmsLookupService,
   ) {}
 
   // ---------- número do pool ----------
@@ -103,6 +105,34 @@ export class SenderService {
       targets = targets.filter((t) => !blocked.has(t.phone));
     }
 
+    // ── Filtro TMS: consulta o lote no banco do HiperTMS (read-only) ──────────
+    // Clientes já cadastrados no TMS não recebem campanha de prospecção.
+    // Se TMS_DB_URL não estiver configurado, tmsMap fica vazio e nenhum lead é bloqueado.
+    const tmsMap = await this.tmsLookup.batchLookup(targets.map((t) => t.phone));
+    const tmsBlocked = targets.filter((t) => tmsMap.has(TmsLookupService.normalize(t.phone)));
+    const tmsAllowed = targets.filter((t) => !tmsMap.has(TmsLookupService.normalize(t.phone)));
+    const skippedTms = tmsBlocked.length;
+
+    // Marca os clientes TMS com a tag 'tms_cliente' no Nexa (só leitura do TMS — escrita só no Nexa)
+    for (const t of tmsBlocked) {
+      const info = tmsMap.get(TmsLookupService.normalize(t.phone));
+      await this.prisma.contact.upsert({
+        where: { tenantId_phone: { tenantId, phone: t.phone } },
+        update: { tags: { push: 'tms_cliente' } },
+        create: {
+          tenantId,
+          phone: t.phone,
+          name: t.name ?? info?.name ?? undefined,
+          source: 'tms_import',
+          tags: ['tms_cliente'],
+        },
+      }).catch(() => null); // não bloqueia se falhar
+    }
+
+    if (skippedTms > 0) {
+      this.logger.log(`Campanha "${dto.name}": ${skippedTms} lead(s) já são clientes TMS — pulados e marcados`);
+    }
+
     const campaign = await this.prisma.campaign.create({
       data: {
         tenantId,
@@ -112,11 +142,18 @@ export class SenderService {
         mediaUrl: dto.mediaUrl || null,
         mediaName: dto.mediaName || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
-        targets: { create: targets.map((t) => ({ tenantId, phone: t.phone, name: t.name })) },
+        targets: {
+          create: [
+            // leads que podem receber a campanha
+            ...tmsAllowed.map((t) => ({ tenantId, phone: t.phone, name: t.name })),
+            // clientes TMS: criados como skipped para aparecer no relatório
+            ...tmsBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'tms_cliente' })),
+          ],
+        },
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: targets.length, skippedOptOut };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms };
   }
 
   async listCampaigns(tenantId: string) {

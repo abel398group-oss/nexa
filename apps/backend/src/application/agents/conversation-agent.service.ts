@@ -8,6 +8,7 @@ import { SalesAgentService } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
 import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 
 export interface HandleResult {
   route: RouteDecision;
@@ -43,6 +44,7 @@ export class ConversationAgentService {
     private readonly prisma: PrismaService,
     private readonly autonomy: AutonomyService,
     private readonly notifications: NotificationsService,
+    private readonly tmsLookup: TmsLookupService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -50,8 +52,30 @@ export class ConversationAgentService {
     tenantId: string,
     input: { message: string; conversationId?: string; productCode?: string },
   ): Promise<HandleResult> {
-    const route = await this.router.route(input.message);
+    let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
+
+    // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
+    // Busca o telefone da conversa para consultar o TMS antes de rotear
+    let tmsCustomer: { name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+    if (input.conversationId && route.agent === 'sales') {
+      const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+      if (convForPhone?.phone) {
+        const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]);
+        const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
+        if (tmsInfo) {
+          // É cliente TMS: redireciona para suporte
+          route = { ...route, agent: 'support' };
+          tmsCustomer = {
+            name: tmsInfo.name,
+            role: tmsInfo.role,
+            tenantName: tmsInfo.tenantName,
+            isAdmin: tmsInfo.role?.toUpperCase() === 'ADMIN',
+          };
+          this.logger.log(`TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — roteado para suporte`);
+        }
+      }
+    }
     // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
     const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
     const history = msgs
@@ -102,7 +126,7 @@ export class ConversationAgentService {
 
       case 'support':
       default: {
-        const r = await this.support.ask(tenantId, { question: input.message, conversationId: undefined });
+        const r = await this.support.ask(tenantId, { question: input.message, conversationId: undefined, tmsCustomer });
         draft = r.draft;
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;

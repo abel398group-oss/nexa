@@ -38,7 +38,11 @@ export class SupportAgentService {
   // Sempre retorna RASCUNHO — o orquestrador decide se envia (ADR 012).
   async ask(
     tenantId: string,
-    input: { question: string; conversationId?: string },
+    input: {
+      question: string;
+      conversationId?: string;
+      tmsCustomer?: { name: string; role?: string; tenantName?: string; isAdmin: boolean };
+    },
   ): Promise<AgentReply> {
     const kb = await this.knowledge.retrieve(tenantId, input.question, 3);
     const usedKnowledge = kb.map((k) => ({ id: k.id, title: k.title, score: k.score }));
@@ -68,11 +72,25 @@ export class SupportAgentService {
       if (h >= 12 && h < 18) return 'Boa tarde';
       return 'Boa noite';
     })();
+    // Contexto TMS: se o cliente já é usuário do HiperTMS, a Lia age como suporte prioritário
+    const tmsCtx = input.tmsCustomer;
+    const tmsBlock = tmsCtx
+      ? `CONTEXTO IMPORTANTE: Você está atendendo ${tmsCtx.name}, que JÁ É CLIENTE ATIVO do HiperTMS` +
+        (tmsCtx.tenantName ? ` (empresa: ${tmsCtx.tenantName})` : '') +
+        (tmsCtx.isAdmin ? ', perfil ADMINISTRADOR' : ', perfil usuário') +
+        '. NÃO tente vender — ele já é cliente. ' +
+        'Foque em resolver a dúvida ou problema dele com o sistema. ' +
+        'Se não souber a resposta, escale para o suporte humano.\n\n'
+      : '';
+
     const system =
-      'Você é a Lia, assistente comercial da Nexa (vende o sistema HiperTMS para transportadoras). ' +
+      (tmsCtx
+        ? 'Você é a Lia, assistente de SUPORTE da Nexa para clientes do HiperTMS. '
+        : 'Você é a Lia, assistente comercial da Nexa (vende o sistema HiperTMS para transportadoras). ') +
       `Quando saudar, use a saudação adequada ao horário atual: "${greeting}" (não repita em toda mensagem). ` +
       'Responda em português do Brasil, de forma curta, cordial e objetiva (WhatsApp). ' +
       'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente. ' +
+      tmsBlock +
       'Use SOMENTE as informações das Fontes fornecidas. Se a resposta não estiver nas Fontes, ' +
       'diga que vai checar com um especialista — NUNCA invente preços, prazos ou recursos. ' +
       'Se a dúvida exigir decisão humana (negociação, desconto, contrato), sinalize.';

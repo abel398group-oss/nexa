@@ -10,6 +10,7 @@ import { SellersModule } from '@/application/sellers/sellers.module';
 import { PlaybookModule } from '@/application/playbook/playbook.module';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
+import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 
 @Module({
   imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule],
@@ -20,6 +21,7 @@ import { AgentsController } from '@/presentation/http/agents/agents.controller';
     SalesAgentService,
     SupervisorAgentService,
     ConversationAgentService,
+    TmsLookupService,
   ],
   exports: [SupportAgentService, ConversationAgentService],
 })
