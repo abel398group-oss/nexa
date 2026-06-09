@@ -197,8 +197,16 @@ export class SenderService {
     try {
       // Recuperação de travamento: alvos presos em 'sending' por mais de 5 min
       // indicam crash do worker no meio do envio — volta para 'queued' para reprocessar.
+      // sentAt é null quando ainda não foi enviado (ficou preso em 'sending' sem enviar)
+      // ou sentAt muito antigo (>5min) — ambos indicam travamento.
       await this.prisma.campaignTarget.updateMany({
-        where: { status: 'sending', updatedAt: { lt: new Date(Date.now() - 5 * 60_000) } },
+        where: {
+          status: 'sending',
+          OR: [
+            { sentAt: null },
+            { sentAt: { lt: new Date(Date.now() - 5 * 60_000) } },
+          ],
+        },
         data: { status: 'queued' },
       });
 
