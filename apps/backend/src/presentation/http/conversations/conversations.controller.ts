@@ -29,6 +29,11 @@ export class ConversationsController {
     return this.conversations.getMessages(tenantId ?? 'default', id);
   }
 
+  @Get(':id/timeline')
+  timeline(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.conversations.getTimeline(tenantId ?? 'default', id);
+  }
+
   @Post()
   create(
     @CurrentTenant() tenantId: string,

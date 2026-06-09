@@ -120,6 +120,15 @@ export class ConversationsService {
     });
   }
 
+  // Histórico de mudanças de status/outcome (para a timeline da conversa)
+  async getTimeline(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    return this.prisma.conversationStageHistory.findMany({
+      where: { conversationId: id },
+      orderBy: { changedAt: 'asc' },
+    });
+  }
+
   // Cria conversa (correlationId nasce aqui — rastreio ponta a ponta)
   async create(
     tenantId: string,

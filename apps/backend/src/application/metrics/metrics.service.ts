@@ -25,6 +25,7 @@ export class MetricsService {
       optedOut,
       convTotal,
       convByStatus,
+      convByOutcome,
       msgByDirection,
       aiMessages,
       tokenAgg,
@@ -37,6 +38,7 @@ export class MetricsService {
       this.prisma.contact.count({ where: { tenantId, status: 'opted_out', ...dw } }),
       this.prisma.aiConversation.count({ where: { tenantId, ...dw } }),
       this.prisma.aiConversation.groupBy({ by: ['status'], where: { tenantId, ...dw }, _count: true }),
+      this.prisma.aiConversation.groupBy({ by: ['outcome'], where: { tenantId, outcome: { not: null }, ...dw }, _count: true }),
       this.prisma.aiMessage.groupBy({ by: ['direction'], where: { tenantId, ...dw }, _count: true }),
       this.prisma.aiMessage.count({
         where: { tenantId, direction: 'outbound', metadata: { path: ['aiGenerated'], equals: true }, ...dw },
@@ -70,6 +72,7 @@ export class MetricsService {
       conversations: {
         total: convTotal,
         byStatus: asMap(convByStatus, 'status'),
+        byOutcome: asMap(convByOutcome, 'outcome'),
       },
       messages: {
         inbound: msgByDirection.find((m) => m.direction === 'inbound')?._count ?? 0,
