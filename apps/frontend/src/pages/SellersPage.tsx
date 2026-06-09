@@ -33,9 +33,9 @@ export function SellersPage() {
   async function load() {
     setLoading(true);
     try {
-      const [s, k] = await Promise.all([api.get('/sellers'), api.get('/metrics/sellers')]);
-      setItems(s.data);
-      setKpis(k.data);
+      const [s, k] = await Promise.allSettled([api.get('/sellers'), api.get('/metrics/sellers')]);
+      if (s.status === 'fulfilled') setItems(s.value.data);
+      if (k.status === 'fulfilled') setKpis(k.value.data);
     } finally {
       setLoading(false);
     }
@@ -111,19 +111,19 @@ export function SellersPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-zinc-50 p-8">
-      <h1 className="mb-1 text-xl font-bold text-zinc-800">Vendedores</h1>
-      <p className="mb-6 text-xs text-zinc-400">Leads quentes são distribuídos (round-robin) e notificados no WhatsApp</p>
+    <div className="h-full overflow-auto bg-base-100 p-8">
+      <h1 className="mb-1 text-xl font-bold text-base-content">Vendedores</h1>
+      <p className="mb-6 text-xs text-base-content/50">Leads quentes são distribuídos (round-robin) e notificados no WhatsApp</p>
 
       {/* ===== KPIs de desempenho ===== */}
       <div className="mb-6">
-        <h2 className="mb-2 text-sm font-semibold text-zinc-600">Desempenho de vendas</h2>
+        <h2 className="mb-2 text-sm font-semibold text-base-content/70">Desempenho de vendas</h2>
         {loading ? (
           <SkeletonList rows={2} />
         ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="card overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
+            <thead className="border-b text-left text-xs uppercase" style={{ background: 'var(--surface-muted)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               <tr>
                 <th className="px-4 py-2.5">Vendedor</th>
                 <th className="px-4 py-2.5">Leads</th>
@@ -134,20 +134,20 @@ export function SellersPage() {
               </tr>
             </thead>
             <tbody>
-              {kpis.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-zinc-400">Sem dados ainda.</td></tr>}
+              {kpis.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-base-content/40">Sem dados ainda.</td></tr>}
               {kpis.map((k) => (
-                <tr key={k.id} className="border-b last:border-0">
-                  <td className="px-4 py-2.5 font-medium text-zinc-700">{k.name}</td>
-                  <td className="px-4 py-2.5 text-zinc-600">{k.leads}</td>
-                  <td className="px-4 py-2.5 text-zinc-600">{k.emAndamento}</td>
+                <tr key={k.id} className="border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+                  <td className="px-4 py-2.5 font-medium text-base-content">{k.name}</td>
+                  <td className="px-4 py-2.5 text-base-content/70">{k.leads}</td>
+                  <td className="px-4 py-2.5 text-base-content/70">{k.emAndamento}</td>
                   <td className="px-4 py-2.5"><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">{k.ganhos}</span></td>
                   <td className="px-4 py-2.5"><span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">{k.perdidos}</span></td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-base-200">
                         <div className="h-full bg-brand-500" style={{ width: `${k.taxaConversao}%` }} />
                       </div>
-                      <span className="text-xs font-semibold text-zinc-700">{k.taxaConversao}%</span>
+                      <span className="text-xs font-semibold text-base-content">{k.taxaConversao}%</span>
                     </div>
                   </td>
                 </tr>
@@ -158,24 +158,24 @@ export function SellersPage() {
         )}
       </div>
 
-      <form onSubmit={add} className="mb-6 rounded-xl bg-white p-4 shadow-sm">
+      <form onSubmit={add} className="card mb-6 p-4">
         <div className="mb-2 flex flex-wrap gap-2">
-          <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="Nome do vendedor" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input className="input flex-1" placeholder="Nome do vendedor" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input flex-1" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <input className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">
+          <input className="input flex-1" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="password" className="input flex-1" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <button disabled={busy} className="btn-primary disabled:opacity-50">
             {editId ? 'Salvar' : '+ Adicionar'}
           </button>
           {editId && (
-            <button type="button" onClick={cancelEdit} className="rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100">
+            <button type="button" onClick={cancelEdit} className="btn-ghost">
               Cancelar
             </button>
           )}
         </div>
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-base-content/40">
           {editId
             ? 'Editando — altere nome/WhatsApp. Pra dar/trocar login: preencha e-mail + senha. Pra só resetar a senha: deixe o e-mail e digite a nova senha.'
             : 'Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).'}
@@ -188,42 +188,44 @@ export function SellersPage() {
       ) : items.length === 0 ? (
         <EmptyState icon="🧑‍💼" title="Nenhum vendedor cadastrado" description="Adicione um vendedor no formulário acima — ele recebe os leads quentes." />
       ) : (
-      <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
-        <thead className="border-b bg-zinc-50 text-left text-xs uppercase text-zinc-400">
-          <tr>
-            <th className="px-4 py-3">Nome</th>
-            <th className="px-4 py-3">WhatsApp</th>
-            <th className="px-4 py-3">Leads recebidos</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-400">Nenhum vendedor. Adicione um acima.</td></tr>}
-          {items.map((s) => (
-            <tr key={s.id} className="border-b last:border-0">
-              <td className="px-4 py-3 font-medium text-zinc-700">
-                {s.name}
-                <div className="text-[11px] font-normal text-zinc-400">{s.loginEmail ? `🔑 ${s.loginEmail}` : 'sem login'}</div>
-              </td>
-              <td className="px-4 py-3 text-zinc-600">{s.phone}</td>
-              <td className="px-4 py-3 text-zinc-600">{s.assignedCount}</td>
-              <td className="px-4 py-3">
-                <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>
-              </td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => toggle(s)} className="rounded-lg border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-50">
-                    {s.active ? 'Desativar' : 'Ativar'}
-                  </button>
-                  <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100">✏️</button>
-                  <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
-                </div>
-              </td>
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="border-b text-left text-xs uppercase" style={{ background: 'var(--surface-muted)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            <tr>
+              <th className="px-4 py-3">Nome</th>
+              <th className="px-4 py-3">WhatsApp</th>
+              <th className="px-4 py-3">Leads recebidos</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-base-content/40">Nenhum vendedor. Adicione um acima.</td></tr>}
+            {items.map((s) => (
+              <tr key={s.id} className="border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+                <td className="px-4 py-3 font-medium text-base-content">
+                  {s.name}
+                  <div className="text-[11px] font-normal text-base-content/40">{s.loginEmail ? `🔑 ${s.loginEmail}` : 'sem login'}</div>
+                </td>
+                <td className="px-4 py-3 text-base-content/70">{s.phone}</td>
+                <td className="px-4 py-3 text-base-content/70">{s.assignedCount}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => toggle(s)} className="btn-outline h-7 px-3 text-xs">
+                      {s.active ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✏️</button>
+                    <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       )}
     </div>
   );

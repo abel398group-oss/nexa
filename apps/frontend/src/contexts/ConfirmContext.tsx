@@ -54,10 +54,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {state && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => close(false)} />
-          <div className="relative w-96 max-w-[92vw] rounded-xl bg-white p-6 shadow-elevated dark:bg-sidebar">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" className="relative w-96 max-w-[92vw] rounded-xl bg-white p-6 shadow-elevated dark:bg-sidebar">
             <div className="mb-3 flex items-center gap-3">
               <span className="text-2xl">{v.icon}</span>
-              <h2 className="text-base font-semibold text-base-content">{state.title ?? 'Confirmar ação'}</h2>
+              <h2 id="confirm-title" className="text-base font-semibold text-base-content">{state.title ?? 'Confirmar ação'}</h2>
             </div>
             <p className="mb-5 text-sm text-base-content/70">{state.message}</p>
             <div className="flex justify-end gap-2">

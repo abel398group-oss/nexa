@@ -38,6 +38,9 @@ export function GuidedTour({ steps, onClose }: { steps: TourStep[]; onClose: () 
     <div className="fixed inset-0 z-[60] bg-black/50" onClick={finish}>
       {/* cartão do tour (rodapé central) */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tour guiado"
         onClick={(e) => e.stopPropagation()}
         className="absolute bottom-8 left-1/2 w-[22rem] -translate-x-1/2 rounded-xl bg-white p-5 shadow-xl"
       >

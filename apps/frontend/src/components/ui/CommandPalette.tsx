@@ -62,7 +62,7 @@ export function CommandPalette({
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh]" onKeyDown={onKey}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-[560px] max-w-[92vw] overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
+      <div role="dialog" aria-modal="true" aria-label="Paleta de comandos" className="relative w-[560px] max-w-[92vw] overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
         <input
           ref={inputRef}
           value={query}

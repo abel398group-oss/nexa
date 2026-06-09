@@ -126,7 +126,8 @@ export class ConversationAgentService {
 
       case 'support':
       default: {
-        const r = await this.support.ask(tenantId, { question: input.message, conversationId: undefined, tmsCustomer });
+        // Passa conversationId para que o SupportAgent recupere o histórico da conversa
+        const r = await this.support.ask(tenantId, { question: input.message, conversationId: input.conversationId, tmsCustomer });
         draft = r.draft;
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;

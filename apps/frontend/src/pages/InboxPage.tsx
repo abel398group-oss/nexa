@@ -36,15 +36,19 @@ export function InboxPage() {
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
-  // carrega conversas
+  // carrega conversas — AbortController evita setState em componente desmontado
   useEffect(() => {
-    api.get('/conversations')
+    const controller = new AbortController();
+    api.get('/conversations', { signal: controller.signal })
       .then((r) => setConvs(r.data.items))
+      .catch((e) => { if (e?.code !== 'ERR_CANCELED') console.error(e); })
       .finally(() => setLoadingConvs(false));
+    return () => controller.abort();
   }, []);
 
-  // conecta socket
+  // conecta socket — cria apenas uma instância e fecha no cleanup
   useEffect(() => {
+    if (socketRef.current) return; // já conectado
     const s = io('/', { path: '/ws', transports: ['websocket'] });
     socketRef.current = s;
     s.on('message', (msg: Message) => setMessages((prev) => [...prev, msg]));
@@ -52,7 +56,7 @@ export function InboxPage() {
     s.on('message:ack', (d: { id: string; ack: number }) =>
       setMessages((prev) => prev.map((m) => (m.id === d.id ? { ...m, ack: d.ack } : m))),
     );
-    return () => { s.close(); };
+    return () => { s.close(); socketRef.current = null; };
   }, []);
 
   // mantém a conversa sempre na mensagem mais recente (que fica no TOPO)

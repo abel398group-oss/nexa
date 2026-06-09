@@ -186,14 +186,22 @@ export class SenderService {
   }
 
   // ---------- worker de disparo ----------
+  // BUG-06 fix: getHours() retorna UTC em containers Linux → usar UTC-3 explicitamente
   private withinBusinessHours(): boolean {
-    const h = new Date().getHours();
+    const h = (new Date().getUTCHours() - 3 + 24) % 24;
     return h >= BUSINESS_START && h < BUSINESS_END;
   }
 
   @Interval(15000) // tenta a cada 15s; o delay real entre envios é controlado abaixo
   async tick() {
     try {
+      // Recuperação de travamento: alvos presos em 'sending' por mais de 5 min
+      // indicam crash do worker no meio do envio — volta para 'queued' para reprocessar.
+      await this.prisma.campaignTarget.updateMany({
+        where: { status: 'sending', updatedAt: { lt: new Date(Date.now() - 5 * 60_000) } },
+        data: { status: 'queued' },
+      });
+
       // fecha campanhas 'running' que já não têm alvo na fila (terminaram)
       await this.prisma.campaign.updateMany({
         where: { status: 'running', targets: { none: { status: 'queued' } } },

@@ -4,14 +4,24 @@ import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 
+// Cache em memória por tenantId — evita recarregar a base a cada mensagem recebida em pico
+// TTL: 30s. Invalidado automaticamente após qualquer escrita (create/update/delete).
+interface KbCacheEntry { items: any[]; expiresAt: number; }
+
 @Injectable()
 export class KnowledgeService {
   private readonly logger = new Logger('KnowledgeService');
+  private readonly retrieveCache = new Map<string, KbCacheEntry>();
+  private readonly CACHE_TTL_MS = 30_000; // 30 segundos
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly connectors: ConnectorsService,
   ) {}
+
+  private invalidateCache(tenantId: string) {
+    this.retrieveCache.delete(tenantId);
+  }
 
   async findAll(tenantId: string, q: PaginationQueryDto): Promise<Paginated<any>> {
     const where: any = { tenantId };
@@ -36,14 +46,22 @@ export class KnowledgeService {
 
   // Recupera os KB mais relevantes p/ uma pergunta (retrieval p/ a Lia).
   // Scoring textual simples (título>tags>tópico>conteúdo). pgvector entra depois.
-  // P3 fix: limita a 100 artigos para scoring em memória — evita carregar toda a base
-  // com bases grandes (500+ artigos = +1MB por chamada). Fix definitivo: GIN index no Postgres.
+  // Cache em memória 30s por tenantId — evita recarregar toda a base a cada mensagem.
+  // Fix definitivo: GIN index no Postgres (pendente para escala > 500 artigos).
   async retrieve(tenantId: string, query: string, topN = 3) {
-    const all = await this.prisma.aiKnowledgeBase.findMany({
-      where: { tenantId },
-      take: 100,
-      orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
-    });
+    const now = Date.now();
+    const cached = this.retrieveCache.get(tenantId);
+    let all: any[];
+    if (cached && cached.expiresAt > now) {
+      all = cached.items;
+    } else {
+      all = await this.prisma.aiKnowledgeBase.findMany({
+        where: { tenantId },
+        take: 100,
+        orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
+      });
+      this.retrieveCache.set(tenantId, { items: all, expiresAt: now + this.CACHE_TTL_MS });
+    }
     const terms = query
       .toLowerCase()
       .normalize('NFD')
@@ -92,6 +110,7 @@ export class KnowledgeService {
 
   // cria KB + versão 1 (não aprovada — passa pela curadoria humana)
   async create(tenantId: string, dto: CreateKnowledgeDto, author = 'system') {
+    this.invalidateCache(tenantId);
     return this.prisma.aiKnowledgeBase.create({
       data: {
         tenantId,
@@ -115,6 +134,7 @@ export class KnowledgeService {
     id: string,
     dto: { title?: string; content?: string; topic?: string; category?: string; tags?: string[] },
   ) {
+    this.invalidateCache(tenantId);
     await this.findOne(tenantId, id);
     return this.prisma.aiKnowledgeBase.update({
       where: { id },
@@ -129,6 +149,7 @@ export class KnowledgeService {
   }
 
   async remove(tenantId: string, id: string) {
+    this.invalidateCache(tenantId);
     await this.findOne(tenantId, id);
     await this.prisma.aiKnowledgeVersion.deleteMany({ where: { knowledgeId: id } });
     await this.prisma.aiKnowledgeBase.delete({ where: { id } });
@@ -176,6 +197,7 @@ export class KnowledgeService {
       await this.create(tenantId, { ...it, productCode }, `connector:${productCode}`);
       created++;
     }
+    this.invalidateCache(tenantId);
     this.logger.log(`Import ${productCode}: ${created} novos, ${updated} atualizados (${items.length} recebidos)`);
     return { source: productCode, received: items.length, created, updated };
   }

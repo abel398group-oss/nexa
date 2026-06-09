@@ -48,9 +48,9 @@ export function CampaignsPage() {
   async function load() {
     // não seta loading=true a cada poll (8s) — só o 1º load mostra skeleton
     try {
-      const [c, n] = await Promise.all([api.get('/campaigns'), api.get('/sender/numbers')]);
-      setItems(c.data);
-      setNumbers(n.data);
+      const [c, n] = await Promise.allSettled([api.get('/campaigns'), api.get('/sender/numbers')]);
+      if (c.status === 'fulfilled') setItems(c.value.data);
+      if (n.status === 'fulfilled') setNumbers(n.value.data);
     } finally {
       setLoading(false);
     }
@@ -116,15 +116,15 @@ export function CampaignsPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-zinc-50 p-8">
+    <div className="h-full overflow-auto bg-base-100 p-8">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-800">Disparo de Leads</h1>
-          <p className="text-xs text-zinc-400">
+          <h1 className="text-xl font-bold text-base-content">Disparo de Leads</h1>
+          <p className="text-xs text-base-content/50">
             Horário comercial 7h-19h · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'}
           </p>
         </div>
-        <button onClick={() => setShow(true)} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">+ Nova campanha</button>
+        <button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>
       </div>
 
       <div className="space-y-3">
@@ -134,7 +134,7 @@ export function CampaignsPage() {
             icon="📣"
             title="Nenhuma campanha ainda"
             description="Crie uma campanha para disparar mensagens em massa com proteção anti-bloqueio."
-            action={<button onClick={() => setShow(true)} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">+ Nova campanha</button>}
+            action={<button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>}
           />
         )}
         {!loading && items.map((c) => {
@@ -142,31 +142,31 @@ export function CampaignsPage() {
           const sent = c.counts.sent ?? 0;
           const pct = total ? Math.round((sent / total) * 100) : 0;
           return (
-            <div key={c.id} className="rounded-xl bg-white p-5 shadow-sm">
+            <div key={c.id} className="card p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-zinc-800">{c.name}</span>
+                  <span className="font-semibold text-base-content">{c.name}</span>
                   <span className="ml-2"><Badge variant={statusVariant(c.status)}>{c.status}</Badge></span>
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <button onClick={() => start(c.id, c.name)} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-500">▶ Iniciar</button>
+                    <button onClick={() => start(c.id, c.name)} className="btn-primary h-7 px-3 text-xs">▶ Iniciar</button>
                   )}
                   {c.status === 'running' && (
-                    <button onClick={() => pause(c.id)} className="rounded-lg bg-amber-500 px-3 py-1 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
+                    <button onClick={() => pause(c.id)} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
                   )}
-                  <button onClick={() => del(c)} title="Excluir campanha" className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-red-500 hover:bg-red-50">🗑️</button>
+                  <button onClick={() => del(c)} title="Excluir campanha" className="btn-outline h-7 px-2 text-xs text-red-500 hover:bg-red-50">🗑️</button>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">{c.template}</p>
+              <p className="mt-2 text-xs text-base-content/50">{c.template}</p>
               <div className="mt-3">
-                <div className="mb-1 flex justify-between text-xs text-zinc-400">
+                <div className="mb-1 flex justify-between text-xs text-base-content/40">
                   <span>{sent}/{total} enviados</span><span>{pct}%</span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-base-200">
                   <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
                 </div>
-                <div className="mt-1 flex gap-2 text-[11px] text-zinc-400">
+                <div className="mt-1 flex gap-2 text-[11px] text-base-content/40">
                   {Object.entries(c.counts).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
                 </div>
               </div>
@@ -177,44 +177,49 @@ export function CampaignsPage() {
 
       {show && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30" onClick={() => setShow(false)}>
-          <form onClick={(e) => e.stopPropagation()} onSubmit={create} className="w-[28rem] rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="mb-4 text-lg font-bold text-zinc-800">Nova campanha</h2>
-            <label className="mb-1 block text-xs text-zinc-500">Nome</label>
-            <input className="mb-3 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Frete Junho" />
-            <label className="mb-1 block text-xs text-zinc-500">Mensagem (use {'{{nome}}'} pra personalizar)</label>
-            <textarea className="mb-3 h-24 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" value={template} onChange={(e) => setTemplate(e.target.value)} />
-            <label className="mb-2 flex items-center gap-2 text-sm text-zinc-600">
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={create}
+            className="w-[28rem] rounded-xl p-6 shadow-elevated"
+            style={{ background: 'var(--surface-elevated)', color: 'var(--text-primary)' }}
+          >
+            <h2 className="mb-4 text-lg font-bold text-base-content">Nova campanha</h2>
+            <label className="mb-1 block text-xs text-base-content/50">Nome</label>
+            <input className="input mb-3 w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Frete Junho" />
+            <label className="mb-1 block text-xs text-base-content/50">Mensagem (use {'{{nome}}'} pra personalizar)</label>
+            <textarea className="input mb-3 h-24 w-full py-2" value={template} onChange={(e) => setTemplate(e.target.value)} />
+            <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70">
               <input type="checkbox" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
               Disparar para todos os contatos ativos
             </label>
             {!fromContacts && (
-              <textarea className="mb-3 h-20 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" placeholder="Um telefone por linha (5511...)" value={phonesText} onChange={(e) => setPhonesText(e.target.value)} />
+              <textarea className="input mb-3 h-20 w-full py-2" placeholder="Um telefone por linha (5511...)" value={phonesText} onChange={(e) => setPhonesText(e.target.value)} />
             )}
 
             {/* Link */}
-            <label className="mb-1 block text-xs text-zinc-500">Link (opcional — vai no final da mensagem)</label>
-            <input className="mb-3 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://... (portfólio, site)" />
+            <label className="mb-1 block text-xs text-base-content/50">Link (opcional — vai no final da mensagem)</label>
+            <input className="input mb-3 w-full" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://... (portfólio, site)" />
 
             {/* Anexo */}
-            <label className="mb-1 block text-xs text-zinc-500">Anexo (PDF/Word — portfólio)</label>
+            <label className="mb-1 block text-xs text-base-content/50">Anexo (PDF/Word — portfólio)</label>
             <div className="mb-3 flex items-center gap-2">
               <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} className="text-xs" />
-              {uploading && <span className="text-xs text-zinc-400">enviando...</span>}
+              {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
               {media && <span className="text-xs text-emerald-600">✅ {media.name}</span>}
             </div>
 
             {/* Quantidade */}
-            <label className="mb-1 block text-xs text-zinc-500">Quantos enviar?</label>
-            <div className="mb-3 flex items-center gap-3 text-sm">
+            <label className="mb-1 block text-xs text-base-content/50">Quantos enviar?</label>
+            <div className="mb-3 flex items-center gap-3 text-sm text-base-content/70">
               <label className="flex items-center gap-1"><input type="radio" checked={limitMode === 'all'} onChange={() => setLimitMode('all')} /> Todos (até o limite diário)</label>
               <label className="flex items-center gap-1"><input type="radio" checked={limitMode === 'limit'} onChange={() => setLimitMode('limit')} /> Só</label>
-              <input type="number" min={1} disabled={limitMode !== 'limit'} value={sendLimit} onChange={(e) => setSendLimit(Number(e.target.value))} className="w-20 rounded-lg border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40" />
+              <input type="number" min={1} disabled={limitMode !== 'limit'} value={sendLimit} onChange={(e) => setSendLimit(Number(e.target.value))} className="input w-20 disabled:opacity-40" />
             </div>
-            <p className="mb-3 text-[11px] text-zinc-400">Limite diário do número: {numbers[0] ? `${numbers[0].sentToday}/${numbers[0].dailyLimit} hoje` : '—'}. O sistema respeita horário comercial e o anti-ban automaticamente.</p>
+            <p className="mb-3 text-[11px] text-base-content/40">Limite diário do número: {numbers[0] ? `${numbers[0].sentToday}/${numbers[0].dailyLimit} hoje` : '—'}. O sistema respeita horário comercial e o anti-ban automaticamente.</p>
 
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShow(false)} className="rounded-lg px-4 py-2 text-sm text-zinc-500">Cancelar</button>
-              <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">{busy ? 'Criando...' : 'Criar'}</button>
+              <button type="button" onClick={() => setShow(false)} className="btn-ghost">Cancelar</button>
+              <button disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Criando...' : 'Criar'}</button>
             </div>
           </form>
         </div>

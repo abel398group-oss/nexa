@@ -98,33 +98,34 @@ export function KnowledgePage() {
   }
 
   return (
-    <div className="flex h-full bg-zinc-50">
+    <div className="flex h-full bg-base-100">
       {/* lista */}
-      <div className="flex w-96 flex-col border-r bg-white">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="flex w-96 flex-col border-r" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <h1 className="font-bold text-zinc-800">Conhecimento</h1>
-            <p className="text-xs text-zinc-400">{total} itens · alimenta a Lia</p>
+            <h1 className="font-bold text-base-content">Conhecimento</h1>
+            <p className="text-xs text-base-content/50">{total} itens · alimenta a Lia</p>
           </div>
           <button
             onClick={importTms}
             disabled={busy}
-            className="rounded-lg bg-brand-600 px-3 py-2 text-xs text-white hover:bg-brand-500 disabled:opacity-50"
+            className="btn-primary text-xs disabled:opacity-50"
           >
             {busy ? 'Importando...' : '↓ Importar TMS'}
           </button>
         </div>
-        {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700">{msg}</div>}
+        {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700" style={{ borderColor: 'var(--border)' }}>{msg}</div>}
         <div className="flex-1 overflow-y-auto">
-          {items.length === 0 && <p className="p-5 text-sm text-zinc-400">Vazio. Clique em "Importar TMS".</p>}
+          {items.length === 0 && <p className="p-5 text-sm text-base-content/40">Vazio. Clique em "Importar TMS".</p>}
           {items.map((k) => (
             <button
               key={k.id}
               onClick={() => open(k)}
-              className={`block w-full border-b px-5 py-3 text-left hover:bg-zinc-50 ${sel?.id === k.id ? 'bg-zinc-100' : ''}`}
+              className={`block w-full border-b px-5 py-3 text-left transition-colors hover:bg-base-100 ${sel?.id === k.id ? 'bg-base-200' : ''}`}
+              style={{ borderColor: 'var(--border)' }}
             >
-              <div className="text-sm font-medium text-zinc-700">{k.title}</div>
-              <div className="mt-0.5 text-xs text-zinc-400">{k.category} · {k.topic}</div>
+              <div className="text-sm font-medium text-base-content">{k.title}</div>
+              <div className="mt-0.5 text-xs text-base-content/50">{k.category} · {k.topic}</div>
             </button>
           ))}
         </div>
@@ -133,15 +134,15 @@ export function KnowledgePage() {
       {/* detalhe */}
       <div className="flex-1 overflow-y-auto p-8">
         {!sel ? (
-          <div className="flex h-full items-center justify-center text-zinc-400">Selecione um item</div>
+          <div className="flex h-full items-center justify-center text-base-content/40">Selecione um item</div>
         ) : (
           <div className="mx-auto max-w-2xl">
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-xs uppercase text-zinc-400">{sel.category} · {sel.topic}</div>
+              <div className="text-xs uppercase text-base-content/40">{sel.category} · {sel.topic}</div>
               {!editing && (
                 <div className="flex gap-1">
-                  <button onClick={startEdit} title="Editar" className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100">✏️ Editar</button>
-                  <button onClick={del} title="Excluir" className="rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50">🗑️ Excluir</button>
+                  <button onClick={startEdit} title="Editar" className="btn-ghost h-8 gap-1 px-3 text-sm">✏️ Editar</button>
+                  <button onClick={del} title="Excluir" className="h-8 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50">🗑️ Excluir</button>
                 </div>
               )}
             </div>
@@ -151,23 +152,23 @@ export function KnowledgePage() {
                 <input className="input w-full text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
                 <textarea className="input h-56 w-full py-2 text-sm leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
                 <div className="flex gap-2">
-                  <button onClick={saveEdit} disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">{busy ? 'Salvando...' : 'Salvar'}</button>
-                  <button onClick={() => setEditing(false)} className="rounded-lg px-4 py-2 text-sm text-zinc-500 hover:bg-zinc-100">Cancelar</button>
+                  <button onClick={saveEdit} disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Salvando...' : 'Salvar'}</button>
+                  <button onClick={() => setEditing(false)} className="btn-ghost">Cancelar</button>
                 </div>
               </div>
             ) : (
               <>
-                <h2 className="mb-4 text-2xl font-bold text-zinc-800">{sel.title}</h2>
-                <div className="mb-6 whitespace-pre-line rounded-xl bg-white p-6 text-sm leading-relaxed text-zinc-700 shadow-sm">
+                <h2 className="mb-4 text-2xl font-bold text-base-content">{sel.title}</h2>
+                <div className="card mb-6 whitespace-pre-line p-6 text-sm leading-relaxed text-base-content/80">
                   {sel.content}
                 </div>
               </>
             )}
-            <h3 className="mb-2 text-sm font-semibold text-zinc-600">Versões (curadoria)</h3>
+            <h3 className="mb-2 text-sm font-semibold text-base-content/70">Versões (curadoria)</h3>
             <div className="space-y-2">
               {sel.versions?.map((v) => (
-                <div key={v.id} className="flex items-center justify-between rounded-lg bg-white px-4 py-2 text-sm shadow-sm">
-                  <span className="text-zinc-600">v{v.version}</span>
+                <div key={v.id} className="card flex items-center justify-between px-4 py-2 text-sm">
+                  <span className="text-base-content/70">v{v.version}</span>
                   {v.approved ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
                       ✓ aprovada {v.reviewer && `· ${v.reviewer}`}
@@ -175,7 +176,7 @@ export function KnowledgePage() {
                   ) : (
                     <button
                       onClick={() => approve(v.id)}
-                      className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-700"
+                      className="btn-primary text-xs"
                     >
                       Aprovar
                     </button>

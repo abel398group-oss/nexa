@@ -1,72 +1,62 @@
-# ADR 002 — Stack e Padrões do Frontend
+# ADR 002 — Frontend Stack
 
-**Status:** Proposto (a validar) · **Data:** 2026-06
+- **Status**: Aceito (revisado em 2026-06-09 — ver nota de atualização)
+- **Revisado por**: ADR 014
 
 ---
 
 ## Contexto
 
-O sistema hoje não tem frontend — toda operação é via banco e n8n. Precisamos de um
-painel para: importar contatos, criar campanhas, ver dashboard, gerenciar leads e
-acompanhar conversas. Decidimos usar o **HiperTMS v12 como referência de construção**.
+Definição da stack de frontend do Nexa, plataforma de IA comercial B2B.
+O frontend é o painel de operação da Lia (assistente de vendas/suporte via WhatsApp).
+
+---
 
 ## Decisão
 
-Adotar a **mesma stack e padrões do HiperTMS**, para reaproveitar conhecimento,
-componentes e convenções.
+### Stack instalada e em uso
 
-### D1 — Stack do frontend
-| Camada | Tecnologia (igual TMS) |
-|---|---|
-| Framework | React 18 + TypeScript |
-| Build | Vite |
-| Estilo | Tailwind CSS + FlyonUI |
-| Forms | react-hook-form + zod |
-| Dados | @tanstack/react-query + axios (axiosTransport) |
-| Tabelas | @tanstack/react-table |
-| Ícones | lucide-react / heroicons |
-| Gráficos | recharts |
-| Permissões | CASL |
+| Dependência | Versão | Papel |
+|-------------|--------|-------|
+| React | 18.3 | UI framework |
+| Vite | 5.4 | Build tool e dev server |
+| TypeScript | 5.5 | Tipagem estática |
+| Tailwind CSS | 3.4 | Utilitários CSS |
+| React Router DOM | 6.26 | Roteamento SPA |
+| Axios | 1.7 | Cliente HTTP |
+| Socket.io-client | 4.8 | Websocket para Inbox em tempo real |
+| PostCSS + Autoprefixer | — | Pipeline CSS |
 
-### D2 — Backend do frontend
-- **NestJS + Prisma + PostgreSQL** (mesmo padrão TMS)
-- API REST como ponte entre o front e o banco (n8n não serve para isso)
-- Reaproveitar o PostgreSQL existente (mesmas tabelas de leads)
+### Design system
 
-### D3 — Taxonomia de páginas (ADR 003 do TMS)
-Quatro tipos canônicos:
-- **List** (StandardListPage) — listas com filtro/paginação
-- **Form** (StandardFormPage) — criar/editar
-- **View** (StandardViewPage) — leitura
-- **Edit** — edição com proteção de mudanças não-salvas
+Proprietário, espelhando o HiperTMS (referência visual do Uelder).
+Tokens CSS em `index.css` + extensões de tema em `tailwind.config.js`.
+Não utiliza biblioteca de componentes externa.
+**Ver ADR 014 para inventário completo e regras de uso.**
 
-### D4 — Segurança (espelhar TMS)
-- JWT via cookie HttpOnly
-- Multi-tenant preparado (tenantId no contexto, nunca no body)
-- CASL para permissões granulares
-- Secrets fora do repo (.env / secret manager)
+### Dark mode
 
-### D5 — Integração com o n8n
-- O frontend escreve/lê no PostgreSQL via API
-- O n8n continua consumindo o mesmo banco
-- Eventualmente, seguir o padrão do ADR 024 do TMS (eventos + ações idempotentes)
+Implementado via classe `html.dark` (Tailwind `darkMode: 'class'`).
+Tokens CSS em `:root` são sobrescritos em `html.dark` — componentes adaptam automaticamente.
+
+---
+
+## Nota de Atualização (2026-06-09)
+
+Dependências citadas em versões anteriores desta ADR mas **nunca instaladas**.
+O ADR 014 formalizou as decisões atualizadas:
+
+| Item | Status | Decisão atual |
+|------|--------|---------------|
+| FlyonUI | ❌ Não instalado | **Não instalar** — design system próprio é suficiente |
+| recharts | ❌ Não instalado | Instalar quando dashboard precisar de gráficos (backlog) |
+| CASL | ❌ Não instalado | Instalar quando RBAC front ficar complexo (backlog) |
+| lucide / heroicons | ❌ Não instalado | Instalar lucide quando houver demanda de ícones consistentes |
+
+---
 
 ## Consequências
 
-**Positivas**
-- Reaproveita design system, componentes e padrões já maduros do TMS
-- Curva de aprendizado menor (mesma stack)
-- Caminho natural para o sistema virar módulo/integração do TMS
-
-**A decidir**
-- Standalone vs módulo dentro do TMS (há sobreposição: TMS já tem features de lead)
-- Multi-tenant agora ou depois
-
-## Telas do MVP (primeira leva)
-1. Login / Auth
-2. Dashboard (métricas — queries já prontas)
-3. Importar contatos
-4. Lista de contatos / CRM
-5. Campanhas (criar + acompanhar)
-6. Saúde dos números
-7. Inbox de conversas (mais complexo — fase 2)
+- Sem lock-in de biblioteca de componentes externa
+- Stack mínima: bundle pequeno, build rápido (~1s dev HMR)
+- Responsabilidade de manter os átomos CSS é do time Nexa

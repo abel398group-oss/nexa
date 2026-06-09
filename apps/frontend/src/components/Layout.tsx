@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -200,7 +200,8 @@ export function Layout() {
   }, []);
 
   // comandos: navegação pelas telas visíveis + ações rápidas
-  const commands: Command[] = [
+  // useMemo evita recriar o array (e re-render do CommandPalette) a cada render do Layout
+  const commands: Command[] = useMemo(() => [
     ...visibleItems.map((it) => ({
       id: `nav:${it.to}`,
       label: it.label,
@@ -213,7 +214,8 @@ export function Layout() {
     { id: 'act:tour', label: 'Refazer o tour', icon: '🎓', hint: 'Ação', run: () => setTourOpen(true) },
     { id: 'act:collapse', label: collapsed ? 'Expandir menu' : 'Recolher menu', icon: '↔️', hint: 'Ação', run: toggleCollapsed },
     { id: 'act:logout', label: 'Sair', icon: '⏻', hint: 'Ação', run: logout },
-  ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [visibleItems, dark, collapsed]);
 
   // tour automático na primeira vez
   useEffect(() => {
@@ -292,7 +294,7 @@ export function Layout() {
       {/* ===== COLUNA PRINCIPAL ===== */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* topbar */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 bg-white px-6">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-6" style={{ background: 'var(--surface)' }}>
           <h1 className="text-base font-semibold text-base-content">{pageTitle}</h1>
           <div className="flex items-center gap-2">
             {location.pathname === '/dashboard' && <DateRangePicker />}

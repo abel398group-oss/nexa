@@ -53,9 +53,7 @@
   --text-primary:   var(--app-base-content);
   --text-secondary: #52525b;
   --text-muted:     #a1a1aa;
-  --fg:             var(--app-base-content);
-  --fg-muted:       rgba(22, 24, 29, 0.65);
-  --fg-subtle:      rgba(22, 24, 29, 0.50);
+  /* --fg, --fg-muted, --fg-subtle removidos (tokens mortos — não consumidos por nenhum átomo) */
 
   /* Bordas */
   --border:       #e6e6e3;
@@ -231,11 +229,12 @@ body {
   .btn-ghost:hover { background: var(--surface-elevated); }
 
   .card {
-    @apply rounded-xl border;
+    @apply rounded-xl border transition-shadow duration-150;
     background: var(--surface);
     border-color: var(--border);
     box-shadow: var(--shadow-card);
   }
+  .card:hover { box-shadow: var(--shadow-card-hover); }
 
   .input {
     @apply h-9 w-full rounded-md border px-3 text-sm outline-none transition-colors focus:ring-[3px] focus:ring-brand-500/30 focus:border-brand-500;
@@ -289,7 +288,7 @@ html.dark .shadow-md { --tw-shadow: var(--shadow-tw-md); }
 html.dark .shadow-lg { --tw-shadow: var(--shadow-tw-lg); }
 html.dark .shadow-xl { --tw-shadow: var(--shadow-tw-xl); }
 
-/* Inputs dark */
+/* Inputs dark — usa tokens em vez de hardcodes */
 html.dark select,
 html.dark input[type='text'],
 html.dark input[type='search'],
@@ -297,12 +296,12 @@ html.dark input[type='email'],
 html.dark input[type='number'],
 html.dark input[type='date'],
 html.dark textarea {
-  background-color: #1f2937;
-  border-color: #4b5563;
-  color: #e5e7eb;
+  background-color: var(--surface-input);
+  border-color: var(--border-input);
+  color: var(--text-primary);
 }
 html.dark input::placeholder,
-html.dark textarea::placeholder { color: #6b7280 !important; }
+html.dark textarea::placeholder { color: var(--text-muted) !important; }
 
 /* ===== DARK: superfícies base-* e zinc-* ===== */
 /* bg-base-* dark — resolvem via variáveis CSS que já estão corretas em html.dark */
@@ -353,8 +352,7 @@ html.dark textarea::placeholder { color: #6b7280 !important; }
 .dark .fixed .rounded-xl.bg-white,
 .dark .fixed form.bg-white { background-color: var(--surface); color: var(--text-primary); }
 
-/* topbar, aside, headers */
-.dark header           { background-color: var(--surface) !important; border-color: var(--border) !important; }
+/* topbar, aside, headers — !important removido do header pois Layout.tsx já usa token */
 .dark aside.bg-white   { background-color: var(--surface) !important; }
 .dark .border-b.bg-white { background-color: var(--surface) !important; }
 .dark .rounded-xl.bg-white,

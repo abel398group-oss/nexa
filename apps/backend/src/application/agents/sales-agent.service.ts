@@ -19,8 +19,9 @@ export class SalesAgentService {
   private readonly logger = new Logger('SalesAgent');
 
   // saudação por horário (Brasília) — business-rules §10
+  // BUG-06 fix: getHours() retorna UTC em containers Linux → usar UTC-3 explicitamente
   static greeting(): string {
-    const h = new Date().getHours();
+    const h = (new Date().getUTCHours() - 3 + 24) % 24;
     if (h >= 5 && h < 12) return 'Bom dia';
     if (h >= 12 && h < 18) return 'Boa tarde';
     return 'Boa noite';

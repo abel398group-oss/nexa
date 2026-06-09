@@ -12,10 +12,11 @@ import { SellersPage } from '@/pages/SellersPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { PlaybookPage } from '@/pages/PlaybookPage';
+import { DevTokensPage } from '@/pages/DevTokensPage';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex h-full items-center justify-center text-zinc-400">Carregando...</div>;
+  if (loading) return <div className="flex h-full items-center justify-center text-base-content/40">Carregando...</div>;
   return user ? children : <Navigate to="/login" replace />;
 }
 
@@ -42,6 +43,9 @@ export default function App() {
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/playbook" element={<PlaybookPage />} />
+            {import.meta.env.DEV && (
+              <Route path="/dev/tokens" element={<DevTokensPage />} />
+            )}
           </Route>
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>

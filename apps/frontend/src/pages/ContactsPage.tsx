@@ -305,9 +305,9 @@ export function ContactsPage() {
               { k: 'email', label: 'Email', ph: 'joao@empresa.com' },
             ].map((f) => (
               <div key={f.k} className="mb-3">
-                <label className="mb-1 block text-xs text-zinc-500">{f.label}</label>
+                <label className="mb-1 block text-xs text-base-content/50">{f.label}</label>
                 <input
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  className="input w-full"
                   placeholder={f.ph}
                   value={(form as any)[f.k]}
                   onChange={(e) => setForm({ ...form, [f.k]: e.target.value })}
@@ -316,10 +316,10 @@ export function ContactsPage() {
             ))}
             {err && <p className="mb-3 text-sm text-red-500">{err}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg px-4 py-2 text-sm text-zinc-500">
+              <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">
                 Cancelar
               </button>
-              <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">
+              <button disabled={busy} className="btn-primary disabled:opacity-50">
                 {busy ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
@@ -330,34 +330,39 @@ export function ContactsPage() {
       {/* modal importar */}
       {showImport && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30" onClick={() => setShowImport(false)}>
-          <form onClick={(e) => e.stopPropagation()} onSubmit={doImport} className="w-[30rem] rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="mb-1 text-lg font-bold text-zinc-800">Importar contatos</h2>
-            <p className="mb-3 text-xs text-zinc-500">
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={doImport}
+            className="w-[30rem] rounded-xl p-6 shadow-elevated"
+            style={{ background: 'var(--surface-elevated)', color: 'var(--text-primary)' }}
+          >
+            <h2 className="mb-1 text-lg font-bold text-base-content">Importar contatos</h2>
+            <p className="mb-3 text-xs text-base-content/50">
               Formato: <code>telefone,nome,empresa</code> (ex: 5511999998888,João,Transp X). Só o <strong>telefone</strong> é obrigatório (55+DDD+número).
             </p>
 
             {/* opção: subir arquivo .csv/.txt + baixar modelo */}
-            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3">
-              <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-xs font-medium text-white hover:bg-brand-700">
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed p-3" style={{ borderColor: 'var(--border)', background: 'var(--surface-muted)' }}>
+              <label className="btn-primary cursor-pointer text-xs">
                 📎 Escolher arquivo (.csv ou .txt)
                 <input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={onPickFile} />
               </label>
-              <button type="button" onClick={baixarModelo} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs hover:bg-zinc-100">
+              <button type="button" onClick={baixarModelo} className="btn-outline text-xs">
                 ⬇️ Baixar modelo
               </button>
-              <span className="text-[11px] text-zinc-400">ou cole abaixo 👇</span>
+              <span className="text-[11px] text-base-content/40">ou cole abaixo 👇</span>
             </div>
 
             <textarea
-              className="mb-3 h-40 w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono text-xs"
+              className="input mb-3 h-40 w-full py-2 font-mono text-xs"
               placeholder={"5511999998888,João Silva,Transportadora X\n5511988887777,Maria"}
               value={csv}
               onChange={(e) => setCsv(e.target.value)}
             />
-            {importMsg && <p className="mb-3 text-sm text-zinc-600">{importMsg}</p>}
+            {importMsg && <p className="mb-3 text-sm text-base-content/70">{importMsg}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowImport(false)} className="rounded-lg px-4 py-2 text-sm text-zinc-500">Fechar</button>
-              <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700 disabled:opacity-50">{busy ? 'Importando...' : 'Importar'}</button>
+              <button type="button" onClick={() => setShowImport(false)} className="btn-ghost">Fechar</button>
+              <button disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Importando...' : 'Importar'}</button>
             </div>
           </form>
         </div>
