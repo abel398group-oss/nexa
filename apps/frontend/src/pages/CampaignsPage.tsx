@@ -28,6 +28,8 @@ export function CampaignsPage() {
   // WhatsApp fields
   const [name, setName] = useState('');
   const [template, setTemplate] = useState('{{saudacao}}, {{nome}}! Aqui é a Lia do HiperTMS. Posso te apresentar nosso sistema de gestão de fretes?');
+  // WhatsApp: default "todos os contatos". Email: default lista manual (fromContacts=false)
+  // pois normalmente não há e-mails cadastrados nos contatos ainda
   const [fromContacts, setFromContacts] = useState(true);
   const [phonesText, setPhonesText] = useState('');
   const [link, setLink] = useState('');
@@ -78,7 +80,8 @@ export function CampaignsPage() {
 
   function resetForm() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
-    setPhonesText(''); setEmailsText(''); setEmailSubject(''); setChannel('whatsapp');
+    setPhonesText(''); setEmailsText(''); setEmailSubject('');
+    setChannel('whatsapp'); setFromContacts(true);
   }
 
   async function create(e: React.FormEvent) {
@@ -232,14 +235,14 @@ export function CampaignsPage() {
             <div className="mb-4 flex rounded-lg border border-base-200 overflow-hidden text-sm">
               <button
                 type="button"
-                onClick={() => setChannel('whatsapp')}
+                onClick={() => { setChannel('whatsapp'); setFromContacts(true); }}
                 className={`flex-1 py-2 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white font-medium' : 'bg-white text-base-content/60 hover:bg-base-100'}`}
               >
                 💬 WhatsApp
               </button>
               <button
                 type="button"
-                onClick={() => setChannel('email')}
+                onClick={() => { setChannel('email'); setFromContacts(false); }}
                 className={`flex-1 py-2 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/60 hover:bg-base-100'}`}
               >
                 ✉️ E-mail
@@ -275,21 +278,46 @@ export function CampaignsPage() {
                   O link de descadastro (LGPD) e a assinatura são adicionados automaticamente no rodapé.
                 </p>
 
-                {/* Lista de e-mails */}
-                <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70">
-                  <input type="checkbox" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
-                  Usar contatos com e-mail cadastrado
+                {/* Lista de destinatários */}
+                <label className="mb-1 block text-xs font-medium text-base-content/70">
+                  Destinatários <span className="text-error">*</span>
                 </label>
-                {!fromContacts && (
+
+                {/* Toggle: lista manual ↔ contatos cadastrados */}
+                <div className="mb-2 flex rounded-md border border-base-200 overflow-hidden text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setFromContacts(false)}
+                    className={`flex-1 py-1.5 transition-colors ${!fromContacts ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/50 hover:bg-base-100'}`}
+                  >
+                    ✍️ Digitar lista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFromContacts(true)}
+                    className={`flex-1 py-1.5 transition-colors ${fromContacts ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/50 hover:bg-base-100'}`}
+                  >
+                    👥 Contatos com e-mail
+                  </button>
+                </div>
+
+                {!fromContacts ? (
                   <>
                     <textarea
-                      className="input mb-1 h-24 w-full py-2 text-sm font-mono"
-                      placeholder={'joao@empresa.com\nmaria@logistica.com.br'}
+                      className="input mb-1 h-28 w-full py-2 text-sm font-mono"
+                      placeholder={'joao@empresa.com\nmaria@transportadora.com.br\ncontato@logistica.com'}
                       value={emailsText}
                       onChange={(e) => setEmailsText(e.target.value)}
+                      required={!fromContacts}
                     />
-                    <p className="mb-3 text-[11px] text-base-content/40">Um e-mail por linha.</p>
+                    <p className="mb-3 text-[11px] text-base-content/40">
+                      Um e-mail por linha · {emailsText.split('\n').filter((l) => l.includes('@')).length} e-mail(s) detectado(s)
+                    </p>
                   </>
+                ) : (
+                  <p className="mb-3 text-[11px] text-base-content/50 rounded bg-base-100 px-3 py-2">
+                    Será disparado para todos os contatos ativos que possuam e-mail cadastrado. Opted-out são automaticamente excluídos.
+                  </p>
                 )}
               </>
             ) : (
