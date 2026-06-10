@@ -67,13 +67,19 @@ export class ConversationAgentService {
     const hasPanel = VIA_PANEL_MARKER.test(input.message);
     // Modalidade B: HANDOFF:token → resolve contexto rico e vai direto para suporte
     const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
-    let handoffContext: { externalId: string; tenantId: string; page?: string | null; errorCode?: string | null } | null = null;
+    let handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null = null;
+    // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
+    let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
 
     if (handoffMatch) {
       handoffContext = await this.handoff.consume(handoffMatch[1]);
       if (handoffContext) {
         route = { ...route, agent: 'support' };
-        this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} page=${handoffContext.page ?? '-'}`);
+        // identidade segura: o nome vem do token (TMS autenticado), então a Lia já sabe quem é
+        if (handoffContext.name) {
+          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false };
+        }
+        this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} nome=${handoffContext.name ?? '-'} page=${handoffContext.page ?? '-'}`);
       } else {
         this.logger.warn(`HANDOFF token inválido/expirado: ${handoffMatch[1]}`);
       }
@@ -89,7 +95,6 @@ export class ConversationAgentService {
 
     // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
     // Busca o telefone da conversa para consultar o TMS antes de rotear
-    let tmsCustomer: { name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
     if (input.conversationId && route.agent === 'sales') {
       const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
       if (convForPhone?.phone) {

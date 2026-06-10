@@ -606,6 +606,7 @@ model HandoffToken {
   token      String    @unique  // nanoid 8 chars — curto e URL-safe
   tenantId   String    @map("tenant_id")
   externalId String    @map("external_id") // externalId do cliente no TMS
+  name       String?   @map("user_name")   // nome do usuário LOGADO no TMS (identidade segura — vem do token, nunca do WhatsApp)
   page       String?                       // página de origem (ex: "fiscal/cte")
   errorCode  String?   @map("error_code")  // código de erro visível na tela, se houver
   usedAt     DateTime? @map("used_at")     // null = ainda não usado

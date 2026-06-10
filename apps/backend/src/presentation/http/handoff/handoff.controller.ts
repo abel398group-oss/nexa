@@ -4,6 +4,7 @@ import { HandoffService } from '@/application/handoff/handoff.service';
 class CreateHandoffDto {
   externalId!: string;
   tenantId!: string;
+  name?: string; // nome do usuário logado no TMS (identidade segura)
   page?: string;
   errorCode?: string;
 }
@@ -24,6 +25,7 @@ export class HandoffController {
     const result = await this.handoff.create({
       externalId: body.externalId,
       tenantId: body.tenantId,
+      name: body.name,
       page: body.page,
       errorCode: body.errorCode,
       serviceToken,

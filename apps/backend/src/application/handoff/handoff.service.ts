@@ -25,6 +25,7 @@ function validateServiceToken(provided: string | undefined): void {
 export interface CreateHandoffInput {
   externalId: string;
   tenantId: string;
+  name?: string; // nome do usuário logado no TMS (identidade segura)
   page?: string;
   errorCode?: string;
   serviceToken?: string;
@@ -33,6 +34,7 @@ export interface CreateHandoffInput {
 export interface HandoffContext {
   externalId: string;
   tenantId: string;
+  name?: string | null;
   page?: string | null;
   errorCode?: string | null;
 }
@@ -59,13 +61,14 @@ export class HandoffService {
         token,
         tenantId: input.tenantId,
         externalId: input.externalId,
+        name: input.name ?? null,
         page: input.page ?? null,
         errorCode: input.errorCode ?? null,
         expiresAt,
       },
     });
 
-    this.logger.log(`Handoff token criado: ${token} | tenant=${input.tenantId} | ext=${input.externalId} | page=${input.page ?? '-'}`);
+    this.logger.log(`Handoff token criado: ${token} | tenant=${input.tenantId} | ext=${input.externalId} | nome=${input.name ?? '-'} | page=${input.page ?? '-'}`);
     return { token, expiresIn: TOKEN_TTL_MS / 1000 };
   }
 
@@ -92,6 +95,7 @@ export class HandoffService {
     return {
       externalId: record.externalId,
       tenantId: record.tenantId,
+      name: record.name,
       page: record.page,
       errorCode: record.errorCode,
     };
