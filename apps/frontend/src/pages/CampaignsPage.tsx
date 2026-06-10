@@ -226,150 +226,207 @@ export function CampaignsPage() {
           <form
             onClick={(e) => e.stopPropagation()}
             onSubmit={create}
-            className="w-[30rem] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-elevated"
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl"
             style={{ background: 'var(--surface-elevated)', color: 'var(--text-primary)' }}
           >
-            <h2 className="mb-4 text-lg font-bold text-base-content">Nova campanha</h2>
+            {/* Header fixo */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-base-200 px-7 py-4"
+                 style={{ background: 'var(--surface-elevated)' }}>
+              <h2 className="text-lg font-bold text-base-content">Nova campanha</h2>
+              <button type="button" onClick={() => { setShow(false); resetForm(); }}
+                      className="text-base-content/40 hover:text-base-content text-xl leading-none">✕</button>
+            </div>
+
+            <div className="px-7 py-5 space-y-5">
 
             {/* Canal */}
-            <div className="mb-4 flex rounded-lg border border-base-200 overflow-hidden text-sm">
+            <div className="flex rounded-xl border border-base-200 overflow-hidden text-sm font-medium">
               <button
                 type="button"
                 onClick={() => { setChannel('whatsapp'); setFromContacts(true); }}
-                className={`flex-1 py-2 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white font-medium' : 'bg-white text-base-content/60 hover:bg-base-100'}`}
+                className={`flex-1 py-2.5 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
                 💬 WhatsApp
               </button>
               <button
                 type="button"
                 onClick={() => { setChannel('email'); setFromContacts(false); }}
-                className={`flex-1 py-2 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/60 hover:bg-base-100'}`}
+                className={`flex-1 py-2.5 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
                 ✉️ E-mail
               </button>
             </div>
 
             {/* Nome */}
-            <label className="mb-1 block text-xs text-base-content/50">Nome da campanha</label>
-            <input className="input mb-3 w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Prospecção Junho" required />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-base-content/60">Nome da campanha</label>
+              <input className="input w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Prospecção Junho" required />
+            </div>
 
             {channel === 'email' ? (
               <>
-                {/* Assunto — crítico para deliverability */}
-                <label className="mb-1 block text-xs text-base-content/50">
-                  Assunto do e-mail <span className="text-error">*</span>
-                  <span className="ml-1 text-base-content/30">(evite MAIÚSCULAS, !!! e palavras de spam)</span>
-                </label>
-                <input
-                  className="input mb-1 w-full"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="Conheça o HiperTMS — gestão de fretes simplificada"
-                  required
-                />
-                <p className="mb-3 text-[11px] text-base-content/40">
-                  ✅ Bom: "Gestão de fretes para transportadoras" &nbsp;|&nbsp; ❌ Ruim: "OFERTA!!! Grátis por tempo limitado"
-                </p>
-
-                {/* Template e-mail */}
-                <label className="mb-1 block text-xs text-base-content/50">Corpo do e-mail (use {'{{nome}}'} e {'{{saudacao}}'})</label>
-                <textarea className="input mb-3 h-36 w-full py-2 text-sm" value={emailTemplate} onChange={(e) => setEmailTemplate(e.target.value)} required />
-                <p className="mb-3 text-[11px] text-base-content/40">
-                  O link de descadastro (LGPD) e a assinatura são adicionados automaticamente no rodapé.
-                </p>
-
-                {/* Lista de destinatários */}
-                <label className="mb-1 block text-xs font-medium text-base-content/70">
-                  Destinatários <span className="text-error">*</span>
-                </label>
-
-                {/* Toggle: lista manual ↔ contatos cadastrados */}
-                <div className="mb-2 flex rounded-md border border-base-200 overflow-hidden text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setFromContacts(false)}
-                    className={`flex-1 py-1.5 transition-colors ${!fromContacts ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/50 hover:bg-base-100'}`}
-                  >
-                    ✍️ Digitar lista
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFromContacts(true)}
-                    className={`flex-1 py-1.5 transition-colors ${fromContacts ? 'bg-blue-500 text-white font-medium' : 'bg-white text-base-content/50 hover:bg-base-100'}`}
-                  >
-                    👥 Contatos com e-mail
-                  </button>
+                {/* Assunto */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    Assunto <span className="text-error">*</span>
+                    <span className="ml-2 font-normal text-base-content/30">evite MAIÚSCULAS, !!! e palavras de spam</span>
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder="Conheça o HiperTMS — gestão de fretes simplificada"
+                    required
+                  />
+                  <p className="mt-1 text-[11px] text-base-content/35">
+                    ✅ "Gestão de fretes para transportadoras" &nbsp;·&nbsp; ❌ "OFERTA!!! Grátis por tempo limitado"
+                  </p>
                 </div>
 
-                {!fromContacts ? (
-                  <>
-                    <textarea
-                      className="input mb-1 h-28 w-full py-2 text-sm font-mono"
-                      placeholder={'joao@empresa.com\nmaria@transportadora.com.br\ncontato@logistica.com'}
-                      value={emailsText}
-                      onChange={(e) => setEmailsText(e.target.value)}
-                      required={!fromContacts}
-                    />
-                    <p className="mb-3 text-[11px] text-base-content/40">
-                      Um e-mail por linha · {emailsText.split('\n').filter((l) => l.includes('@')).length} e-mail(s) detectado(s)
-                    </p>
-                  </>
-                ) : (
-                  <p className="mb-3 text-[11px] text-base-content/50 rounded bg-base-100 px-3 py-2">
-                    Será disparado para todos os contatos ativos que possuam e-mail cadastrado. Opted-out são automaticamente excluídos.
+                {/* Corpo */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    Corpo do e-mail
+                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'} e {'{{saudacao}}'}</span>
+                  </label>
+                  <textarea
+                    className="input w-full py-2 text-sm"
+                    style={{ minHeight: '160px', resize: 'vertical' }}
+                    value={emailTemplate}
+                    onChange={(e) => setEmailTemplate(e.target.value)}
+                    required
+                  />
+                  <p className="mt-1 text-[11px] text-base-content/35">
+                    Assinatura + link de descadastro (LGPD) adicionados automaticamente no rodapé.
                   </p>
-                )}
+                </div>
+
+                {/* Destinatários */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    Destinatários <span className="text-error">*</span>
+                  </label>
+                  <div className="mb-2 flex rounded-lg border border-base-200 overflow-hidden text-xs font-medium">
+                    <button type="button" onClick={() => setFromContacts(false)}
+                      className={`flex-1 py-2 transition-colors ${!fromContacts ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      ✍️ Digitar lista
+                    </button>
+                    <button type="button" onClick={() => setFromContacts(true)}
+                      className={`flex-1 py-2 transition-colors ${fromContacts ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      👥 Contatos com e-mail
+                    </button>
+                  </div>
+                  {!fromContacts ? (
+                    <>
+                      <textarea
+                        className="input w-full py-2 text-sm font-mono"
+                        style={{ minHeight: '120px', resize: 'vertical' }}
+                        placeholder={'joao@empresa.com\nmaria@transportadora.com.br\ncontato@logistica.com'}
+                        value={emailsText}
+                        onChange={(e) => setEmailsText(e.target.value)}
+                        required={!fromContacts}
+                      />
+                      <p className="mt-1 text-[11px] text-base-content/40">
+                        Um e-mail por linha · <strong>{emailsText.split('\n').filter((l) => l.includes('@')).length}</strong> e-mail(s) detectado(s)
+                      </p>
+                    </>
+                  ) : (
+                    <p className="rounded-lg bg-base-100 px-3 py-2.5 text-xs text-base-content/50">
+                      Disparado para todos os contatos ativos com e-mail cadastrado. Opted-out excluídos automaticamente.
+                    </p>
+                  )}
+                </div>
               </>
             ) : (
               <>
-                {/* Template WhatsApp */}
-                <label className="mb-1 block text-xs text-base-content/50">Mensagem (use {'{{nome}}'} e {'{{saudacao}}'})</label>
-                <textarea className="input mb-3 h-24 w-full py-2" value={template} onChange={(e) => setTemplate(e.target.value)} required />
-
-                {/* Lista de telefones */}
-                <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70">
-                  <input type="checkbox" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
-                  Disparar para todos os contatos ativos
-                </label>
-                {!fromContacts && (
-                  <textarea className="input mb-3 h-20 w-full py-2" placeholder="Um telefone por linha (5511...)" value={phonesText} onChange={(e) => setPhonesText(e.target.value)} />
-                )}
-
-                {/* Link */}
-                <label className="mb-1 block text-xs text-base-content/50">Link (opcional — vai no final)</label>
-                <input className="input mb-3 w-full" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." />
-
-                {/* Anexo */}
-                <label className="mb-1 block text-xs text-base-content/50">Anexo (PDF/Word)</label>
-                <div className="mb-3 flex items-center gap-2">
-                  <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} className="text-xs" />
-                  {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
-                  {media && <span className="text-xs text-emerald-600">✅ {media.name}</span>}
+                {/* Mensagem WhatsApp */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    Mensagem
+                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'} e {'{{saudacao}}'}</span>
+                  </label>
+                  <textarea
+                    className="input w-full py-2"
+                    style={{ minHeight: '100px', resize: 'vertical' }}
+                    value={template}
+                    onChange={(e) => setTemplate(e.target.value)}
+                    required
+                  />
                 </div>
 
-                <p className="mb-3 text-[11px] text-base-content/40">
+                {/* Destinatários WA */}
+                <div>
+                  <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
+                    <input type="checkbox" className="checkbox checkbox-sm" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
+                    Todos os contatos ativos
+                  </label>
+                  {!fromContacts && (
+                    <textarea
+                      className="input w-full py-2 font-mono text-sm"
+                      style={{ minHeight: '90px', resize: 'vertical' }}
+                      placeholder="Um telefone por linha (5511...)"
+                      value={phonesText}
+                      onChange={(e) => setPhonesText(e.target.value)}
+                    />
+                  )}
+                </div>
+
+                {/* Link + Anexo lado a lado */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-base-content/60">Link (opcional)</label>
+                    <input className="input w-full" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-base-content/60">Anexo (PDF/Word)</label>
+                    <div className="flex flex-col gap-1">
+                      <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                             onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} className="text-xs" />
+                      {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
+                      {media && <span className="text-xs text-emerald-600 truncate">✅ {media.name}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-base-content/35">
                   Número: {numbers[0] ? `${numbers[0].sentToday}/${numbers[0].dailyLimit} hoje` : '—'} · delay 30–90s · anti-ban ativo
                 </p>
               </>
             )}
 
             {/* Quantidade */}
-            <label className="mb-1 block text-xs text-base-content/50">Quantos enviar?</label>
-            <div className="mb-4 flex items-center gap-3 text-sm text-base-content/70">
-              <label className="flex items-center gap-1"><input type="radio" checked={limitMode === 'all'} onChange={() => setLimitMode('all')} /> Todos (até o limite diário)</label>
-              <label className="flex items-center gap-1"><input type="radio" checked={limitMode === 'limit'} onChange={() => setLimitMode('limit')} /> Só</label>
-              <input type="number" min={1} disabled={limitMode !== 'limit'} value={sendLimit} onChange={(e) => setSendLimit(Number(e.target.value))} className="input w-20 disabled:opacity-40" />
+            <div className="rounded-xl border border-base-200 px-4 py-3">
+              <label className="mb-2 block text-xs font-medium text-base-content/60">Quantos enviar?</label>
+              <div className="flex items-center gap-4 text-sm text-base-content/70">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="radio" checked={limitMode === 'all'} onChange={() => setLimitMode('all')} />
+                  Todos (até o limite diário)
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="radio" checked={limitMode === 'limit'} onChange={() => setLimitMode('limit')} />
+                  Só
+                  <input type="number" min={1} disabled={limitMode !== 'limit'}
+                         value={sendLimit} onChange={(e) => setSendLimit(Number(e.target.value))}
+                         className="input w-20 disabled:opacity-40" />
+                </label>
+              </div>
             </div>
 
             {channel === 'email' && (
-              <div className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
-                ⏱️ Anti-spam ativo: delay 90–180s entre e-mails · máx 50/dia · horário 8h–18h · link de opt-out obrigatório em todos os envios.
+              <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                ⏱️ <strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · horário 8h–18h · link de opt-out em todos os e-mails.
               </div>
             )}
 
-            <div className="flex justify-end gap-2">
+            </div>{/* fim px-7 py-5 */}
+
+            {/* Footer fixo */}
+            <div className="sticky bottom-0 flex justify-end gap-3 border-t border-base-200 px-7 py-4"
+                 style={{ background: 'var(--surface-elevated)' }}>
               <button type="button" onClick={() => { setShow(false); resetForm(); }} className="btn-ghost">Cancelar</button>
-              <button disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Criando...' : 'Criar campanha'}</button>
+              <button disabled={busy} className="btn-primary disabled:opacity-50 px-6">
+                {busy ? 'Criando...' : 'Criar campanha'}
+              </button>
             </div>
           </form>
         </div>
