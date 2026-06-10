@@ -26,7 +26,19 @@ export class ConversationsService {
         take: q.limit,
         skip: q.offset,
         orderBy: { startedAt: 'desc' },
-        include: { assignedSeller: { select: { name: true } } },
+        include: {
+          assignedSeller: { select: { name: true } },
+        },
+      }).then(async (convs) => {
+        // Enriquece com dados do contato (nome, tags) via phone+tenantId
+        if (!convs.length) return convs;
+        const phones = [...new Set(convs.map((c) => c.phone))];
+        const contacts = await this.prisma.contact.findMany({
+          where: { tenantId, phone: { in: phones } },
+          select: { phone: true, name: true, nameSource: true, tags: true },
+        });
+        const contactMap = new Map(contacts.map((c) => [c.phone, c]));
+        return convs.map((c) => ({ ...c, contact: contactMap.get(c.phone) ?? null }));
       }),
       this.prisma.aiConversation.count({ where }),
     ]);

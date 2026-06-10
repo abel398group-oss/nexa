@@ -9,6 +9,12 @@ import { SupportAgentService } from './support-agent.service';
 import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { HandoffService } from '@/application/handoff/handoff.service';
+
+// Detecta marcador do botão TMS (Modalidade A — ADR 022)
+const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
+// Detecta token de handoff (Modalidade B — ADR 022)
+const HANDOFF_TOKEN_RE = /\bHANDOFF:([a-z0-9]{6,12})\b/i;
 
 export interface HandleResult {
   route: RouteDecision;
@@ -45,6 +51,7 @@ export class ConversationAgentService {
     private readonly autonomy: AutonomyService,
     private readonly notifications: NotificationsService,
     private readonly tmsLookup: TmsLookupService,
+    private readonly handoff: HandoffService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -54,6 +61,31 @@ export class ConversationAgentService {
   ): Promise<HandleResult> {
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
+
+    // ── ADR 022: detecção de marcador e token de handoff ───────────────────
+    // Modalidade A: [via-painel-tms] → vai direto para suporte sem lookup
+    const hasPanel = VIA_PANEL_MARKER.test(input.message);
+    // Modalidade B: HANDOFF:token → resolve contexto rico e vai direto para suporte
+    const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
+    let handoffContext: { externalId: string; tenantId: string; page?: string | null; errorCode?: string | null } | null = null;
+
+    if (handoffMatch) {
+      handoffContext = await this.handoff.consume(handoffMatch[1]);
+      if (handoffContext) {
+        route = { ...route, agent: 'support' };
+        this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} page=${handoffContext.page ?? '-'}`);
+      } else {
+        this.logger.warn(`HANDOFF token inválido/expirado: ${handoffMatch[1]}`);
+      }
+    } else if (hasPanel) {
+      route = { ...route, agent: 'support' };
+      this.logger.log('Marcador [via-painel-tms] detectado → rota suporte direto');
+    }
+    // Remove marcadores da mensagem antes de processar (não aparecem na resposta)
+    const cleanMessage = input.message
+      .replace(VIA_PANEL_MARKER, '')
+      .replace(HANDOFF_TOKEN_RE, '')
+      .trim();
 
     // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
     // Busca o telefone da conversa para consultar o TMS antes de rotear

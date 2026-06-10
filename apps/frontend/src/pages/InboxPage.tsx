@@ -21,6 +21,7 @@ interface Conversation {
   customerStage?: string | null;
   ticketCategory?: string | null;
   ticketPriority?: string | null;
+  contact?: { name?: string | null; nameSource?: string | null; tags?: string[] } | null;
 }
 interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
@@ -188,9 +189,15 @@ export function InboxPage() {
                 style={{ borderColor: 'var(--border)' }}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-medium text-base-content truncate">{c.phone}</span>
+                  <span className="font-medium text-base-content truncate">
+                    {c.contact?.name || c.phone}
+                  </span>
                   {stale && <span title="Aguardando equipe há +2h" className="text-amber-500 text-xs">⚠️</span>}
                 </div>
+                {/* mostra telefone abaixo do nome quando há nome */}
+                {c.contact?.name && (
+                  <div className="text-[11px] text-base-content/50 truncate">{c.phone}</div>
+                )}
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
                   {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
@@ -228,7 +235,14 @@ export function InboxPage() {
             {/* header da conversa */}
             <div className="flex items-center justify-between border-b bg-white px-4 py-3 gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
-                <span className="font-medium text-base-content">{active.phone}</span>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-medium text-base-content leading-tight">
+                    {active.contact?.name || active.phone}
+                  </span>
+                  {active.contact?.name && (
+                    <span className="text-xs text-base-content/50">{active.phone}</span>
+                  )}
+                </div>
 
                 {/* status badge (tamanho md no header) */}
                 <ConversationStatusBadge

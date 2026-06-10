@@ -1,0 +1,99 @@
+import { Injectable, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '@/infra/prisma/prisma.service';
+import { randomBytes } from 'crypto';
+
+// Gera token URL-safe de 8 chars sem dependência externa
+function genToken(): string {
+  return randomBytes(6).toString('base64url').slice(0, 8).toLowerCase().replace(/[^a-z0-9]/g, '0');
+}
+
+const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+// Token TMS_SERVICE_TOKEN — server-to-server, nunca exposto ao browser
+function validateServiceToken(provided: string | undefined): void {
+  const expected = process.env.TMS_SERVICE_TOKEN;
+  if (!expected) {
+    // Não configurado: aceita qualquer token em dev (avisa no log)
+    Logger.warn('TMS_SERVICE_TOKEN não configurado — handoff sem autenticação (dev only)', 'HandoffService');
+    return;
+  }
+  if (provided !== expected) {
+    throw new UnauthorizedException('TMS_SERVICE_TOKEN inválido');
+  }
+}
+
+export interface CreateHandoffInput {
+  externalId: string;
+  tenantId: string;
+  page?: string;
+  errorCode?: string;
+  serviceToken?: string;
+}
+
+export interface HandoffContext {
+  externalId: string;
+  tenantId: string;
+  page?: string | null;
+  errorCode?: string | null;
+}
+
+@Injectable()
+export class HandoffService {
+  private readonly logger = new Logger('HandoffService');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  // Gerado pelo Nexa a pedido do TMS (server-to-server).
+  async create(input: CreateHandoffInput): Promise<{ token: string; expiresIn: number }> {
+    validateServiceToken(input.serviceToken);
+
+    if (!input.externalId || !input.tenantId) {
+      throw new BadRequestException('externalId e tenantId são obrigatórios');
+    }
+
+    const token = genToken();
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+
+    await this.prisma.handoffToken.create({
+      data: {
+        token,
+        tenantId: input.tenantId,
+        externalId: input.externalId,
+        page: input.page ?? null,
+        errorCode: input.errorCode ?? null,
+        expiresAt,
+      },
+    });
+
+    this.logger.log(`Handoff token criado: ${token} | tenant=${input.tenantId} | ext=${input.externalId} | page=${input.page ?? '-'}`);
+    return { token, expiresIn: TOKEN_TTL_MS / 1000 };
+  }
+
+  // Consome o token (uso único). Retorna o contexto ou null se inválido/expirado.
+  async consume(token: string): Promise<HandoffContext | null> {
+    const record = await this.prisma.handoffToken.findUnique({ where: { token } });
+
+    if (!record) return null;
+    if (record.usedAt) {
+      this.logger.warn(`Handoff token já usado: ${token}`);
+      return null;
+    }
+    if (record.expiresAt < new Date()) {
+      this.logger.warn(`Handoff token expirado: ${token}`);
+      return null;
+    }
+
+    // Marca como usado (uso único)
+    await this.prisma.handoffToken.update({
+      where: { token },
+      data: { usedAt: new Date() },
+    });
+
+    return {
+      externalId: record.externalId,
+      tenantId: record.tenantId,
+      page: record.page,
+      errorCode: record.errorCode,
+    };
+  }
+}
