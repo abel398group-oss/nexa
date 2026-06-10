@@ -14,6 +14,7 @@ import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBad
 interface Conversation {
   id: string;
   phone: string;
+  sourceChannel?: string | null;
   status: string;
   outcome?: string | null;
   lastActivityAt?: string | null;
@@ -22,6 +23,29 @@ interface Conversation {
   ticketCategory?: string | null;
   ticketPriority?: string | null;
   contact?: { name?: string | null; nameSource?: string | null; tags?: string[] } | null;
+}
+
+// Converte "email:addr@ex.com" → "addr@ex.com" para exibição
+function displayPhone(phone: string): string {
+  return phone.startsWith('email:') ? phone.slice(6) : phone;
+}
+
+function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
+  if (sourceChannel === 'email') {
+    return (
+      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700 font-medium" title="Canal: e-mail">
+        ✉️ email
+      </span>
+    );
+  }
+  if (sourceChannel === 'whatsapp') {
+    return (
+      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 font-medium" title="Canal: WhatsApp">
+        💬 whatsapp
+      </span>
+    );
+  }
+  return null;
 }
 interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
@@ -190,17 +214,20 @@ export function InboxPage() {
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="font-medium text-base-content truncate">
-                    {c.contact?.name || c.phone}
+                    {c.contact?.name || displayPhone(c.phone)}
                   </span>
                   {stale && <span title="Aguardando equipe há +2h" className="text-amber-500 text-xs">⚠️</span>}
                 </div>
-                {/* mostra telefone abaixo do nome quando há nome */}
+                {/* mostra identificador abaixo do nome quando há nome */}
                 {c.contact?.name && (
-                  <div className="text-[11px] text-base-content/50 truncate">{c.phone}</div>
+                  <div className="text-[11px] text-base-content/50 truncate">{displayPhone(c.phone)}</div>
                 )}
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
                   {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
+                  {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
+                    <ChannelBadge sourceChannel={c.sourceChannel} />
+                  )}
                   {(c.ticketCategory || c.ticketPriority) && (
                     <TicketCategoryBadge
                       category={c.ticketCategory}
@@ -237,10 +264,10 @@ export function InboxPage() {
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <div className="flex flex-col min-w-0">
                   <span className="font-medium text-base-content leading-tight">
-                    {active.contact?.name || active.phone}
+                    {active.contact?.name || displayPhone(active.phone)}
                   </span>
                   {active.contact?.name && (
-                    <span className="text-xs text-base-content/50">{active.phone}</span>
+                    <span className="text-xs text-base-content/50">{displayPhone(active.phone)}</span>
                   )}
                 </div>
 
@@ -252,6 +279,11 @@ export function InboxPage() {
                 />
                 {active.outcome && (
                   <ConversationOutcomeBadge outcome={active.outcome} size="md" />
+                )}
+
+                {/* canal */}
+                {active.sourceChannel && active.sourceChannel !== 'whatsapp' && (
+                  <ChannelBadge sourceChannel={active.sourceChannel} />
                 )}
 
                 {/* ticket category/priority — suporte */}

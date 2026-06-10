@@ -547,6 +547,38 @@ model SalesPlaybook {
   @@map("sales_playbook")
 }
 
+// ===================== CANAL E-MAIL (ADR 021) =====================
+// Configuração do canal de e-mail por tenant.
+model EmailChannel {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique @map("tenant_id")
+  provider   String   @default("mailgun") // mailgun | sendgrid | imap
+  inboxEmail String   @map("inbox_email")  // endereço que recebe e-mails
+  fromEmail  String   @map("from_email")   // endereço usado para envio
+  domain     String?                        // domínio Mailgun (ex: mg.hipervias.com.br)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("email_channels")
+}
+
+// Token de opt-out para descadastro em 2 passos (ADR 021 D9 + Adendo)
+// TTL 30 dias. Uso único (usedAt preenchido após confirmação).
+model EmailOptOutToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  tenantId  String    @map("tenant_id")
+  contactId String    @map("contact_id")   // contato vinculado
+  email     String                          // e-mail que pediu o opt-out
+  usedAt    DateTime? @map("used_at")      // null = ainda não confirmado
+  expiresAt DateTime  @map("expires_at")   // TTL 30 dias
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([tenantId])
+  @@map("email_optout_tokens")
+}
+
 // Handoff token — botão "Falar com a Lia" no painel TMS (ADR 022 Modalidade B)
 // Gerado pelo Nexa a pedido do TMS (server-to-server). TTL 5min. Uso único.
 model HandoffToken {

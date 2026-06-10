@@ -28,6 +28,7 @@ import { AgentsModule } from './application/agents/agents.module';
 import { PlaybookModule } from './application/playbook/playbook.module';
 import { NotificationsModule } from './application/notifications/notifications.module';
 import { HandoffModule } from './application/handoff/handoff.module';
+import { EmailModule } from './application/email/email.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -70,6 +71,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     PlaybookModule,
     NotificationsModule,
     HandoffModule,
+    EmailModule,
     AdminModule,
     MetricsModule,
     WhatsappModule,
