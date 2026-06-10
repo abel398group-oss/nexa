@@ -37,6 +37,7 @@ export function CampaignsPage() {
   const [uploading, setUploading] = useState(false);
 
   // Email-only fields
+  const [emailLinkMode, setEmailLinkMode] = useState<'upload' | 'manual'>('upload');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailsText, setEmailsText] = useState('');
   const [emailTemplate, setEmailTemplate] = useState(
@@ -58,6 +59,8 @@ export function CampaignsPage() {
       fd.append('file', file);
       const r = await api.post('/campaigns/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMedia({ url: r.data.url, name: r.data.name });
+      // Para e-mail: o link é a URL do arquivo hospedado
+      if (channel === 'email') setLink(r.data.url);
     } finally {
       setUploading(false);
     }
@@ -81,7 +84,7 @@ export function CampaignsPage() {
   function resetForm() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
-    setChannel('whatsapp'); setFromContacts(true);
+    setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload');
   }
 
   async function create(e: React.FormEvent) {
@@ -305,18 +308,62 @@ export function CampaignsPage() {
                 {/* Link / PDF */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-base-content/60">
-                    Link ou PDF (opcional)
+                    Anexo ou link (opcional)
                     <span className="ml-2 font-normal text-base-content/30">aparece no rodapé antes do descadastro</span>
                   </label>
-                  <input
-                    className="input w-full"
-                    value={link}
-                    onChange={(e) => setLink(e.target.value)}
-                    placeholder="https://drive.google.com/... ou https://hipertms.com.br/demo"
-                  />
-                  <p className="mt-1 text-[11px] text-base-content/35">
-                    💡 Prefira links públicos (Google Drive, site) — anexos em e-mail aumentam o score de spam.
-                  </p>
+
+                  {/* Toggle: upload vs link manual */}
+                  <div className="mb-2 flex rounded-lg border border-base-200 overflow-hidden text-xs font-medium">
+                    <button type="button" onClick={() => setEmailLinkMode('upload')}
+                      className={`flex-1 py-2 transition-colors ${emailLinkMode === 'upload' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      📎 Fazer upload do PDF
+                    </button>
+                    <button type="button" onClick={() => setEmailLinkMode('manual')}
+                      className={`flex-1 py-2 transition-colors ${emailLinkMode === 'manual' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      🔗 Colar link
+                    </button>
+                  </div>
+
+                  {emailLinkMode === 'upload' ? (
+                    <div className="rounded-lg border border-dashed border-base-300 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.ppt,.pptx"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              uploadFile(e.target.files[0]).then(() => {});
+                            }
+                          }}
+                          className="text-xs flex-1"
+                        />
+                        {uploading && <span className="text-xs text-base-content/40 whitespace-nowrap">enviando...</span>}
+                      </div>
+                      {media && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs text-emerald-600">✅ {media.name}</span>
+                          <span className="text-[11px] text-base-content/40 truncate">→ {media.url}</span>
+                          <button type="button" onClick={() => { setMedia(null); setLink(''); }}
+                                  className="ml-auto text-[11px] text-red-400 hover:text-red-600">✕</button>
+                        </div>
+                      )}
+                      <p className="mt-2 text-[11px] text-base-content/35">
+                        O arquivo é hospedado no servidor e enviado como link no e-mail — não como anexo direto.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        className="input w-full"
+                        value={link}
+                        onChange={(e) => setLink(e.target.value)}
+                        placeholder="https://drive.google.com/... ou https://hipertms.com.br/demo"
+                      />
+                      <p className="mt-1 text-[11px] text-base-content/35">
+                        Links do Google Drive, Dropbox, site ou qualquer URL pública.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Destinatários */}
