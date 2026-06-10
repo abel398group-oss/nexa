@@ -97,6 +97,7 @@ export function CampaignsPage() {
         };
         if (fromContacts) payload.fromContacts = true;
         else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).map((e) => ({ email: e }));
+        if (link.trim()) payload.link = link.trim();
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         r = await api.post('/campaigns/email', payload);
       } else {
@@ -298,6 +299,23 @@ export function CampaignsPage() {
                   />
                   <p className="mt-1 text-[11px] text-base-content/35">
                     Assinatura + link de descadastro (LGPD) adicionados automaticamente no rodapé.
+                  </p>
+                </div>
+
+                {/* Link / PDF */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    Link ou PDF (opcional)
+                    <span className="ml-2 font-normal text-base-content/30">aparece no rodapé antes do descadastro</span>
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="https://drive.google.com/... ou https://hipertms.com.br/demo"
+                  />
+                  <p className="mt-1 text-[11px] text-base-content/35">
+                    💡 Prefira links públicos (Google Drive, site) — anexos em e-mail aumentam o score de spam.
                   </p>
                 </div>
 

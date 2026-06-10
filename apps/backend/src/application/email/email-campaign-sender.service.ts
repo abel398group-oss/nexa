@@ -104,6 +104,7 @@ export class EmailCampaignSenderService {
       template: string;
       emails?: { email: string; name?: string }[]; // lista manual
       fromContacts?: boolean;                        // usa contatos com e-mail cadastrado
+      link?: string;
       sendLimit?: number;
     },
   ) {
@@ -147,6 +148,7 @@ export class EmailCampaignSenderService {
         channel: 'email',
         subject: dto.subject,
         template: dto.template,
+        link: dto.link?.trim() || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         targets: {
           create: targets.map((t) => ({
@@ -262,7 +264,11 @@ export class EmailCampaignSenderService {
         },
       });
 
-      const body = this.render(campaign.template, target.name);
+      let body = this.render(campaign.template, target.name);
+      // Injeta link da campanha antes do rodapé (se fornecido)
+      if (campaign.link) {
+        body += `\n\n🔗 ${campaign.link}`;
+      }
       const subject = campaign.subject ?? `Sobre o HiperTMS — ${this.render('{{saudacao}}', target.name)}`;
 
       try {

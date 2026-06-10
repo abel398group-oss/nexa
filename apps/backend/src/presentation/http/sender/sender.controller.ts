@@ -32,6 +32,7 @@ class CreateEmailCampaignDto {
   @IsString() @MinLength(10) template!: string;
   @IsOptional() @IsArray() emails?: { email: string; name?: string }[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
+  @IsOptional() @IsString() link?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
 }
 
