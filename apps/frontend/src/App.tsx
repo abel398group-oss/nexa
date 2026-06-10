@@ -13,6 +13,7 @@ import { CampaignsPage } from '@/pages/CampaignsPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { PlaybookPage } from '@/pages/PlaybookPage';
 import { DevTokensPage } from '@/pages/DevTokensPage';
+import { EmailChannelSettingsPage } from '@/pages/EmailChannelSettingsPage';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/playbook" element={<PlaybookPage />} />
+            <Route path="/settings/email-channel" element={<EmailChannelSettingsPage />} />
             {import.meta.env.DEV && (
               <Route path="/dev/tokens" element={<DevTokensPage />} />
             )}

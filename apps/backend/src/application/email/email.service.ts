@@ -194,17 +194,14 @@ export class EmailService {
     // aqui enviamos fisicamente o e-mail (o autoSent=true já gravou no histórico).
     const draft = agentResult.draft;
     if (draft) {
-      const reSubject = n.subject.startsWith('Re:') ? n.subject : `Re: ${n.subject}`;
-      const replyTo = process.env.MAILGUN_REPLY_TO; // endereço de resposta da empresa
-
       await this.emailReply.send({
         to: n.fromAddress,
-        subject: reSubject,
+        subject: n.subject,
         body: draft,
-        replyTo,
         tenantId,
         contactId: contact.id,
         leadScore: agentResult.route?.leadScore,
+        inReplyToSubject: n.subject,
       });
     }
 

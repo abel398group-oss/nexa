@@ -1,21 +1,24 @@
 /**
  * EmailReplyService — ADR 021 D5
  *
- * Envia respostas da Lia por e-mail via Mailgun HTTP API.
- * Formato: plain text + assinatura + link de opt-out.
+ * Envia respostas da Lia por SMTP (Hostgator / qualquer servidor cPanel).
  *
- * Configuração (.env):
- *   MAILGUN_API_KEY   — chave da API Mailgun (obrigatório para envio)
- *   MAILGUN_DOMAIN    — domínio Mailgun (ex: mg.hipervias.com.br)
- *   MAILGUN_FROM      — endereço remetente (ex: Lia <lia@mg.hipervias.com.br>)
- *   APP_BASE_URL      — URL base do backend (ex: https://api.hipervias.com.br)
+ * Configuração via EmailChannel no banco (por tenant) ou .env como fallback:
+ *   EMAIL_SMTP_HOST   mail.hipertms.com.br
+ *   EMAIL_SMTP_PORT   465
+ *   EMAIL_SMTP_USER   lia@hipertms.com.br
+ *   EMAIL_SMTP_PASS   <senha>
+ *   EMAIL_FROM_NAME   Lia HiperTMS
+ *   EMAIL_REPLY_TO    contato@hipertms.com.br
+ *   APP_BASE_URL      https://api.hipervias.com.br
  */
 import { Injectable, Logger } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailOptOutService } from './email-optout.service';
 
-const SIGNATURE = 'Lia · Assistente HiperTMS | hipervias.com.br';
+const SIGNATURE = 'Lia · Assistente HiperTMS | hipertms.com.br';
 
-// Stripe markdown simples (a Lia pode ter gerado texto com negrito etc.)
 function stripMarkdown(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -28,32 +31,85 @@ function stripMarkdown(text: string): string {
 export interface SendEmailOptions {
   to: string;
   subject: string;
-  body: string;        // rascunho da Lia (plain text)
-  replyTo?: string;
+  body: string;
   tenantId: string;
   contactId: string;
-  leadScore?: number;  // ≥40 → convite WhatsApp (ADR 021 D6)
+  leadScore?: number;
+  inReplyToSubject?: string; // assunto original para o Re:
+}
+
+// Configuração SMTP resolvida (banco ou .env)
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  fromEmail: string;
+  fromName: string;
+  replyTo?: string;
 }
 
 @Injectable()
 export class EmailReplyService {
   private readonly logger = new Logger('EmailReplyService');
 
-  constructor(private readonly optout: EmailOptOutService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly optout: EmailOptOutService,
+  ) {}
 
-  async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string }> {
-    const apiKey = process.env.MAILGUN_API_KEY;
-    const domain = process.env.MAILGUN_DOMAIN;
-    const from = process.env.MAILGUN_FROM ?? `Lia HiperTMS <lia@${domain ?? 'hipervias.com.br'}>`;
-    const baseUrl = process.env.APP_BASE_URL ?? 'https://api.hipervias.com.br';
+  /** Resolve configuração SMTP: banco (por tenant) ou fallback .env. */
+  private async resolveConfig(tenantId: string): Promise<SmtpConfig | null> {
+    // Tenta buscar configuração do tenant no banco
+    const ch = await this.prisma.emailChannel.findUnique({
+      where: { tenantId },
+    }).catch(() => null);
 
-    if (!apiKey || !domain) {
-      this.logger.warn('MAILGUN_API_KEY ou MAILGUN_DOMAIN não configurados — e-mail não enviado (dev mode)');
-      this.logger.debug(`[dev] Para: ${opts.to} | Assunto: ${opts.subject}\n${opts.body}`);
-      return { sent: false, reason: 'mailgun_not_configured' };
+    if (ch?.isActive && ch.smtpUser && ch.smtpPass) {
+      return {
+        host: ch.smtpHost,
+        port: ch.smtpPort,
+        secure: ch.smtpSecure,
+        user: ch.smtpUser,
+        pass: ch.smtpPass,
+        fromEmail: ch.fromEmail,
+        fromName: ch.fromName,
+        replyTo: ch.replyTo ?? undefined,
+      };
     }
 
-    // Gera token de opt-out (TTL 30 dias, uso único)
+    // Fallback: variáveis de ambiente
+    const host = process.env.EMAIL_SMTP_HOST;
+    const user = process.env.EMAIL_SMTP_USER;
+    const pass = process.env.EMAIL_SMTP_PASS;
+    if (!host || !user || !pass) return null;
+
+    return {
+      host,
+      port: Number(process.env.EMAIL_SMTP_PORT ?? 465),
+      secure: (process.env.EMAIL_SMTP_SECURE ?? 'true') !== 'false',
+      user,
+      pass,
+      fromEmail: user,
+      fromName: process.env.EMAIL_FROM_NAME ?? 'Lia HiperTMS',
+      replyTo: process.env.EMAIL_REPLY_TO,
+    };
+  }
+
+  async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string }> {
+    const config = await this.resolveConfig(opts.tenantId);
+
+    if (!config) {
+      this.logger.warn(
+        'Configuração SMTP não encontrada (banco nem .env) — e-mail não enviado (dev mode)',
+      );
+      this.logger.debug(`[dev] Para: ${opts.to} | ${opts.subject}\n${opts.body}`);
+      return { sent: false, reason: 'smtp_not_configured' };
+    }
+
+    // Gera token de opt-out (TTL 30 dias)
+    const baseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3001';
     const optOutToken = await this.optout.generateToken(opts.tenantId, opts.contactId, opts.to);
     const optOutUrl = `${baseUrl}/api/email/optout?token=${optOutToken}`;
 
@@ -69,34 +125,33 @@ export class EmailReplyService {
       `--\n${SIGNATURE}\n\n` +
       `Para não receber mais mensagens: ${optOutUrl}`;
 
-    const form = new URLSearchParams();
-    form.append('from', from);
-    form.append('to', opts.to);
-    form.append('subject', opts.subject);
-    form.append('text', bodyText);
-    if (opts.replyTo) form.append('h:Reply-To', opts.replyTo);
+    const subject =
+      opts.inReplyToSubject
+        ? (opts.inReplyToSubject.startsWith('Re:') ? opts.inReplyToSubject : `Re: ${opts.inReplyToSubject}`)
+        : opts.subject;
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure, // true = SSL/TLS (porta 465)
+      auth: { user: config.user, pass: config.pass },
+      tls: { rejectUnauthorized: false }, // Hostgator usa certificado cPanel, pode não ter CA raiz
+    });
 
     try {
-      const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: form.toString(),
+      await transporter.sendMail({
+        from: `"${config.fromName}" <${config.fromEmail}>`,
+        to: opts.to,
+        subject,
+        text: bodyText,
+        replyTo: config.replyTo,
       });
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        this.logger.error(`Mailgun erro ${response.status}: ${errText}`);
-        return { sent: false, reason: `mailgun_${response.status}` };
-      }
-
-      this.logger.log(`E-mail enviado para ${opts.to} (tenant=${opts.tenantId})`);
+      this.logger.log(`E-mail enviado via SMTP para ${opts.to} (tenant=${opts.tenantId})`);
       return { sent: true };
     } catch (err: any) {
-      this.logger.error(`Erro ao enviar e-mail: ${err?.message}`);
-      return { sent: false, reason: 'network_error' };
+      this.logger.error(`Erro SMTP ao enviar para ${opts.to}: ${err?.message}`);
+      return { sent: false, reason: `smtp_error: ${err?.message}` };
     }
   }
 }

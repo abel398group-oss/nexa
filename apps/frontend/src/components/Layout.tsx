@@ -27,6 +27,7 @@ const items = [
   { to: '/campaigns', label: 'Disparo', icon: '📣', perm: 'campaigns' },
   { to: '/playbook', label: 'Playbook IA', icon: '🎯', perm: 'ai_control' },
   { to: '/users', label: 'Usuários', icon: '🔐', perm: 'users' },
+  { to: '/settings/email-channel', label: 'Canal de E-mail', icon: '✉️', perm: 'admin' },
 ];
 
 const titles: Record<string, string> = {
@@ -38,6 +39,7 @@ const titles: Record<string, string> = {
   '/campaigns': 'Disparo de Leads',
   '/playbook': 'Playbook de Vendas',
   '/users': 'Usuários & Acessos',
+  '/settings/email-channel': 'Canal de E-mail',
 };
 
 function KillSwitch() {
