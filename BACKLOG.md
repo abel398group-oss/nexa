@@ -93,3 +93,4 @@
 | 2026-06-10 | Settings page — configuração de e-mail por tenant |
 | 2026-06-10 | Campanhas de e-mail — modal redesenhado, upload de PDF, anti-spam |
 | 2026-06-10 | Inbox — badge de canal (✉️ e-mail / 💬 WhatsApp) |
+| 2026-06-10 | Botão "Falar com a Lia" na landing page do TMS — PR aberto em feat/botao-lia-whatsapp (aguarda merge do Uelder) |
