@@ -151,3 +151,54 @@ Confirmar com Uelder se esses campos estão disponíveis antes de implementar.
 ## Relacionados
 
 ADR 010 (Connector) · ADR 011 (Source of Truth) · ADR 015 (Suporte)
+
+---
+
+## Adendo — Origem do nome (precedência determinística)
+
+**Data:** 2026-06-10
+
+### Problema
+
+A regra "TMS tem precedência sobre pushname, mas não sobre nome manual" é ambígua:
+o campo `name` é único e o código não sabe se o valor atual veio do pushname do
+WhatsApp (pode sobrescrever) ou de edição do operador (não pode).
+
+### Decisão — campo de origem
+
+Adicionar rastreio de origem do nome no modelo `Contact`:
+
+```prisma
+model Contact {
+  ...
+  name        String?
+  nameSource  String?  @default("pushname") @map("name_source")
+  // valores: pushname | tms | manual
+}
+```
+
+**Precedência (forte → fraca): `manual` > `tms` > `pushname`**
+
+| Origem atual (`nameSource`) | TMS pode sobrescrever? |
+|---|---|
+| `pushname` (auto WhatsApp) | ✅ sim |
+| `tms` | ✅ sim (atualiza) |
+| `manual` (operador editou) | ❌ nunca |
+
+**Regra de escrita:**
+- Ao enriquecer com nome do TMS → só grava se `nameSource != 'manual'`; seta
+  `nameSource = 'tms'`.
+- Ao operador editar o nome na inbox → seta `nameSource = 'manual'` (passa a ser
+  intocável pelo sistema).
+
+Isso substitui o campo `nameLockedByOperator` mencionado no D7 — a flag fica
+codificada no próprio `nameSource`, sem campo extra.
+
+### Nota — fonte de dados do TMS (Uelder)
+
+O `lookupCustomer()` / `enrichContact()` consome a API de consulta ao banco de
+usuários do TMS fornecida pelo Uelder. Mantém-se a regra absoluta: **somente
+leitura** (zero writes no TMS) e acesso sempre atrás da interface `Connector`
+(ADR 010 — trocável sem refatorar).
+
+O contrato exato dos campos retornados está documentado no adendo do ADR 010.

@@ -187,3 +187,49 @@ model EmailChannel {
 ## Relacionados
 
 ADR 009 (Leads como plataforma) · ADR 010 (Connector) · ADR 012 (Segurança / Prompt-injection)
+
+---
+
+## Adendo — Opt-out de e-mail à prova de prefetch
+
+**Data:** 2026-06-10
+
+### Problema
+
+`GET /api/email/optout?token=...` pode ser disparado por **prefetch de
+clientes de e-mail ou scanners antivírus** antes do usuário clicar — causando
+descadastro acidental sem intenção do cliente. Isso invalida o opt-out legalmente
+(sem ação consciente do titular) e é falso-positivo de LGPD.
+
+### Decisão — confirmação em 2 passos
+
+O fluxo de opt-out passa a ser:
+
+```
+1. GET /api/email/optout?token=...
+   → NÃO descadastra.
+   → Renderiza página: "Deseja confirmar o descadastro?
+                        [Sim, não quero mais receber mensagens]"
+
+2. Usuário clica no botão → POST /api/email/optout  (body: { token })
+   → Efetiva: contact.status = 'opted_out', contact.optOutAt = now
+   → Renderiza: "Você foi descadastrado com sucesso."
+```
+
+**Especificação do token de opt-out:**
+
+| Propriedade | Valor |
+|---|---|
+| TTL | 30 dias (opt-out não precisa ser urgente) |
+| Uso | Único — invalidado após o POST |
+| Atrelamento | `contactId` + `email` — não ao telefone |
+| Geração | JWT assinado com `EMAIL_OPTOUT_SECRET` (`.env`) |
+
+**Após opt-out confirmado:**
+- Contato não recebe mais respostas por e-mail
+- `enrichContact()` não roda mais para esse contato (ADR 020 D6)
+- Tratamento idêntico ao opt-out WhatsApp (`SAIR`/`STOP`)
+- Log de auditoria gravado em `contact_interactions`
+
+Essa abordagem garante validade legal (LGPD / CAN-SPAM / GDPR) e elimina o
+risco de descadastro involuntário por prefetch.

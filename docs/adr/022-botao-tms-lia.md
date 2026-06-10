@@ -181,3 +181,32 @@ Zero API, zero dependência do Nexa. O time do TMS (Uelder) faz sozinho.
 ## Relacionados
 
 ADR 015 (Suporte) · ADR 010 (Connector) · ADR 012 (Segurança) · ADR 013 (Ambiente)
+
+---
+
+## Nota — Responsabilidade do botão (Uelder / time TMS)
+
+**Data:** 2026-06-10
+
+| Modalidade | Quem implementa | Dependência externa |
+|---|---|---|
+| **A — Link WhatsApp (MVP)** | **Time TMS (Uelder)** — zero dependência do Nexa | Nenhuma. HTML puro com o número da Lia e o marcador `[via-painel-tms]` no `?text=`. |
+| **B — Token contextual** | **Nexa** expõe o endpoint · **Uelder** chama no servidor | Endpoint `POST /api/handoff/token` no Nexa deve estar pronto antes. Coordenar a entrega dos dois lados. `TMS_SERVICE_TOKEN` compartilhado de forma segura (fora do repo, fora do browser). |
+| **C — Web Chat** | Nexa (widget + backend) | Não entra antes do DigitalOcean deploy. |
+
+**Ação imediata para Uelder (Modalidade A):**
+
+Adicionar no painel do HiperTMS o botão:
+
+```html
+<a
+  href="https://wa.me/5511994327713?text=Ol%C3%A1%2C%20sou%20cliente%20do%20HiperTMS%20e%20preciso%20de%20ajuda.%20%5Bvia-painel-tms%5D"
+  target="_blank"
+  rel="noopener"
+>
+  💬 Falar com a Lia
+</a>
+```
+
+O `[via-painel-tms]` garante que a Lia vá direto para o suporte sem perguntar
+se o cliente já usa o sistema.

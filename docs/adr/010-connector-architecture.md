@@ -84,3 +84,54 @@ A plataforma **NÃO acessa o banco do produto**. Acessa só a **API** do produto
 ## Pendências
 - Detalhar contrato de cada método (payloads) ao implementar a Fase 3
 - Definir biblioteca de criptografia das credenciais (KMS/secret manager)
+
+---
+
+## Adendo — Contrato de Leitura do TMS (a preencher quando Uelder entregar)
+
+**Data:** 2026-06-10
+
+A integração de leitura com o TMS — usada pelo enriquecimento de contato (ADR 020)
+e pelo diagnóstico de suporte (ADR 015) — consome uma API ou conexão fornecida pelo
+Uelder. Este adendo registra o contrato acordado.
+
+> **⚠️ PREENCHER quando os endpoints/campos forem entregues pelo Uelder.**
+> Enquanto não chega: `lookupCustomer()` e demais métodos de diagnóstico continuam
+> com a implementação atual — retornam `null` quando `TMS_API_BASE_URL` não estiver
+> configurado (fallback seguro, sem quebrar o fluxo).
+
+### Requisitos de segurança da conexão (não-negociáveis)
+
+1. **Credencial somente-leitura** — `SELECT` apenas. Nunca usuário com permissão de
+   escrita. Zero `INSERT`/`UPDATE`/`DELETE` no banco do TMS.
+2. **Preferir read-replica**, não o banco primário de produção do TMS (evita carga
+   extra no operacional).
+3. **Credencial/URL em secret criptografado** (`.env` / secret manager) — fora do
+   repo, fora do browser, jamais em texto claro em código-fonte.
+4. **Sempre atrás da interface `Connector`** — a implementação é trocável sem
+   refatorar o pipeline (ADR 010).
+5. **Timeout + circuit breaker** — falha ou lentidão do TMS não derruba o Nexa.
+   Degrada graciosamente: enriquecimento pulado, diagnóstico sem dados externos,
+   suporte continua via KB.
+
+### Métodos de leitura esperados (confirmar contrato com Uelder)
+
+| Método `Connector` | Retorno esperado | Consumido por |
+|---|---|---|
+| `lookupCustomer(phone)` | `{ externalId, name, email?, plan?, status, registeredAt? }` | Router (ADR 015) · Enriquecimento (ADR 020) |
+| `getDocumentStatus(tipo, numero)` | `{ status, ambiente, rejeicao? }` (CT-e / MDF-e) | DiagnosticAgent (ADR 015) |
+| `getRejectionInfo(codigo)` | `{ codigo, descricao, causa, correcao }` | DiagnosticAgent · Playbooks (ADR 017) |
+| `getContractStatus(externalId)` | `{ plano, status, expiresAt?, docsUsed?, docsLimit? }` | DiagnosticAgent (ADR 015) |
+| *(outros a confirmar)* | — | — |
+
+### Campos disponíveis via API do Uelder — checklist (PREENCHER)
+
+- [ ] `name` (razão social / nome do responsável)
+- [ ] `email`
+- [ ] `plan` (código do plano: basico / essencial / profissional)
+- [ ] `status` (active / suspended / trial / cancelled)
+- [ ] `registeredAt` (data de cadastro)
+- [ ] Status de CT-e por número/chave
+- [ ] Código de rejeição SEFAZ e descrição
+- [ ] Status de contrato / documentos consumidos no mês
+- [ ] *(listar campos adicionais conforme entrega)*
