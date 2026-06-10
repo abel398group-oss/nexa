@@ -331,6 +331,209 @@ export class HiperTmsConnector implements Connector {
           'HiperTMS: 100% na nuvem, integração SEFAZ nativa, precificação automática, acesso de qualquer lugar.',
         tags: ['planilha', 'legado', 'comparativo', 'migracao', 'vantagem'],
       },
+
+      // ══════════════════════════════════════════════════════════════════════════
+      // TROUBLESHOOTING / SUPORTE OPERACIONAL — "como faço" e "deu erro X"
+      // Extraído dos PRDs do HiperTMS (docs/features/**). Conteúdo para a Lia
+      // resolver dúvidas de CLIENTES ATIVOS (não vendas). Validar rótulos exatos
+      // de menu com o time do TMS.
+      // ══════════════════════════════════════════════════════════════════════════
+
+      // ── FISCAL / CT-e ───────────────────────────────────────────────────────────
+      {
+        topic: 'cte', category: 'suporte',
+        title: 'Como emitir um CT-e (passo a passo)',
+        content:
+          'O CT-e é emitido a partir de um embarque. Passo a passo: ' +
+          '(1) tenha um certificado digital ativo (Dados da Empresa > Certificado Digital); ' +
+          '(2) abra o embarque desejado e acione a emissão de CT-e (informe série e ambiente se solicitado); ' +
+          '(3) o sistema assina o XML e transmite à SEFAZ, gravando chave, protocolo e status; ' +
+          '(4) acompanhe na lista de CT-e (filtros por status, embarque e data); ' +
+          '(5) baixe o XML ou o PDF (DACTE) quando autorizado. ' +
+          'Se não houver certificado ativo, a emissão não funciona e o sistema orienta a cadastrá-lo.',
+        tags: ['cte', 'emitir', 'emissao', 'como faco', 'dacte', 'sefaz', 'embarque', 'fiscal'],
+      },
+      {
+        topic: 'cte', category: 'suporte',
+        title: 'CT-e foi rejeitado pela SEFAZ — o que fazer',
+        content:
+          'Quando a SEFAZ rejeita o CT-e, o sistema mostra o código e a mensagem da rejeição (em metadata.emissionLog). ' +
+          'Rejeições comuns: ' +
+          '562 — CT-e já cancelado (emita um novo CT-e); ' +
+          '539 — CFOP inválido para a UF (verifique o CFOP no cadastro da operação); ' +
+          '204 — duplicidade (confira se o CT-e já foi emitido com o mesmo número); ' +
+          '581 — certificado digital inválido/expirado (renove o certificado em Dados da Empresa > Certificado Digital); ' +
+          '999 — erro genérico (acione o suporte com o XML do CT-e). ' +
+          'Em dúvida fiscal específica, não improvise: encaminhe ao suporte humano.',
+        tags: ['cte', 'rejeicao', 'rejeitado', 'sefaz', 'erro', '562', '539', '204', '581', 'cfop', 'fiscal'],
+      },
+      {
+        topic: 'cte', category: 'suporte',
+        title: 'Cancelar CT-e ou enviar carta de correção',
+        content:
+          'CT-e autorizado pode ser cancelado ou corrigido por carta de correção (CC-e), dentro dos prazos da SEFAZ. ' +
+          'Cancelamento: abra o CT-e e use a opção de cancelar, informando a justificativa (mínimo de caracteres exigido pela SEFAZ). ' +
+          'Carta de correção: use quando o erro é de informação corrigível (não serve para valor, datas ou partes). ' +
+          'Se o status local estiver divergente da SEFAZ, use "sincronizar consulta" para atualizar antes de agir.',
+        tags: ['cte', 'cancelar', 'cancelamento', 'carta de correcao', 'cce', 'sincronizar', 'fiscal'],
+      },
+
+      // ── FISCAL / MDF-e ──────────────────────────────────────────────────────────
+      {
+        topic: 'mdfe', category: 'suporte',
+        title: 'Como emitir e encerrar um MDF-e',
+        content:
+          'O MDF-e é emitido a partir de uma viagem e é obrigatório no transporte interestadual. ' +
+          'Emissão: abra a viagem, acione o MDF-e e informe os dados exigidos (chaves dos CT-e, percurso/UF, RNTRC). ' +
+          'Após a viagem terminar, é OBRIGATÓRIO encerrar o MDF-e — MDF-e não encerrado fica pendente e pode gerar problema fiscal. ' +
+          'Encerramento: abra o MDF-e e use a opção de encerrar (informe UF e município de encerramento se solicitado). ' +
+          'Há uma lista de "MDF-e não encerrados" para você acompanhar pendências.',
+        tags: ['mdfe', 'emitir', 'encerrar', 'encerramento', 'viagem', 'nao encerrado', 'rntrc', 'fiscal'],
+      },
+
+      // ── FISCAL / CERTIFICADO ────────────────────────────────────────────────────
+      {
+        topic: 'fiscal', category: 'suporte',
+        title: 'Certificado digital vencido ou inválido (não emite CT-e/MDF-e)',
+        content:
+          'Se a emissão parou com erro de certificado (ex.: rejeição 581), o certificado provavelmente venceu ou a senha está incorreta. ' +
+          'Solução: acesse Dados da Empresa > Certificado Digital, faça o upload de um novo PFX (A1) válido e informe a senha correta. ' +
+          'Defina a UF e o ambiente (PRODUCAO ou HOMOLOGACAO) e marque o certificado como ativo. ' +
+          'O sistema valida e detecta a UF/ambiente automaticamente. Sem certificado ativo válido, nenhuma emissão fiscal funciona.',
+        tags: ['certificado', 'pfx', 'vencido', 'invalido', 'a1', '581', 'fiscal', 'configuracao'],
+      },
+      {
+        topic: 'fiscal', category: 'suporte',
+        title: 'Testar conexão com a SEFAZ / status fiscal',
+        content:
+          'Se a emissão está lenta ou falhando, vale checar a conexão com a SEFAZ. ' +
+          'O módulo fiscal tem um teste de conectividade (status fiscal) que usa o certificado ativo e a UF. ' +
+          'Se a SEFAZ estiver fora do ar (problema do órgão, não do sistema), aguarde e tente novamente; o HiperTMS apenas transmite. ' +
+          'Persistindo, acione o suporte informando a UF, o ambiente e o horário da tentativa.',
+        tags: ['sefaz', 'status', 'conexao', 'fora do ar', 'teste', 'fiscal', 'lentidao'],
+      },
+
+      // ── PRECIFICAÇÃO / FRETE ────────────────────────────────────────────────────
+      {
+        topic: 'precificacao', category: 'suporte',
+        title: 'Preço do frete saiu errado ou desatualizado',
+        content:
+          'O motor de precificação é determinístico (mesmos dados = mesmo preço). Se o valor parece errado, normalmente é uma destas causas: ' +
+          '(1) os artefatos de precificação estão desatualizados ("stale") após mudança de tabela/markup — rode "recalcular" na materialização; ' +
+          '(2) há um contrato de cliente com preço negociado aplicando por cima da tabela; ' +
+          '(3) a rota/modalidade (FCL ou LCL) ou o regime tributário estão diferentes do esperado. ' +
+          'Use a análise crítica para ver o breakdown (frete, taxas, margens e impostos) e entender de onde veio o valor.',
+        tags: ['precificacao', 'frete', 'preco errado', 'desatualizado', 'materializacao', 'recalcular', 'stale', 'contrato', 'analise critica'],
+      },
+      {
+        topic: 'precificacao', category: 'suporte',
+        title: 'Como importar tabelas de frete (FCL/LCL)',
+        content:
+          'As tabelas de frete podem ser importadas em lote no módulo de Precificação (importação FCL ou LCL). ' +
+          'Envie o arquivo no formato esperado; o sistema retorna quantos itens foram criados e quantos ignorados. ' +
+          'Se a importação falhar com erro de validação, o arquivo está fora do layout — confira colunas e formato. ' +
+          'Após importar, rode a materialização (recalcular) para os novos preços passarem a valer nas cotações.',
+        tags: ['tabela', 'importar', 'importacao', 'fcl', 'lcl', 'frete', 'precificacao', 'antt'],
+      },
+      {
+        topic: 'precificacao', category: 'suporte',
+        title: 'Contrato do cliente não aplica o preço negociado',
+        content:
+          'Se o preço de contrato não está sendo aplicado, geralmente a rota da operação não é compatível com a rota do contrato. ' +
+          'Use a verificação de rota (check-route) do contrato para confirmar a compatibilidade. ' +
+          'Confira também se o contrato está ATIVO (não suspenso/cancelado) e se as regras do contrato cobrem a modalidade e o trecho usados. ' +
+          'Contrato ativo + rota compatível = preço negociado aplicado.',
+        tags: ['contrato', 'preco negociado', 'cliente', 'rota', 'check-route', 'precificacao', 'frete'],
+      },
+
+      // ── FINANCEIRO ──────────────────────────────────────────────────────────────
+      {
+        topic: 'financeiro', category: 'suporte',
+        title: 'Não consigo criar conta a pagar/receber diretamente',
+        content:
+          'No HiperTMS as contas NÃO são criadas manualmente — elas são geradas a partir de uma FATURA (invoice). ' +
+          'A criação direta de conta é desativada de propósito (retorna erro orientando o uso de faturas). ' +
+          'Para gerar uma conta a pagar: crie uma fatura a pagar. Para receber: crie uma fatura a receber. ' +
+          'O sistema valida o total e as parcelas e gera as contas vinculadas ao documento de origem. ' +
+          'Abastecimentos e diárias de motorista também viram conta a pagar automaticamente (via Frota, após aprovação).',
+        tags: ['financeiro', 'conta a pagar', 'conta a receber', 'fatura', 'invoice', 'nao consigo criar', 'parcela'],
+      },
+      {
+        topic: 'financeiro', category: 'suporte',
+        title: 'Acompanhar contas vencidas e vencimentos',
+        content:
+          'No módulo Financeiro você lista contas a pagar e a receber com filtros (status, somente vencidas, busca). ' +
+          'Use o filtro "somente vencidas" (overdue) para ver o que está em atraso. ' +
+          'Há um resumo agregado por tipo e status para uma visão rápida. ' +
+          'As categorias (plano de contas) permitem acompanhar orçamento mensal/anual e a execução por categoria.',
+        tags: ['financeiro', 'vencidas', 'overdue', 'vencimento', 'contas', 'resumo', 'orcamento', 'categoria'],
+      },
+
+      // ── FROTA / CADASTRO ────────────────────────────────────────────────────────
+      {
+        topic: 'frota', category: 'suporte',
+        title: 'Erro ao cadastrar veículo (consumo km/L)',
+        content:
+          'Ao cadastrar um veículo, o consumo médio (km/L) é obrigatório e deve ser maior que zero. ' +
+          'Se o cadastro for bloqueado, verifique o campo de consumo — valor zerado ou negativo não é aceito. ' +
+          'Esse dado é necessário porque as Viagens usam o consumo médio para calcular o custo de combustível. ' +
+          'Também não é permitido duplicar placa por empresa.',
+        tags: ['veiculo', 'cadastro', 'consumo', 'km/l', 'erro', 'frota', 'placa'],
+      },
+      {
+        topic: 'frota', category: 'suporte',
+        title: 'Abastecimento não virou conta a pagar',
+        content:
+          'Um abastecimento só gera conta a pagar DEPOIS de aprovado. ' +
+          'Fluxo: o abastecimento entra como "pendente de aprovação"; um responsável aprova (ou rejeita); ' +
+          'só então é possível convertê-lo em conta a pagar no Financeiro. ' +
+          'A conversão é idempotente — não gera conta duplicada. Se não apareceu no Financeiro, confirme se o abastecimento foi aprovado e convertido.',
+        tags: ['abastecimento', 'conta a pagar', 'aprovacao', 'pendente', 'frota', 'financeiro', 'combustivel'],
+      },
+      {
+        topic: 'frota', category: 'suporte',
+        title: 'Alerta de CNH de motorista vencendo',
+        content:
+          'O módulo de Frota controla a validade da CNH dos motoristas. ' +
+          'Há uma consulta de "carteiras vencendo" que lista os motoristas por proximidade do vencimento. ' +
+          'Use-a para renovar a CNH antes do vencimento e evitar motorista impedido de rodar. ' +
+          'O cadastro do motorista guarda número e validade da CNH e o status ativo/inativo.',
+        tags: ['cnh', 'motorista', 'vencendo', 'validade', 'frota', 'alerta'],
+      },
+
+      // ── USUÁRIOS / ACESSO ───────────────────────────────────────────────────────
+      {
+        topic: 'usuarios', category: 'suporte',
+        title: 'Esqueci a senha / redefinir acesso',
+        content:
+          'Na tela de login, use "esqueci minha senha" para receber um link de redefinição por e-mail. ' +
+          'Após redefinir, faça login normalmente. ' +
+          'Já logado, é possível trocar a senha no seu perfil (informando a senha atual). ' +
+          'Por segurança, o sistema não revela se um e-mail existe ou não ao solicitar a recuperação.',
+        tags: ['senha', 'esqueci', 'redefinir', 'reset', 'login', 'acesso', 'usuario'],
+      },
+      {
+        topic: 'usuarios', category: 'suporte',
+        title: 'Usuário sem acesso a um módulo (permissões)',
+        content:
+          'O acesso aos módulos é controlado por perfil (papel) de cada usuário. ' +
+          'Se alguém não vê um módulo ou recebe "acesso negado", o perfil dele não tem essa permissão. ' +
+          'Quem resolve é o Administrador da empresa: em Administração > Perfis, ajuste as permissões do perfil ou atribua outro perfil ao usuário. ' +
+          'O número de usuários permitidos depende do plano contratado.',
+        tags: ['permissao', 'acesso negado', 'perfil', 'papel', 'usuario', 'admin', 'modulo', '403'],
+      },
+
+      // ── ERRO DE SISTEMA / GERAL ─────────────────────────────────────────────────
+      {
+        topic: 'erro_sistema', category: 'suporte',
+        title: 'Tela travada ou comportamento inesperado',
+        content:
+          'Se uma tela travou ou algo se comportou de forma inesperada, tente primeiro: ' +
+          '(1) atualizar a página (Ctrl+F5); (2) sair e entrar de novo; (3) testar em outro navegador (Chrome atualizado). ' +
+          'Se persistir, registre: o que você estava fazendo, a tela/módulo, o horário e, se houver, a mensagem de erro exata. ' +
+          'Com esses dados o suporte consegue investigar pelos logs. Para tema fiscal/financeiro com bloqueio, o atendimento é priorizado.',
+        tags: ['erro', 'travou', 'bug', 'tela', 'inesperado', 'sistema', 'suporte'],
+      },
     ];
   }
 
