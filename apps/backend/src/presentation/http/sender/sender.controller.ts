@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SenderService } from '@/application/sender/sender.service';
+import { EmailCampaignSenderService } from '@/application/email/email-campaign-sender.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
@@ -25,11 +26,23 @@ class CreateCampaignDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
 }
 
+class CreateEmailCampaignDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsString() @MinLength(5) subject!: string;
+  @IsString() @MinLength(10) template!: string;
+  @IsOptional() @IsArray() emails?: { email: string; name?: string }[];
+  @IsOptional() @IsBoolean() fromContacts?: boolean;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
+}
+
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('campaigns')
 @Controller()
 export class SenderController {
-  constructor(private readonly sender: SenderService) {}
+  constructor(
+    private readonly sender: SenderService,
+    private readonly emailCampaign: EmailCampaignSenderService,
+  ) {}
 
   @Get('campaigns')
   list(@CurrentTenant() tenantId: string) {
@@ -39,6 +52,11 @@ export class SenderController {
   @Post('campaigns')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateCampaignDto) {
     return this.sender.createCampaign(tenantId ?? 'default', dto);
+  }
+
+  @Post('campaigns/email')
+  createEmail(@CurrentTenant() tenantId: string, @Body() dto: CreateEmailCampaignDto) {
+    return this.emailCampaign.createEmailCampaign(tenantId ?? 'default', dto);
   }
 
   // upload do anexo (PDF/Word) — retorna a URL pública p/ usar na campanha

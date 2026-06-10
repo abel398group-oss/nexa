@@ -462,12 +462,14 @@ model Campaign {
   id        String    @id @default(uuid())
   tenantId  String    @map("tenant_id")
   name      String
-  template  String // texto; suporta {{nome}}
+  channel   String    @default("whatsapp") @map("channel") // whatsapp | email
+  template  String // texto; suporta {{nome}} e {{saudacao}}
+  subject   String?   // assunto do e-mail (obrigatório para channel=email)
   status    String    @default("draft") // draft | running | paused | done
-  link      String? // link opcional anexado no texto (ex: portfólio no Drive)
-  mediaUrl  String?   @map("media_url") // arquivo anexado (PDF/Word) — URL servida pelo backend
-  mediaName String?   @map("media_name") // nome original do arquivo
-  sendLimit Int?      @map("send_limit") // quantos enviar (null = todos / até limite diário)
+  link      String? // link opcional
+  mediaUrl  String?   @map("media_url")
+  mediaName String?   @map("media_name")
+  sendLimit Int?      @map("send_limit")
   createdAt DateTime  @default(now()) @map("created_at")
   startedAt DateTime? @map("started_at")
 
@@ -482,9 +484,10 @@ model CampaignTarget {
   campaignId String    @map("campaign_id")
   campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   tenantId   String    @map("tenant_id")
-  phone      String
+  phone      String    @default("") // WhatsApp: número real; e-mail: vazio ou "email:<addr>"
+  email      String?   // e-mail do destinatário (canal email)
   name       String?
-  status     String    @default("queued") // queued | sent | failed | skipped
+  status     String    @default("queued") // queued | sent | failed | skipped | sending
   sentAt     DateTime? @map("sent_at")
   error      String?
   createdAt  DateTime  @default(now()) @map("created_at")
