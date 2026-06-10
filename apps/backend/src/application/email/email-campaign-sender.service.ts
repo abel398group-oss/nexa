@@ -105,6 +105,7 @@ export class EmailCampaignSenderService {
       emails?: { email: string; name?: string }[]; // lista manual
       fromContacts?: boolean;                        // usa contatos com e-mail cadastrado
       link?: string;
+      sendLinkOnFirst?: boolean; // false (padrão) = só envia link após resposta do lead
       sendLimit?: number;
     },
   ) {
@@ -149,6 +150,7 @@ export class EmailCampaignSenderService {
         subject: dto.subject,
         template: dto.template,
         link: dto.link?.trim() || null,
+        sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         targets: {
           create: targets.map((t) => ({
@@ -265,8 +267,10 @@ export class EmailCampaignSenderService {
       });
 
       let body = this.render(campaign.template, target.name);
-      // Injeta link da campanha antes do rodapé (se fornecido)
-      if (campaign.link) {
+      // Injeta link apenas se sendLinkOnFirst=true.
+      // Padrão (false): 1º e-mail sem link → lead responde → Lia envia na conversa.
+      // Emails frios sem link têm score de spam menor e maior taxa de resposta.
+      if (campaign.link && campaign.sendLinkOnFirst) {
         body += `\n\n🔗 ${campaign.link}`;
       }
       const subject = campaign.subject ?? `Sobre o HiperTMS — ${this.render('{{saudacao}}', target.name)}`;

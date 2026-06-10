@@ -38,6 +38,7 @@ export function CampaignsPage() {
 
   // Email-only fields
   const [emailLinkMode, setEmailLinkMode] = useState<'upload' | 'manual'>('upload');
+  const [sendLinkOnFirst, setSendLinkOnFirst] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailsText, setEmailsText] = useState('');
   const [emailTemplate, setEmailTemplate] = useState(
@@ -84,7 +85,7 @@ export function CampaignsPage() {
   function resetForm() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
-    setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload');
+    setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
   }
 
   async function create(e: React.FormEvent) {
@@ -100,7 +101,7 @@ export function CampaignsPage() {
         };
         if (fromContacts) payload.fromContacts = true;
         else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).map((e) => ({ email: e }));
-        if (link.trim()) payload.link = link.trim();
+        if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         r = await api.post('/campaigns/email', payload);
       } else {
@@ -362,6 +363,31 @@ export function CampaignsPage() {
                       <p className="mt-1 text-[11px] text-base-content/35">
                         Links do Google Drive, Dropbox, site ou qualquer URL pública.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Quando enviar o link */}
+                  {(link || media) && (
+                    <div className="mt-3 rounded-xl border border-base-200 px-4 py-3">
+                      <p className="mb-2 text-xs font-medium text-base-content/60">Quando enviar o link?</p>
+                      <div className="flex flex-col gap-2">
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input type="radio" className="mt-0.5" checked={!sendLinkOnFirst}
+                                 onChange={() => setSendLinkOnFirst(false)} />
+                          <div>
+                            <p className="text-sm font-medium text-base-content">Só após resposta <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Recomendado</span></p>
+                            <p className="text-[11px] text-base-content/40">1º e-mail sem link → lead responde com interesse → Lia envia o link na conversa. Melhor entregabilidade.</p>
+                          </div>
+                        </label>
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input type="radio" className="mt-0.5" checked={sendLinkOnFirst}
+                                 onChange={() => setSendLinkOnFirst(true)} />
+                          <div>
+                            <p className="text-sm text-base-content/70">No 1º e-mail</p>
+                            <p className="text-[11px] text-base-content/40">Envia o link direto. Mais risco de cair em spam.</p>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>

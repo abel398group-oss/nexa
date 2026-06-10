@@ -466,7 +466,8 @@ model Campaign {
   template  String // texto; suporta {{nome}} e {{saudacao}}
   subject   String?   // assunto do e-mail (obrigatório para channel=email)
   status    String    @default("draft") // draft | running | paused | done
-  link      String? // link opcional
+  link            String? // link opcional
+  sendLinkOnFirst Boolean @default(false) @map("send_link_on_first") // false = só envia link após resposta (anti-spam)
   mediaUrl  String?   @map("media_url")
   mediaName String?   @map("media_name")
   sendLimit Int?      @map("send_limit")
