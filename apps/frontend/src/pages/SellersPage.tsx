@@ -4,7 +4,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button } from '@/shared/ui';
+import { Button, Input } from '@/shared/ui';
 import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
@@ -161,12 +161,12 @@ export function SellersPage() {
 
       <form onSubmit={add} className="card mb-6 p-4">
         <div className="mb-2 flex flex-wrap gap-2">
-          <input className="input flex-1" placeholder="Nome do vendedor" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="input flex-1" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input className="flex-1" placeholder="Nome do vendedor" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input className="flex-1" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <input className="input flex-1" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" className="input flex-1" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input className="flex-1" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input type="password" className="flex-1" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
           <Button loading={busy}>
             {editId ? 'Salvar' : '+ Adicionar'}
           </Button>

@@ -21,6 +21,7 @@ const TOUR_STEPS: TourStep[] = [
 const items = [
   { to: '/dashboard', label: 'Painel', icon: '📊', perm: 'dashboard' },
   { to: '/inbox', label: 'Inbox', icon: '💬', perm: 'inbox' },
+  { to: '/support', label: 'Suporte', icon: '🛠️', perm: 'inbox' },
   { to: '/contacts', label: 'Contatos', icon: '👥', perm: 'contacts' },
   { to: '/knowledge', label: 'Conhecimento', icon: '📚', perm: 'knowledge' },
   { to: '/sellers', label: 'Vendedores', icon: '🧑‍💼', perm: 'sellers' },
@@ -33,6 +34,7 @@ const items = [
 const titles: Record<string, string> = {
   '/dashboard': 'Painel',
   '/inbox': 'Inbox',
+  '/support': 'Suporte',
   '/contacts': 'Contatos',
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',

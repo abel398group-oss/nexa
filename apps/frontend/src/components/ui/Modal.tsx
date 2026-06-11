@@ -45,19 +45,19 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative rounded-xl border border-base-300 bg-[var(--surface-elevated)] shadow-elevated',
+          'relative flex max-h-[92vh] flex-col rounded-xl border border-base-300 bg-[var(--surface-elevated)] shadow-elevated',
           SIZE[size],
           className,
         )}
       >
         {title && (
-          <div className="border-b border-base-200 px-6 py-4 text-base font-semibold text-base-content">
+          <div className="flex-none border-b border-base-200 px-6 py-4 text-base font-semibold text-base-content">
             {title}
           </div>
         )}
-        <div className="px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-base-200 px-6 py-4">{footer}</div>
+          <div className="flex flex-none justify-end gap-2 border-t border-base-200 px-6 py-4">{footer}</div>
         )}
       </div>
     </div>

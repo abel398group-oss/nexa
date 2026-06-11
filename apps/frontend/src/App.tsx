@@ -5,6 +5,7 @@ import { ConfirmProvider } from '@/contexts/ConfirmContext';
 import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { InboxPage } from '@/pages/InboxPage';
+import { SupportPage } from '@/pages/SupportPage';
 import { ContactsPage } from '@/pages/ContactsPage';
 import { KnowledgePage } from '@/pages/KnowledgePage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -38,6 +39,7 @@ export default function App() {
           >
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/support" element={<SupportPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/knowledge" element={<KnowledgePage />} />
             <Route path="/sellers" element={<SellersPage />} />
