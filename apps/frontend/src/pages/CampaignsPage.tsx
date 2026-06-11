@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge, statusVariant } from '@/components/ui/Badge';
+import { Button, Card } from '@/shared/ui';
 
 interface Campaign {
   id: string;
@@ -167,7 +168,7 @@ export function CampaignsPage() {
             E-mail: 8h–18h · 50/dia · delay 90–180s (anti-spam)
           </p>
         </div>
-        <button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>
+        <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
       </div>
 
       <div className="space-y-3">
@@ -177,7 +178,7 @@ export function CampaignsPage() {
             icon="📣"
             title="Nenhuma campanha ainda"
             description="Crie uma campanha de WhatsApp ou e-mail para disparar para seus leads."
-            action={<button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>}
+            action={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
           />
         )}
         {!loading && items.map((c) => {
@@ -186,7 +187,7 @@ export function CampaignsPage() {
           const pct = total ? Math.round((sent / total) * 100) : 0;
           const isEmail = c.channel === 'email';
           return (
-            <div key={c.id} className="card p-5">
+            <Card key={c.id} className="p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-base-content">{c.name}</span>
@@ -198,12 +199,12 @@ export function CampaignsPage() {
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <button onClick={() => start(c)} className="btn-primary h-7 px-3 text-xs">▶ Iniciar</button>
+                    <Button onClick={() => start(c)} size="sm">▶ Iniciar</Button>
                   )}
                   {c.status === 'running' && (
                     <button onClick={() => pause(c.id)} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
                   )}
-                  <button onClick={() => del(c)} title="Excluir campanha" className="btn-outline h-7 px-2 text-xs text-red-500 hover:bg-red-50">🗑️</button>
+                  <Button onClick={() => del(c)} title="Excluir campanha" variant="outline" size="sm" className="text-red-500 hover:bg-red-50">🗑️</Button>
                 </div>
               </div>
               {isEmail && c.subject && (
@@ -221,7 +222,7 @@ export function CampaignsPage() {
                   {Object.entries(c.counts).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
                 </div>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
@@ -514,10 +515,10 @@ export function CampaignsPage() {
             {/* Footer fixo */}
             <div className="sticky bottom-0 flex justify-end gap-3 border-t border-base-200 px-7 py-4"
                  style={{ background: 'var(--surface-elevated)' }}>
-              <button type="button" onClick={() => { setShow(false); resetForm(); }} className="btn-ghost">Cancelar</button>
-              <button disabled={busy} className="btn-primary disabled:opacity-50 px-6">
+              <Button type="button" variant="ghost" onClick={() => { setShow(false); resetForm(); }}>Cancelar</Button>
+              <Button loading={busy} className="px-6">
                 {busy ? 'Criando...' : 'Criar campanha'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
