@@ -1,0 +1,28 @@
+# Segurança: NUNCA copiar segredos nem lixo local para a imagem Docker (deploy DigitalOcean)
+**/.env
+**/.env.*
+!**/.env.example
+
+# deps e build (instalados/gerados na imagem)
+**/node_modules
+**/dist
+**/build
+**/.vite
+.pnpm-store
+
+# git e CI
+.git
+.github
+
+# logs e dados locais
+**/*.log
+logs/
+pgdata/
+redisdata/
+backups/
+**/uploads
+
+# os/editor
+.DS_Store
+.vscode
+.idea

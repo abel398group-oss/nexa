@@ -39,4 +39,4 @@ Antes de disparar, o sistema consulta o banco do HiperTMS em lote:
 ## Referências
 
 - Service: `apps/backend/src/application/sender/sender.service.ts`
-- ADR: `docs/architecture/decisions/002-campaigns.md`
+- ADR: `docs/adr/024-campanhas-filtro-tms.md`

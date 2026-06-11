@@ -49,7 +49,7 @@
 ### 🎉 PARIDADE COM N8N ATINGIDA — Nexa já faz tudo que o n8n faz (+ inbox/dashboard/governança)
 
 ### ⏳ FASE 4 — Produção
-- [ ] Hardening de segurança (ver AUDITORIA_TECNICA_N8N.md)
+- [ ] Hardening de segurança (ver docs/reviews/2026-06-05-auditoria-tecnica-n8n.md)
 - [ ] Deploy DigitalOcean (ficar 24/7)
 - [ ] Liberar allowlist do WAHA (enviar p/ clientes reais)
 - [ ] Validar billing real do TMS (com Uelder)
@@ -264,5 +264,5 @@
 
 ## ⚠️ Pendências externas
 - [ ] Validar conexão de billing do TMS com o Uelder (antes de plugar real)
-- [ ] Hardening de segurança antes do 1º disparo real (ver docs/AUDITORIA_TECNICA_N8N.md)
+- [ ] Hardening de segurança antes do 1º disparo real (ver docs/reviews/2026-06-05-auditoria-tecnica-n8n.md)
 - [ ] Domínio (nexalia.com / nexa.com.br) — decisão de marketing

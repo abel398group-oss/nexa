@@ -60,5 +60,5 @@ Coordena todos os agentes. Responsável pelo auto-envio (kill switch), handoff p
 
 ## Referências
 
-- ADR: `docs/architecture/decisions/001-agents.md`
+- ADR: `docs/adr/023-orquestrador-envio-unico.md` (envio único/supervisão) · `docs/adr/003-arquitetura-agentes.md`
 - TMS Knowledge: `apps/backend/src/application/connectors/hipertms.connector.ts` → `getKnowledge()`

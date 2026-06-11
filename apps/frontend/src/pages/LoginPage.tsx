@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/shared/ui';
 
 const FEATURES = [
   'Qualificação automática de leads 24h',
@@ -126,20 +127,9 @@ export function LoginPage() {
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="btn-primary w-full justify-center"
-            >
-              {busy ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Entrando…
-                </span>
-              ) : (
-                'Entrar'
-              )}
-            </button>
+            <Button type="submit" loading={busy} className="w-full justify-center">
+              {busy ? 'Entrando…' : 'Entrar'}
+            </Button>
           </form>
 
           {/* dica de rodapé */}

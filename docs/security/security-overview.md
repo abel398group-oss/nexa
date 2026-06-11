@@ -1,0 +1,71 @@
+# Segurança — Visão Geral (Nexa)
+
+> Pilares de segurança do Nexa. Decisões em **ADR 005** (RBAC/LGPD/Retenção) e
+> **ADR 012** (Segurança da IA & Prompt Injection). Implementação em
+> `main.ts`, `app.module.ts` e `shared/auth/`.
+
+## Objetivo
+
+Proteger uma plataforma SaaS multi-tenant em que uma IA toca dados pessoais,
+financeiros e de acesso. Segurança é requisito de design, não camada posterior.
+
+## Pilares
+
+- **Tenant isolation** como regra padrão: `tenantId` deriva do contexto
+  autenticado, **nunca** do body ou da fala do lead (ADR 005 D2).
+- **Least privilege**: permissões explícitas por recurso/ação (RBAC + `@RequirePerm`).
+- **Backend como autoridade**: a IA solicita; o backend valida identidade, tenant,
+  perfil e executa (regra de ouro, ADR 005 / ADR 012).
+- **Segredos fora do repositório**: `.env`/secret manager (ver `secrets-management.md`).
+
+## Controles implementados (backend)
+
+Configurados em `apps/backend/src/main.ts` e `app.module.ts`:
+
+- **Auth**: JWT em **cookie HttpOnly** (`shared/auth/jwt.strategy.ts`,
+  `jwt-auth.guard.ts`), `cookie-parser`.
+- **RBAC / permissões**: `PermissionsGuard` + `@RequirePerm('...')`; `admin` passa
+  sempre, demais perfis precisam da permissão explícita.
+- **Rate limiting**: `@nestjs/throttler`, 100 req/min por IP, guard global.
+- **Headers**: Helmet (HSTS, X-Frame, nosniff). CSP desativado apenas para não
+  quebrar o Swagger UI.
+- **CORS restrito**: apenas origens em `CORS_ORIGINS`, com `credentials: true`.
+- **Validação**: `ValidationPipe` com `whitelist + forbidNonWhitelisted` →
+  proteção contra mass-assignment.
+- **Prefixo global** `/api`; Swagger desativado em produção.
+- **Observabilidade**: logging estruturado (pino) com `correlationId` por request
+  (`shared/middleware/correlation-id.middleware.ts`); auditoria em `shared/audit/`.
+
+## Perfis (RBAC — ADR 005 D1)
+
+| Perfil | Pode |
+|---|---|
+| Admin | tudo |
+| Gestor | operação |
+| Operacional | uso do sistema |
+| Financeiro | cobranças |
+| IA | read-only (solicita; backend executa conforme o perfil do solicitante) |
+
+## Segurança da IA
+
+Validação de entrada (prompt injection) e saída (alucinação/LGPD/tom) pelo
+Supervisor; ações irreversíveis exigem humano; kill switch de autonomia. Detalhes
+em `docs/ai/ai-guardrails.md` e ADR 012.
+
+## LGPD e retenção (ADR 005 D4/D5)
+
+Conversas, memória e health score são dado pessoal. Direitos de exclusão,
+exportação, consentimento e anonimização. Retenção: mensagens 24m, auditoria 60m,
+financeiro conforme legislação; após o prazo, anonimizar/expurgar (`audit_retention`).
+
+## Ambientes e isolamento (ADR 013)
+
+dev / staging / production têm bancos e segredos isolados; nunca compartilhar
+chave entre ambientes; staging usa cópia anonimizada de dados (ver
+`docs/infra/ci-cd.md` e `secrets-management.md`).
+
+## Relacionados
+
+- ADR 005 — Segurança e Permissões · ADR 012 — Segurança da IA · ADR 013 — Environment
+- `docs/security/secrets-management.md` · `docs/ai/ai-guardrails.md`
+- `docs/api/api-standards.md` · `docs/api/error-handling.md`

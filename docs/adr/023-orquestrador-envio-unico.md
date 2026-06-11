@@ -1,4 +1,8 @@
-﻿# ADR 001 — Arquitetura de Agentes de IA
+﻿# ADR 023 — Orquestrador de Envio Único e Roteamento TMS
+
+> Renumerada de `architecture/decisions/001-agents.md` na consolidação de ADRs
+> (2026-06-11). Complementa a ADR 003 (Arquitetura de Agentes) com a decisão de
+> implementação do envio único e supervisão.
 
 ## Status: Aceito
 

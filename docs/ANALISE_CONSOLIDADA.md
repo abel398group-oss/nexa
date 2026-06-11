@@ -24,7 +24,7 @@
 | Rate limiting (12s) + humanização (3-6s) | ✅ |
 | Modo fila (Redis) + pruning | ✅ |
 
-### Limitações conhecidas (ver AUDITORIA_TECNICA_N8N.md)
+### Limitações conhecidas (ver reviews/2026-06-05-auditoria-tecnica-n8n.md)
 - 🔴 Secrets hardcoded · webhook sem auth · sem HTTPS · n8n sem auth
 - 🟠 3 nós HTTP sem onError · delay Sender 2-10s (prod=30-90s)
 - 🟡 Agendamentos manuais · sem observabilidade · single-tenant
@@ -57,7 +57,7 @@
 | Versões de runtime | schema/runtime.md | ✅ (template) |
 | Roadmap por fases | IMPLEMENTATION_ROADMAP | ✅ |
 | Sprint plan (14 sprints) | SPRINT_PLAN | ✅ |
-| Auditoria do MVP | AUDITORIA_TECNICA_N8N | ✅ |
+| Auditoria do MVP | reviews/2026-06-05-auditoria-tecnica-n8n | ✅ |
 
 ### Decisões estratégicas travadas
 - ✅ Plataforma independente (não módulo do TMS)

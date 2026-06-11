@@ -7,9 +7,12 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { validateEnv } from './shared/config/validate-env';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  // Segurança: barra o boot em produção se algum segredo crítico estiver fraco/ausente/placeholder.
+  validateEnv();
   // arquivos de campanha (anexos) servidos em /uploads (fora do prefixo /api)
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 

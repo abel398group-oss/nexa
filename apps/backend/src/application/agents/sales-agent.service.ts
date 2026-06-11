@@ -75,7 +75,7 @@ export class SalesAgentService {
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
       (cfg.persona ? `${cfg.persona} ` : '') +
       greetingRule +
-      'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use emojis com moderação. ' +
+      'Fale em português do Brasil, com tom profissional e institucional (negociação entre empresas) e postura consultiva, em mensagens curtas de WhatsApp (2-5 linhas). Evite emojis e gírias. ' +
       'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente.\n\n' +
       'VOCÊ CONDUZ A VENDA POR ESTÁGIOS. Descubra em qual estágio a conversa está (pelo histórico) e cumpra o objetivo dele:\n' +
       '1) SAUDAÇÃO: acolher e descobrir o motivo do contato.\n' +
@@ -131,8 +131,8 @@ export class SalesAgentService {
     } catch (e: any) {
       this.logger.warn(`Sales fallback (${e?.message})`);
       const draft =
-        `Temos planos a partir de R$89/mês. Pra te indicar o ideal, me conta: ` +
-        `quantos veículos/motoristas a sua operação tem hoje? 🚚`;
+        `Temos planos a partir de R$89/mês. Para indicar o ideal para a sua operação, me conte: ` +
+        `quantos veículos a sua frota tem hoje e qual o volume aproximado de documentos fiscais por mês?`;
       return { draft, suggestedAction: 'none', usedKnowledge: [], allowedFacts, confidence: 'low', model: AI_MODEL };
     }
   }

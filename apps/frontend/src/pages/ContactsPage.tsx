@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import {
+  type Contact,
+  type ImportContactInput,
+  listContacts,
+  createContact,
+  updateContact,
+  reactivateContact,
+  deleteContact,
+  importContacts,
+} from '@/features/contact';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-
-interface Contact {
-  id: string;
-  phone: string;
-  name?: string;
-  company?: string;
-  email?: string;
-  leadStatus?: string;
-  status?: string; // active | opted_out
-  source?: string;
-  createdAt: string;
-}
 
 const empty = { phone: '', name: '', company: '', email: '' };
 
@@ -39,9 +36,9 @@ export function ContactsPage() {
   async function load() {
     setLoading(true);
     try {
-      const r = await api.get('/contacts', { params: { search: search || undefined, limit: 100 } });
-      setItems(r.data.items);
-      setTotal(r.data.total);
+      const r = await listContacts({ search, limit: 100 });
+      setItems(r.items);
+      setTotal(r.total);
     } finally {
       setLoading(false);
     }
@@ -59,21 +56,10 @@ export function ContactsPage() {
     try {
       if (editId) {
         // edição (não reenvia source)
-        await api.patch(`/contacts/${editId}`, {
-          phone: form.phone.trim(),
-          name: form.name || undefined,
-          company: form.company || undefined,
-          email: form.email || undefined,
-        });
+        await updateContact(editId, form);
         toast.success('Contato atualizado!');
       } else {
-        await api.post('/contacts', {
-          phone: form.phone.trim(),
-          name: form.name || undefined,
-          company: form.company || undefined,
-          email: form.email || undefined,
-          source: 'manual',
-        });
+        await createContact(form);
         toast.success('Contato salvo!');
       }
       setForm(empty);
@@ -104,7 +90,7 @@ export function ContactsPage() {
     });
     if (!ok) return;
     try {
-      await api.patch(`/contacts/${c.id}/reactivate`);
+      await reactivateContact(c.id);
       toast.success('Contato reativado.');
       await load();
     } catch {
@@ -121,7 +107,7 @@ export function ContactsPage() {
     });
     if (!ok) return;
     try {
-      await api.delete(`/contacts/${c.id}`);
+      await deleteContact(c.id);
       toast.success('Contato excluído.');
       await load();
     } catch {
@@ -135,7 +121,7 @@ export function ContactsPage() {
     setImportMsg('');
     try {
       // formato por linha: telefone[,nome[,empresa]]
-      const contacts = csv
+      const contacts: ImportContactInput[] = csv
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean)
@@ -145,8 +131,8 @@ export function ContactsPage() {
         })
         .filter((c) => c.phone.length >= 12);
       if (contacts.length === 0) { toast.error('Nenhum telefone válido (use 55+DDD+número).'); setBusy(false); return; }
-      const r = await api.post('/contacts/import', { contacts });
-      toast.success(`${r.data.imported} contatos importados.`);
+      const r = await importContacts(contacts);
+      toast.success(`${r.imported} contatos importados.`);
       setCsv('');
       setShowImport(false);
       await load();

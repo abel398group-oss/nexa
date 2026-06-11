@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { Button, Card } from '@/shared/ui';
 
 interface User {
   id: string; email: string; name?: string; role: string;
@@ -56,12 +57,12 @@ export function UsersPage() {
           <h1 className="text-xl font-bold text-base-content">Usuários & Acessos</h1>
           <p className="text-xs text-base-content/50">Crie logins e marque quais áreas cada um pode acessar. Admin acessa tudo.</p>
         </div>
-        <button onClick={() => { setShow(true); setErr(''); }} className="btn-primary">+ Novo usuário</button>
+        <Button onClick={() => { setShow(true); setErr(''); }}>+ Novo usuário</Button>
       </div>
 
       <div className="space-y-3">
         {items.map((u) => (
-          <div key={u.id} className="card p-4">
+          <Card key={u.id} className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <span className="font-semibold text-base-content">{u.name || u.email}</span>
