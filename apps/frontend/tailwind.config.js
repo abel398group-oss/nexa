@@ -37,6 +37,11 @@ export default {
           300: '#e6e6e3',
           content: '#16181d',
         },
+        // Navy — secundário (gráficos + gradiente assinatura), igual ao TMS
+        navy: {
+          DEFAULT: '#1e3a5f',
+          700:     '#16304d',
+        },
         // zinc — aliases (compatibilidade)
         zinc: {
           50:  '#f4f4f5',
@@ -62,6 +67,20 @@ export default {
         'inner-soft':   'inset 0 2px 4px 0 rgb(0 0 0 / 0.04)',
         'up':           '0 -2px 10px rgb(0 0 0 / 0.06)',
         'glow-brand':   '0 0 26px -4px rgb(255 90 31 / 0.30)',
+        'glow-danger':  '0 0 20px -4px rgb(220 38 38 / 0.30)',
+        'glow-success': '0 0 20px -4px rgb(22 163 74 / 0.30)',
+      },
+      borderRadius: {
+        // Escada de raios do TMS (3xl = card de cotação do hero)
+        '3xl': '1.875rem',
+      },
+      backgroundImage: {
+        // Gradiente assinatura: 135° ignição → brasa → navy
+        'signature': 'linear-gradient(135deg, #ff5a1f 0%, #ed4708 50%, #1e3a5f 100%)',
+      },
+      transitionTimingFunction: {
+        'entrance': 'cubic-bezier(0.22, 1, 0.36, 1)',
+        'layout':   'cubic-bezier(0.4, 0, 0.2, 1)',
       },
     },
   },

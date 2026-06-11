@@ -1,18 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import {
+  Button,
+  Card,
+  Select,
+  Table,
+  THead,
+  TBody,
+  TR,
+  TH,
+  TD,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+} from '@/shared/ui';
+import { getCategoryConfig, getPriorityConfig, CATEGORY_CONFIG } from '@/lib/ticket-category';
+import { getStatusConfig } from '@/lib/conversation-status';
 
 /**
- * SupportPage — ESTRUTURA (scaffold) do módulo de Suporte do Nexa.
+ * SupportPage — módulo de Suporte do Nexa.
  *
- * Objetivo: dar ao squad de design uma base funcional para estilizar.
- * Já busca os dados reais (conversas de suporte) e renderiza a lista com
- * categoria/prioridade/status. O visual é propositalmente simples — trocar
- * pelos componentes do design system de vocês.
- *
- * Fonte de dados: GET /conversations (mesmo endpoint do Inbox), filtrado para
- * tickets de suporte (tem ticketCategory, ou cliente ativo, ou status escalado).
- * TODO(design): paginação, busca, ordenação, detalhe do ticket, SLA, ações.
+ * Lista os tickets de atendimento que a Lia abre/resolve. A lógica e a fonte de
+ * dados (GET /conversations, filtrado para suporte) NÃO mudam — apenas a camada
+ * visual usa o design system (@/shared/ui) e os configs canônicos de
+ * categoria/prioridade/status.
+ * TODO(produto): paginação, busca, ordenação, detalhe do ticket, SLA, ações.
  */
 
 interface Conversation {
@@ -27,27 +40,6 @@ interface Conversation {
   ticketPriority?: string | null;
   contact?: { name?: string | null } | null;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  fiscal: 'Fiscal', cte: 'CT-e', mdfe: 'MDF-e', frete: 'Frete', financeiro: 'Financeiro',
-  cadastro: 'Cadastro', usuarios: 'Usuários', integracoes: 'Integrações', api: 'API',
-  erro_sistema: 'Erro de sistema', treinamento: 'Treinamento',
-};
-
-const PRIORITY_STYLE: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  high: 'bg-orange-100 text-orange-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  low: 'bg-base-200 text-base-content/60',
-};
-
-const STATUS_STYLE: Record<string, string> = {
-  open: 'bg-green-100 text-green-700',
-  escalated: 'bg-red-100 text-red-700',
-  waiting_customer: 'bg-blue-100 text-blue-700',
-  waiting_internal: 'bg-purple-100 text-purple-700',
-  closed: 'bg-base-200 text-base-content/60',
-};
 
 function isSupportTicket(c: Conversation): boolean {
   return !!c.ticketCategory || c.customerStage === 'cliente_ativo' || c.status === 'escalated';
@@ -68,20 +60,72 @@ function timeAgo(iso?: string | null): string {
   return `${Math.round(h / 24)}d`;
 }
 
+// ─── Badges (usam os configs canônicos) ──────────────────────────────────────
+
+function CategoryPill({ cat }: { cat?: string | null }) {
+  const cfg = getCategoryConfig(cat);
+  if (!cfg) return <span className="text-base-content/30">—</span>;
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color} ${cfg.textColor}`}
+    >
+      <span aria-hidden>{cfg.emoji}</span>
+      {cfg.label}
+    </span>
+  );
+}
+
+function PriorityPill({ pri }: { pri?: string | null }) {
+  const cfg = getPriorityConfig(pri);
+  if (!cfg) return <span className="text-base-content/30">—</span>;
+  const isCritical = pri === 'critical';
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${cfg.color} ${cfg.textColor} ${
+        isCritical ? 'shadow-sm ring-2 ring-red-500/50 animate-pulse' : ''
+      }`}
+    >
+      <span aria-hidden>{cfg.emoji}</span>
+      {cfg.label}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cfg = getStatusConfig(status);
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: cfg.dot }} aria-hidden />
+      {cfg.labelPt}
+    </span>
+  );
+}
+
 export function SupportPage() {
   const navigate = useNavigate();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
+  function load(signal?: AbortSignal) {
+    setLoading(true);
+    setError(false);
+    api
+      .get('/conversations', { signal })
+      .then((r) => setConvs(Array.isArray(r.data) ? r.data : r.data?.items ?? []))
+      .catch((e) => {
+        if (e?.name !== 'CanceledError' && e?.code !== 'ERR_CANCELED') setError(true);
+      })
+      .finally(() => setLoading(false));
+  }
+
   useEffect(() => {
     const controller = new AbortController();
-    api
-      .get('/conversations', { signal: controller.signal })
-      .then((r) => setConvs(Array.isArray(r.data) ? r.data : r.data?.items ?? []))
-      .catch(() => setConvs([]))
-      .finally(() => setLoading(false));
+    load(controller.signal);
     return () => controller.abort();
   }, []);
 
@@ -97,7 +141,6 @@ export function SupportPage() {
     [tickets, statusFilter, categoryFilter],
   );
 
-  // resumo (cards) — estrutura para o design
   const summary = useMemo(
     () => ({
       total: tickets.length,
@@ -108,113 +151,121 @@ export function SupportPage() {
     [tickets],
   );
 
+  const cards = [
+    { label: 'Tickets', value: summary.total, accent: 'text-base-content' },
+    { label: 'Abertos', value: summary.open, accent: 'text-emerald-600' },
+    { label: 'Escalados', value: summary.escalated, accent: summary.escalated > 0 ? 'text-red-600' : 'text-base-content' },
+    { label: 'Fechados', value: summary.closed, accent: 'text-base-content/70' },
+  ];
+
   return (
-    <div className="p-6">
-      {/* ===== Cards de resumo (estrutura — design refina) ===== */}
+    <div className="h-full overflow-auto bg-base-100 p-6">
+      {/* ===== Cabeçalho ===== */}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-base-content">🛠️ Suporte</h1>
+        <p className="text-xs text-base-content/50">
+          Tickets de atendimento que a Lia abre e resolve para os clientes do HiperTMS.
+        </p>
+      </div>
+
+      {/* ===== Cards de resumo ===== */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'Tickets', value: summary.total },
-          { label: 'Abertos', value: summary.open },
-          { label: 'Escalados', value: summary.escalated },
-          { label: 'Fechados', value: summary.closed },
-        ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-base-200 bg-white p-4 dark:bg-sidebar">
-            <div className="text-2xl font-bold text-base-content">{card.value}</div>
+        {cards.map((card) => (
+          <Card key={card.label} className="p-4">
+            <div className={`text-2xl font-bold ${card.accent}`}>{card.value}</div>
             <div className="text-xs text-base-content/50">{card.label}</div>
-          </div>
+          </Card>
         ))}
       </div>
 
-      {/* ===== Filtros (estrutura) ===== */}
+      {/* ===== Filtros ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 rounded-md border border-base-300 bg-white px-3 text-sm"
-        >
-          <option value="all">Todos os status</option>
-          <option value="open">Abertos</option>
-          <option value="escalated">Escalados</option>
-          <option value="waiting_customer">Aguardando cliente</option>
-          <option value="closed">Fechados</option>
-        </select>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="h-9 rounded-md border border-base-300 bg-white px-3 text-sm"
-        >
-          <option value="all">Todas as categorias</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+        <div className="w-48">
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">Todos os status</option>
+            <option value="open">Abertos</option>
+            <option value="escalated">Escalados</option>
+            <option value="waiting_customer">Aguardando cliente</option>
+            <option value="waiting_internal">Aguardando equipe</option>
+            <option value="closed">Fechados</option>
+          </Select>
+        </div>
+        <div className="w-48">
+          <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="all">Todas as categorias</option>
+            {Object.entries(CATEGORY_CONFIG).map(([k, cfg]) => (
+              <option key={k} value={k}>
+                {cfg.label}
+              </option>
+            ))}
+          </Select>
+        </div>
         <span className="ml-auto text-xs text-base-content/50">{filtered.length} ticket(s)</span>
       </div>
 
-      {/* ===== Tabela de tickets (estrutura) ===== */}
-      <div className="overflow-hidden rounded-xl border border-base-200 bg-white dark:bg-sidebar">
+      {/* ===== Lista de tickets ===== */}
+      <Card className="overflow-hidden">
         {loading ? (
-          <div className="p-10 text-center text-base-content/40">Carregando…</div>
+          <LoadingState label="Carregando tickets…" />
+        ) : error ? (
+          <ErrorState
+            title="Não foi possível carregar os tickets"
+            description="Verifique sua conexão e tente novamente."
+            action={
+              <Button variant="outline" size="sm" onClick={() => load()}>
+                Recarregar
+              </Button>
+            }
+          />
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-base-content/40">Nenhum ticket de suporte encontrado.</div>
+          <EmptyState
+            icon="🛠️"
+            title="Nenhum ticket de suporte"
+            description="Quando a Lia abrir um chamado de suporte, ele aparece aqui."
+          />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-base-200 text-left text-xs text-base-content/50">
-              <tr>
-                <th className="px-4 py-3 font-medium">Cliente</th>
-                <th className="px-4 py-3 font-medium">Categoria</th>
-                <th className="px-4 py-3 font-medium">Prioridade</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Última atividade</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-base-200">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Cliente</TH>
+                <TH>Categoria</TH>
+                <TH>Prioridade</TH>
+                <TH>Status</TH>
+                <TH>Última atividade</TH>
+                <TH className="text-right">Ação</TH>
+              </TR>
+            </THead>
+            <TBody>
               {filtered.map((t) => (
-                <tr key={t.id} className="hover:bg-base-100">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-base-content">{t.contact?.name || displayPhone(t.phone)}</div>
+                <TR key={t.id}>
+                  <TD>
+                    <div className="font-medium text-base-content">
+                      {t.contact?.name || displayPhone(t.phone)}
+                    </div>
                     <div className="text-xs text-base-content/50">{displayPhone(t.phone)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {t.ticketCategory ? (
-                      <span className="rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70">
-                        {CATEGORY_LABELS[t.ticketCategory] ?? t.ticketCategory}
-                      </span>
-                    ) : (
-                      <span className="text-base-content/30">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {t.ticketPriority ? (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLE[t.ticketPriority] ?? 'bg-base-200'}`}>
-                        {t.ticketPriority}
-                      </span>
-                    ) : (
-                      <span className="text-base-content/30">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[t.status] ?? 'bg-base-200'}`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-base-content/60">{timeAgo(t.lastActivityAt)}</td>
-                  <td className="px-4 py-3 text-right">
-                    {/* TODO(design): abrir o detalhe do ticket. Por ora, leva ao Inbox. */}
-                    <button
-                      onClick={() => navigate('/inbox')}
-                      className="rounded-md border border-base-300 px-3 py-1 text-xs font-medium text-base-content/70 hover:bg-base-100"
-                    >
+                  </TD>
+                  <TD>
+                    <CategoryPill cat={t.ticketCategory} />
+                  </TD>
+                  <TD>
+                    <PriorityPill pri={t.ticketPriority} />
+                  </TD>
+                  <TD>
+                    <StatusPill status={t.status} />
+                  </TD>
+                  <TD className="text-base-content/60">{timeAgo(t.lastActivityAt)}</TD>
+                  <TD className="text-right">
+                    {/* TODO(produto): abrir o detalhe do ticket. Por ora, leva ao Inbox. */}
+                    <Button variant="outline" size="sm" onClick={() => navigate('/inbox')}>
                       Abrir
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
