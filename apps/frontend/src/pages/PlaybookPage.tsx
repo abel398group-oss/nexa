@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
+import { Button } from '@/shared/ui';
 
 interface Objection { objection: string; guidance: string }
 interface Playbook {
@@ -187,9 +188,9 @@ export function PlaybookPage() {
               ↩️ Restaurar padrão
             </button>
             <div className="flex items-center gap-3">
-              <button onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-sm disabled:opacity-50">
+              <Button onClick={save} loading={saving} className="px-5">
                 {saving ? 'Salvando...' : 'Salvar playbook'}
-              </button>
+              </Button>
             </div>
           </div>
         </>

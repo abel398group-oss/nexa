@@ -93,7 +93,7 @@ export function UsersPage() {
                 })}
               </div>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -129,8 +129,8 @@ export function UsersPage() {
             )}
             {err && <p className="mb-3 text-sm text-red-500">{err}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShow(false)} className="rounded-md px-4 py-2 text-sm text-base-content/60">Cancelar</button>
-              <button disabled={busy} className="btn-primary">{busy ? 'Criando...' : 'Criar'}</button>
+              <Button type="button" variant="ghost" onClick={() => setShow(false)}>Cancelar</Button>
+              <Button type="submit" loading={busy}>{busy ? 'Criando...' : 'Criar'}</Button>
             </div>
           </form>
         </div>

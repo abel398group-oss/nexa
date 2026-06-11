@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { Button } from '@/shared/ui';
 
 interface FormState {
   fromEmail: string;
@@ -309,9 +310,9 @@ export function EmailChannelSettingsPage() {
         )}
 
         <div className="flex justify-end gap-3 border-t border-base-200 pt-4">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+          <Button type="submit" loading={saving}>
             {saving ? 'Salvando…' : 'Salvar configurações'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

@@ -4,6 +4,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
+import { Button } from '@/shared/ui';
 import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
@@ -166,13 +167,13 @@ export function SellersPage() {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <input className="input flex-1" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
           <input type="password" className="input flex-1" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button disabled={busy} className="btn-primary disabled:opacity-50">
+          <Button loading={busy}>
             {editId ? 'Salvar' : '+ Adicionar'}
-          </button>
+          </Button>
           {editId && (
-            <button type="button" onClick={cancelEdit} className="btn-ghost">
+            <Button type="button" variant="ghost" onClick={cancelEdit}>
               Cancelar
-            </button>
+            </Button>
           )}
         </div>
         <p className="text-xs text-base-content/40">
@@ -214,9 +215,9 @@ export function SellersPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => toggle(s)} className="btn-outline h-7 px-3 text-xs">
+                    <Button variant="outline" size="sm" onClick={() => toggle(s)}>
                       {s.active ? 'Desativar' : 'Ativar'}
-                    </button>
+                    </Button>
                     <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✏️</button>
                     <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
                   </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@/shared/ui';
 import {
   type Contact,
   type ImportContactInput,
@@ -208,9 +209,9 @@ export function ContactsPage() {
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && load()}
           />
-          <button onClick={load} className="btn-outline">Buscar</button>
-          <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="btn-outline">↑ Importar</button>
-          <button onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }} className="btn-primary">+ Novo</button>
+          <Button variant="outline" onClick={load}>Buscar</Button>
+          <Button variant="outline" onClick={() => { setShowImport(true); setImportMsg(''); }}>↑ Importar</Button>
+          <Button onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }}>+ Novo</Button>
         </div>
       </div>
 
@@ -302,12 +303,12 @@ export function ContactsPage() {
             ))}
             {err && <p className="mb-3 text-sm text-red-500">{err}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">
+              <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
                 Cancelar
-              </button>
-              <button disabled={busy} className="btn-primary disabled:opacity-50">
+              </Button>
+              <Button loading={busy}>
                 {busy ? 'Salvando...' : 'Salvar'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -333,9 +334,9 @@ export function ContactsPage() {
                 📎 Escolher arquivo (.csv ou .txt)
                 <input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={onPickFile} />
               </label>
-              <button type="button" onClick={baixarModelo} className="btn-outline text-xs">
+              <Button type="button" variant="outline" size="sm" onClick={baixarModelo}>
                 ⬇️ Baixar modelo
-              </button>
+              </Button>
               <span className="text-[11px] text-base-content/40">ou cole abaixo 👇</span>
             </div>
 
@@ -347,8 +348,8 @@ export function ContactsPage() {
             />
             {importMsg && <p className="mb-3 text-sm text-base-content/70">{importMsg}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowImport(false)} className="btn-ghost">Fechar</button>
-              <button disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Importando...' : 'Importar'}</button>
+              <Button type="button" variant="ghost" onClick={() => setShowImport(false)}>Fechar</Button>
+              <Button loading={busy}>{busy ? 'Importando...' : 'Importar'}</Button>
             </div>
           </form>
         </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
+import { Button } from '@/shared/ui';
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -83,7 +84,7 @@ export function DashboardPage() {
             Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s
           </p>
         </div>
-        <button onClick={load} className="btn-outline h-9 px-4 text-sm">↻ Atualizar</button>
+        <Button variant="outline" onClick={load}>↻ Atualizar</Button>
       </div>
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
