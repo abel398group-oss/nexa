@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
@@ -170,6 +170,21 @@ export class SenderService {
       }),
     );
     return withCounts;
+  }
+
+  // Detalhe de uma campanha: a campanha + destinatários (com status) + contagem.
+  async campaignDetail(tenantId: string, id: string) {
+    const campaign = await this.prisma.campaign.findFirst({ where: { id, tenantId } });
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+    const targets = await this.prisma.campaignTarget.findMany({
+      where: { campaignId: id },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+    });
+    const counts = targets.reduce(
+      (a, t) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
+      {} as Record<string, number>,
+    );
+    return { campaign, targets, counts };
   }
 
   async setStatus(tenantId: string, id: string, status: 'running' | 'paused') {

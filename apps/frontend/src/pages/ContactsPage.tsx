@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, Input, Textarea, Label, Select } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select, StatusBadge } from '@/shared/ui';
+import { Icon } from '@/components/ui/icons';
 import {
   type Contact,
   type ImportContactInput,
   type TagCount,
+  type ContactCampaign,
   listContacts,
   listTags,
   bulkTagContacts,
@@ -13,6 +15,7 @@ import {
   reactivateContact,
   deleteContact,
   importContacts,
+  getContactCampaigns,
 } from '@/features/contact';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
@@ -40,6 +43,10 @@ export function ContactsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importTag, setImportTag] = useState('');
   const [bulkTagValue, setBulkTagValue] = useState('');
+  const [showHist, setShowHist] = useState(false);
+  const [histContact, setHistContact] = useState<Contact | null>(null);
+  const [histList, setHistList] = useState<ContactCampaign[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
@@ -181,6 +188,26 @@ export function ContactsPage() {
       toast.error('Erro ao excluir alguns contatos.');
     }
   }
+
+  // ── Histórico de campanhas do contato ─────────────────────────────
+  async function openHistory(c: Contact) {
+    setHistContact(c);
+    setShowHist(true);
+    setHistLoading(true);
+    try {
+      setHistList(await getContactCampaigns(c.id));
+    } catch {
+      setHistList([]);
+    } finally {
+      setHistLoading(false);
+    }
+  }
+  const histTone = (s: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' =>
+    s === 'sent' ? 'success'
+      : s === 'failed' ? 'danger'
+      : s === 'skipped' ? 'warning'
+      : s === 'queued' || s === 'sending' ? 'info'
+      : 'neutral';
 
   async function doImport(e: React.FormEvent) {
     e.preventDefault();
@@ -418,6 +445,9 @@ export function ContactsPage() {
                 <td className="px-4 py-3 text-xs text-base-content/50">{c.source || '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
+                    <button onClick={() => openHistory(c)} title="Campanhas recebidas" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">
+                      <Icon name="campaigns" className="h-4 w-4" />
+                    </button>
                     {c.status === 'opted_out' && (
                       <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-100">↩️ Reativar</button>
                     )}
@@ -508,6 +538,42 @@ export function ContactsPage() {
             <Button loading={busy}>{busy ? 'Importando...' : 'Importar'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* modal histórico de campanhas do contato */}
+      <Modal
+        open={showHist}
+        onClose={() => setShowHist(false)}
+        title={`Campanhas recebidas — ${histContact?.name || histContact?.phone || ''}`}
+        size="md"
+      >
+        {histLoading ? (
+          <div className="py-8 text-center text-sm text-base-content/50">Carregando histórico…</div>
+        ) : histList.length === 0 ? (
+          <EmptyState
+            icon="📣"
+            title="Nenhuma campanha"
+            description="Este contato ainda não recebeu nenhuma campanha."
+          />
+        ) : (
+          <div className="space-y-2">
+            {histList.map((h, i) => (
+              <div
+                key={h.campaignId + i}
+                className="flex items-center justify-between rounded-lg border border-base-200 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-base-content">{h.name}</div>
+                  <div className="text-[11px] text-base-content/50">
+                    {h.channel === 'email' ? '✉️ e-mail' : '💬 WhatsApp'} ·{' '}
+                    {new Date(h.createdAt).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                <StatusBadge tone={histTone(h.status)}>{h.status}</StatusBadge>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
     </div>
   );

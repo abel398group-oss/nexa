@@ -6,6 +6,7 @@ export type {
   ImportContactInput,
   ContactListParams,
   ContactListResult,
+  ContactCampaign,
   TagCount,
 } from './types/contact.types';
 
@@ -18,4 +19,5 @@ export {
   reactivateContact,
   deleteContact,
   importContacts,
+  getContactCampaigns,
 } from './api/contact.api';

@@ -41,6 +41,12 @@ export class ContactsController {
     return this.contacts.findOne(tenantId ?? 'default', id);
   }
 
+  // histórico de campanhas que o contato recebeu
+  @Get(':id/campaigns')
+  campaigns(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.campaignsForContact(tenantId ?? 'default', id);
+  }
+
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateContactDto) {
     return this.contacts.create(tenantId ?? 'default', dto);

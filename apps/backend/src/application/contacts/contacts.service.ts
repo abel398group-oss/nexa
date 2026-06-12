@@ -65,6 +65,24 @@ export class ContactsService {
     return contact;
   }
 
+  // Histórico de campanhas que um contato recebeu (via CampaignTarget).
+  async campaignsForContact(tenantId: string, id: string) {
+    const contact = await this.findOne(tenantId, id);
+    const targets = await this.prisma.campaignTarget.findMany({
+      where: { tenantId, phone: contact.phone },
+      include: { campaign: { select: { id: true, name: true, channel: true, createdAt: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return targets.map((t) => ({
+      campaignId: t.campaignId,
+      name: t.campaign?.name ?? '—',
+      channel: t.campaign?.channel ?? 'whatsapp',
+      status: t.status,
+      sentAt: t.sentAt,
+      createdAt: t.createdAt,
+    }));
+  }
+
   async create(tenantId: string, dto: CreateContactDto) {
     const phone = normalizePhone(dto.phone) || dto.phone; // garante formato canônico
     // upsert por (tenantId, phone) — não duplica

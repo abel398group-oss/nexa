@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge, statusVariant } from '@/components/ui/Badge';
-import { Button, Card } from '@/shared/ui';
+import { Button, Card, StatusBadge, Modal } from '@/shared/ui';
 
 interface Campaign {
   id: string;
@@ -39,6 +39,9 @@ export function CampaignsPage() {
   const [audience, setAudience] = useState<'todos' | 'tag' | 'manual'>('todos');
   const [audienceTag, setAudienceTag] = useState('');
   const [tags, setTags] = useState<TagCount[]>([]);
+  const [detail, setDetail] = useState<any | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const location = useLocation();
   const [link, setLink] = useState('');
   const [media, setMedia] = useState<{ url: string; name: string } | null>(null);
@@ -114,6 +117,40 @@ export function CampaignsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
+
+  // abre o detalhe de uma campanha (destinatários + status)
+  async function openDetail(c: Campaign) {
+    setShowDetail(true);
+    setDetailLoading(true);
+    setDetail({ campaign: c, targets: [], counts: c.counts });
+    try {
+      const r = await api.get(`/campaigns/${c.id}`);
+      setDetail(r.data);
+    } catch {
+      /* mantém o resumo básico */
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+  const targetTone = (s: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' =>
+    s === 'sent' ? 'success'
+      : s === 'failed' ? 'danger'
+      : s === 'skipped' ? 'warning'
+      : s === 'queued' || s === 'sending' ? 'info'
+      : 'neutral';
+
+  // pré-preenche o "Nova campanha" só com os que falharam/pularam
+  function resendFailed() {
+    const failed = (detail?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
+    if (failed.length === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
+    setName(`Reenvio · ${detail.campaign.name}`);
+    setTemplate(detail.campaign.template || template);
+    setPhonesText(failed.map((t: any) => t.phone).join('\n'));
+    setAudience('manual');
+    setChannel('whatsapp');
+    setShowDetail(false);
+    setShow(true);
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -221,7 +258,11 @@ export function CampaignsPage() {
           const pct = total ? Math.round((sent / total) * 100) : 0;
           const isEmail = c.channel === 'email';
           return (
-            <Card key={c.id} className="p-5">
+            <Card
+              key={c.id}
+              onClick={() => openDetail(c)}
+              className="cursor-pointer p-5 transition-shadow hover:shadow-card-hover"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-base-content">{c.name}</span>
@@ -233,12 +274,12 @@ export function CampaignsPage() {
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <Button onClick={() => start(c)} size="sm">▶ Iniciar</Button>
+                    <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm">▶ Iniciar</Button>
                   )}
                   {c.status === 'running' && (
-                    <button onClick={() => pause(c.id)} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
+                    <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
                   )}
-                  <Button onClick={() => del(c)} title="Excluir campanha" variant="outline" size="sm" className="text-red-500 hover:bg-red-50">🗑️</Button>
+                  <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="sm" className="text-red-500 hover:bg-red-50">🗑️</Button>
                 </div>
               </div>
               {isEmail && c.subject && (
@@ -597,6 +638,64 @@ export function CampaignsPage() {
           </form>
         </div>
       )}
+
+      {/* modal de detalhe da campanha (resultados) */}
+      <Modal
+        open={showDetail}
+        onClose={() => setShowDetail(false)}
+        title={detail?.campaign?.name || 'Campanha'}
+        size="lg"
+      >
+        {detail && (
+          <>
+            <p className="mb-3 whitespace-pre-line rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+              {detail.campaign.template}
+            </p>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {Object.entries(detail.counts || {}).map(([s, n]) => (
+                <StatusBadge key={s} tone={targetTone(s)}>
+                  {s}: {n as number}
+                </StatusBadge>
+              ))}
+              {Object.keys(detail.counts || {}).length === 0 && (
+                <span className="text-xs text-base-content/40">Sem envios ainda.</span>
+              )}
+              {((detail.counts?.failed ?? 0) + (detail.counts?.skipped ?? 0)) > 0 && (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={resendFailed}>
+                  ↻ Reenviar aos que falharam
+                </Button>
+              )}
+            </div>
+            {detailLoading ? (
+              <div className="py-6 text-center text-sm text-base-content/50">Carregando destinatários…</div>
+            ) : detail.targets?.length ? (
+              <div className="max-h-80 space-y-1.5 overflow-y-auto">
+                {detail.targets.map((t: any) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between rounded-lg border border-base-200 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-base-content">{t.name || t.phone}</div>
+                      {t.error && <div className="truncate text-[11px] text-red-500">{t.error}</div>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {t.sentAt && (
+                        <span className="text-[11px] text-base-content/40">
+                          {new Date(t.sentAt).toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                      <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6 text-center text-sm text-base-content/50">Sem destinatários.</div>
+            )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import type {
   ContactInput,
   ContactListParams,
   ContactListResult,
+  ContactCampaign,
   ImportContactInput,
   TagCount,
 } from '../types/contact.types';
@@ -58,6 +59,12 @@ export async function deleteContact(id: string): Promise<void> {
 
 export async function importContacts(contacts: ImportContactInput[]): Promise<{ imported: number }> {
   const r = await api.post('/contacts/import', { contacts });
+  return r.data;
+}
+
+// Campanhas que o contato recebeu (histórico).
+export async function getContactCampaigns(id: string): Promise<ContactCampaign[]> {
+  const r = await api.get(`/contacts/${id}/campaigns`);
   return r.data;
 }
 

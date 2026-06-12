@@ -41,6 +41,16 @@ export interface TagCount {
   count: number;
 }
 
+// Uma campanha que um contato recebeu (histórico via CampaignTarget).
+export interface ContactCampaign {
+  campaignId: string;
+  name: string;
+  channel: string; // whatsapp | email
+  status: string; // queued | sending | sent | failed | skipped
+  sentAt: string | null;
+  createdAt: string;
+}
+
 export interface ContactListResult {
   items: Contact[];
   total: number;
