@@ -163,6 +163,24 @@ export function ContactsPage() {
       state: { phones: chosen.map((c) => ({ phone: c.phone, name: c.name })) },
     });
   }
+  // Exclui todos os contatos selecionados (com confirmação).
+  async function deleteSelected() {
+    const n = selected.size;
+    const ok = await confirm({
+      title: 'Excluir selecionados',
+      message: `Excluir ${n} contato(s)? Esta ação não pode ser desfeita.`,
+      variant: 'danger',
+      confirmLabel: `Excluir ${n}`,
+    });
+    if (!ok) return;
+    try {
+      await Promise.all([...selected].map((id) => deleteContact(id)));
+      toast.success(`${n} contato(s) excluído(s).`);
+      await load();
+    } catch {
+      toast.error('Erro ao excluir alguns contatos.');
+    }
+  }
 
   async function doImport(e: React.FormEvent) {
     e.preventDefault();
@@ -309,6 +327,9 @@ export function ContactsPage() {
                 />
                 <Button variant="outline" size="sm" onClick={addTagToSelected}>+ Tag</Button>
               </div>
+              <Button variant="destructive" size="sm" onClick={deleteSelected}>
+                Excluir
+              </Button>
               <button
                 onClick={() => setSelected(new Set())}
                 className="ml-auto text-xs text-base-content/50 hover:text-base-content"
