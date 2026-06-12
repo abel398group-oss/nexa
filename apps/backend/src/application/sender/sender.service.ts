@@ -290,8 +290,9 @@ export class SenderService {
       let text = this.render(campaign.template, target.name);
       if (campaign.link) text += `\n\n${campaign.link}`; // anexa o link no texto
       // anexo como LINK público (WAHA grátis não envia arquivo; link funciona).
-      // MEDIA_PUBLIC_BASE = base pública que o cliente acessa (ex.: túnel/domínio).
-      const mediaBase = process.env.MEDIA_PUBLIC_BASE;
+      // Base pública: MEDIA_PUBLIC_BASE (domínio fixo) ou, na falta, NEXA_PUBLIC_URL
+      // (o túnel atual — atualizado pelo .bat a cada subida, então o link fica válido).
+      const mediaBase = process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL;
       if (campaign.mediaUrl && mediaBase) {
         const idx = campaign.mediaUrl.indexOf('/uploads/');
         if (idx >= 0) {
@@ -307,8 +308,10 @@ export class SenderService {
         }
         await this.conversations.addMessage(campaign.tenantId, conv.id, { direction: 'outbound', content: text, intent: 'outbound_campaign' });
 
-        // anexo (PDF/Word) — envia o arquivo logo após o texto
-        if (campaign.mediaUrl) {
+        // anexo NATIVO (PDF/Word) — só quando a API oficial do WhatsApp estiver habilitada.
+        // WAHA grátis não envia arquivo; até habilitar, o material vai como link no texto (acima).
+        // Para ligar: defina WHATSAPP_MEDIA_ENABLED=true no .env.
+        if (campaign.mediaUrl && process.env.WHATSAPP_MEDIA_ENABLED === 'true') {
           await this.waha.sendFile(target.phone, campaign.mediaUrl, campaign.mediaName ?? 'arquivo', '');
         }
 

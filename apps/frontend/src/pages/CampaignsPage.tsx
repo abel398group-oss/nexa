@@ -42,6 +42,7 @@ export function CampaignsPage() {
   const [detail, setDetail] = useState<any | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
   const location = useLocation();
   const [link, setLink] = useState('');
   const [media, setMedia] = useState<{ url: string; name: string } | null>(null);
@@ -122,12 +123,13 @@ export function CampaignsPage() {
   async function openDetail(c: Campaign) {
     setShowDetail(true);
     setDetailLoading(true);
+    setDetailError(false);
     setDetail({ campaign: c, targets: [], counts: c.counts });
     try {
       const r = await api.get(`/campaigns/${c.id}`);
       setDetail(r.data);
     } catch {
-      /* mantém o resumo básico */
+      setDetailError(true);
     } finally {
       setDetailLoading(false);
     }
@@ -648,9 +650,22 @@ export function CampaignsPage() {
       >
         {detail && (
           <>
-            <p className="mb-3 whitespace-pre-line rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+            <p className="mb-2 whitespace-pre-line rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
               {detail.campaign.template}
             </p>
+            {(detail.campaign.subject || detail.campaign.mediaName || detail.campaign.link) && (
+              <div className="mb-3 space-y-1 text-xs text-base-content/60">
+                {detail.campaign.subject && (
+                  <div>📧 Assunto: <span className="text-base-content/80">{detail.campaign.subject}</span></div>
+                )}
+                {detail.campaign.mediaName && (
+                  <div>📎 Anexo: <span className="text-base-content/80">{detail.campaign.mediaName}</span></div>
+                )}
+                {detail.campaign.link && (
+                  <div className="truncate">🔗 Link: <span className="text-base-content/80">{detail.campaign.link}</span></div>
+                )}
+              </div>
+            )}
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {Object.entries(detail.counts || {}).map(([s, n]) => (
                 <StatusBadge key={s} tone={targetTone(s)}>
@@ -689,6 +704,11 @@ export function CampaignsPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            ) : detailError ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-4 text-center text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                Não foi possível carregar os destinatários.<br />
+                O backend pode estar desatualizado — feche as janelas antigas e reinicie o servidor.
               </div>
             ) : (
               <div className="py-6 text-center text-sm text-base-content/50">Sem destinatários.</div>
