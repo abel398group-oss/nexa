@@ -8,12 +8,33 @@ import type {
   ContactListParams,
   ContactListResult,
   ImportContactInput,
+  TagCount,
 } from '../types/contact.types';
 
 export async function listContacts(params: ContactListParams = {}): Promise<ContactListResult> {
   const r = await api.get('/contacts', {
-    params: { search: params.search || undefined, limit: params.limit ?? 100 },
+    params: {
+      search: params.search || undefined,
+      tag: params.tag || undefined,
+      limit: params.limit ?? 100,
+    },
   });
+  return r.data;
+}
+
+// Lista as tags distintas do tenant (com contagem).
+export async function listTags(): Promise<TagCount[]> {
+  const r = await api.get('/contacts/tags');
+  return r.data;
+}
+
+// Adiciona/remove uma tag em vários contatos de uma vez.
+export async function bulkTagContacts(
+  ids: string[],
+  tag: string,
+  mode: 'add' | 'remove' = 'add',
+): Promise<{ updated: number }> {
+  const r = await api.post('/contacts/bulk-tag', { ids, tag, mode });
   return r.data;
 }
 

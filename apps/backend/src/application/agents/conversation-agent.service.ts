@@ -62,6 +62,53 @@ export class ConversationAgentService {
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
 
+    // Sempre busca a conversa anterior mais relevante do mesmo número para manter contexto entre sessões.
+    // Usa a conversa prévia com mais dados reais (≥2 msgs inbound com conteúdo de negócio).
+    let priorHistory = '';
+    if (input.conversationId) {
+      const convPhone = await this.prisma.aiConversation
+        .findUnique({ where: { id: input.conversationId }, select: { phone: true } })
+        .catch(() => null);
+      if (convPhone?.phone) {
+        // Busca conversas anteriores com mensagens suficientes (descarta testes/conversas vazias)
+        const priorConvs = await this.prisma.aiConversation.findMany({
+          where: { tenantId, phone: convPhone.phone, id: { not: input.conversationId } },
+          orderBy: { startedAt: 'desc' },
+          take: 5,
+          select: { id: true },
+        }).catch(() => []);
+
+        for (const pc of priorConvs) {
+          const pcMsgs = await this.prisma.aiMessage.findMany({
+            where: { conversationId: pc.id },
+            orderBy: { createdAt: 'asc' },
+            select: { direction: true, content: true },
+          }).catch(() => []);
+
+          // Só aproveita conversa com ≥2 inbound com conteúdo real (>10 chars, sem palavrão/teste)
+          const realInbound = pcMsgs.filter((m: any) =>
+            m.direction === 'inbound' &&
+            m.content.length > 10 &&
+            !/puteiro|vaca|puta|traveco/i.test(m.content),
+          );
+          if (realInbound.length < 2) continue;
+
+          const filtered = pcMsgs.filter((m: any) =>
+            !m.content.startsWith('Pronto! ✅') &&
+            !/puteiro|vaca|puta|traveco/i.test(m.content),
+          );
+          priorHistory =
+            '[Contexto de conversa anterior — use estes dados sem repetir as perguntas já respondidas]\n' +
+            filtered
+              .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content.slice(0, 200)}`)
+              .join('\n') +
+            '\n[Fim do contexto anterior]\n';
+          this.logger.log(`Contexto anterior carregado para ${convPhone.phone}: conv ${pc.id.slice(0, 8)}, ${filtered.length} msgs`);
+          break; // usa só a conversa anterior mais recente com dados reais
+        }
+      }
+    }
+
     // ── ADR 022: detecção de marcador e token de handoff ───────────────────
     // Modalidade A: [via-painel-tms] → vai direto para suporte sem lookup
     const hasPanel = VIA_PANEL_MARKER.test(input.message);
@@ -119,7 +166,7 @@ export class ConversationAgentService {
     }
     // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
     const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
-    const history = msgs
+    const history = priorHistory + msgs
       .slice(-6)
       .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
       .join('\n');
@@ -154,6 +201,7 @@ export class ConversationAgentService {
           history,
           leadScore: route.leadScore,
           ongoing: liaAlreadyTalked,
+          hasPriorContext: priorHistory.length > 0,
         });
         draft = r.draft;
         suggestedAction = r.suggestedAction;

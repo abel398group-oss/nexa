@@ -6,10 +6,13 @@ export type {
   ImportContactInput,
   ContactListParams,
   ContactListResult,
+  TagCount,
 } from './types/contact.types';
 
 export {
   listContacts,
+  listTags,
+  bulkTagContacts,
   createContact,
   updateContact,
   reactivateContact,

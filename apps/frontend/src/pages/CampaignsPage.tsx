@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { listContacts, listTags, type TagCount } from '@/features/contact';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
@@ -33,6 +35,11 @@ export function CampaignsPage() {
   // pois normalmente não há e-mails cadastrados nos contatos ainda
   const [fromContacts, setFromContacts] = useState(true);
   const [phonesText, setPhonesText] = useState('');
+  // público do WhatsApp: todos ativos | por tag | manual
+  const [audience, setAudience] = useState<'todos' | 'tag' | 'manual'>('todos');
+  const [audienceTag, setAudienceTag] = useState('');
+  const [tags, setTags] = useState<TagCount[]>([]);
+  const location = useLocation();
   const [link, setLink] = useState('');
   const [media, setMedia] = useState<{ url: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -87,7 +94,26 @@ export function CampaignsPage() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
+    setAudience('todos'); setAudienceTag('');
   }
+
+  // carrega as tags para o seletor "por tag"
+  useEffect(() => {
+    listTags().then(setTags).catch(() => {});
+  }, []);
+
+  // recebe a seleção vinda da tela de Contatos ("Criar campanha com selecionados")
+  useEffect(() => {
+    const st = location.state as { phones?: { phone: string; name?: string }[] } | null;
+    if (st?.phones?.length) {
+      setPhonesText(st.phones.map((p) => p.phone).join('\n'));
+      setAudience('manual');
+      setChannel('whatsapp');
+      setShow(true);
+      window.history.replaceState({}, ''); // evita reabrir ao navegar de volta
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -107,8 +133,16 @@ export function CampaignsPage() {
         r = await api.post('/campaigns/email', payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
-        if (fromContacts) payload.fromContacts = true;
-        else payload.phones = phonesText.split('\n').map((l) => l.trim()).filter(Boolean).map((p) => ({ phone: p.replace(/\D/g, '') }));
+        if (audience === 'todos') {
+          payload.fromContacts = true;
+        } else if (audience === 'tag') {
+          const r2 = await listContacts({ tag: audienceTag, limit: 2000 });
+          payload.phones = r2.items
+            .filter((c) => c.status !== 'opted_out')
+            .map((c) => ({ phone: c.phone, name: c.name }));
+        } else {
+          payload.phones = phonesText.split('\n').map((l) => l.trim()).filter(Boolean).map((p) => ({ phone: p.replace(/\D/g, '') }));
+        }
         if (link.trim()) payload.link = link.trim();
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
@@ -446,13 +480,53 @@ export function CampaignsPage() {
                   />
                 </div>
 
-                {/* Destinatários WA */}
+                {/* Destinatários WA — seletor de público */}
                 <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
-                    <input type="checkbox" className="checkbox checkbox-sm" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
-                    Todos os contatos ativos
-                  </label>
-                  {!fromContacts && (
+                  <div className="mb-2 text-sm text-base-content/70">Quem vai receber?</div>
+                  <div className="mb-2 flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
+                    {([['todos', 'Todos ativos'], ['tag', 'Por tag'], ['manual', 'Manual']] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setAudience(k)}
+                        className={`flex-1 rounded-md py-1.5 transition-colors ${
+                          audience === k ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:text-base-content'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {audience === 'tag' && (
+                    <div>
+                      {tags.length === 0 ? (
+                        <p className="text-xs text-base-content/40">Nenhuma tag ainda — crie tags na tela de Contatos.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {tags.map((t) => (
+                            <button
+                              key={t.tag}
+                              type="button"
+                              onClick={() => setAudienceTag(audienceTag === t.tag ? '' : t.tag)}
+                              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                audienceTag === t.tag ? 'bg-brand-500 text-white' : 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                              }`}
+                            >
+                              {t.tag} <span className="opacity-60">{t.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {audienceTag && (
+                        <div className="mt-2 rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+                          → <strong className="text-base-content">{tags.find((t) => t.tag === audienceTag)?.count ?? 0} contatos</strong> com a tag "{audienceTag}" · opt-out é excluído no envio.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {audience === 'manual' && (
                     <textarea
                       className="input w-full py-2 font-mono text-sm"
                       style={{ minHeight: '90px', resize: 'vertical' }}

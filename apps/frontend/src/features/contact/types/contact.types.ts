@@ -8,6 +8,7 @@ export interface Contact {
   leadStatus?: string;
   status?: string; // active | opted_out
   source?: string;
+  tags?: string[];
   createdAt: string;
 }
 
@@ -25,11 +26,19 @@ export interface ImportContactInput {
   name?: string;
   company?: string;
   source: string;
+  tags?: string[];
 }
 
 export interface ContactListParams {
   search?: string;
   limit?: number;
+  tag?: string;
+}
+
+// Tag com contagem de contatos (para filtros e seletor de público).
+export interface TagCount {
+  tag: string;
+  count: number;
 }
 
 export interface ContactListResult {

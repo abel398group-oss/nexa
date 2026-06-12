@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Modal, Input, Textarea, Label, Select } from '@/shared/ui';
 import {
   type Contact,
   type ImportContactInput,
+  type TagCount,
   listContacts,
+  listTags,
+  bulkTagContacts,
   createContact,
   updateContact,
   reactivateContact,
@@ -31,15 +35,26 @@ export function ContactsPage() {
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'optout'>('todos');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [tags, setTags] = useState<TagCount[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importTag, setImportTag] = useState('');
+  const [bulkTagValue, setBulkTagValue] = useState('');
+  const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
 
   async function load() {
     setLoading(true);
+    setSelected(new Set());
     try {
-      const r = await listContacts({ search, limit: 100 });
+      const [r, t] = await Promise.all([
+        listContacts({ search, limit: 100, tag: tagFilter ?? undefined }),
+        listTags(),
+      ]);
       setItems(r.items);
       setTotal(r.total);
+      setTags(t);
     } finally {
       setLoading(false);
     }
@@ -48,7 +63,7 @@ export function ContactsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tagFilter]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -116,6 +131,39 @@ export function ContactsPage() {
     }
   }
 
+  // ── Seleção em massa ──────────────────────────────────────────────
+  function toggleSel(id: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function toggleAll() {
+    setSelected((s) => (s.size === shown.length ? new Set() : new Set(shown.map((c) => c.id))));
+  }
+  async function addTagToSelected() {
+    const tag = bulkTagValue.trim();
+    if (!tag) { toast.error('Digite o nome da tag.'); return; }
+    try {
+      await bulkTagContacts([...selected], tag, 'add');
+      toast.success(`Tag "${tag}" adicionada a ${selected.size} contato(s).`);
+      setBulkTagValue('');
+      await load();
+    } catch {
+      toast.error('Erro ao adicionar tag.');
+    }
+  }
+  // Leva os selecionados (ativos) para a tela de Disparo, já como público manual.
+  function createCampaignFromSelected() {
+    const chosen = items.filter((c) => selected.has(c.id) && c.status !== 'opted_out');
+    if (chosen.length === 0) { toast.error('Selecione contatos ativos.'); return; }
+    navigate('/campaigns', {
+      state: { phones: chosen.map((c) => ({ phone: c.phone, name: c.name })) },
+    });
+  }
+
   async function doImport(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -128,13 +176,21 @@ export function ContactsPage() {
         .filter(Boolean)
         .map((l) => {
           const [phone, name, company] = l.split(/[,;\t]/).map((x) => x?.trim());
-          return { phone: (phone || '').replace(/\D/g, ''), name: name || undefined, company: company || undefined, source: 'import' };
+          const tag = importTag.trim();
+          return {
+            phone: (phone || '').replace(/\D/g, ''),
+            name: name || undefined,
+            company: company || undefined,
+            source: 'import',
+            tags: tag ? [tag] : undefined,
+          };
         })
         .filter((c) => c.phone.length >= 12);
       if (contacts.length === 0) { toast.error('Nenhum telefone válido (use 55+DDD+número).'); setBusy(false); return; }
       const r = await importContacts(contacts);
       toast.success(`${r.imported} contatos importados.`);
       setCsv('');
+      setImportTag('');
       setShowImport(false);
       await load();
     } catch (e: any) {
@@ -155,11 +211,13 @@ export function ContactsPage() {
 
   // baixa um arquivo-modelo de exemplo
   function baixarModelo() {
+    // ; como separador (Excel pt-BR abre em colunas) + BOM (acentos corretos)
     const exemplo =
-      'telefone,nome,empresa\n' +
-      '5511999998888,João Silva,Transportadora Silva\n' +
-      '5511988887777,Maria Souza,Souza Logística\n' +
-      '5511977776666,,';
+      '﻿' +
+      'telefone;nome;empresa\n' +
+      '5511999998888;João Silva;Transportadora Silva\n' +
+      '5511988887777;Maria Souza;Souza Logística\n' +
+      '5511977776666;;';
     const blob = new Blob([exemplo], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -177,6 +235,11 @@ export function ContactsPage() {
     };
     return map[s ?? ''] || 'bg-base-200 text-base-content/60';
   };
+
+  const chipCls = (active: boolean) =>
+    `rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+      active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/70 hover:bg-base-300'
+    }`;
 
   const optOutCount = items.filter((c) => c.status === 'opted_out').length;
   const shown = items.filter((c) =>
@@ -215,6 +278,48 @@ export function ContactsPage() {
         </div>
       </div>
 
+      {/* filtro por tag + barra de seleção em massa */}
+      {(tags.length > 0 || selected.size > 0) && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-base-200 bg-[var(--surface)] px-6 py-2.5">
+          {selected.size === 0 ? (
+            <>
+              <span className="text-xs text-base-content/50">Tags:</span>
+              <button onClick={() => setTagFilter(null)} className={chipCls(tagFilter === null)}>Todas</button>
+              {tags.map((t) => (
+                <button
+                  key={t.tag}
+                  onClick={() => setTagFilter(tagFilter === t.tag ? null : t.tag)}
+                  className={chipCls(tagFilter === t.tag)}
+                >
+                  {t.tag} <span className="opacity-60">{t.count}</span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <span className="text-sm font-semibold text-brand-600">{selected.size} selecionado(s)</span>
+              <Button size="sm" onClick={createCampaignFromSelected}>Criar campanha</Button>
+              <div className="flex items-center gap-1">
+                <Input
+                  className="!w-40"
+                  placeholder="nome da tag"
+                  value={bulkTagValue}
+                  onChange={(e) => setBulkTagValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addTagToSelected()}
+                />
+                <Button variant="outline" size="sm" onClick={addTagToSelected}>+ Tag</Button>
+              </div>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="ml-auto text-xs text-base-content/50 hover:text-base-content"
+              >
+                Limpar seleção
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* tabela */}
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
@@ -234,9 +339,19 @@ export function ContactsPage() {
         <table className="w-full overflow-hidden rounded-xl text-sm" style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
           <thead className="border-b text-left text-xs uppercase" style={{ background: 'var(--surface-muted)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             <tr>
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={shown.length > 0 && selected.size === shown.length}
+                  onChange={toggleAll}
+                  className="size-4 align-middle accent-brand-500"
+                  title="Selecionar todos"
+                />
+              </th>
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">Telefone</th>
               <th className="px-4 py-3">Empresa</th>
+              <th className="px-4 py-3">Tags</th>
               <th className="px-4 py-3">Lead</th>
               <th className="px-4 py-3">Origem</th>
               <th className="px-4 py-3 text-right">Ações</th>
@@ -244,7 +359,15 @@ export function ContactsPage() {
           </thead>
           <tbody>
             {shown.map((c) => (
-              <tr key={c.id} className={`border-b last:border-0 hover:bg-base-100 ${c.status === 'opted_out' ? 'opacity-60' : ''}`} style={{ borderColor: 'var(--border)' }}>
+              <tr key={c.id} className={`border-b last:border-0 hover:bg-base-100 ${c.status === 'opted_out' ? 'opacity-60' : ''} ${selected.has(c.id) ? 'bg-brand-500/[0.06]' : ''}`} style={{ borderColor: 'var(--border)' }}>
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.id)}
+                    onChange={() => toggleSel(c.id)}
+                    className="size-4 align-middle accent-brand-500"
+                  />
+                </td>
                 <td className="px-4 py-3 font-medium text-base-content">
                   {c.name || '—'}
                   {c.status === 'opted_out' && (
@@ -253,6 +376,19 @@ export function ContactsPage() {
                 </td>
                 <td className="px-4 py-3 text-base-content/80">{c.phone}</td>
                 <td className="px-4 py-3 text-base-content/80">{c.company || '—'}</td>
+                <td className="px-4 py-3">
+                  {c.tags && c.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {c.tags.map((t) => (
+                        <span key={t} className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-base-content/30">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${badge(c.leadStatus)}`}>
                     {c.leadStatus || 'novo'}
@@ -325,6 +461,18 @@ export function ContactsPage() {
               ⬇️ Baixar modelo
             </Button>
             <span className="text-[11px] text-base-content/40">ou cole abaixo 👇</span>
+          </div>
+
+          <div>
+            <Label className="mb-1 block text-xs text-base-content/60">Tag desta importação (opcional)</Label>
+            <Input
+              placeholder="Ex.: Feira-Junho, Lista-Indicação"
+              value={importTag}
+              onChange={(e) => setImportTag(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] text-base-content/40">
+              Todos os contatos deste arquivo entram com essa tag — facilita escolher na campanha.
+            </p>
           </div>
 
           <Textarea
