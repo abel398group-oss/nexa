@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { TenantProvider, TenantGate } from '@/contexts/TenantContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ConfirmProvider } from '@/contexts/ConfirmContext';
 import { Layout } from '@/components/Layout';
@@ -28,6 +29,7 @@ export default function App() {
     <ToastProvider>
     <ConfirmProvider>
     <AuthProvider>
+    <TenantProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -35,7 +37,9 @@ export default function App() {
           <Route
             element={
               <Protected>
-                <Layout />
+                <TenantGate>
+                  <Layout />
+                </TenantGate>
               </Protected>
             }
           >
@@ -56,6 +60,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Routes>
       </BrowserRouter>
+    </TenantProvider>
     </AuthProvider>
     </ConfirmProvider>
     </ToastProvider>

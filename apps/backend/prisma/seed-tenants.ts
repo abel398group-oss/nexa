@@ -22,20 +22,36 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, '') || 'tenant';
 }
 
+// Roda uma query distinct; se a tabela não existir neste banco (drift), pula.
+async function safeDistinct(
+  label: string,
+  query: () => Promise<{ tenantId: string | null }[]>,
+): Promise<{ tenantId: string | null }[]> {
+  try {
+    return await query();
+  } catch (e: any) {
+    if (e?.code === 'P2021') {
+      console.warn(`(pulando) tabela de "${label}" não existe neste banco`);
+      return [];
+    }
+    throw e;
+  }
+}
+
 // Coleta tenantId distinto de cada tabela relevante e une num Set.
 async function collectTenantIds(): Promise<string[]> {
   const set = new Set<string>();
   const add = (rows: { tenantId: string | null }[]) =>
     rows.forEach((r) => r.tenantId && set.add(r.tenantId));
 
-  add(await prisma.contact.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.aiConversation.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.seller.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.campaign.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.emailChannel.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.aiKnowledgeBase.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.notification.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
-  add(await prisma.user.findMany({ distinct: ['tenantId'], select: { tenantId: true } }));
+  add(await safeDistinct('contacts', () => prisma.contact.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('aiConversation', () => prisma.aiConversation.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('seller', () => prisma.seller.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('campaign', () => prisma.campaign.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('emailChannel', () => prisma.emailChannel.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('aiKnowledgeBase', () => prisma.aiKnowledgeBase.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('notification', () => prisma.notification.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
+  add(await safeDistinct('user', () => prisma.user.findMany({ distinct: ['tenantId'], select: { tenantId: true } })));
 
   return [...set];
 }

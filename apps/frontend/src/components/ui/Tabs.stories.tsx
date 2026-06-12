@@ -5,6 +5,7 @@ const meta = {
   title: 'Primitivos/Tabs',
   component: Tabs,
   tags: ['autodocs'],
+  args: { children: '' },
 } satisfies Meta<typeof Tabs>;
 export default meta;
 
