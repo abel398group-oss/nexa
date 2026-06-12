@@ -592,7 +592,19 @@ export function CampaignsPage() {
                       <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
                              onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} className="text-xs" />
                       {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
-                      {media && <span className="text-xs text-emerald-600 truncate">✅ {media.name}</span>}
+                      {media && (
+                        <>
+                          <span className="text-xs text-emerald-600">✅ arquivo enviado</span>
+                          <input
+                            className="input mt-1 w-full text-xs"
+                            value={media.name}
+                            onChange={(e) => setMedia({ ...media, name: e.target.value })}
+                            placeholder="Nome do anexo (ex.: Nossa apresentação)"
+                            title="Nome que aparece pro cliente na mensagem"
+                          />
+                          <span className="text-[10px] text-base-content/35">É esse nome que vai antes do link do PDF na mensagem.</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
