@@ -72,6 +72,31 @@
   --shadow-inner-soft: inset 0 2px 4px 0 rgb(0 0 0 / 0.04);
   --shadow-up:         0 -2px 10px rgb(0 0 0 / 0.06);
   --shadow-glow-brand: 0 0 26px -4px rgb(255 90 31 / 0.30);
+
+  /* ===== Tokens herdados do HiperTMS (paridade visual completa) ===== */
+  /* Secundário navy — gráficos e gradiente assinatura */
+  --color-navy:       #1e3a5f;
+  --color-navy-700:   #16304d;
+
+  /* Acentos quentes + família "ink" (carvão) */
+  --accent-warm:      #ff7a47;
+  --accent-warm-soft: #ff8a5c;
+  --ink-900: #0e0f13;
+  --ink-800: #16181d;
+  --ink-700: #1f222a;
+
+  /* Status como pílulas de tinta suave (tint = fundo, ink = texto) */
+  --success-tint: #dcfce7; --success-ink: #166534;
+  --warning-tint: #fef3c7; --warning-ink: #92400e;
+  --danger-tint:  #fee2e2; --danger-ink:  #991b1b;
+  --info-tint:    #e0f2fe; --info-ink:    #075985;
+  --neutral-tint: #f2f2f0; --neutral-ink: #44464d;
+
+  /* Glows extras + easings canônicos */
+  --shadow-glow-danger:  0 0 20px -4px rgb(220 38 38 / 0.30);
+  --shadow-glow-success: 0 0 20px -4px rgb(22 163 74 / 0.30);
+  --ease-entrance: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-layout:   cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* h1, h2 — font override (igual TMS) */
@@ -133,6 +158,18 @@ html.dark {
   --shadow-tw-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-tw-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
   --shadow-tw-xl: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+
+  /* Status tints — overrides dark (igual TMS) */
+  --success-tint: rgba(22, 163, 74, 0.22);  --success-ink: #86efac;
+  --warning-tint: rgba(249, 115, 22, 0.20); --warning-ink: #fdba74;
+  --danger-tint:  rgba(220, 38, 38, 0.20);  --danger-ink:  #fca5a5;
+  --info-tint:    rgba(2, 132, 199, 0.22);  --info-ink:    #7dd3fc;
+  --neutral-tint: #1f222a;                  --neutral-ink: #a1a1aa;
+}
+
+/* Gradiente assinatura do design system: 135° ignição → brasa → navy (igual TMS) */
+.bg-signature {
+  background-image: linear-gradient(135deg, #ff5a1f 0%, #ed4708 50%, #1e3a5f 100%);
 }
 
 /* ===== BASE LAYOUT — igual ao TMS ===== */

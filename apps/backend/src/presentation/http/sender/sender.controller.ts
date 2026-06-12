@@ -51,6 +51,11 @@ export class SenderController {
     return this.sender.listCampaigns(tenantId ?? 'default');
   }
 
+  @Get('campaigns/:id')
+  detail(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sender.campaignDetail(tenantId ?? 'default', id);
+  }
+
   @Post('campaigns')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateCampaignDto) {
     return this.sender.createCampaign(tenantId ?? 'default', dto);

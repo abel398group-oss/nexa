@@ -3,8 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { EffectiveTenantInterceptor } from './shared/tenant/effective-tenant.interceptor';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { AiModule } from './shared/ai/ai.module';
 import { GovernanceModule } from './shared/governance/governance.module';
@@ -37,7 +38,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
-    // rate limiting (E1 — padrão TMS): 100 req/min por IP
+    // rate limiting (E1 - padrao TMS): 100 req/min por IP
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     // Logger estruturado (pino) com correlationId no contexto
     LoggerModule.forRoot({
@@ -79,10 +80,14 @@ import { HealthController } from './presentation/http/health/health.controller';
     SenderModule,
     FollowUpModule,
     UsersModule,
-    // Próximos módulos de feature: router, sales, supervisor ...
+    // Proximos modulos de feature: router, sales, supervisor ...
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }], // rate limit global (E1)
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard }, // rate limit global (E1)
+    // resolve o tenant efetivo (platform admin) + somente-leitura na Fase 1
+    { provide: APP_INTERCEPTOR, useClass: EffectiveTenantInterceptor },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

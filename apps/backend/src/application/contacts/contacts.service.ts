@@ -8,7 +8,7 @@ import { normalizePhone } from '@/shared/utils/phone.util';
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(tenantId: string, q: PaginationQueryDto): Promise<Paginated<any>> {
+  async findAll(tenantId: string, q: PaginationQueryDto, tag?: string): Promise<Paginated<any>> {
     const where: any = { tenantId };
     if (q.search) {
       where.OR = [
@@ -17,6 +17,7 @@ export class ContactsService {
         { company: { contains: q.search, mode: 'insensitive' } },
       ];
     }
+    if (tag) where.tags = { has: tag };
     const [items, total] = await Promise.all([
       this.prisma.contact.findMany({
         where,
@@ -29,10 +30,57 @@ export class ContactsService {
     return { items, total };
   }
 
+  // Lista as tags distintas do tenant com a contagem de contatos (para filtros e seletor de público).
+  async listTags(tenantId: string): Promise<{ tag: string; count: number }[]> {
+    const rows = await this.prisma.contact.findMany({ where: { tenantId }, select: { tags: true } });
+    const counts = new Map<string, number>();
+    for (const r of rows) for (const t of r.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // Adiciona ou remove uma tag em vários contatos de uma vez (sem duplicar).
+  async bulkTag(tenantId: string, ids: string[], tag: string, mode: 'add' | 'remove' = 'add') {
+    const clean = (tag ?? '').trim();
+    if (!clean || !ids?.length) return { updated: 0 };
+    const contacts = await this.prisma.contact.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true, tags: true },
+    });
+    let updated = 0;
+    for (const c of contacts) {
+      const set = new Set(c.tags ?? []);
+      if (mode === 'add') set.add(clean);
+      else set.delete(clean);
+      await this.prisma.contact.update({ where: { id: c.id }, data: { tags: [...set] } });
+      updated++;
+    }
+    return { updated };
+  }
+
   async findOne(tenantId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({ where: { id, tenantId } });
     if (!contact) throw new NotFoundException('Contato não encontrado');
     return contact;
+  }
+
+  // Histórico de campanhas que um contato recebeu (via CampaignTarget).
+  async campaignsForContact(tenantId: string, id: string) {
+    const contact = await this.findOne(tenantId, id);
+    const targets = await this.prisma.campaignTarget.findMany({
+      where: { tenantId, phone: contact.phone },
+      include: { campaign: { select: { id: true, name: true, channel: true, createdAt: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return targets.map((t) => ({
+      campaignId: t.campaignId,
+      name: t.campaign?.name ?? '—',
+      channel: t.campaign?.channel ?? 'whatsapp',
+      status: t.status,
+      sentAt: t.sentAt,
+      createdAt: t.createdAt,
+    }));
   }
 
   async create(tenantId: string, dto: CreateContactDto) {

@@ -48,9 +48,19 @@
 | # | Prioridade | Tarefa | Notas |
 |---|---|---|---|
 | TMS-1 | 🟡 | Uelder criar endpoint `GET /api/companies/by-phone` no TMS | Nexa chama para enriquecer lead com dados do cliente TMS |
-| TMS-2 | 🟡 | Preencher `TMS_API_BASE_URL`, `TMS_SERVICE_TOKEN`, `TMS_TENANT_ID` no `.env` | Só após TMS-1 |
+| TMS-2 | 🟡 | Preencher `TMS_API_BASE_URL`, `TMS_SERVICE_TOKEN`, `TMS_TENANT_ID` no `.env` | Só após TMS-1/TMS-5 |
 | TMS-3 | 🟢 | Handoff Modalidade B — Uelder chamar endpoint do Nexa ao abrir chamado | `POST /api/handoff/from-tms` já implementado no Nexa |
 | TMS-4 | 🟢 | Handoff Modalidade A — Uelder adicionar botão "Abrir no Nexa" no painel TMS | HTML simples apontando para o Nexa |
+| TMS-5 | 🔴 | Uelder criar endpoint `GET /api/plans` no TMS | **Nexa pronto** (`getPlans()` chama ao vivo c/ fallback p/ catálogo). Faz a Lia vender sempre o preço atual do TMS |
+| TMS-6 | 🟢 | Uelder criar endpoint `GET /api/health` no TMS | **Nexa pronto** (`healthCheck()` faz ping real). Saúde do conector reflete conexão real |
+
+### Contrato esperado pelo Nexa (lado consumidor JÁ pronto)
+
+Todos com header `x-internal-token: <TMS_SERVICE_TOKEN>`, timeout 5s. Se a chamada falhar, o Nexa cai no catálogo de fallback — nunca quebra a venda.
+
+- **`GET /api/plans?tenantId=<id>`** → `{ "plans": [ { "code": "basico", "name": "Básico", "price": 89, "maxUsers": 1, "features": ["CT-e", "..."] } ] }` (aceita também o array direto, e os aliases `id/title/priceMonthly/userLimit`).
+- **`GET /api/health`** → `200 OK` quando o TMS está no ar.
+- **`GET /api/companies/by-phone?phone=<e164>&tenantId=<id>`** → `{ "found": bool, "company": { externalId, name, email, plan, status, createdAt } }`.
 
 ---
 

@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button, Input, Alert } from '@/shared/ui';
 
-const FEATURES = [
-  'Qualificação automática de leads 24h',
-  'Respostas personalizadas com IA + RAG',
-  'Handoff instantâneo para vendedores',
-  'Supervisor de qualidade em cada mensagem',
-];
+// Ícones inline (nexa não usa lucide) — mostrar/ocultar senha.
+function EyeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function EyeOffIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.39M6.6 6.6A13.3 13.3 0 0 0 2 12s3.5 7 10 7a9.1 9.1 0 0 0 5.4-1.6" />
+      <path d="m3 3 18 18" />
+    </svg>
+  );
+}
 
 export function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -32,123 +45,94 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="relative isolate flex min-h-app flex-col items-center justify-center overflow-hidden px-4 py-14">
+      {/* fundo: degradê suave + brilho laranja no topo (igual ao TMS) */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#f3ede8]/80 via-base-200 to-base-200" aria-hidden />
+      <div
+        className="pointer-events-none absolute -top-32 left-1/2 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full bg-gradient-to-b from-brand-500/[0.12] to-transparent blur-3xl"
+        aria-hidden
+      />
 
-      {/* ===== PAINEL DE MARCA (esquerdo) ===== */}
-      <div className="hidden lg:flex w-[44%] flex-col justify-between bg-sidebar px-12 py-10">
-        {/* logo */}
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-base font-bold text-white">
-            N
-          </span>
-          <span className="text-xl font-semibold tracking-tight text-white">Nexa</span>
-        </div>
-
-        {/* headline */}
-        <div>
-          <blockquote className="text-[1.65rem] font-semibold leading-snug text-white">
-            "A sua equipe de vendas&nbsp;que nunca dorme."
-          </blockquote>
-          <p className="mt-4 text-sm leading-relaxed text-white/55">
-            A Lia atende leads no WhatsApp 24 horas, classifica intenção em
-            tempo real e entrega os quentes direto para o seu time — em segundos.
-          </p>
-          <ul className="mt-8 space-y-3">
-            {FEATURES.map((f) => (
-              <li key={f} className="flex items-center gap-2.5 text-sm text-white/70">
-                <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
-                  style={{ background: 'var(--sidebar-accent)', color: '#1a1827' }}
-                >
-                  ✓
+      <div className="relative w-full max-w-[440px]">
+        {/* borda laranja em degradê = o "glow" do card */}
+        <div className="rounded-[1.35rem] bg-gradient-to-br from-[#FF5A1F] via-[#ED4708] to-[#FF8A5C] p-[1px] shadow-[0_24px_56px_-16px_rgb(255_90_31_/_0.35),0_12px_28px_-12px_rgb(0_0_0_/_0.25)]">
+          <div className="rounded-[calc(1.35rem-1px)] bg-base-100 px-7 pb-9 pt-10 sm:px-9">
+            {/* logo + título */}
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-base font-bold text-white">
+                  N
                 </span>
-                {f}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* rodapé */}
-        <p className="text-xs text-white/25">© 2026 Nexa · Plataforma de IA Comercial B2B</p>
-      </div>
-
-      {/* ===== FORMULÁRIO (direito) ===== */}
-      <div className="flex flex-1 items-center justify-center bg-base-100 px-6 py-10">
-        <div className="w-full max-w-sm">
-
-          {/* logo mobile (só aparece em telas menores) */}
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-            <span className="text-lg font-semibold text-base-content">Nexa</span>
-          </div>
-
-          {/* título */}
-          <h2 className="text-2xl font-bold text-base-content">Bem-vindo de volta</h2>
-          <p className="mt-1 text-sm text-base-content/50">Entre com suas credenciais para continuar.</p>
-
-          {/* form */}
-          <form onSubmit={onSubmit} className="mt-8 space-y-5">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-base-content">
-                Email
-              </label>
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                className="input"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-base-content">
-                Senha
-              </label>
-              <input
-                type="password"
-                autoComplete="current-password"
-                required
-                className="input"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            {/* erro */}
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">
-                <span>⚠️</span>
-                {error}
+                <span className="text-2xl font-bold tracking-tight text-base-content">Nexa</span>
               </div>
-            )}
+              <h1 className="mt-8 text-2xl font-extrabold tracking-tight text-base-content">Bem-vindo de volta</h1>
+              <p className="mt-1.5 text-sm text-base-content/55">Entre com suas credenciais para continuar.</p>
+            </div>
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="btn-primary w-full justify-center"
-            >
-              {busy ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Entrando…
-                </span>
-              ) : (
-                'Entrar'
+            <form className="mt-9 space-y-5" onSubmit={onSubmit}>
+              <div className="flex flex-col gap-1.5 text-left">
+                <label className="text-sm font-medium text-base-content" htmlFor="email">
+                  Email
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="nome@empresa.com.br"
+                  className="!h-12 !rounded-xl text-base"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 text-left">
+                <label className="text-sm font-medium text-base-content" htmlFor="password">
+                  Senha
+                </label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="!h-12 !rounded-xl pr-12 text-base"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-base-content/45 transition-colors hover:bg-base-200 hover:text-base-content"
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <Alert tone="danger" className="text-sm">
+                  {error}
+                </Alert>
               )}
-            </button>
-          </form>
 
-          {/* dica de rodapé */}
-          <p className="mt-6 text-center text-xs text-base-content/35">
-            Acesso restrito · Nexa v0.1
-          </p>
+              <Button
+                type="submit"
+                loading={busy}
+                className="mt-2 !h-12 w-full justify-center !rounded-xl text-base font-semibold"
+              >
+                {busy ? 'Entrando…' : 'Entrar'}
+              </Button>
+            </form>
+
+            <p className="mt-8 text-center text-xs leading-relaxed text-base-content/45">
+              Acesso restrito · Nexa v0.1
+            </p>
+          </div>
         </div>
       </div>
-
     </div>
   );
 }

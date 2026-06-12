@@ -1,4 +1,7 @@
-﻿# ADR 002 — Campanhas e Filtro TMS
+﻿# ADR 024 — Campanhas e Filtro TMS
+
+> Renumerada de `architecture/decisions/002-campaigns.md` na consolidação de ADRs
+> (2026-06-11).
 
 ## Status: Aceito
 

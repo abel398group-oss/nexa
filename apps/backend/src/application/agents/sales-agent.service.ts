@@ -44,7 +44,7 @@ export class SalesAgentService {
   // Conduz a venda: qualifica, recomenda plano, sugere próximo passo (NÃO executa — ADR 012).
   async sell(
     tenantId: string,
-    input: { question: string; productCode?: string; history?: string; leadScore?: number; ongoing?: boolean },
+    input: { question: string; productCode?: string; history?: string; leadScore?: number; ongoing?: boolean; hasPriorContext?: boolean },
   ): Promise<SalesReply> {
     const productCode = input.productCode ?? 'hipertms';
     const [kb, plans, cfg] = await Promise.all([
@@ -71,11 +71,16 @@ export class SalesAgentService {
       ? 'IMPORTANTE: a conversa JÁ ESTÁ EM ANDAMENTO. NÃO cumprimente de novo (proibido "bom dia/boa tarde/olá/oi" e proibido se reapresentar). Responda direto ao ponto. '
       : `Este é o PRIMEIRO contato: cumprimente UMA vez com "${SalesAgentService.greeting()}" e apresente-se brevemente. `;
 
+    const priorContextRule = input.hasPriorContext
+      ? 'RETOMADA: o histórico acima contém conversas anteriores com este lead. Retome ativamente: mencione o que ele já informou (ex.: "você mencionou X caminhões antes") e continue de onde parou, sem repetir perguntas já respondidas. Se o lead voltou após opt-out, trate com naturalidade — sem drama nem explicação sobre o opt-out. '
+      : '';
+
     const system =
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
       (cfg.persona ? `${cfg.persona} ` : '') +
       greetingRule +
-      'Fale em português do Brasil, tom cordial e consultivo, curto (WhatsApp, 2-5 linhas). Use emojis com moderação. ' +
+      priorContextRule +
+      'Fale em português do Brasil, com tom profissional e institucional (negociação entre empresas) e postura consultiva, em mensagens curtas de WhatsApp (2-5 linhas). Evite emojis e gírias. ' +
       'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente.\n\n' +
       'VOCÊ CONDUZ A VENDA POR ESTÁGIOS. Descubra em qual estágio a conversa está (pelo histórico) e cumpra o objetivo dele:\n' +
       '1) SAUDAÇÃO: acolher e descobrir o motivo do contato.\n' +
@@ -131,8 +136,8 @@ export class SalesAgentService {
     } catch (e: any) {
       this.logger.warn(`Sales fallback (${e?.message})`);
       const draft =
-        `Temos planos a partir de R$89/mês. Pra te indicar o ideal, me conta: ` +
-        `quantos veículos/motoristas a sua operação tem hoje? 🚚`;
+        `Temos planos a partir de R$89/mês. Para indicar o ideal para a sua operação, me conte: ` +
+        `quantos veículos a sua frota tem hoje e qual o volume aproximado de documentos fiscais por mês?`;
       return { draft, suggestedAction: 'none', usedKnowledge: [], allowedFacts, confidence: 'low', model: AI_MODEL };
     }
   }

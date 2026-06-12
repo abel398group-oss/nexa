@@ -8,6 +8,7 @@ import { CommandPalette, Command } from '@/components/ui/CommandPalette';
 import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { Icon, type IconName } from '@/components/ui/icons';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa! 👋', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
@@ -18,21 +19,23 @@ const TOUR_STEPS: TourStep[] = [
   { selector: '[data-tour="killswitch"]', title: 'Controle da IA', text: 'Ligue/desligue a resposta automática da Lia a qualquer momento (botão de pânico).' },
 ];
 
-const items = [
-  { to: '/dashboard', label: 'Painel', icon: '📊', perm: 'dashboard' },
-  { to: '/inbox', label: 'Inbox', icon: '💬', perm: 'inbox' },
-  { to: '/contacts', label: 'Contatos', icon: '👥', perm: 'contacts' },
-  { to: '/knowledge', label: 'Conhecimento', icon: '📚', perm: 'knowledge' },
-  { to: '/sellers', label: 'Vendedores', icon: '🧑‍💼', perm: 'sellers' },
-  { to: '/campaigns', label: 'Disparo', icon: '📣', perm: 'campaigns' },
-  { to: '/playbook', label: 'Playbook IA', icon: '🎯', perm: 'ai_control' },
-  { to: '/users', label: 'Usuários', icon: '🔐', perm: 'users' },
-  { to: '/settings/email-channel', label: 'Canal de E-mail', icon: '✉️', perm: 'admin' },
+const items: { to: string; label: string; icon: string; ic: IconName; perm: string }[] = [
+  { to: '/dashboard', label: 'Painel', icon: '📊', ic: 'dashboard', perm: 'dashboard' },
+  { to: '/inbox', label: 'Inbox', icon: '💬', ic: 'inbox', perm: 'inbox' },
+  { to: '/support', label: 'Suporte', icon: '🛠️', ic: 'support', perm: 'inbox' },
+  { to: '/contacts', label: 'Contatos', icon: '👥', ic: 'contacts', perm: 'contacts' },
+  { to: '/knowledge', label: 'Conhecimento', icon: '📚', ic: 'knowledge', perm: 'knowledge' },
+  { to: '/sellers', label: 'Vendedores', icon: '🧑‍💼', ic: 'sellers', perm: 'sellers' },
+  { to: '/campaigns', label: 'Disparo', icon: '📣', ic: 'campaigns', perm: 'campaigns' },
+  { to: '/playbook', label: 'Playbook IA', icon: '🎯', ic: 'playbook', perm: 'ai_control' },
+  { to: '/users', label: 'Usuários', icon: '🔐', ic: 'users', perm: 'users' },
+  { to: '/settings/email-channel', label: 'Canal de E-mail', icon: '✉️', ic: 'mail', perm: 'admin' },
 ];
 
 const titles: Record<string, string> = {
   '/dashboard': 'Painel',
   '/inbox': 'Inbox',
+  '/support': 'Suporte',
   '/contacts': 'Contatos',
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',
@@ -71,7 +74,7 @@ function KillSwitch() {
         on ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-base-300 bg-white text-base-content hover:bg-base-100'
       }`}
     >
-      <span>{on ? '🤖' : '⏸️'}</span>
+      <Icon name="bot" className="h-4 w-4" />
       IA {on === null ? '...' : on ? 'ON' : 'OFF'}
     </button>
   );
@@ -118,7 +121,7 @@ function AccountMenu() {
             onClick={logout}
             className="flex w-full items-center gap-2 border-t border-base-200 px-4 py-2.5 text-left text-sm text-base-content/70 transition-colors hover:bg-base-100"
           >
-            ⏻ Sair
+            <Icon name="power" className="h-4 w-4" /> Sair
           </button>
         </div>
       )}
@@ -144,7 +147,7 @@ function MoreMenu({ dark, onToggleTheme, onTour }: { dark: boolean; onToggleThem
         title="Mais opções"
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
       >
-        ⋯
+        <Icon name="dots" className="h-5 w-5" />
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
@@ -267,7 +270,7 @@ export function Layout() {
                   {isActive && (
                     <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
                   )}
-                  <span className="text-base">{it.icon}</span>
+                  <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
                   {!collapsed && <span className="truncate">{it.label}</span>}
                 </>
               )}
@@ -282,7 +285,7 @@ export function Layout() {
             collapsed ? 'justify-center px-0' : 'gap-3 px-3'
           }`}
         >
-          <span className="text-base">{collapsed ? '»' : '«'}</span>
+          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} className="h-5 w-5 shrink-0" />
           {!collapsed && <span>Recolher</span>}
         </button>
         {!collapsed && (
@@ -306,7 +309,7 @@ export function Layout() {
               title="Busca rápida (Ctrl+K)"
               className="inline-flex h-8 items-center gap-2 rounded-md border border-base-300 bg-white px-3 text-xs font-medium text-base-content/60 transition-colors hover:bg-base-100"
             >
-              🔍 Buscar
+              <Icon name="search" className="h-4 w-4" /> Buscar
               <kbd className="rounded border border-base-300 bg-base-100 px-1 text-[10px] text-base-content/50">Ctrl K</kbd>
             </button>
             {/* ajuda contextual — só aparece quando existe */}
@@ -317,7 +320,7 @@ export function Layout() {
                 title="Como usar esta tela"
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-base-300 bg-white px-3 text-xs font-medium text-base-content transition-colors hover:bg-base-100"
               >
-                ? Ajuda
+                <Icon name="help" className="h-4 w-4" /> Ajuda
               </button>
             )}
             {/* kill switch — visível para quem tem permissão */}
@@ -328,7 +331,7 @@ export function Layout() {
               title="Alternar tema claro/escuro"
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
             >
-              {dark ? '☀️' : '🌙'}
+              <Icon name={dark ? 'sun' : 'moon'} className="h-[18px] w-[18px]" />
             </button>
             {/* notificações */}
             <NotificationBell />

@@ -184,19 +184,19 @@ export class WhatsappService {
       return { ok: true, phone: n.phone, optOut: true, confirmed: !wasOptedOut };
     }
 
-    // 2b) contato JÁ optou por sair → a IA não responde mais nada (LGPD). Só registra p/ o humano ver.
+    // 2b) contato JÁ optou por sair mas mandou mensagem nova → re-opt-in implícito (consentimento voluntário).
     if (contact.status === 'opted_out') {
-      const oc = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
-      if (oc) await this.conversations.addMessage(tenantId, oc.id, { direction: 'inbound', content: n.text }).catch(() => null);
-      this.logger.warn(`Contato opted_out enviou msg (${n.phone}) — IA NÃO responde`);
-      return { ok: true, phone: n.phone, ignored: true, reason: 'contato optou por sair' };
+      await this.prisma.contact.update({
+        where: { id: contact.id },
+        data: { status: 'active', optOutAt: null },
+      });
+      contact.status = 'active';
+      this.logger.log(`Re-opt-in: ${n.phone} voltou a interagir — status reativado`);
     }
 
-    // 3) acha conversa aberta ou fechada (mas não opt_out) do telefone
-    //    Ajuste 2: conversa CLOSED pode ser reaberta — o lead voltou.
-    //    opt_out NÃO reabre automaticamente (LGPD).
+    // 3) acha conversa mais recente do telefone (qualquer status, incluindo opt_out — re-opt-in já foi tratado acima)
     let conv = await this.prisma.aiConversation.findFirst({
-      where: { tenantId, phone: n.phone, status: { in: ['open', 'waiting_customer', 'waiting_internal', 'escalated', 'closed'] as any } },
+      where: { tenantId, phone: n.phone },
       orderBy: { startedAt: 'desc' },
     });
     if (!conv) {
@@ -206,9 +206,10 @@ export class WhatsappService {
         phone: n.phone,
         sourceChannel: 'whatsapp',
       });
-    } else if ((conv.status as string) === 'closed') {
-      // lead voltou após fechamento → reabre e grava histórico
-      this.logger.log(`Conversa ${conv.id} reaberta — lead ${n.phone} voltou após fechamento`);
+    } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
+      // lead voltou (após fechamento normal ou opt-out) → reabre preservando histórico
+      const fromStatus = conv.status as string;
+      this.logger.log(`Conversa ${conv.id} reaberta (${fromStatus}) — lead ${n.phone} voltou`);
       await this.prisma.$transaction([
         this.prisma.aiConversation.update({
           where: { id: conv.id },
@@ -217,11 +218,11 @@ export class WhatsappService {
         this.prisma.conversationStageHistory.create({
           data: {
             conversationId: conv.id,
-            fromStatus: 'closed',
+            fromStatus,
             toStatus: 'open',
             fromOutcome: (conv as any).outcome ?? null,
-            toOutcome: (conv as any).outcome ?? null, // preserva outcome anterior como histórico
-            reason: 'reaberta_lead_retornou',
+            toOutcome: null,
+            reason: fromStatus === 'opt_out' ? 'reaberta_reopt_in' : 'reaberta_lead_retornou',
           },
         }),
       ]);

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { listContacts, listTags, type TagCount } from '@/features/contact';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge, statusVariant } from '@/components/ui/Badge';
+import { Button, Card, StatusBadge, Modal } from '@/shared/ui';
 
 interface Campaign {
   id: string;
@@ -32,6 +35,14 @@ export function CampaignsPage() {
   // pois normalmente não há e-mails cadastrados nos contatos ainda
   const [fromContacts, setFromContacts] = useState(true);
   const [phonesText, setPhonesText] = useState('');
+  // público do WhatsApp: todos ativos | por tag | manual
+  const [audience, setAudience] = useState<'todos' | 'tag' | 'manual'>('todos');
+  const [audienceTag, setAudienceTag] = useState('');
+  const [tags, setTags] = useState<TagCount[]>([]);
+  const [detail, setDetail] = useState<any | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const location = useLocation();
   const [link, setLink] = useState('');
   const [media, setMedia] = useState<{ url: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -86,6 +97,59 @@ export function CampaignsPage() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
+    setAudience('todos'); setAudienceTag('');
+  }
+
+  // carrega as tags para o seletor "por tag"
+  useEffect(() => {
+    listTags().then(setTags).catch(() => {});
+  }, []);
+
+  // recebe a seleção vinda da tela de Contatos ("Criar campanha com selecionados")
+  useEffect(() => {
+    const st = location.state as { phones?: { phone: string; name?: string }[] } | null;
+    if (st?.phones?.length) {
+      setPhonesText(st.phones.map((p) => p.phone).join('\n'));
+      setAudience('manual');
+      setChannel('whatsapp');
+      setShow(true);
+      window.history.replaceState({}, ''); // evita reabrir ao navegar de volta
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  // abre o detalhe de uma campanha (destinatários + status)
+  async function openDetail(c: Campaign) {
+    setShowDetail(true);
+    setDetailLoading(true);
+    setDetail({ campaign: c, targets: [], counts: c.counts });
+    try {
+      const r = await api.get(`/campaigns/${c.id}`);
+      setDetail(r.data);
+    } catch {
+      /* mantém o resumo básico */
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+  const targetTone = (s: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' =>
+    s === 'sent' ? 'success'
+      : s === 'failed' ? 'danger'
+      : s === 'skipped' ? 'warning'
+      : s === 'queued' || s === 'sending' ? 'info'
+      : 'neutral';
+
+  // pré-preenche o "Nova campanha" só com os que falharam/pularam
+  function resendFailed() {
+    const failed = (detail?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
+    if (failed.length === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
+    setName(`Reenvio · ${detail.campaign.name}`);
+    setTemplate(detail.campaign.template || template);
+    setPhonesText(failed.map((t: any) => t.phone).join('\n'));
+    setAudience('manual');
+    setChannel('whatsapp');
+    setShowDetail(false);
+    setShow(true);
   }
 
   async function create(e: React.FormEvent) {
@@ -106,8 +170,16 @@ export function CampaignsPage() {
         r = await api.post('/campaigns/email', payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
-        if (fromContacts) payload.fromContacts = true;
-        else payload.phones = phonesText.split('\n').map((l) => l.trim()).filter(Boolean).map((p) => ({ phone: p.replace(/\D/g, '') }));
+        if (audience === 'todos') {
+          payload.fromContacts = true;
+        } else if (audience === 'tag') {
+          const r2 = await listContacts({ tag: audienceTag, limit: 2000 });
+          payload.phones = r2.items
+            .filter((c) => c.status !== 'opted_out')
+            .map((c) => ({ phone: c.phone, name: c.name }));
+        } else {
+          payload.phones = phonesText.split('\n').map((l) => l.trim()).filter(Boolean).map((p) => ({ phone: p.replace(/\D/g, '') }));
+        }
         if (link.trim()) payload.link = link.trim();
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
@@ -167,7 +239,7 @@ export function CampaignsPage() {
             E-mail: 8h–18h · 50/dia · delay 90–180s (anti-spam)
           </p>
         </div>
-        <button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>
+        <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
       </div>
 
       <div className="space-y-3">
@@ -177,7 +249,7 @@ export function CampaignsPage() {
             icon="📣"
             title="Nenhuma campanha ainda"
             description="Crie uma campanha de WhatsApp ou e-mail para disparar para seus leads."
-            action={<button onClick={() => setShow(true)} className="btn-primary">+ Nova campanha</button>}
+            action={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
           />
         )}
         {!loading && items.map((c) => {
@@ -186,7 +258,11 @@ export function CampaignsPage() {
           const pct = total ? Math.round((sent / total) * 100) : 0;
           const isEmail = c.channel === 'email';
           return (
-            <div key={c.id} className="card p-5">
+            <Card
+              key={c.id}
+              onClick={() => openDetail(c)}
+              className="cursor-pointer p-5 transition-shadow hover:shadow-card-hover"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-base-content">{c.name}</span>
@@ -198,12 +274,12 @@ export function CampaignsPage() {
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <button onClick={() => start(c)} className="btn-primary h-7 px-3 text-xs">▶ Iniciar</button>
+                    <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm">▶ Iniciar</Button>
                   )}
                   {c.status === 'running' && (
-                    <button onClick={() => pause(c.id)} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
+                    <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
                   )}
-                  <button onClick={() => del(c)} title="Excluir campanha" className="btn-outline h-7 px-2 text-xs text-red-500 hover:bg-red-50">🗑️</button>
+                  <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="sm" className="text-red-500 hover:bg-red-50">🗑️</Button>
                 </div>
               </div>
               {isEmail && c.subject && (
@@ -221,7 +297,7 @@ export function CampaignsPage() {
                   {Object.entries(c.counts).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
                 </div>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
@@ -445,13 +521,53 @@ export function CampaignsPage() {
                   />
                 </div>
 
-                {/* Destinatários WA */}
+                {/* Destinatários WA — seletor de público */}
                 <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
-                    <input type="checkbox" className="checkbox checkbox-sm" checked={fromContacts} onChange={(e) => setFromContacts(e.target.checked)} />
-                    Todos os contatos ativos
-                  </label>
-                  {!fromContacts && (
+                  <div className="mb-2 text-sm text-base-content/70">Quem vai receber?</div>
+                  <div className="mb-2 flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
+                    {([['todos', 'Todos ativos'], ['tag', 'Por tag'], ['manual', 'Manual']] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setAudience(k)}
+                        className={`flex-1 rounded-md py-1.5 transition-colors ${
+                          audience === k ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:text-base-content'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {audience === 'tag' && (
+                    <div>
+                      {tags.length === 0 ? (
+                        <p className="text-xs text-base-content/40">Nenhuma tag ainda — crie tags na tela de Contatos.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {tags.map((t) => (
+                            <button
+                              key={t.tag}
+                              type="button"
+                              onClick={() => setAudienceTag(audienceTag === t.tag ? '' : t.tag)}
+                              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                audienceTag === t.tag ? 'bg-brand-500 text-white' : 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                              }`}
+                            >
+                              {t.tag} <span className="opacity-60">{t.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {audienceTag && (
+                        <div className="mt-2 rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+                          → <strong className="text-base-content">{tags.find((t) => t.tag === audienceTag)?.count ?? 0} contatos</strong> com a tag "{audienceTag}" · opt-out é excluído no envio.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {audience === 'manual' && (
                     <textarea
                       className="input w-full py-2 font-mono text-sm"
                       style={{ minHeight: '90px', resize: 'vertical' }}
@@ -514,14 +630,72 @@ export function CampaignsPage() {
             {/* Footer fixo */}
             <div className="sticky bottom-0 flex justify-end gap-3 border-t border-base-200 px-7 py-4"
                  style={{ background: 'var(--surface-elevated)' }}>
-              <button type="button" onClick={() => { setShow(false); resetForm(); }} className="btn-ghost">Cancelar</button>
-              <button disabled={busy} className="btn-primary disabled:opacity-50 px-6">
+              <Button type="button" variant="ghost" onClick={() => { setShow(false); resetForm(); }}>Cancelar</Button>
+              <Button loading={busy} className="px-6">
                 {busy ? 'Criando...' : 'Criar campanha'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
       )}
+
+      {/* modal de detalhe da campanha (resultados) */}
+      <Modal
+        open={showDetail}
+        onClose={() => setShowDetail(false)}
+        title={detail?.campaign?.name || 'Campanha'}
+        size="lg"
+      >
+        {detail && (
+          <>
+            <p className="mb-3 whitespace-pre-line rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+              {detail.campaign.template}
+            </p>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {Object.entries(detail.counts || {}).map(([s, n]) => (
+                <StatusBadge key={s} tone={targetTone(s)}>
+                  {s}: {n as number}
+                </StatusBadge>
+              ))}
+              {Object.keys(detail.counts || {}).length === 0 && (
+                <span className="text-xs text-base-content/40">Sem envios ainda.</span>
+              )}
+              {((detail.counts?.failed ?? 0) + (detail.counts?.skipped ?? 0)) > 0 && (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={resendFailed}>
+                  ↻ Reenviar aos que falharam
+                </Button>
+              )}
+            </div>
+            {detailLoading ? (
+              <div className="py-6 text-center text-sm text-base-content/50">Carregando destinatários…</div>
+            ) : detail.targets?.length ? (
+              <div className="max-h-80 space-y-1.5 overflow-y-auto">
+                {detail.targets.map((t: any) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between rounded-lg border border-base-200 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-base-content">{t.name || t.phone}</div>
+                      {t.error && <div className="truncate text-[11px] text-red-500">{t.error}</div>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {t.sentAt && (
+                        <span className="text-[11px] text-base-content/40">
+                          {new Date(t.sentAt).toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                      <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6 text-center text-sm text-base-content/50">Sem destinatários.</div>
+            )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

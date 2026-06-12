@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
+import { Button } from '@/shared/ui';
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -83,16 +84,16 @@ export function DashboardPage() {
             Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s
           </p>
         </div>
-        <button onClick={load} className="btn-outline h-9 px-4 text-sm">↻ Atualizar</button>
+        <Button variant="outline" onClick={load}>↻ Atualizar</Button>
       </div>
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
       <SectionTitle>Visão Geral</SectionTitle>
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <ConversationMetricsCard label="Contatos" value={m.contacts.total} emoji="👥" hint={`${m.contacts.optedOut} opt-outs`} />
-        <ConversationMetricsCard label="Conversas" value={m.conversations.total} emoji="💬" hint="total histórico" />
-        <ConversationMetricsCard label="Mensagens" value={m.messages.inbound + m.messages.outbound} emoji="✉️" hint={`${m.messages.inbound} in · ${m.messages.outbound} out`} />
-        <ConversationMetricsCard label="Base (KB)" value={m.knowledge.total} emoji="📚" hint="itens de conhecimento" />
+        <ConversationMetricsCard label="Contatos" value={m.contacts.total} icon="contacts" accent="brand" hint={`${m.contacts.optedOut} opt-outs`} />
+        <ConversationMetricsCard label="Conversas" value={m.conversations.total} icon="inbox" accent="blue" hint="total histórico" />
+        <ConversationMetricsCard label="Mensagens" value={m.messages.inbound + m.messages.outbound} icon="mail" accent="green" hint={`${m.messages.inbound} in · ${m.messages.outbound} out`} />
+        <ConversationMetricsCard label="Base (KB)" value={m.knowledge.total} icon="knowledge" accent="amber" hint="itens de conhecimento" />
       </div>
 
       {/* ── Monitoramento Operacional ──────────────────────────────── */}

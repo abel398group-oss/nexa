@@ -173,7 +173,7 @@ export function InboxPage() {
   return (
     <div className="flex h-full">
       {/* ── Sidebar conversas ─────────────────────────────────────────── */}
-      <aside className="flex w-80 flex-col border-r border-base-200 bg-white">
+      <aside className="flex w-80 flex-col border-r border-base-200 bg-[var(--surface)]">
         <div className="border-b border-base-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
           Conversas
         </div>
@@ -212,34 +212,39 @@ export function InboxPage() {
                 ].join(' ')}
                 style={{ borderColor: 'var(--border)' }}
               >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-medium text-base-content truncate">
-                    {c.contact?.name || displayPhone(c.phone)}
+                <div className="flex gap-3">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
+                    {(c.contact?.name
+                      ? c.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
+                      : displayPhone(c.phone).slice(0, 2)
+                    ).toUpperCase()}
                   </span>
-                  {stale && <span title="Aguardando equipe há +2h" className="text-amber-500 text-xs">⚠️</span>}
-                </div>
-                {/* mostra identificador abaixo do nome quando há nome */}
-                {c.contact?.name && (
-                  <div className="text-[11px] text-base-content/50 truncate">{displayPhone(c.phone)}</div>
-                )}
-                <div className="mt-1 flex flex-wrap items-center gap-1">
-                  <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
-                  {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
-                  {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
-                    <ChannelBadge sourceChannel={c.sourceChannel} />
-                  )}
-                  {(c.ticketCategory || c.ticketPriority) && (
-                    <TicketCategoryBadge
-                      category={c.ticketCategory}
-                      priority={c.ticketPriority}
-                      compact
-                    />
-                  )}
-                  {c.assignedSeller && (
-                    <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
-                      🧑‍💼 {c.assignedSeller.name}
-                    </span>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate font-medium text-base-content">
+                        {c.contact?.name || displayPhone(c.phone)}
+                      </span>
+                      {stale && <span title="Aguardando equipe há +2h" className="text-xs text-amber-500">⚠️</span>}
+                    </div>
+                    {c.contact?.name && (
+                      <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
+                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
+                      {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
+                      {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
+                        <ChannelBadge sourceChannel={c.sourceChannel} />
+                      )}
+                      {(c.ticketCategory || c.ticketPriority) && (
+                        <TicketCategoryBadge category={c.ticketCategory} priority={c.ticketPriority} compact />
+                      )}
+                      {c.assignedSeller && (
+                        <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
+                          {c.assignedSeller.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </button>
             );
@@ -260,7 +265,7 @@ export function InboxPage() {
         ) : (
           <>
             {/* header da conversa */}
-            <div className="flex items-center justify-between border-b bg-white px-4 py-3 gap-2 flex-wrap">
+            <div className="flex items-center justify-between border-b border-base-200 bg-[var(--surface)] px-4 py-3 gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <div className="flex flex-col min-w-0">
                   <span className="font-medium text-base-content leading-tight">
@@ -358,8 +363,8 @@ export function InboxPage() {
                   <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${
                       m.direction === 'outbound'
-                        ? 'bg-brand-500 text-white'
-                        : 'bg-[var(--surface)] text-base-content shadow-sm'
+                        ? 'rounded-tr-sm bg-brand-500 text-white'
+                        : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
                     }`}>
                       <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
                       <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
@@ -375,7 +380,7 @@ export function InboxPage() {
 
               {/* painel timeline */}
               {showTimeline && (
-                <div className="w-64 flex-shrink-0 border-l bg-white overflow-y-auto p-4" style={{ borderColor: 'var(--border)' }}>
+                <div className="w-64 flex-shrink-0 border-l bg-[var(--surface)] overflow-y-auto p-4" style={{ borderColor: 'var(--border)' }}>
                   <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
                     Histórico de Status
                   </div>
@@ -385,7 +390,7 @@ export function InboxPage() {
             </div>
 
             {/* input */}
-            <div className="border-t bg-white p-3">
+            <div className="border-t border-base-200 bg-[var(--surface)] p-3">
               {liaInfo && <div className="mb-2 px-2 text-xs text-brand-600">✨ {liaInfo}</div>}
               <div className="flex gap-2">
                 <button

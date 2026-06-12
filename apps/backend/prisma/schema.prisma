@@ -374,6 +374,23 @@ model EventDlq {
   @@map("event_dlq")
 }
 
+// ===================== TENANTS / CLIENTES (Platform Admin) =====================
+// Dá nome aos tenantId já em uso. Platform-admin (User.tenantId = null) lista e
+// "entra" num Tenant via header X-Acting-Tenant-Id (resolvido no backend).
+// Por ora NÃO viramos os tenantId String em FK (migration grande e arriscada —
+// ver docs/features/platform-admin/implementation.md §5.1).
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String // "HiperTMS"
+  slug      String   @unique // "hipertms"
+  status    String   @default("active") // active | suspended
+  productId String?  @map("product_id") // opcional: vincula ao conector/produto
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
 // ===================== PRODUTOS / CONECTORES (ADR 009/010) =====================
 model Product {
   id        String   @id @default(uuid())

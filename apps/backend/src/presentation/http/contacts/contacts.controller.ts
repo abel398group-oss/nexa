@@ -13,13 +13,38 @@ export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
   @Get()
-  findAll(@CurrentTenant() tenantId: string, @Query() q: PaginationQueryDto) {
-    return this.contacts.findAll(tenantId ?? 'default', q);
+  findAll(
+    @CurrentTenant() tenantId: string,
+    @Query() q: PaginationQueryDto,
+    @Query('tag') tag?: string,
+  ) {
+    return this.contacts.findAll(tenantId ?? 'default', q, tag);
+  }
+
+  // distintas tags do tenant (definir ANTES de :id para não casar como id)
+  @Get('tags')
+  listTags(@CurrentTenant() tenantId: string) {
+    return this.contacts.listTags(tenantId ?? 'default');
+  }
+
+  // adiciona/remove uma tag em vários contatos
+  @Post('bulk-tag')
+  bulkTag(
+    @CurrentTenant() tenantId: string,
+    @Body() body: { ids: string[]; tag: string; mode?: 'add' | 'remove' },
+  ) {
+    return this.contacts.bulkTag(tenantId ?? 'default', body.ids ?? [], body.tag ?? '', body.mode ?? 'add');
   }
 
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.contacts.findOne(tenantId ?? 'default', id);
+  }
+
+  // histórico de campanhas que o contato recebeu
+  @Get(':id/campaigns')
+  campaigns(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.campaignsForContact(tenantId ?? 'default', id);
   }
 
   @Post()

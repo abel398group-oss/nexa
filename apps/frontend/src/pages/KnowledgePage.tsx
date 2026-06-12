@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
+import { Button, Card, Input, Textarea } from '@/shared/ui';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }
 interface KB {
@@ -106,13 +107,9 @@ export function KnowledgePage() {
             <h1 className="font-bold text-base-content">Conhecimento</h1>
             <p className="text-xs text-base-content/50">{total} itens · alimenta a Lia</p>
           </div>
-          <button
-            onClick={importTms}
-            disabled={busy}
-            className="btn-primary text-xs disabled:opacity-50"
-          >
+          <Button onClick={importTms} loading={busy} size="sm">
             {busy ? 'Importando...' : '↓ Importar TMS'}
-          </button>
+          </Button>
         </div>
         {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700" style={{ borderColor: 'var(--border)' }}>{msg}</div>}
         <div className="flex-1 overflow-y-auto">
@@ -141,7 +138,7 @@ export function KnowledgePage() {
               <div className="text-xs uppercase text-base-content/40">{sel.category} · {sel.topic}</div>
               {!editing && (
                 <div className="flex gap-1">
-                  <button onClick={startEdit} title="Editar" className="btn-ghost h-8 gap-1 px-3 text-sm">✏️ Editar</button>
+                  <Button variant="ghost" size="sm" onClick={startEdit} title="Editar">✏️ Editar</Button>
                   <button onClick={del} title="Excluir" className="h-8 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50">🗑️ Excluir</button>
                 </div>
               )}
@@ -149,39 +146,36 @@ export function KnowledgePage() {
 
             {editing ? (
               <div className="mb-6 space-y-3">
-                <input className="input w-full text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
-                <textarea className="input h-56 w-full py-2 text-sm leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
+                <Input className="text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
+                <Textarea className="h-56 leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
                 <div className="flex gap-2">
-                  <button onClick={saveEdit} disabled={busy} className="btn-primary disabled:opacity-50">{busy ? 'Salvando...' : 'Salvar'}</button>
-                  <button onClick={() => setEditing(false)} className="btn-ghost">Cancelar</button>
+                  <Button onClick={saveEdit} loading={busy}>{busy ? 'Salvando...' : 'Salvar'}</Button>
+                  <Button variant="ghost" onClick={() => setEditing(false)}>Cancelar</Button>
                 </div>
               </div>
             ) : (
               <>
                 <h2 className="mb-4 text-2xl font-bold text-base-content">{sel.title}</h2>
-                <div className="card mb-6 whitespace-pre-line p-6 text-sm leading-relaxed text-base-content/80">
+                <Card className="mb-6 whitespace-pre-line p-6 text-sm leading-relaxed text-base-content/80">
                   {sel.content}
-                </div>
+                </Card>
               </>
             )}
             <h3 className="mb-2 text-sm font-semibold text-base-content/70">Versões (curadoria)</h3>
             <div className="space-y-2">
               {sel.versions?.map((v) => (
-                <div key={v.id} className="card flex items-center justify-between px-4 py-2 text-sm">
+                <Card key={v.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="text-base-content/70">v{v.version}</span>
                   {v.approved ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
                       ✓ aprovada {v.reviewer && `· ${v.reviewer}`}
                     </span>
                   ) : (
-                    <button
-                      onClick={() => approve(v.id)}
-                      className="btn-primary text-xs"
-                    >
+                    <Button onClick={() => approve(v.id)} size="sm">
                       Aprovar
-                    </button>
+                    </Button>
                   )}
-                </div>
+                </Card>
               ))}
             </div>
           </div>

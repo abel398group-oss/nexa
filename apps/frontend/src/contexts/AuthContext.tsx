@@ -6,6 +6,7 @@ interface User {
   email: string;
   name?: string;
   role: string;
+  tenantId?: string | null; // null = admin da plataforma (platform admin)
   permissions?: string[];
   sellerId?: string | null;
 }

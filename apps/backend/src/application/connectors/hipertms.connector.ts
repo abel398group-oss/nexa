@@ -17,13 +17,64 @@ export class HiperTmsConnector implements Connector {
     if (!this.configured) {
       return { ok: false, detail: 'TMS_API_BASE_URL/TOKEN não configurados (aguardando Uelder)' };
     }
-    // TODO(real): GET ${TMS_API_BASE_URL}/health com TMS_SERVICE_TOKEN
-    return { ok: true, detail: 'configurado' };
+    try {
+      const res = await fetch(`${process.env.TMS_API_BASE_URL}/api/health`, {
+        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return { ok: false, detail: `TMS retornou ${res.status}` };
+      return { ok: true, detail: 'conectado' };
+    } catch (err: any) {
+      return { ok: false, detail: `TMS inacessível: ${err?.message}` };
+    }
   }
 
+  // Catálogo de planos da Lia (fonte dos "fatos permitidos" da Supervisora).
+  // Quando TMS_API_BASE_URL estiver configurado: busca os planos AO VIVO no HiperTMS.
+  // Enquanto não estiver (ou se a chamada falhar): usa o catálogo conhecido (fallback).
   async getPlans(): Promise<Plan[]> {
-    // TODO(real): GET ${TMS_API_BASE_URL}/plans
-    // Mock baseado no catálogo conhecido do HiperTMS:
+    if (!this.configured) {
+      return this.defaultPlans(); // TMS não configurado — usa catálogo conhecido
+    }
+    try {
+      const tenantId = process.env.TMS_TENANT_ID ?? 'default';
+      const url =
+        `${process.env.TMS_API_BASE_URL}/api/plans` +
+        `?tenantId=${encodeURIComponent(tenantId)}`;
+
+      const res = await fetch(url, {
+        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
+
+      // Aceita tanto { plans: [...] } quanto [...] direto.
+      const data = await res.json() as { plans?: any[] } | any[];
+      const rows = Array.isArray(data) ? data : data?.plans;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        throw new Error('resposta do TMS sem planos');
+      }
+
+      const plans: Plan[] = rows.map((p) => ({
+        code: String(p.code ?? p.id ?? '').trim(),
+        name: String(p.name ?? p.title ?? p.code ?? '').trim(),
+        price: Number(p.price ?? p.priceMonthly ?? p.monthlyPrice ?? 0),
+        maxUsers: p.maxUsers ?? p.userLimit ?? undefined,
+        features: Array.isArray(p.features) ? p.features.map((f: any) => String(f)) : [],
+      })).filter((p) => p.code && Number.isFinite(p.price) && p.price > 0);
+
+      if (plans.length === 0) throw new Error('planos do TMS inválidos (sem code/preço)');
+      return plans;
+    } catch (err: any) {
+      // Nunca quebra a venda: cai no catálogo conhecido e registra o aviso.
+      this.logger.warn(`getPlans falhou (${err?.message}) — usando catálogo de fallback`);
+      return this.defaultPlans();
+    }
+  }
+
+  // Catálogo conhecido do HiperTMS — fallback e fonte enquanto a API do TMS não expõe /api/plans.
+  // Manter sincronizado com o site/TMS até a integração real estar ligada.
+  private defaultPlans(): Plan[] {
     return [
       { code: 'basico', name: 'Básico', price: 89, maxUsers: 1, features: ['CT-e', 'precificação', '500 docs/mês'] },
       { code: 'essencial', name: 'Essencial', price: 299, maxUsers: 5, features: ['tudo do Básico', '5 filiais', '1.000 docs/mês'] },
