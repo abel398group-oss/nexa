@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 import { getActingTenantId, setActingTenantId } from '@/lib/actingTenant';
+import { setDestructiveConfirmHandler } from '@/lib/destructiveConfirm';
 
 export interface Tenant {
   id: string;
@@ -25,6 +27,7 @@ export const useTenant = () => useContext(Ctx);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isPlatformAdmin = !!user && (user.tenantId === null || user.tenantId === undefined);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [actingTenantId, setActingId] = useState<string | null>(getActingTenantId());
@@ -43,8 +46,20 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, [isPlatformAdmin]);
 
+  // Liga o confirm "bonito" do app a quebra de vidro (usada pelo interceptor do axios).
+  useEffect(() => {
+    setDestructiveConfirmHandler((message) =>
+      confirm({
+        title: 'Acao irreversivel em modo cliente',
+        message,
+        variant: 'danger',
+        confirmLabel: 'Executar mesmo assim',
+      }),
+    );
+    return () => setDestructiveConfirmHandler(null);
+  }, [confirm]);
+
   async function selectTenant(id: string) {
-    // registra a entrada (auditoria); segue mesmo se a auditoria falhar
     try {
       await api.post(`/admin/tenants/${id}/enter`);
     } catch {
@@ -52,7 +67,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
     setActingTenantId(id);
     setActingId(id);
-    // recarrega tudo para nao vazar dados do cliente anterior na tela
     window.location.reload();
   }
 
@@ -61,17 +75,17 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{
-        isPlatformAdmin,
-        tenants,
-        actingTenantId,
-        actingTenant,
-        loading,
-        needsSelection,
-        selectTenant,
-      }}
+      value={{ isPlatformAdmin, tenants, actingTenantId, actingTenant, loading, needsSelection, selectTenant }}
     >
       {children}
+      {isPlatformAdmin && actingTenantId && (
+        <div
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg"
+          title="Voce esta operando na conta de um cliente. Alteracoes afetam este cliente."
+        >
+          <span>⚠ Operando como {actingTenant?.name ?? actingTenantId}</span>
+        </div>
+      )}
     </Ctx.Provider>
   );
 }

@@ -14,8 +14,11 @@ KB resolve isso com **conteúdo versionado, aprovado e recuperável por relevân
 
 | Fase | Recuperação | Estado |
 |---|---|---|
-| Atual | KB simples por `tags`/categoria; trecho injetado no prompt | implementado |
+| Atual | Scoring textual por termos: título (3pts) > tags (2pts) > topic (2pts) > conteúdo (1pt); trecho injetado no prompt | implementado |
 | Alvo | Embeddings por artigo + busca semântica (pgvector) | planejado |
+
+> O scoring textual atual e o endpoint de importação estão detalhados em
+> [`docs/features/knowledge/prd.md`](../features/knowledge/prd.md).
 
 PostgreSQL 16 já roda com **pgvector** (ver `docker-compose.yml` e README),
 preparando o terreno para embeddings sem troca de banco.

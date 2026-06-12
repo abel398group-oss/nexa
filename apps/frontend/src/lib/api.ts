@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getActingTenantId } from '@/lib/actingTenant';
+import { confirmDestructive } from '@/lib/destructiveConfirm';
 
 // withCredentials -> envia o cookie HttpOnly (auth) automaticamente
 export const api = axios.create({
@@ -8,8 +9,7 @@ export const api = axios.create({
 });
 
 // Injeta o cliente ativo (platform admin) em cada request. O backend SO honra este
-// header quando o usuario e admin da plataforma (User.tenantId === null); para os
-// demais ele e ignorado (regra de seguranca no servidor).
+// header quando o usuario e admin da plataforma (User.tenantId === null).
 api.interceptors.request.use((config) => {
   const acting = getActingTenantId();
   if (acting) {
@@ -23,7 +23,6 @@ api.interceptors.request.use((config) => {
 let refreshing: Promise<void> | null = null;
 
 function doRefresh(): Promise<void> {
-  // garante uma unica chamada de refresh simultanea (fila)
   if (!refreshing) {
     refreshing = axios
       .post('/api/auth/refresh', {}, { withCredentials: true })
@@ -42,6 +41,27 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url: string = original?.url ?? '';
 
+    // Quebra de vidro: acao irreversivel bloqueada em modo cliente. Confirma e repete
+    // a MESMA requisicao com o header de override.
+    if (
+      status === 403 &&
+      error.response?.data?.code === 'acting_destructive_blocked' &&
+      original &&
+      !original._override
+    ) {
+      const msg =
+        error.response?.data?.message ||
+        'Esta acao e irreversivel e voce esta operando como cliente. Confirmar?';
+      const ok = await confirmDestructive(msg);
+      if (ok) {
+        original._override = true;
+        original.headers = original.headers ?? {};
+        original.headers['X-Acting-Override'] = 'true';
+        return api(original);
+      }
+      return Promise.reject(error);
+    }
+
     // nao tenta renovar em rotas de auth nem se ja tentou
     const isAuthRoute =
       url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/me');
@@ -49,9 +69,8 @@ api.interceptors.response.use(
       original._retry = true;
       try {
         await doRefresh();
-        return api(original); // repete a requisicao original com o token novo
+        return api(original);
       } catch {
-        // refresh falhou -> sessao realmente expirada: manda pro login
         if (!location.pathname.startsWith('/login')) location.assign('/login');
         return Promise.reject(error);
       }

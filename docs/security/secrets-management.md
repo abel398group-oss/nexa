@@ -19,17 +19,27 @@
 | **dev** | `.env` local (não commitado) |
 | **staging / production** | Docker Secrets → DigitalOcean Secrets |
 
-## Segredos críticos
+## Segredos e variáveis críticas (lista canônica)
+
+> Esta é a **lista de referência** do projeto. Outros docs (`infra/deploy.md`,
+> `features/connectors/prd.md`) apontam para cá em vez de manter listas paralelas.
 
 | Variável | Descrição |
 |---|---|
 | `DATABASE_URL` | PostgreSQL do Nexa (por ambiente) |
 | `ANTHROPIC_API_KEY` | Chave Claude (a Lia) — nunca commitar |
-| `TMS_DB_URL` | Banco HiperTMS (read-only, via conector) |
-| `WAHA_API_URL` | Gateway WhatsApp (WAHA) |
-| `CORS_ORIGINS` | Origens permitidas (CSV) |
+| `AI_MODEL` | Modelo da Lia (default `claude-haiku-4-5-20251001`) |
 | `AI_AUTONOMY_ENABLED` | Default do kill switch de autonomia |
+| `TMS_DB_URL` | Banco HiperTMS (read-only, acesso direto p/ campanhas/lookup) |
+| `TMS_API_BASE_URL` | URL base da API do TMS (conector) |
+| `TMS_SERVICE_TOKEN` | Token de autenticação do conector TMS |
+| `WAHA_API_URL` | Gateway WhatsApp (WAHA) |
+| `NEXA_PUBLIC_URL` | URL pública (webhooks — ngrok/cloudflare/domínio) |
+| `CORS_ORIGINS` | Origens permitidas (CSV) |
 | `JWT`/`encryption` keys | Auth e criptografia (distintas por ambiente) |
+
+> `AI_MODEL` não é segredo, mas entra aqui por ser configuração de ambiente
+> relevante. Os preços (`AI_PRICE_IN`/`AI_PRICE_OUT`) são opcionais.
 
 > O cliente Anthropic trata `ANTHROPIC_API_KEY` ausente/placeholder (`xxxxx`)
 > como "não configurado" e degrada com segurança, sem vazar a chave.
