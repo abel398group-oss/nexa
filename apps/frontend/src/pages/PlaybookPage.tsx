@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
-import { Button } from '@/shared/ui';
+import { Button, Input, Textarea } from '@/shared/ui';
 
 interface Objection { objection: string; guidance: string }
 interface Playbook {
@@ -100,8 +100,8 @@ export function PlaybookPage() {
             <p className="text-xs text-base-content/50">
               Instrução extra de personalidade. Ex.: "Seja calorosa e use linguagem simples de transportador."
             </p>
-            <textarea
-              className="input h-20 w-full text-sm"
+            <Textarea
+              className="h-20"
               placeholder="(opcional) Como a Lia deve soar..."
               value={pb.persona}
               onChange={(e) => set('persona', e.target.value)}
@@ -114,8 +114,7 @@ export function PlaybookPage() {
             <p className="text-xs text-base-content/50">
               Quando o lead quer contratar, a Lia manda este link pra ele criar a conta no site (onde o pagamento é feito).
             </p>
-            <input
-              className="input w-full text-sm"
+            <Input
               placeholder="https://www.hipertms.com.br/signup"
               value={pb.signupUrl}
               onChange={(e) => set('signupUrl', e.target.value)}
@@ -138,8 +137,8 @@ export function PlaybookPage() {
                 <div key={i} className="rounded-lg border border-base-200 p-3">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-xs font-medium text-base-content/50">Cliente diz:</span>
-                    <input
-                      className="input flex-1 text-sm"
+                    <Input
+                      className="flex-1"
                       placeholder='Ex.: "Tá caro"'
                       value={o.objection}
                       onChange={(e) => setObj(i, 'objection', e.target.value)}
@@ -148,8 +147,8 @@ export function PlaybookPage() {
                       ✕
                     </button>
                   </div>
-                  <textarea
-                    className="input h-16 w-full text-sm"
+                  <Textarea
+                    className="h-16"
                     placeholder="Como a Lia deve contornar essa objeção..."
                     value={o.guidance}
                     onChange={(e) => setObj(i, 'guidance', e.target.value)}
@@ -173,8 +172,8 @@ export function PlaybookPage() {
               <div key={key}>
                 <label className="mb-1 block text-xs font-medium text-base-content/70">{label}</label>
                 <p className="mb-1 text-[11px] text-base-content/40">{hint}</p>
-                <textarea
-                  className="input h-16 w-full text-sm"
+                <Textarea
+                  className="h-16"
                   value={pb[key]}
                   onChange={(e) => set(key, e.target.value)}
                 />

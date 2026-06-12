@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Modal, Input, Textarea, Label } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select } from '@/shared/ui';
 import {
   type Contact,
   type ImportContactInput,
@@ -186,14 +186,14 @@ export function ContactsPage() {
   return (
     <div className="flex h-full flex-col bg-base-100">
       {/* header */}
-      <div className="flex items-center justify-between border-b border-base-200 bg-white px-6 py-4">
+      <div className="flex items-center justify-between border-b border-base-200 bg-[var(--surface)] px-6 py-4">
         <div>
           <h1 className="text-lg font-bold text-base-content">Contatos</h1>
           <p className="text-xs text-base-content/50">{total} cadastrados{optOutCount > 0 && ` · ${optOutCount} descadastrado(s)`}</p>
         </div>
         <div className="flex gap-2">
-          <select
-            className="input w-auto"
+          <Select
+            className="!w-auto"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value as any)}
             title="Filtrar por situação"
@@ -201,9 +201,9 @@ export function ContactsPage() {
             <option value="todos">Todos</option>
             <option value="ativos">Só ativos</option>
             <option value="optout">Só descadastrados</option>
-          </select>
-          <input
-            className="input w-64"
+          </Select>
+          <Input
+            className="!w-64"
             placeholder="Buscar nome, telefone, empresa..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}

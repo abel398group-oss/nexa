@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Card } from '@/shared/ui';
+import { Button, Card, Input, Textarea } from '@/shared/ui';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }
 interface KB {
@@ -146,8 +146,8 @@ export function KnowledgePage() {
 
             {editing ? (
               <div className="mb-6 space-y-3">
-                <input className="input w-full text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
-                <textarea className="input h-56 w-full py-2 text-sm leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
+                <Input className="text-lg font-bold" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="Título" />
+                <Textarea className="h-56 leading-relaxed" value={eContent} onChange={(e) => setEContent(e.target.value)} placeholder="Conteúdo que a Lia usa..." />
                 <div className="flex gap-2">
                   <Button onClick={saveEdit} loading={busy}>{busy ? 'Salvando...' : 'Salvar'}</Button>
                   <Button variant="ghost" onClick={() => setEditing(false)}>Cancelar</Button>

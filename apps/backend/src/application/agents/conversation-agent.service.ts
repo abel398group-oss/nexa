@@ -92,6 +92,10 @@ export class ConversationAgentService {
       .replace(VIA_PANEL_MARKER, '')
       .replace(HANDOFF_TOKEN_RE, '')
       .trim();
+    // Mensagem que os agentes "leem": sem marcador/token. Se sobrar vazio (ex.: o cliente
+    // só clicou no botão e mandou apenas "HANDOFF:token"), usa uma saudação neutra para a Lia
+    // cumprimentar e perguntar a dúvida — em vez de processar o token cru.
+    const agentMessage = cleanMessage || 'Olá, preciso de ajuda com o HiperTMS.';
 
     // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
     // Busca o telefone da conversa para consultar o TMS antes de rotear
@@ -145,7 +149,7 @@ export class ConversationAgentService {
 
       case 'sales': {
         const r = await this.sales.sell(tenantId, {
-          question: input.message,
+          question: agentMessage,
           productCode: input.productCode,
           history,
           leadScore: route.leadScore,
@@ -164,7 +168,7 @@ export class ConversationAgentService {
       case 'support':
       default: {
         // Passa conversationId para que o SupportAgent recupere o histórico da conversa
-        const r = await this.support.ask(tenantId, { question: input.message, conversationId: input.conversationId, tmsCustomer });
+        const r = await this.support.ask(tenantId, { question: agentMessage, conversationId: input.conversationId, tmsCustomer });
         draft = r.draft;
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;
@@ -189,7 +193,7 @@ export class ConversationAgentService {
     let supervisor: SupervisorVerdict | null = null;
     if (!scripted) {
       supervisor = await this.supervisor.review({
-        customerMessage: input.message,
+        customerMessage: agentMessage,
         draft,
         allowedFacts,
         history,
