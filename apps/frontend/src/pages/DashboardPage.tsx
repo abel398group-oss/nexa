@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
-import { Button } from '@/shared/ui';
+import { Button, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -84,18 +84,13 @@ export function DashboardPage() {
     n(byStatus, 'escalated');
 
   return (
-    <div className="h-full overflow-auto bg-base-100 p-8">
-
-      {/* ── Cabeçalho ──────────────────────────────────────────────── */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-base-content">Dashboard</h1>
-          <p className="text-xs text-base-content/50">
-            Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s
-          </p>
-        </div>
-        <Button variant="outline" onClick={load}>↻ Atualizar</Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Dashboard' }]} />}
+        title="Dashboard"
+        subtitle={<>Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s</>}
+        actions={<Button variant="outline" onClick={load}>↻ Atualizar</Button>}
+      />
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
       <SectionTitle>Visão Geral</SectionTitle>
@@ -281,6 +276,6 @@ export function DashboardPage() {
       <div className="mt-6 rounded-lg border border-dashed border-base-300 p-4 text-xs text-base-content/40">
         <strong className="text-base-content/50">Métricas futuras planejadas:</strong> tempo médio até 1ª resposta · tempo médio até fechamento · conversas por vendedor · taxa de conversão · taxa de no_response · taxa de opt_out
       </div>
-    </div>
+    </PageContainer>
   );
 }
