@@ -53,12 +53,23 @@ export async function reactivateContact(id: string): Promise<void> {
   await api.patch(`/contacts/${id}/reactivate`);
 }
 
+// marca como descadastrado (opt-out) — não recebe mais disparos (LGPD)
+export async function optOutContact(id: string): Promise<void> {
+  await api.patch(`/contacts/${id}/opt-out`);
+}
+
 export async function deleteContact(id: string): Promise<void> {
   await api.delete(`/contacts/${id}`);
 }
 
 export async function importContacts(contacts: ImportContactInput[]): Promise<{ imported: number }> {
   const r = await api.post('/contacts/import', { contacts });
+  return r.data;
+}
+
+// Exclui vários contatos numa única requisição (uma só confirmação de break-glass).
+export async function bulkDeleteContacts(ids: string[]): Promise<{ deleted: number }> {
+  const r = await api.post('/contacts/bulk-delete', { ids });
   return r.data;
 }
 

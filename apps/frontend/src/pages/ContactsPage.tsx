@@ -12,7 +12,9 @@ import {
   createContact,
   updateContact,
   reactivateContact,
+  optOutContact,
   deleteContact,
+  bulkDeleteContacts,
   importContacts,
   getContactCampaigns,
 } from '@/features/contact';
@@ -120,6 +122,24 @@ export function ContactsPage() {
     }
   }
 
+  async function optOut(id: string) {
+    const ok = await confirm({
+      title: 'Descadastrar contato (opt-out)',
+      message: 'Marcar como descadastrado? O contato deixa de receber disparos (LGPD). Você pode reativar depois, com consentimento.',
+      variant: 'warning',
+      confirmLabel: 'Descadastrar',
+    });
+    if (!ok) return;
+    try {
+      await optOutContact(id);
+      toast.success('Contato descadastrado (opt-out).');
+      setShowForm(false);
+      await load();
+    } catch {
+      toast.error('Erro ao descadastrar.');
+    }
+  }
+
   async function del(c: Contact) {
     const ok = await confirm({
       title: 'Excluir contato',
@@ -180,11 +200,12 @@ export function ContactsPage() {
     });
     if (!ok) return;
     try {
-      await Promise.all([...selected].map((id) => deleteContact(id)));
-      toast.success(`${n} contato(s) excluído(s).`);
+      // uma única requisição: apaga todos de uma vez (1 confirmação de break-glass, não N)
+      const r = await bulkDeleteContacts([...selected]);
+      toast.success(`${r.deleted} contato(s) excluído(s).`);
       await load();
     } catch {
-      toast.error('Erro ao excluir alguns contatos.');
+      toast.error('Erro ao excluir os contatos.');
     }
   }
 
@@ -486,6 +507,28 @@ export function ContactsPage() {
             </div>
           ))}
           {err && <p className="text-sm text-red-500">{err}</p>}
+          {/* ação de status (só ao editar): descadastrar (opt-out) ou reativar */}
+          {editId && (() => {
+            const editing = items.find((c) => c.id === editId);
+            if (!editing) return null;
+            return editing.status === 'opted_out' ? (
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); reactivate(editing); }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50"
+              >
+                <Icon name="undo" className="h-4 w-4" /> Reativar contato
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => optOut(editId)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50"
+              >
+                <Icon name="ban" className="h-4 w-4" /> Marcar como descadastrado (opt-out)
+              </button>
+            );
+          })()}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
               Cancelar

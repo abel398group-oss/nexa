@@ -1,10 +1,22 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from '@/application/contacts/dto/create-contact.dto';
+
+// DTOs com validação — necessários porque o ValidationPipe global usa
+// whitelist+forbidNonWhitelisted (tipos inline `{ ids }` podiam ser ignorados).
+class BulkDeleteDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}
+class BulkTagDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+  @IsString() tag!: string;
+  @IsOptional() @IsIn(['add', 'remove']) mode?: 'add' | 'remove';
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('contacts')
@@ -29,10 +41,7 @@ export class ContactsController {
 
   // adiciona/remove uma tag em vários contatos
   @Post('bulk-tag')
-  bulkTag(
-    @CurrentTenant() tenantId: string,
-    @Body() body: { ids: string[]; tag: string; mode?: 'add' | 'remove' },
-  ) {
+  bulkTag(@CurrentTenant() tenantId: string, @Body() body: BulkTagDto) {
     return this.contacts.bulkTag(tenantId ?? 'default', body.ids ?? [], body.tag ?? '', body.mode ?? 'add');
   }
 
@@ -66,9 +75,23 @@ export class ContactsController {
     return this.contacts.importMany(tenantId ?? 'default', body.contacts ?? []);
   }
 
+  // exclusão em lote (vários contatos numa única requisição)
+  @Post('bulk-delete')
+  bulkDelete(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
+    // DEBUG temporário: quantos ids chegaram do front
+    console.warn('[bulk-delete] ids recebidos:', body?.ids?.length ?? 0, body?.ids);
+    return this.contacts.deleteMany(tenantId ?? 'default', body.ids ?? []);
+  }
+
   @Patch(':id/reactivate')
   reactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.contacts.reactivate(tenantId ?? 'default', id);
+  }
+
+  // marca como descadastrado (opt-out) — não recebe mais disparos
+  @Patch(':id/opt-out')
+  optOut(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.optOut(tenantId ?? 'default', id);
   }
 
   @Delete(':id')

@@ -22,6 +22,7 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Acoes irreversiveis bloqueadas por padrao em modo cliente (liberadas com override).
 export function isDestructiveAction(method: string, url: string): boolean {
   if (method === 'DELETE') return true; // qualquer exclusao
+  if (method === 'POST' && /\/contacts\/bulk-delete\b/.test(url)) return true; // exclusao em lote
   if (method === 'POST' && /\/campaigns\/[^/]+\/start\b/.test(url)) return true; // disparar campanha
   return false;
 }

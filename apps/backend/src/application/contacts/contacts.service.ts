@@ -117,6 +117,12 @@ export class ContactsService {
     return this.prisma.contact.update({ where: { id }, data: { status: 'active', optOutAt: null } });
   }
 
+  // marca um contato como descadastrado (opt-out) — não recebe mais disparos (LGPD)
+  async optOut(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    return this.prisma.contact.update({ where: { id }, data: { status: 'opted_out', optOutAt: new Date() } });
+  }
+
   // Import em lote (CSV já parseado em array). Idempotente por phone.
   async importMany(tenantId: string, contacts: CreateContactDto[]) {
     let created = 0;

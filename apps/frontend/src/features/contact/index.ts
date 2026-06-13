@@ -17,7 +17,9 @@ export {
   createContact,
   updateContact,
   reactivateContact,
+  optOutContact,
   deleteContact,
+  bulkDeleteContacts,
   importContacts,
   getContactCampaigns,
 } from './api/contact.api';
