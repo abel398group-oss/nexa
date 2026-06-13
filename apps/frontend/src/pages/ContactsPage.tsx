@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon } from '@/shared/ui';
-import { Icon } from '@/components/ui/icons';
 import {
   type Contact,
   type ImportContactInput,
