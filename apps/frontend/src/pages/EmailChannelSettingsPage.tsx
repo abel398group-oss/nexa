@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Button } from '@/shared/ui';
+import { Button, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 interface FormState {
   fromEmail: string;
@@ -115,14 +115,13 @@ export function EmailChannelSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-base-content">Canal de E-mail</h1>
-        <p className="mt-1 text-sm text-base-content/60">
-          Configure o endereço de e-mail da Lia para enviar e receber mensagens.
-          Use as credenciais do servidor de e-mail (Hostgator / cPanel).
-        </p>
-      </div>
+    <PageContainer>
+      <div className="mx-auto max-w-2xl">
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Canal de E-mail' }]} />}
+        title="Canal de E-mail"
+        subtitle="Configure o endereço de e-mail da Lia para enviar e receber mensagens. Use as credenciais do servidor de e-mail (Hostgator / cPanel)."
+      />
 
       <form onSubmit={save} className="space-y-6">
 
@@ -315,7 +314,8 @@ export function EmailChannelSettingsPage() {
           </Button>
         </div>
       </form>
-    </div>
+      </div>
+    </PageContainer>
   );
 }
 

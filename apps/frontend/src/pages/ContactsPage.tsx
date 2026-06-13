@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, Input, Textarea, Label, Select, StatusBadge } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb } from '@/shared/ui';
 import { Icon } from '@/components/ui/icons';
 import {
   type Contact,
@@ -296,6 +296,7 @@ export function ContactsPage() {
       {/* header */}
       <div className="flex items-center justify-between border-b border-base-200 bg-[var(--surface)] px-6 py-4">
         <div>
+          <Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Contatos' }]} />
           <h1 className="text-lg font-bold text-base-content">Contatos</h1>
           <p className="text-xs text-base-content/50">{total} cadastrados{optOutCount > 0 && ` · ${optOutCount} descadastrado(s)`}</p>
         </div>

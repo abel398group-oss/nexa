@@ -2,7 +2,22 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
-import { Button, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import {
+  Button,
+  PageContainer,
+  PageHeader,
+  Breadcrumb,
+  Card,
+  ChartContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ChartTooltip,
+  chartTooltip,
+  chartColors,
+} from '@/shared/ui';
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -133,6 +148,26 @@ export function DashboardPage() {
               highlight={m.campaigns.replied > 0}
             />
           </div>
+          <Card className="mb-6 p-5">
+            <div className="mb-3 text-sm font-semibold text-base-content/70">Funil de campanhas</div>
+            <ChartContainer height={240}>
+              <BarChart
+                data={[
+                  { label: 'Enviados', value: m.campaigns.sent },
+                  { label: 'Entregue', value: m.campaigns.delivered },
+                  { label: 'Lido', value: m.campaigns.read },
+                  { label: 'Respondeu', value: m.campaigns.replied },
+                ]}
+                margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                <ChartTooltip {...chartTooltip} />
+                <Bar dataKey="value" name="Contatos" fill={chartColors.brand} radius={[6, 6, 0, 0]} maxBarSize={64} />
+              </BarChart>
+            </ChartContainer>
+          </Card>
         </>
       )}
 

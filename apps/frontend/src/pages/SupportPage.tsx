@@ -11,6 +11,8 @@ import {
   TR,
   TH,
   TD,
+  SortableTH,
+  useTableSort,
   LoadingState,
   EmptyState,
   ErrorState,
@@ -144,6 +146,18 @@ export function SupportPage() {
     [tickets, statusFilter, categoryFilter],
   );
 
+  // Linhas com campos derivados pra ordenação (nome do cliente + timestamp).
+  const sortRows = useMemo(
+    () =>
+      filtered.map((t) => ({
+        ...t,
+        _cliente: t.contact?.name || displayPhone(t.phone),
+        _activity: t.lastActivityAt ? new Date(t.lastActivityAt).getTime() : 0,
+      })),
+    [filtered],
+  );
+  const { sorted, sort, toggle } = useTableSort(sortRows, { key: '_activity', direction: 'desc' });
+
   const summary = useMemo(
     () => ({
       total: tickets.length,
@@ -228,16 +242,16 @@ export function SupportPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Cliente</TH>
+                <SortableTH sortKey="_cliente" sort={sort} onSort={toggle}>Cliente</SortableTH>
                 <TH>Categoria</TH>
                 <TH>Prioridade</TH>
-                <TH>Status</TH>
-                <TH>Última atividade</TH>
+                <SortableTH sortKey="status" sort={sort} onSort={toggle}>Status</SortableTH>
+                <SortableTH sortKey="_activity" sort={sort} onSort={toggle}>Última atividade</SortableTH>
                 <TH className="text-right">Ação</TH>
               </TR>
             </THead>
             <TBody>
-              {filtered.map((t) => (
+              {sorted.map((t) => (
                 <TR key={t.id}>
                   <TD>
                     <div className="font-medium text-base-content">

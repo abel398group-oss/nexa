@@ -4,7 +4,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Input } from '@/shared/ui';
+import { Button, Input, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
@@ -112,9 +112,12 @@ export function SellersPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-base-100 p-8">
-      <h1 className="mb-1 text-xl font-bold text-base-content">Vendedores</h1>
-      <p className="mb-6 text-xs text-base-content/50">Leads quentes são distribuídos (round-robin) e notificados no WhatsApp</p>
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Vendedores' }]} />}
+        title="Vendedores"
+        subtitle="Leads quentes são distribuídos (round-robin) e notificados no WhatsApp"
+      />
 
       {/* ===== KPIs de desempenho ===== */}
       <div className="mb-6">
@@ -228,6 +231,6 @@ export function SellersPage() {
         </table>
       </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

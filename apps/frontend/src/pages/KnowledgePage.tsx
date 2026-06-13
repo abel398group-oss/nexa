@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Card, Input, Textarea } from '@/shared/ui';
+import { Button, Card, Input, Textarea, Breadcrumb } from '@/shared/ui';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }
 interface KB {
@@ -104,7 +104,8 @@ export function KnowledgePage() {
       <div className="flex w-96 flex-col border-r" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
         <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <h1 className="font-bold text-base-content">Conhecimento</h1>
+            <Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Conhecimento' }]} />
+            <h1 className="text-lg font-bold text-base-content">Conhecimento</h1>
             <p className="text-xs text-base-content/50">{total} itens · alimenta a Lia</p>
           </div>
           <Button onClick={importTms} loading={busy} size="sm">

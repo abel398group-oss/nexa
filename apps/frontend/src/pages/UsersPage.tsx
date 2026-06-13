@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Button, Card, Modal, Input, Select, Label } from '@/shared/ui';
+import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 interface User {
   id: string; email: string; name?: string; role: string;
@@ -51,14 +51,13 @@ export function UsersPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-base-100 p-8">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-base-content">Usuários & Acessos</h1>
-          <p className="text-xs text-base-content/50">Crie logins e marque quais áreas cada um pode acessar. Admin acessa tudo.</p>
-        </div>
-        <Button onClick={() => { setShow(true); setErr(''); }}>+ Novo usuário</Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Usuários' }]} />}
+        title="Usuários & Acessos"
+        subtitle="Crie logins e marque quais áreas cada um pode acessar. Admin acessa tudo."
+        actions={<Button onClick={() => { setShow(true); setErr(''); }}>+ Novo usuário</Button>}
+      />
 
       <div className="space-y-3">
         {items.map((u) => (
@@ -134,6 +133,6 @@ export function UsersPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageContainer>
   );
 }

@@ -28,6 +28,8 @@ export * from '@/components/ui/Separator';
 export * from '@/components/ui/Table';
 export * from '@/components/ui/Tabs';
 export * from '@/components/ui/Pagination';
+export * from '@/components/ui/Chart';
+export * from '@/components/ui/Calendar';
 
 // Feedback / status
 export * from '@/components/ui/StatusBadge';

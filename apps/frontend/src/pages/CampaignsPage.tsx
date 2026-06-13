@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge, statusVariant } from '@/components/ui/Badge';
-import { Button, Card, StatusBadge, Modal } from '@/shared/ui';
+import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 interface Campaign {
   id: string;
@@ -242,17 +242,13 @@ export function CampaignsPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-base-100 p-8">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-base-content">Disparo de Leads</h1>
-          <p className="text-xs text-base-content/50">
-            WhatsApp: 7h–19h · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp;
-            E-mail: 8h–18h · 50/dia · delay 90–180s (anti-spam)
-          </p>
-        </div>
-        <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Disparo' }]} />}
+        title="Disparo de Leads"
+        subtitle={<>WhatsApp: 7h–19h · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: 8h–18h · 50/dia · delay 90–180s (anti-spam)</>}
+        actions={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
+      />
 
       <div className="space-y-3">
         {loading && <SkeletonList rows={3} />}
@@ -761,6 +757,6 @@ export function CampaignsPage() {
           </>
         )}
       </Modal>
-    </div>
+    </PageContainer>
   );
 }

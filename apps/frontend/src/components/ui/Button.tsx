@@ -10,7 +10,15 @@ export type ButtonVariant =
   | 'secondary'
   | 'success'
   | 'link';
-export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
+export type ButtonSize =
+  | 'xs'
+  | 'sm'
+  | 'md'
+  | 'lg'
+  | 'icon'
+  | 'icon-xs'
+  | 'icon-sm'
+  | 'icon-lg';
 
 const BASE =
   'inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-brand-500/30 disabled:pointer-events-none disabled:opacity-50';
@@ -26,10 +34,14 @@ const VARIANT: Record<ButtonVariant, string> = {
 };
 
 const SIZE: Record<ButtonSize, string> = {
+  xs: 'h-7 gap-1.5 px-2 text-xs',
   sm: 'h-8 px-3 text-xs',
   md: 'h-9 px-4',
   lg: 'h-10 px-6',
   icon: 'h-9 w-9',
+  'icon-xs': 'h-7 w-7',
+  'icon-sm': 'h-8 w-8',
+  'icon-lg': 'h-10 w-10',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

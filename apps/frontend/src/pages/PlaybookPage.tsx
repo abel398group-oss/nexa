@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
-import { Button, Input, Textarea } from '@/shared/ui';
+import { Button, Input, Textarea, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 interface Objection { objection: string; guidance: string }
 interface Playbook {
@@ -82,13 +82,13 @@ export function PlaybookPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div>
-        <h1 className="text-lg font-bold text-base-content">Playbook de Vendas da Lia</h1>
-        <p className="text-xs text-base-content/50">
-          Edite como a Lia conduz a venda — sem mexer no código. As mudanças valem na próxima resposta dela.
-        </p>
-      </div>
+    <PageContainer>
+      <div className="mx-auto max-w-3xl space-y-6">
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Playbook IA' }]} />}
+        title="Playbook de Vendas da Lia"
+        subtitle="Edite como a Lia conduz a venda — sem mexer no código. As mudanças valem na próxima resposta dela."
+      />
 
       {loading || !pb ? (
         <SkeletonList rows={5} />
@@ -194,6 +194,7 @@ export function PlaybookPage() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </PageContainer>
   );
 }
