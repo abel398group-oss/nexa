@@ -31,7 +31,9 @@ export * from '@/components/ui/Separator';
 export * from '@/components/ui/Table';
 export * from '@/components/ui/Tabs';
 export * from '@/components/ui/Pagination';
-export * from '@/components/ui/Chart';
+// Chart NÃO entra no barrel de propósito: o recharts é pesado e deve ser
+// carregado sob demanda (ver pages/DashboardCampaignChart.tsx + React.lazy).
+// Importe de '@/components/ui/Chart' direto dentro de um componente lazy.
 export * from '@/components/ui/Calendar';
 
 // Feedback / status
