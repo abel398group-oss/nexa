@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { displayPhone, toBrPhone } from '@/lib/phone';
 import { listContacts, listTags, type TagCount, type Contact } from '@/features/contact';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -324,8 +325,8 @@ export function CampaignsPage() {
     });
   }
   function addAvulso() {
-    const p = onlyDigits(avulsoInput);
-    if (p.length < 12) { toast.error('Telefone inválido — use 55 + DDD + número.'); return; }
+    const p = toBrPhone(avulsoInput); // aceita DDD+número, adiciona o 55
+    if (p.length < 12) { toast.error('Telefone inválido — informe DDD + número.'); return; }
     const selPhones = new Set([...manualSelected.values()].map((v) => onlyDigits(v.phone)));
     if (avulsos.includes(p) || selPhones.has(p)) { toast.info('Esse telefone já está na lista.'); return; }
     setAvulsos((a) => [...a, p]);
@@ -487,7 +488,7 @@ export function CampaignsPage() {
         title="Disparo de Leads"
         subtitle={
           <>
-            WhatsApp: {settings ? `${settings.waStartHour}h–${settings.waEndHour}h` : '—'} · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: {settings ? `${settings.emailStartHour}h–${settings.emailEndHour}h` : '—'} · 50/dia · delay 90–180s (anti-spam)
+            WhatsApp: {settings ? `${settings.waStartHour}h–${settings.waEndHour}h` : '—'} · {numbers.map((n) => `${displayPhone(n.phone)}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: {settings ? `${settings.emailStartHour}h–${settings.emailEndHour}h` : '—'} · 50/dia · delay 90–180s (anti-spam)
           </>
         }
         actions={
@@ -1021,7 +1022,7 @@ export function CampaignsPage() {
                                             {optedOut && <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">descadastrado</span>}
                                           </span>
                                           <span className="block truncate text-[11px] text-base-content/50">
-                                            {c.phone}{c.company ? ` · ${c.company}` : ''}
+                                            {displayPhone(c.phone)}{c.company ? ` · ${c.company}` : ''}
                                           </span>
                                         </span>
                                         {!!c.tags?.length && (
@@ -1053,7 +1054,7 @@ export function CampaignsPage() {
                       <div className="flex items-center gap-2">
                         <input
                           className="input flex-1 text-sm"
-                          placeholder="Adicionar avulso (55 + DDD + número)"
+                          placeholder="Adicionar avulso (DDD + número)"
                           value={avulsoInput}
                           onChange={(e) => setAvulsoInput(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAvulso(); } }}
@@ -1066,7 +1067,7 @@ export function CampaignsPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {avulsos.map((p) => (
                             <span key={p} className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/70">
-                              {p}
+                              {displayPhone(p)}
                               <button type="button" onClick={() => setAvulsos((a) => a.filter((x) => x !== p))} className="text-base-content/40 hover:text-red-500">
                                 <Icon name="close" className="h-3 w-3" />
                               </button>
@@ -1284,7 +1285,7 @@ export function CampaignsPage() {
                     className="flex items-center justify-between rounded-lg border border-base-200 px-3 py-2 text-sm"
                   >
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-base-content">{t.name || t.phone}</div>
+                      <div className="truncate font-medium text-base-content">{t.name || displayPhone(t.phone)}</div>
                       {t.error && <div className="truncate text-[11px] text-red-500">{t.error}</div>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">

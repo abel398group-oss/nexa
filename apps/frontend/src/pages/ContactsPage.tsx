@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon } from '@/shared/ui';
+import { displayPhone } from '@/lib/phone';
 import {
   type Contact,
   type ImportContactInput,
@@ -108,7 +109,7 @@ export function ContactsPage() {
   async function reactivate(c: Contact) {
     const ok = await confirm({
       title: 'Reativar contato',
-      message: `Reativar ${c.name || c.phone}? Só faça isso se a pessoa CONSENTIU em voltar a receber mensagens (LGPD).`,
+      message: `Reativar ${c.name || displayPhone(c.phone)}? Só faça isso se a pessoa CONSENTIU em voltar a receber mensagens (LGPD).`,
       variant: 'warning',
       confirmLabel: 'Reativar',
     });
@@ -143,7 +144,7 @@ export function ContactsPage() {
   async function del(c: Contact) {
     const ok = await confirm({
       title: 'Excluir contato',
-      message: `Excluir ${c.name || c.phone}? Esta ação não pode ser desfeita.`,
+      message: `Excluir ${c.name || displayPhone(c.phone)}? Esta ação não pode ser desfeita.`,
       variant: 'danger',
       confirmLabel: 'Excluir',
     });
@@ -443,7 +444,7 @@ export function ContactsPage() {
                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">descadastrado</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-base-content/80">{c.phone}</td>
+                <td className="px-4 py-3 text-base-content/80">{displayPhone(c.phone)}</td>
                 <td className="px-4 py-3 text-base-content/80">{c.company || '—'}</td>
                 <td className="px-4 py-3">
                   {c.tags && c.tags.length > 0 ? (
@@ -492,7 +493,7 @@ export function ContactsPage() {
       >
         <form onSubmit={save} className="space-y-3">
           {[
-            { k: 'phone', label: 'Telefone (55DDDxxxxxxxx)', ph: '5511999998888' },
+            { k: 'phone', label: 'Telefone (DDD + número)', ph: '11999998888' },
             { k: 'name', label: 'Nome', ph: 'João Silva' },
             { k: 'company', label: 'Empresa', ph: 'Transportadora X' },
             { k: 'email', label: 'Email', ph: 'joao@empresa.com' },
@@ -542,7 +543,7 @@ export function ContactsPage() {
       <Modal open={showImport} onClose={() => setShowImport(false)} title="Importar contatos" size="md">
         <form onSubmit={doImport} className="space-y-3">
           <p className="text-xs text-base-content/50">
-            Formato: <code>telefone,nome,empresa</code> (ex: 5511999998888,João,Transp X). Só o <strong>telefone</strong> é obrigatório (55+DDD+número).
+            Formato: <code>telefone,nome,empresa</code> (ex: 11999998888,João,Transp X). Só o <strong>telefone</strong> é obrigatório (DDD + número).
           </p>
 
           {/* opção: subir arquivo .csv/.txt + baixar modelo */}

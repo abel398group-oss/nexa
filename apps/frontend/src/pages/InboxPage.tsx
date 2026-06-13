@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
+import { displayPhone } from '@/lib/phone';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
@@ -26,10 +27,6 @@ interface Conversation {
   contact?: { name?: string | null; nameSource?: string | null; tags?: string[] } | null;
 }
 
-// Converte "email:addr@ex.com" → "addr@ex.com" para exibição
-function displayPhone(phone: string): string {
-  return phone.startsWith('email:') ? phone.slice(6) : phone;
-}
 
 function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   if (sourceChannel === 'email') {

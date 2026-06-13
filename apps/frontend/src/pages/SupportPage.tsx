@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { displayPhone } from '@/lib/phone';
 import {
   Button,
   Card,
@@ -49,10 +50,6 @@ interface Conversation {
 
 function isSupportTicket(c: Conversation): boolean {
   return !!c.ticketCategory || c.customerStage === 'cliente_ativo' || c.status === 'escalated';
-}
-
-function displayPhone(phone: string): string {
-  return phone.startsWith('email:') ? phone.slice(6) : phone;
 }
 
 function timeAgo(iso?: string | null): string {
