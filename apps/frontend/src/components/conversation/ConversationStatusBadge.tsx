@@ -1,4 +1,5 @@
 import { getStatusConfig, isWaitingInternalStale } from '@/lib/conversation-status';
+import { Icon } from '@/components/ui/icons';
 
 interface Props {
   status: string;
@@ -16,12 +17,9 @@ export function ConversationStatusBadge({ status, lastActivityAt, size = 'sm' }:
       className={`inline-flex items-center gap-1 rounded-full font-medium ${px} ${cfg.bg} ${cfg.text}`}
       title={cfg.label}
     >
-      <span>{cfg.emoji}</span>
       <span>{cfg.labelPt}</span>
       {stale && (
-        <span title="Sem movimentação há mais de 2h" className="text-amber-600">
-          ⚠️
-        </span>
+        <Icon name="alert" title="Sem movimentação há mais de 2h" className="h-3 w-3 text-amber-600" />
       )}
     </span>
   );

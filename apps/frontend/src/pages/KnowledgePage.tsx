@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Card, Input, Textarea, Breadcrumb } from '@/shared/ui';
+import { Button, Card, Input, Textarea, Breadcrumb, Icon } from '@/shared/ui';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }
 interface KB {
@@ -109,7 +109,8 @@ export function KnowledgePage() {
             <p className="text-xs text-base-content/50">{total} itens · alimenta a Lia</p>
           </div>
           <Button onClick={importTms} loading={busy} size="sm">
-            {busy ? 'Importando...' : '↓ Importar TMS'}
+            {!busy && <Icon name="download" className="h-4 w-4" />}
+            {busy ? 'Importando...' : 'Importar TMS'}
           </Button>
         </div>
         {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700" style={{ borderColor: 'var(--border)' }}>{msg}</div>}
@@ -139,8 +140,8 @@ export function KnowledgePage() {
               <div className="text-xs uppercase text-base-content/40">{sel.category} · {sel.topic}</div>
               {!editing && (
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={startEdit} title="Editar">✏️ Editar</Button>
-                  <button onClick={del} title="Excluir" className="h-8 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50">🗑️ Excluir</button>
+                  <Button variant="ghost" size="sm" onClick={startEdit} title="Editar"><Icon name="edit" className="h-4 w-4" /> Editar</Button>
+                  <button onClick={del} title="Excluir" className="inline-flex h-8 items-center gap-1 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /> Excluir</button>
                 </div>
               )}
             </div>
@@ -169,7 +170,7 @@ export function KnowledgePage() {
                   <span className="text-base-content/70">v{v.version}</span>
                   {v.approved ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-                      ✓ aprovada {v.reviewer && `· ${v.reviewer}`}
+                      aprovada {v.reviewer && `· ${v.reviewer}`}
                     </span>
                   ) : (
                     <Button onClick={() => approve(v.id)} size="sm">

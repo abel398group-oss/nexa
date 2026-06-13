@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
-import { Button, Input, Textarea, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { Button, Input, Textarea, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 
 interface Objection { objection: string; guidance: string }
 interface Playbook {
@@ -144,7 +144,7 @@ export function PlaybookPage() {
                       onChange={(e) => setObj(i, 'objection', e.target.value)}
                     />
                     <button onClick={() => removeObj(i)} title="Remover" className="rounded px-2 py-1 text-red-500 hover:bg-red-50">
-                      ✕
+                      <Icon name="close" className="h-4 w-4" />
                     </button>
                   </div>
                   <Textarea
@@ -165,9 +165,9 @@ export function PlaybookPage() {
           <section className="card space-y-3 p-5">
             <h2 className="text-sm font-semibold text-base-content">Próximo passo (CTA) por temperatura do lead</h2>
             {([
-              ['ctaCold', '🧊 Lead FRIO (score < 40)', 'Ainda explorando — o que a Lia deve fazer?'],
-              ['ctaWarm', '🌤️ Lead MORNO (40–69)', 'Tem interesse — como avançar?'],
-              ['ctaHot', '🔥 Lead QUENTE (≥ 70)', 'Pronto pra fechar — qual o CTA forte?'],
+              ['ctaCold', 'Lead FRIO (score < 40)', 'Ainda explorando — o que a Lia deve fazer?'],
+              ['ctaWarm', 'Lead MORNO (40–69)', 'Tem interesse — como avançar?'],
+              ['ctaHot', 'Lead QUENTE (≥ 70)', 'Pronto pra fechar — qual o CTA forte?'],
             ] as const).map(([key, label, hint]) => (
               <div key={key}>
                 <label className="mb-1 block text-xs font-medium text-base-content/70">{label}</label>
@@ -183,8 +183,8 @@ export function PlaybookPage() {
 
           {/* ações */}
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-base-200 bg-base-100/80 py-3 backdrop-blur">
-            <button onClick={reset} disabled={saving} className="rounded-lg px-4 py-2 text-sm text-base-content/60 hover:bg-base-200 disabled:opacity-50">
-              ↩️ Restaurar padrão
+            <button onClick={reset} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm text-base-content/60 hover:bg-base-200 disabled:opacity-50">
+              <Icon name="undo" className="h-4 w-4" /> Restaurar padrão
             </button>
             <div className="flex items-center gap-3">
               <Button onClick={save} loading={saving} className="px-5">

@@ -32,14 +32,14 @@ export function HelpDemo({ frames }: { frames: DemoFrame[] }) {
           {f.mock === 'click' && (
             <div className="relative">
               <div className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow">{f.label}</div>
-              <span className="demo-cursor absolute -bottom-2 -right-2 text-lg">👆</span>
+              <span className="demo-cursor absolute -bottom-2 -right-2 h-3 w-3 rounded-full border-2 border-white bg-brand-700 shadow" />
             </div>
           )}
           {f.mock === 'toggle' && (
             <div className="flex items-center gap-2">
-              <div className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white">🤖 IA ON</div>
+              <div className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white">IA ON</div>
               <span className="text-base-content/40">→</span>
-              <div className="rounded-md border border-base-300 bg-white px-3 py-1.5 text-xs">⏸️ IA OFF</div>
+              <div className="rounded-md border border-base-300 bg-white px-3 py-1.5 text-xs">IA OFF</div>
             </div>
           )}
           {f.mock === 'type' && (

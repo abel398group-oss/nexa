@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { Icon } from '@/components/ui/icons';
 
 interface Notif { id: string; type: string; title: string; body: string; link?: string | null; read: boolean; createdAt: string }
 
@@ -62,7 +63,7 @@ export function NotificationBell() {
         title="Notificações"
         className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/70 transition-colors hover:bg-base-200"
       >
-        🔔
+        <Icon name="bell" className="h-5 w-5" />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
             {unread > 9 ? '9+' : unread}
@@ -80,7 +81,7 @@ export function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-auto">
             {items.length === 0 && (
-              <div className="px-4 py-8 text-center text-xs text-base-content/40">Nenhuma notificação 🎉</div>
+              <div className="px-4 py-8 text-center text-xs text-base-content/40">Nenhuma notificação</div>
             )}
             {items.map((n) => (
               <button

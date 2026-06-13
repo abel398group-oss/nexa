@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icon, type IconName } from '@/components/ui/icons';
 
 export interface Command {
   id: string;
   label: string;
   hint?: string; // texto à direita (ex.: "Ir para", "Ação")
-  icon?: string;
+  icon?: IconName;
   keywords?: string; // termos extras p/ busca
   run: () => void;
 }
@@ -86,7 +87,9 @@ export function CommandPalette({
                 i === active ? 'bg-brand-600 text-white' : 'text-base-content hover:bg-base-100'
               }`}
             >
-              <span className="text-base">{c.icon ?? '›'}</span>
+              <span className="flex h-4 w-4 items-center justify-center">
+                {c.icon ? <Icon name={c.icon} className="h-4 w-4" /> : '›'}
+              </span>
               <span className="flex-1 truncate">{c.label}</span>
               {c.hint && (
                 <span className={`text-[10px] ${i === active ? 'text-white/70' : 'text-base-content/40'}`}>

@@ -61,7 +61,7 @@ export function GuidedTour({ steps, onClose }: { steps: TourStep[]; onClose: () 
               onClick={() => (last ? finish() : setIdx(idx + 1))}
               className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
             >
-              {last ? 'Concluir 🎉' : 'Próximo'}
+              {last ? 'Concluir' : 'Próximo'}
             </button>
           </div>
         </div>

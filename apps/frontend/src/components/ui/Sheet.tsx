@@ -1,4 +1,5 @@
 import { ReactNode, useEffect } from 'react';
+import { Icon } from '@/components/ui/icons';
 
 // Drawer lateral (Sheet) — painel que desliza da borda. Sem libs externas (inspirado no TMS).
 export function Sheet({
@@ -48,7 +49,7 @@ export function Sheet({
             className="rounded-md px-2 py-1 text-base-content/60 transition-colors hover:bg-base-200"
             aria-label="Fechar"
           >
-            ✕
+            <Icon name="close" className="h-4 w-4" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>

@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Badge, statusVariant } from '@/components/ui/Badge';
-import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 
 interface Campaign {
   id: string;
@@ -143,13 +143,13 @@ export function CampaignsPage() {
 
   // chip de engajamento (entregue/lido/respondeu) a partir do ack + replied
   const engChip = (t: any): { label: string; cls: string } | null => {
-    if (t?.replied) return { label: '💬 Respondeu', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15' };
-    if (t?.ack >= 3) return { label: '👁 Lido', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15' };
-    if (t?.ack >= 2) return { label: '✓✓ Entregue', cls: 'bg-base-200 text-base-content/60' };
+    if (t?.replied) return { label: 'Respondeu', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15' };
+    if (t?.ack >= 3) return { label: 'Lido', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15' };
+    if (t?.ack >= 2) return { label: 'Entregue', cls: 'bg-base-200 text-base-content/60' };
     return null;
   };
   const outcomeLabel = (o: string) =>
-    ({ won: '🏆 Ganho', lost: '❌ Perdido', no_response: '🔇 Sem resposta', opt_out: '🚫 Opt-out', em_aberto: '⏳ Em aberto' } as Record<string, string>)[o] || o;
+    ({ won: 'Ganho', lost: 'Perdido', no_response: 'Sem resposta', opt_out: 'Opt-out', em_aberto: 'Em aberto' } as Record<string, string>)[o] || o;
 
   // pré-preenche o "Nova campanha" só com os que falharam/pularam
   function resendFailed() {
@@ -220,7 +220,7 @@ export function CampaignsPage() {
     });
     if (!ok) return;
     await api.post(`/campaigns/${c.id}/start`);
-    toast.success('Campanha iniciada 🚀');
+    toast.success('Campanha iniciada');
     await load();
   }
   async function pause(id: string) { await api.post(`/campaigns/${id}/pause`); toast.info('Campanha pausada.'); await load(); }
@@ -254,7 +254,7 @@ export function CampaignsPage() {
         {loading && <SkeletonList rows={3} />}
         {!loading && items.length === 0 && (
           <EmptyState
-            icon="📣"
+            icon={<Icon name="campaigns" className="h-9 w-9" />}
             title="Nenhuma campanha ainda"
             description="Crie uma campanha de WhatsApp ou e-mail para disparar para seus leads."
             action={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
@@ -276,22 +276,22 @@ export function CampaignsPage() {
                   <span className="font-semibold text-base-content">{c.name}</span>
                   <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
                   {isEmail
-                    ? <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700">✉️ e-mail</span>
-                    : <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700">💬 WhatsApp</span>
+                    ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700"><Icon name="mail" className="h-3 w-3" /> e-mail</span>
+                    : <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700"><Icon name="inbox" className="h-3 w-3" /> WhatsApp</span>
                   }
                 </div>
                 <div className="flex gap-2">
                   {c.status !== 'running' && c.status !== 'done' && (
-                    <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm">▶ Iniciar</Button>
+                    <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm"><Icon name="play" className="h-3.5 w-3.5" /> Iniciar</Button>
                   )}
                   {c.status === 'running' && (
-                    <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="h-7 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400">⏸ Pausar</button>
+                    <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
                   )}
-                  <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="sm" className="text-red-500 hover:bg-red-50">🗑️</Button>
+                  <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="icon-sm" className="text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></Button>
                 </div>
               </div>
               {isEmail && c.subject && (
-                <p className="mt-1 text-xs font-medium text-base-content/60">📧 Assunto: {c.subject}</p>
+                <p className="mt-1 text-xs font-medium text-base-content/60">Assunto: {c.subject}</p>
               )}
               <p className="mt-1 text-xs text-base-content/40 line-clamp-1">{c.template}</p>
               <div className="mt-3">
@@ -323,7 +323,7 @@ export function CampaignsPage() {
                  style={{ background: 'var(--surface-elevated)' }}>
               <h2 className="text-lg font-bold text-base-content">Nova campanha</h2>
               <button type="button" onClick={() => { setShow(false); resetForm(); }}
-                      className="text-base-content/40 hover:text-base-content text-xl leading-none">✕</button>
+                      className="text-base-content/40 hover:text-base-content"><Icon name="close" className="h-5 w-5" /></button>
             </div>
 
             <div className="px-7 py-5 space-y-5">
@@ -333,16 +333,16 @@ export function CampaignsPage() {
               <button
                 type="button"
                 onClick={() => { setChannel('whatsapp'); setFromContacts(true); }}
-                className={`flex-1 py-2.5 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
-                💬 WhatsApp
+                <Icon name="inbox" className="h-4 w-4" /> WhatsApp
               </button>
               <button
                 type="button"
                 onClick={() => { setChannel('email'); setFromContacts(false); }}
-                className={`flex-1 py-2.5 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
-                ✉️ E-mail
+                <Icon name="mail" className="h-4 w-4" /> E-mail
               </button>
             </div>
 
@@ -368,7 +368,7 @@ export function CampaignsPage() {
                     required
                   />
                   <p className="mt-1 text-[11px] text-base-content/35">
-                    ✅ "Gestão de fretes para transportadoras" &nbsp;·&nbsp; ❌ "OFERTA!!! Grátis por tempo limitado"
+                    Bom: "Gestão de fretes para transportadoras" &nbsp;·&nbsp; Evite: "OFERTA!!! Grátis por tempo limitado"
                   </p>
                 </div>
 
@@ -400,12 +400,12 @@ export function CampaignsPage() {
                   {/* Toggle: upload vs link manual */}
                   <div className="mb-2 flex rounded-lg border border-base-200 overflow-hidden text-xs font-medium">
                     <button type="button" onClick={() => setEmailLinkMode('upload')}
-                      className={`flex-1 py-2 transition-colors ${emailLinkMode === 'upload' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
-                      📎 Fazer upload do PDF
+                      className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2 transition-colors ${emailLinkMode === 'upload' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      <Icon name="upload" className="h-4 w-4" /> Fazer upload do PDF
                     </button>
                     <button type="button" onClick={() => setEmailLinkMode('manual')}
-                      className={`flex-1 py-2 transition-colors ${emailLinkMode === 'manual' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
-                      🔗 Colar link
+                      className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2 transition-colors ${emailLinkMode === 'manual' ? 'bg-indigo-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      Colar link
                     </button>
                   </div>
 
@@ -426,10 +426,10 @@ export function CampaignsPage() {
                       </div>
                       {media && (
                         <div className="mt-2 flex items-center gap-2">
-                          <span className="text-xs text-emerald-600">✅ {media.name}</span>
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600"><Icon name="check" className="h-3.5 w-3.5" /> {media.name}</span>
                           <span className="text-[11px] text-base-content/40 truncate">→ {media.url}</span>
                           <button type="button" onClick={() => { setMedia(null); setLink(''); }}
-                                  className="ml-auto text-[11px] text-red-400 hover:text-red-600">✕</button>
+                                  className="ml-auto text-red-400 hover:text-red-600"><Icon name="close" className="h-3.5 w-3.5" /></button>
                         </div>
                       )}
                       <p className="mt-2 text-[11px] text-base-content/35">
@@ -484,11 +484,11 @@ export function CampaignsPage() {
                   <div className="mb-2 flex rounded-lg border border-base-200 overflow-hidden text-xs font-medium">
                     <button type="button" onClick={() => setFromContacts(false)}
                       className={`flex-1 py-2 transition-colors ${!fromContacts ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
-                      ✍️ Digitar lista
+                      Digitar lista
                     </button>
                     <button type="button" onClick={() => setFromContacts(true)}
-                      className={`flex-1 py-2 transition-colors ${fromContacts ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
-                      👥 Contatos com e-mail
+                      className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2 transition-colors ${fromContacts ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}>
+                      <Icon name="contacts" className="h-4 w-4" /> Contatos com e-mail
                     </button>
                   </div>
                   {!fromContacts ? (
@@ -600,7 +600,7 @@ export function CampaignsPage() {
                       {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
                       {media && (
                         <>
-                          <span className="text-xs text-emerald-600">✅ arquivo enviado</span>
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600"><Icon name="check" className="h-3.5 w-3.5" /> arquivo enviado</span>
                           <input
                             className="input mt-1 w-full text-xs"
                             value={media.name}
@@ -641,7 +641,7 @@ export function CampaignsPage() {
 
             {channel === 'email' && (
               <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700">
-                ⏱️ <strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · horário 8h–18h · link de opt-out em todos os e-mails.
+<strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · horário 8h–18h · link de opt-out em todos os e-mails.
               </div>
             )}
 
@@ -674,13 +674,13 @@ export function CampaignsPage() {
             {(detail.campaign.subject || detail.campaign.mediaName || detail.campaign.link) && (
               <div className="mb-3 space-y-1 text-xs text-base-content/60">
                 {detail.campaign.subject && (
-                  <div>📧 Assunto: <span className="text-base-content/80">{detail.campaign.subject}</span></div>
+                  <div>Assunto: <span className="text-base-content/80">{detail.campaign.subject}</span></div>
                 )}
                 {detail.campaign.mediaName && (
-                  <div>📎 Anexo: <span className="text-base-content/80">{detail.campaign.mediaName}</span></div>
+                  <div>Anexo: <span className="text-base-content/80">{detail.campaign.mediaName}</span></div>
                 )}
                 {detail.campaign.link && (
-                  <div className="truncate">🔗 Link: <span className="text-base-content/80">{detail.campaign.link}</span></div>
+                  <div className="truncate">Link: <span className="text-base-content/80">{detail.campaign.link}</span></div>
                 )}
               </div>
             )}
@@ -695,16 +695,16 @@ export function CampaignsPage() {
               )}
               {((detail.counts?.failed ?? 0) + (detail.counts?.skipped ?? 0)) > 0 && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={resendFailed}>
-                  ↻ Reenviar aos que falharam
+                  <Icon name="refresh" className="h-4 w-4" /> Reenviar aos que falharam
                 </Button>
               )}
             </div>
 
             {detail.engagement && (
               <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">✓✓ Entregue: {detail.engagement.delivered}</span>
-                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">👁 Lido: {detail.engagement.read}</span>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">💬 Respondeu: {detail.engagement.replied}</span>
+                <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">Entregue: {detail.engagement.delivered}</span>
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">Lido: {detail.engagement.read}</span>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">Respondeu: {detail.engagement.replied}</span>
               </div>
             )}
 

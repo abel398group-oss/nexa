@@ -4,6 +4,7 @@ import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
 import {
   Button,
+  Icon,
   PageContainer,
   PageHeader,
   Breadcrumb,
@@ -104,7 +105,7 @@ export function DashboardPage() {
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Dashboard' }]} />}
         title="Dashboard"
         subtitle={<>Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s</>}
-        actions={<Button variant="outline" onClick={load}>↻ Atualizar</Button>}
+        actions={<Button variant="outline" onClick={load}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
       />
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
@@ -124,26 +125,26 @@ export function DashboardPage() {
             <ConversationMetricsCard
               label="Enviados"
               value={m.campaigns.sent}
-              emoji="📤"
+              icon="send"
               hint={`${m.campaigns.total} campanha(s)`}
             />
             <ConversationMetricsCard
               label="Entregue"
               value={`${m.campaigns.delivered} · ${m.campaigns.deliveredPct}%`}
-              emoji="✓✓"
+              icon="check"
               accent="blue"
             />
             <ConversationMetricsCard
               label="Lido"
               value={`${m.campaigns.read} · ${m.campaigns.readPct}%`}
-              emoji="👁"
+              icon="eye"
               accent="blue"
               highlight={m.campaigns.read > 0}
             />
             <ConversationMetricsCard
               label="Respondeu"
               value={`${m.campaigns.replied} · ${m.campaigns.repliedPct}%`}
-              emoji="💬"
+              icon="reply"
               accent="green"
               highlight={m.campaigns.replied > 0}
             />
@@ -177,7 +178,7 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="Conversas Ativas"
           value={activeTotal}
-          emoji="⚡"
+          icon="zap"
           hint="open + waiting + escalated"
           accent="brand"
           highlight={activeTotal > 0}
@@ -185,28 +186,28 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="Open"
           value={n(byStatus, 'open')}
-          emoji="🟢"
+          icon="inbox"
           accent="green"
           highlight={n(byStatus, 'open') > 0}
         />
         <ConversationMetricsCard
           label="Waiting Customer"
           value={n(byStatus, 'waiting_customer')}
-          emoji="🟡"
+          icon="bell"
           accent="amber"
         />
         <ConversationMetricsCard
           label="Waiting Internal"
           value={n(byStatus, 'waiting_internal')}
-          emoji="🔵"
+          icon="users"
           accent="blue"
           highlight={n(byStatus, 'waiting_internal') > 0}
-          hint={n(byStatus, 'waiting_internal') > 0 ? 'verifique atenção ⚠️' : undefined}
+          hint={n(byStatus, 'waiting_internal') > 0 ? 'verifique atenção' : undefined}
         />
         <ConversationMetricsCard
           label="Escalated"
           value={n(byStatus, 'escalated')}
-          emoji="🟠"
+          icon="alert"
           accent="orange"
           highlight={n(byStatus, 'escalated') > 0}
           hint={n(byStatus, 'escalated') > 0 ? 'requer ação imediata' : undefined}
@@ -214,7 +215,7 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="Closed"
           value={n(byStatus, 'closed')}
-          emoji="⚫"
+          icon="check"
           accent="zinc"
         />
       </div>
@@ -228,7 +229,7 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="Won"
           value={n(byOutcome, 'won')}
-          emoji="🏆"
+          icon="trophy"
           accent="green"
           highlight={n(byOutcome, 'won') > 0}
           hint="vendas realizadas"
@@ -236,21 +237,21 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="Lost"
           value={n(byOutcome, 'lost')}
-          emoji="❌"
+          icon="close"
           accent="red"
           hint="vendas perdidas"
         />
         <ConversationMetricsCard
           label="No Response"
           value={n(byOutcome, 'no_response')}
-          emoji="🔇"
+          icon="mute"
           accent="zinc"
           hint="fechado por inatividade"
         />
         <ConversationMetricsCard
           label="Opt-out"
           value={n(byStatus, 'opt_out')}
-          emoji="🚫"
+          icon="ban"
           accent="red"
           hint="descadastrados (LGPD)"
         />
@@ -262,27 +263,27 @@ export function DashboardPage() {
         <ConversationMetricsCard
           label="IA Autônoma"
           value={`${m.messages.aiSharePct}%`}
-          emoji="🤖"
+          icon="bot"
           accent="brand"
           hint={`${m.messages.aiGenerated} respostas enviadas pela IA`}
         />
         <ConversationMetricsCard
           label="Tokens"
           value={(m.ai.tokensIn + m.ai.tokensOut).toLocaleString('pt-BR')}
-          emoji="⚡"
+          icon="zap"
           hint={`${m.ai.tokensIn} in · ${m.ai.tokensOut} out`}
         />
         <ConversationMetricsCard
           label="Custo IA (est.)"
           value={`US$ ${m.ai.estimatedCostUsd.toFixed(4)}`}
-          emoji="💵"
+          icon="dollar"
           accent="amber"
           hint="estimado pelos tokens"
         />
         <ConversationMetricsCard
           label="DLQ (erros)"
           value={m.events.dlq}
-          emoji="⚠️"
+          icon="alert"
           accent={m.events.dlq > 0 ? 'red' : undefined}
           hint="eventos com falha"
         />

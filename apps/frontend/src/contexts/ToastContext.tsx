@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { Icon, type IconName } from '@/components/ui/icons';
 
 type ToastType = 'success' | 'error' | 'info';
 interface Toast { id: number; type: ToastType; message: string }
@@ -11,10 +12,10 @@ interface ToastApi {
 const ToastCtx = createContext<ToastApi>({ success: () => {}, error: () => {}, info: () => {} });
 
 let counter = 0;
-const STYLE: Record<ToastType, { bg: string; icon: string }> = {
-  success: { bg: 'border-emerald-500 bg-emerald-50 text-emerald-800', icon: '✅' },
-  error: { bg: 'border-red-500 bg-red-50 text-red-800', icon: '❌' },
-  info: { bg: 'border-sky-500 bg-sky-50 text-sky-800', icon: 'ℹ️' },
+const STYLE: Record<ToastType, { bg: string; icon: IconName }> = {
+  success: { bg: 'border-emerald-500 bg-emerald-50 text-emerald-800', icon: 'check' },
+  error: { bg: 'border-red-500 bg-red-50 text-red-800', icon: 'close' },
+  info: { bg: 'border-sky-500 bg-sky-50 text-sky-800', icon: 'help' },
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -47,7 +48,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             onClick={() => remove(t.id)}
             className={`pointer-events-auto flex cursor-pointer items-start gap-2 rounded-lg border-l-4 px-4 py-3 text-sm shadow-lg animate-[slideInRight_.2s_ease-out] ${STYLE[t.type].bg}`}
           >
-            <span>{STYLE[t.type].icon}</span>
+            <Icon name={STYLE[t.type].icon} className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="flex-1">{t.message}</span>
           </div>
         ))}

@@ -1,6 +1,7 @@
 import { createContext, useContext, useRef, useState, useCallback, ReactNode } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button, ButtonVariant } from '@/components/ui/Button';
+import { Icon, type IconName } from '@/components/ui/icons';
 
 interface ConfirmOpts {
   title?: string;
@@ -13,10 +14,10 @@ type ConfirmFn = (opts: ConfirmOpts) => Promise<boolean>;
 
 const ConfirmCtx = createContext<ConfirmFn>(async () => false);
 
-const VARIANT: Record<'danger' | 'warning' | 'info', { icon: string; btn: ButtonVariant }> = {
-  danger: { icon: '⚠️', btn: 'destructive' },
-  warning: { icon: '🔔', btn: 'primary' },
-  info: { icon: 'ℹ️', btn: 'primary' },
+const VARIANT: Record<'danger' | 'warning' | 'info', { icon: IconName; tone: string; btn: ButtonVariant }> = {
+  danger: { icon: 'alert', tone: 'text-red-500', btn: 'destructive' },
+  warning: { icon: 'bell', tone: 'text-amber-500', btn: 'primary' },
+  info: { icon: 'help', tone: 'text-sky-500', btn: 'primary' },
 };
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
@@ -49,7 +50,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         size="sm"
         title={
           <span className="flex items-center gap-2">
-            <span className="text-xl">{v.icon}</span>
+            <Icon name={v.icon} className={`h-5 w-5 ${v.tone}`} />
             {state?.title ?? 'Confirmar ação'}
           </span>
         }

@@ -145,7 +145,7 @@ export function EmailChannelSettingsPage() {
         </div>
 
         {/* ── Remetente ──────────────────────────────────────────────── */}
-        <Section title="✉️ Remetente" subtitle="Endereço que o lead vê ao receber o e-mail.">
+        <Section title="Remetente" subtitle="Endereço que o lead vê ao receber o e-mail.">
           <Field label="E-mail de envio" required>
             <input
               type="email"
@@ -177,7 +177,7 @@ export function EmailChannelSettingsPage() {
         </Section>
 
         {/* ── SMTP (envio) ────────────────────────────────────────────── */}
-        <Section title="📤 SMTP — Envio" subtitle="Servidor de saída. Hostgator: mail.hipertms.com.br porta 465.">
+        <Section title="SMTP — Envio" subtitle="Servidor de saída. Hostgator: mail.hipertms.com.br porta 465.">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <Field label="Servidor SMTP">
@@ -233,7 +233,7 @@ export function EmailChannelSettingsPage() {
         </Section>
 
         {/* ── IMAP (recebimento) ──────────────────────────────────────── */}
-        <Section title="📥 IMAP — Recebimento" subtitle="Servidor de entrada. Hostgator: mail.hipertms.com.br porta 993.">
+        <Section title="IMAP — Recebimento" subtitle="Servidor de entrada. Hostgator: mail.hipertms.com.br porta 993.">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <Field label="Servidor IMAP">
@@ -304,7 +304,7 @@ export function EmailChannelSettingsPage() {
         )}
         {saved && (
           <div className="rounded-lg bg-success/10 px-4 py-3 text-sm text-success">
-            ✅ Configurações salvas com sucesso!
+            Configurações salvas com sucesso!
           </div>
         )}
 

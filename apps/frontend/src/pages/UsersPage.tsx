@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 
 interface User {
   id: string; email: string; name?: string; role: string;
@@ -74,7 +74,7 @@ export function UsersPage() {
               </button>
             </div>
             {u.role === 'admin' ? (
-              <p className="text-xs text-base-content/50">🔓 Acesso total (administrador)</p>
+              <p className="text-xs text-base-content/50">Acesso total (administrador)</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {ALL_AREAS.map((a) => {
@@ -83,10 +83,10 @@ export function UsersPage() {
                     <button
                       key={a}
                       onClick={() => savePerms(u, togglePerm(u.permissions, a))}
-                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'}`}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'}`}
                       style={!on ? { background: 'var(--surface)' } : undefined}
                     >
-                      {on ? '✓ ' : ''}{AREA_LABEL[a]}
+                      {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
                     </button>
                   );
                 })}
@@ -118,8 +118,8 @@ export function UsersPage() {
                   const on = form.permissions.includes(a);
                   return (
                     <button type="button" key={a} onClick={() => setForm({ ...form, permissions: togglePerm(form.permissions, a) })}
-                      className={`rounded-md border px-2.5 py-1 text-xs ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 bg-white text-base-content/50'}`}>
-                      {on ? '✓ ' : ''}{AREA_LABEL[a]}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 bg-white text-base-content/50'}`}>
+                      {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
                     </button>
                   );
                 })}

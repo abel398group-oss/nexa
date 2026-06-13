@@ -159,12 +159,12 @@ export const ACTIVE_STATUSES: ConversationStatus[] = [
 /** Todos os filtros disponíveis no inbox */
 export const INBOX_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'all',              label: 'Todas' },
-  { key: 'open',             label: '🟢 Open' },
-  { key: 'waiting_customer', label: '🟡 Waiting Customer' },
-  { key: 'waiting_internal', label: '🔵 Waiting Internal' },
-  { key: 'escalated',        label: '🟠 Escalated' },
-  { key: 'closed',           label: '⚫ Closed' },
-  { key: 'opt_out',          label: '🚫 Opt-out' },
+  { key: 'open',             label: 'Open' },
+  { key: 'waiting_customer', label: 'Waiting Customer' },
+  { key: 'waiting_internal', label: 'Waiting Internal' },
+  { key: 'escalated',        label: 'Escalated' },
+  { key: 'closed',           label: 'Closed' },
+  { key: 'opt_out',          label: 'Opt-out' },
 ];
 
 /** Retorna true se a conversa waiting_internal está sem movimentação há mais de 2h */

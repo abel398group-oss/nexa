@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Icon } from '@/components/ui/icons';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
@@ -33,15 +34,15 @@ function displayPhone(phone: string): string {
 function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   if (sourceChannel === 'email') {
     return (
-      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700 font-medium" title="Canal: e-mail">
-        ✉️ email
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700 font-medium" title="Canal: e-mail">
+        <Icon name="mail" className="h-3 w-3" /> email
       </span>
     );
   }
   if (sourceChannel === 'whatsapp') {
     return (
-      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 font-medium" title="Canal: WhatsApp">
-        💬 whatsapp
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 font-medium" title="Canal: WhatsApp">
+        <Icon name="inbox" className="h-3 w-3" /> whatsapp
       </span>
     );
   }
@@ -60,7 +61,7 @@ function Recibo({ ack }: { ack?: number }) {
   if (a >= 3) return <span className="font-semibold text-sky-200" title="Lido">✓✓ lido</span>;
   if (a === 2) return <span className="text-white/75" title="Entregue">✓✓ entregue</span>;
   if (a >= 1) return <span className="text-white/75" title="Enviado">✓ enviado</span>;
-  return <span className="text-white/60" title="Enviando">🕓 enviando</span>;
+  return <span className="text-white/60" title="Enviando">enviando</span>;
 }
 
 export function InboxPage() {
@@ -156,11 +157,10 @@ export function InboxPage() {
     try {
       const r = await api.post('/agent/handle', { message: question, conversationId: active.id });
       setText(r.data.draft);
-      const agentEmoji: Record<string, string> = { sales: '💰', support: '🛠️', human: '🙋', optout: '🚫' };
       const route = r.data.route || {};
       const fontes = (r.data.usedKnowledge || []).map((k: any) => k.title).join(', ');
       setLiaInfo(
-        `${agentEmoji[route.agent] || '✨'} ${route.agent} · ${route.intent} · score ${route.leadScore}` +
+        `${route.agent} · ${route.intent} · score ${route.leadScore}` +
           (r.data.suggestedAction && r.data.suggestedAction !== 'none' ? ` · ação: ${r.data.suggestedAction}` : '') +
           (r.data.needsHuman ? ' · escalar' : '') +
           (fontes ? ` · fontes: ${fontes}` : ''),
@@ -191,7 +191,7 @@ export function InboxPage() {
           {loadingConvs && <div className="p-3"><SkeletonList rows={5} /></div>}
           {!loadingConvs && convs.length === 0 && (
             <div className="p-3">
-              <EmptyState icon="💬" title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
+              <EmptyState icon={<Icon name="inbox" className="h-9 w-9" />} title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
             </div>
           )}
           {!loadingConvs && filtered.length === 0 && convs.length > 0 && (
@@ -224,7 +224,7 @@ export function InboxPage() {
                       <span className="truncate font-medium text-base-content">
                         {c.contact?.name || displayPhone(c.phone)}
                       </span>
-                      {stale && <span title="Aguardando equipe há +2h" className="text-xs text-amber-500">⚠️</span>}
+                      {stale && <Icon name="alert" title="Aguardando equipe há +2h" className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
                     </div>
                     {c.contact?.name && (
                       <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
@@ -308,12 +308,12 @@ export function InboxPage() {
                     title={`${tmsLookup.customer.name}${tmsLookup.customer.plan ? ` · Plano: ${tmsLookup.customer.plan}` : ''}`}
                     className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700"
                   >
-                    ✅ Cliente TMS{tmsLookup.customer.plan ? ` — ${tmsLookup.customer.plan}` : ''}
+                    <Icon name="check" className="h-3 w-3" /> Cliente TMS{tmsLookup.customer.plan ? ` — ${tmsLookup.customer.plan}` : ''}
                   </span>
                 )}
                 {tmsLookup !== null && !tmsLookup.found && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2.5 py-0.5 text-[11px] text-base-content/50">
-                    🆕 Prospect
+                    Prospect
                   </span>
                 )}
               </div>
@@ -329,7 +329,7 @@ export function InboxPage() {
                   }`}
                   title="Histórico de status"
                 >
-                  📋 Timeline
+                  <span className="inline-flex items-center gap-1"><Icon name="knowledge" className="h-3.5 w-3.5" /> Timeline</span>
                 </button>
 
                 {/* resultado da venda */}
@@ -341,7 +341,7 @@ export function InboxPage() {
                       ? 'bg-emerald-600 text-white'
                       : 'border border-base-300 text-base-content/70 hover:bg-base-100'
                   }`}
-                >✅ Ganhou</button>
+                ><span className="inline-flex items-center gap-1"><Icon name="check" className="h-3.5 w-3.5" /> Ganhou</span></button>
                 <button
                   onClick={() => setOutcome(active.outcome === 'lost' ? null : 'lost')}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -349,7 +349,7 @@ export function InboxPage() {
                       ? 'bg-red-600 text-white'
                       : 'border border-base-300 text-base-content/70 hover:bg-base-100'
                   }`}
-                >❌ Perdeu</button>
+                ><span className="inline-flex items-center gap-1"><Icon name="close" className="h-3.5 w-3.5" /> Perdeu</span></button>
               </div>
             </div>
 
@@ -391,15 +391,15 @@ export function InboxPage() {
 
             {/* input */}
             <div className="border-t border-base-200 bg-[var(--surface)] p-3">
-              {liaInfo && <div className="mb-2 px-2 text-xs text-brand-600">✨ {liaInfo}</div>}
+              {liaInfo && <div className="mb-2 inline-flex items-center gap-1 px-2 text-xs text-brand-600"><Icon name="bot" className="h-3.5 w-3.5" /> {liaInfo}</div>}
               <div className="flex gap-2">
                 <button
                   onClick={suggest}
                   disabled={liaBusy}
                   title="Sugerir resposta com a Lia"
-                  className="rounded-full bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500 disabled:opacity-50"
                 >
-                  {liaBusy ? '...' : '✨ Lia'}
+                  {liaBusy ? '...' : <><Icon name="bot" className="h-4 w-4" /> Lia</>}
                 </button>
                 <input
                   className="flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"

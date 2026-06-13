@@ -12,7 +12,7 @@ import { Icon, type IconName } from '@/components/ui/icons';
 import { TenantSelector } from '@/contexts/TenantContext';
 
 const TOUR_STEPS: TourStep[] = [
-  { selector: 'aside nav', title: 'Bem-vindo ao Nexa! 👋', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
+  { selector: 'aside nav', title: 'Bem-vindo ao Nexa!', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
   { selector: 'a[href="/inbox"]', title: 'Inbox', text: 'Atenda as conversas do WhatsApp em tempo real. A IA (Lia) sugere ou envia respostas.' },
   { selector: 'a[href="/campaigns"]', title: 'Disparo de Leads', text: 'Envie campanhas em massa com proteção anti-bloqueio (horário, limites, follow-up).' },
   { selector: 'a[href="/sellers"]', title: 'Vendedores', text: 'Cadastre sua equipe. Leads quentes são distribuídos e o vendedor é avisado no WhatsApp.' },
@@ -20,30 +20,30 @@ const TOUR_STEPS: TourStep[] = [
   { selector: '[data-tour="killswitch"]', title: 'Controle da IA', text: 'Ligue/desligue a resposta automática da Lia a qualquer momento (botão de pânico).' },
 ];
 
-type NavItem = { to: string; label: string; emoji: string; ic: IconName; perm: string };
+type NavItem = { to: string; label: string; ic: IconName; perm: string };
 type NavGroup = { label: string | null; items: NavItem[] };
 
 // Navegação agrupada (padrão HiperTMS: Grupo → Item). Grupo sem label = item solto no topo.
 const NAV_GROUPS: NavGroup[] = [
   { label: null, items: [
-    { to: '/dashboard', label: 'Painel', emoji: '📊', ic: 'dashboard', perm: 'dashboard' },
+    { to: '/dashboard', label: 'Painel', ic: 'dashboard', perm: 'dashboard' },
   ] },
   { label: 'Atendimento', items: [
-    { to: '/inbox', label: 'Inbox', emoji: '💬', ic: 'inbox', perm: 'inbox' },
-    { to: '/support', label: 'Suporte', emoji: '🛠️', ic: 'support', perm: 'inbox' },
+    { to: '/inbox', label: 'Inbox', ic: 'inbox', perm: 'inbox' },
+    { to: '/support', label: 'Suporte', ic: 'support', perm: 'inbox' },
   ] },
   { label: 'Comercial', items: [
-    { to: '/contacts', label: 'Contatos', emoji: '👥', ic: 'contacts', perm: 'contacts' },
-    { to: '/campaigns', label: 'Disparo', emoji: '📣', ic: 'campaigns', perm: 'campaigns' },
-    { to: '/sellers', label: 'Vendedores', emoji: '🧑‍💼', ic: 'sellers', perm: 'sellers' },
-    { to: '/playbook', label: 'Playbook IA', emoji: '🎯', ic: 'playbook', perm: 'ai_control' },
+    { to: '/contacts', label: 'Contatos', ic: 'contacts', perm: 'contacts' },
+    { to: '/campaigns', label: 'Disparo', ic: 'campaigns', perm: 'campaigns' },
+    { to: '/sellers', label: 'Vendedores', ic: 'sellers', perm: 'sellers' },
+    { to: '/playbook', label: 'Playbook IA', ic: 'playbook', perm: 'ai_control' },
   ] },
   { label: 'Conhecimento', items: [
-    { to: '/knowledge', label: 'Base de Conhecimento', emoji: '📚', ic: 'knowledge', perm: 'knowledge' },
+    { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
   ] },
   { label: 'Administração', items: [
-    { to: '/users', label: 'Usuários', emoji: '🔐', ic: 'users', perm: 'users' },
-    { to: '/settings/email-channel', label: 'Canal de E-mail', emoji: '✉️', ic: 'mail', perm: 'admin' },
+    { to: '/users', label: 'Usuários', ic: 'users', perm: 'users' },
+    { to: '/settings/email-channel', label: 'Canal de E-mail', ic: 'mail', perm: 'admin' },
   ] },
 ];
 
@@ -130,7 +130,7 @@ function AccountMenu() {
             </div>
           </div>
           <div className="px-4 py-2 text-[11px] text-base-content/50">
-            {isAdmin ? '👑 Administrador' : '🧑‍💼 Vendedor'}
+            {isAdmin ? 'Administrador' : 'Vendedor'}
           </div>
           <button
             onClick={logout}
@@ -170,7 +170,7 @@ function MoreMenu({ dark, onToggleTheme, onTour }: { dark: boolean; onToggleThem
             onClick={() => { onTour(); setOpen(false); }}
             className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-base-content/70 transition-colors hover:bg-base-100"
           >
-            🎓 Refazer tour
+            <Icon name="help" className="h-4 w-4" /> Refazer tour
           </button>
         </div>
       )}
@@ -219,14 +219,14 @@ export function Layout() {
     ...visibleItems.map((it) => ({
       id: `nav:${it.to}`,
       label: it.label,
-      icon: it.emoji,
+      icon: it.ic,
       hint: 'Ir para',
       keywords: it.perm,
       run: () => navigate(it.to),
     })),
-    { id: 'act:theme', label: dark ? 'Tema claro' : 'Tema escuro', icon: dark ? '☀️' : '🌙', hint: 'Ação', run: toggleTheme },
-    { id: 'act:tour', label: 'Refazer o tour', icon: '🎓', hint: 'Ação', run: () => setTourOpen(true) },
-    { id: 'act:logout', label: 'Sair', icon: '⏻', hint: 'Ação', run: logout },
+    { id: 'act:theme', label: dark ? 'Tema claro' : 'Tema escuro', icon: (dark ? 'sun' : 'moon') as IconName, hint: 'Ação', run: toggleTheme },
+    { id: 'act:tour', label: 'Refazer o tour', icon: 'help' as IconName, hint: 'Ação', run: () => setTourOpen(true) },
+    { id: 'act:logout', label: 'Sair', icon: 'power' as IconName, hint: 'Ação', run: logout },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [visibleItems, dark]);
 

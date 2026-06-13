@@ -23,8 +23,32 @@ export type IconName =
   | 'power'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'chevronDown'
   | 'help'
-  | 'bot';
+  | 'bot'
+  | 'plus'
+  | 'edit'
+  | 'trash'
+  | 'upload'
+  | 'download'
+  | 'play'
+  | 'pause'
+  | 'refresh'
+  | 'undo'
+  | 'calendar'
+  | 'filter'
+  | 'send'
+  | 'check'
+  | 'close'
+  | 'building'
+  | 'eye'
+  | 'reply'
+  | 'trophy'
+  | 'zap'
+  | 'dollar'
+  | 'ban'
+  | 'mute'
+  | 'alert';
 
 const PATHS: Record<IconName, ReactNode> = {
   dashboard: (
@@ -127,6 +151,122 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   chevronLeft: <path d="m14 6-6 6 6 6" />,
   chevronRight: <path d="m10 6 6 6-6 6" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  edit: (
+    <>
+      <path d="M4 20h4l10-10a2 2 0 0 0-2.8-2.8L5 17.3V20Z" />
+      <path d="m13.5 6.5 4 4" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M4 20h16" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 4v12" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 20h16" />
+    </>
+  ),
+  play: <path d="M7 5.5v13l11-6.5-11-6.5Z" fill="currentColor" stroke="none" />,
+  pause: (
+    <>
+      <rect x="6.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none" />
+      <rect x="14" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M20 11a8 8 0 0 0-13.7-5L4 8" />
+      <path d="M4 4v4h4" />
+      <path d="M4 13a8 8 0 0 0 13.7 5L20 16" />
+      <path d="M20 20v-4h-4" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h11a5 5 0 0 1 0 10h-1" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="16" rx="2" />
+      <path d="M3.5 9h17M8 3v4M16 3v4" />
+    </>
+  ),
+  filter: <path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z" />,
+  send: (
+    <>
+      <path d="M21 4 3 11l6 2 2 6 10-15Z" />
+      <path d="m9 13 12-9" />
+    </>
+  ),
+  check: <path d="m5 12 5 5 9-11" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
+  building: (
+    <>
+      <rect x="5" y="3" width="14" height="18" rx="1.5" />
+      <path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01M10 21v-3h4v3" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  reply: (
+    <>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h9a7 7 0 0 1 7 7v1" />
+    </>
+  ),
+  trophy: (
+    <>
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+      <path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" />
+      <path d="M12 13v3M9 20h6M10 20v-1.5a2 2 0 0 1 4 0V20" />
+    </>
+  ),
+  zap: <path d="M13 3 5 13h6l-2 8 8-10h-6l2-8Z" />,
+  dollar: (
+    <>
+      <path d="M12 3v18" />
+      <path d="M16 7.5a3 3 0 0 0-3-2.5h-1.5a2.5 2.5 0 0 0 0 5h2a2.5 2.5 0 0 1 0 5H12a3 3 0 0 1-3-2.5" />
+    </>
+  ),
+  ban: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m6 6 12 12" />
+    </>
+  ),
+  mute: (
+    <>
+      <path d="M5 9v6h3l5 4V5L8 9H5Z" />
+      <path d="m16 9 4 6M20 9l-4 6" />
+    </>
+  ),
+  alert: (
+    <>
+      <path d="M12 4 2.5 20h19L12 4Z" />
+      <path d="M12 10v4M12 17.5h.01" />
+    </>
+  ),
   help: (
     <>
       <circle cx="12" cy="12" r="9" />

@@ -4,7 +4,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Input, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { Badge } from '@/components/ui/Badge';
 
 interface Seller {
@@ -190,7 +190,7 @@ export function SellersPage() {
       {loading ? (
         <SkeletonList rows={3} />
       ) : items.length === 0 ? (
-        <EmptyState icon="🧑‍💼" title="Nenhum vendedor cadastrado" description="Adicione um vendedor no formulário acima — ele recebe os leads quentes." />
+        <EmptyState icon={<Icon name="sellers" className="h-9 w-9" />} title="Nenhum vendedor cadastrado" description="Adicione um vendedor no formulário acima — ele recebe os leads quentes." />
       ) : (
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
@@ -209,7 +209,7 @@ export function SellersPage() {
               <tr key={s.id} className="border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
                 <td className="px-4 py-3 font-medium text-base-content">
                   {s.name}
-                  <div className="text-[11px] font-normal text-base-content/40">{s.loginEmail ? `🔑 ${s.loginEmail}` : 'sem login'}</div>
+                  <div className="text-[11px] font-normal text-base-content/40">{s.loginEmail || 'sem login'}</div>
                 </td>
                 <td className="px-4 py-3 text-base-content/70">{s.phone}</td>
                 <td className="px-4 py-3 text-base-content/70">{s.assignedCount}</td>
@@ -221,8 +221,8 @@ export function SellersPage() {
                     <Button variant="outline" size="sm" onClick={() => toggle(s)}>
                       {s.active ? 'Desativar' : 'Ativar'}
                     </Button>
-                    <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✏️</button>
-                    <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">🗑️</button>
+                    <button onClick={() => openEdit(s)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200"><Icon name="edit" className="h-4 w-4" /></button>
+                    <button onClick={() => del(s)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>

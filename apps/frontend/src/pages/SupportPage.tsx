@@ -19,6 +19,7 @@ import {
   PageContainer,
   PageHeader,
   Breadcrumb,
+  Icon,
 } from '@/shared/ui';
 import { getCategoryConfig, getPriorityConfig, CATEGORY_CONFIG } from '@/lib/ticket-category';
 import { getStatusConfig } from '@/lib/conversation-status';
@@ -74,7 +75,6 @@ function CategoryPill({ cat }: { cat?: string | null }) {
     <span
       className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color} ${cfg.textColor}`}
     >
-      <span aria-hidden>{cfg.emoji}</span>
       {cfg.label}
     </span>
   );
@@ -90,7 +90,6 @@ function PriorityPill({ pri }: { pri?: string | null }) {
         isCritical ? 'shadow-sm ring-2 ring-red-500/50 animate-pulse' : ''
       }`}
     >
-      <span aria-hidden>{cfg.emoji}</span>
       {cfg.label}
     </span>
   );
@@ -234,7 +233,7 @@ export function SupportPage() {
           />
         ) : filtered.length === 0 ? (
           <EmptyState
-            icon="🛠️"
+            icon={<Icon name="support" className="h-9 w-9" />}
             title="Nenhum ticket de suporte"
             description="Quando a Lia abrir um chamado de suporte, ele aparece aqui."
           />

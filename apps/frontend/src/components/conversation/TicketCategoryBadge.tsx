@@ -7,7 +7,7 @@ interface Props {
   compact?: boolean; // só ícone + label curto
 }
 
-export function TicketCategoryBadge({ category, priority, compact = false }: Props) {
+export function TicketCategoryBadge({ category, priority }: Props) {
   const cat = getCategoryConfig(category);
   const pri = getPriorityConfig(priority);
 
@@ -20,8 +20,7 @@ export function TicketCategoryBadge({ category, priority, compact = false }: Pro
           className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${cat.color} ${cat.textColor}`}
           title={cat.label}
         >
-          <span>{cat.emoji}</span>
-          {!compact && <span>{cat.label}</span>}
+          <span>{cat.label}</span>
         </span>
       )}
       {pri && (
@@ -29,8 +28,7 @@ export function TicketCategoryBadge({ category, priority, compact = false }: Pro
           className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${pri.color} ${pri.textColor}`}
           title={`Prioridade: ${pri.label}`}
         >
-          <span>{pri.emoji}</span>
-          {!compact && <span>{pri.label}</span>}
+          <span>{pri.label}</span>
         </span>
       )}
     </span>

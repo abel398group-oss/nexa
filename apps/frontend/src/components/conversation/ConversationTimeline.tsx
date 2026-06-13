@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { getStatusConfig, getOutcomeConfig } from '@/lib/conversation-status';
+import { Icon } from '@/components/ui/icons';
 
 interface TimelineEntry {
   id: string;
@@ -85,11 +86,9 @@ export function ConversationTimeline({ conversationId }: Props) {
 
             {/* dot */}
             <div
-              className="relative z-10 mt-1 h-7 w-7 flex-shrink-0 rounded-full border-2 border-white flex items-center justify-center text-base"
+              className="relative z-10 mt-1 h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 border-white"
               style={{ background: toStatus.dot, boxShadow: '0 0 0 2px var(--border)' }}
-            >
-              <span className="text-[10px]">{toStatus.emoji}</span>
-            </div>
+            />
 
             {/* conteúdo */}
             <div className="flex-1 pb-4">
@@ -107,12 +106,12 @@ export function ConversationTimeline({ conversationId }: Props) {
                 </span>
                 {toOutcome && (
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${toOutcome.bg} ${toOutcome.text}`}>
-                    {toOutcome.emoji} {toOutcome.labelPt}
+                    {toOutcome.labelPt}
                   </span>
                 )}
                 {isReopen && (
-                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
-                    🔄 Reaberta
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                    <Icon name="refresh" className="h-3 w-3" /> Reaberta
                   </span>
                 )}
               </div>

@@ -9,6 +9,9 @@
  * espelhando o globals.css do HiperTMS.
  */
 
+// Ícones de linha (outline)
+export * from '@/components/ui/icons';
+
 // Moldura de página
 export * from '@/components/ui/PageHeader';
 export * from '@/components/ui/Breadcrumb';

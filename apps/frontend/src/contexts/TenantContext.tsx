@@ -5,6 +5,7 @@ import { useConfirm } from '@/contexts/ConfirmContext';
 import { getActingTenantId, setActingTenantId } from '@/lib/actingTenant';
 import { setDestructiveConfirmHandler } from '@/lib/destructiveConfirm';
 import { Popover } from '@/components/ui/Popover';
+import { Icon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 
 export interface Tenant {
@@ -85,7 +86,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
           className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg"
           title="Voce esta operando na conta de um cliente. Alteracoes afetam este cliente."
         >
-          <span>⚠ Operando como {actingTenant?.name ?? actingTenantId}</span>
+          <Icon name="alert" className="h-3.5 w-3.5" />
+          <span>Operando como {actingTenant?.name ?? actingTenantId}</span>
         </div>
       )}
     </Ctx.Provider>
@@ -168,7 +170,7 @@ export function TenantGate({ children }: { children: ReactNode }) {
   if (!needsSelection) return <>{children}</>;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-base-100 p-8 text-center">
-      <div className="text-3xl">🏢</div>
+      <Icon name="building" className="h-8 w-8 text-base-content/40" />
       <h1 className="text-lg font-bold text-base-content">Selecione um cliente</h1>
       <p className="max-w-sm text-sm text-base-content/50">
         Voce e admin da plataforma. Escolha o cliente que deseja visualizar para comecar.

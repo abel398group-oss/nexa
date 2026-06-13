@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDateRange, lastDays, ALL_TIME, DateRange } from '@/contexts/DateRangeContext';
+import { Icon } from '@/components/ui/icons';
 
 // Seletor de período da topbar (como o calendário do TMS) — filtra o painel.
 export function DateRangePicker() {
@@ -47,8 +48,9 @@ export function DateRangePicker() {
         title="Período dos indicadores"
         className="inline-flex h-8 items-center gap-2 rounded-md border border-base-300 bg-white px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-100"
       >
-        📅 {range.label}
-        <span className="text-base-content/40">▾</span>
+        <Icon name="calendar" className="h-4 w-4 text-base-content/50" />
+        {range.label}
+        <Icon name="chevronDown" className="h-3.5 w-3.5 text-base-content/40" />
       </button>
 
       {open && (

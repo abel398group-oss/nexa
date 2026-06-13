@@ -14,7 +14,6 @@ export function ConversationOutcomeBadge({ outcome, size = 'sm' }: Props) {
       className={`inline-flex items-center gap-1 rounded-full font-medium ${px} ${cfg.bg} ${cfg.text}`}
       title={cfg.label}
     >
-      <span>{cfg.emoji}</span>
       <span>{cfg.labelPt}</span>
     </span>
   );

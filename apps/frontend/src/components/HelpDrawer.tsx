@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { HelpDemo, DemoFrame } from '@/components/HelpDemo';
+import { Icon } from '@/components/ui/icons';
 
 interface HelpSection { title: string; steps: string[]; }
 interface HelpDoc { title: string; intro: string; sections: HelpSection[]; tip?: string; demo?: DemoFrame[]; }
@@ -12,7 +13,7 @@ export const HELP: Record<string, HelpDoc> = {
     demo: [
       { mock: 'card', caption: '1. Cards mostram os números do dia', label: '14', result: '11' },
       { mock: 'list', caption: '2. Quadros detalham leads, cobranças e reclamações', label: 'Item' },
-      { mock: 'card', caption: '3. Atualiza sozinho a cada 10s', label: '🔄', result: 'auto' },
+      { mock: 'card', caption: '3. Atualiza sozinho a cada 10s', label: 'Auto', result: 'auto' },
     ],
     sections: [
       { title: 'O que cada número significa', steps: [
@@ -34,8 +35,8 @@ export const HELP: Record<string, HelpDoc> = {
     intro: 'Onde você lê e responde as conversas do WhatsApp em tempo real.',
     demo: [
       { mock: 'list', caption: '1. Clique numa conversa da lista', label: 'Lead' },
-      { mock: 'click', caption: '2. Clique em ✨ Lia pra sugerir resposta', label: '✨ Lia' },
-      { mock: 'type', caption: '3. A resposta aparece — revise e envie', label: 'Bom dia! O HiperTMS emite CT-e...', result: 'enviado ✅' },
+      { mock: 'click', caption: '2. Clique em Lia pra sugerir resposta', label: 'Lia' },
+      { mock: 'type', caption: '3. A resposta aparece — revise e envie', label: 'Bom dia! O HiperTMS emite CT-e...', result: 'enviado' },
     ],
     sections: [
       { title: 'Conversar', steps: [
@@ -44,15 +45,15 @@ export const HELP: Record<string, HelpDoc> = {
         'Digite no campo de baixo e clique Enviar — vai pro WhatsApp do cliente.',
       ] },
       { title: 'Usar a Lia (IA)', steps: [
-        'Clique no botão "✨ Lia" — ela lê a última mensagem do cliente e sugere uma resposta.',
-        'A barrinha mostra pra qual agente roteou (💰 vendas / 🛠️ suporte) e o score do lead.',
+        'Clique no botão "Lia" — ela lê a última mensagem do cliente e sugere uma resposta.',
+        'A barrinha mostra pra qual agente roteou (vendas / suporte) e o score do lead.',
         'Revise o texto sugerido, edite se quiser, e clique Enviar.',
       ] },
       { title: 'Etiquetas', steps: [
-        'Uma conversa com "🧑‍💼 nome" foi atribuída àquele vendedor.',
+        'Uma conversa com o nome do vendedor foi atribuída àquele vendedor.',
       ] },
     ],
-    tip: 'Com o kill switch "🤖 IA ON" (no topo), a Lia responde sozinha os leads — sem você clicar.',
+    tip: 'Com o kill switch "IA ON" (no topo), a Lia responde sozinha os leads — sem você clicar.',
   },
   '/contacts': {
     title: 'Contatos (CRM)',
@@ -60,7 +61,7 @@ export const HELP: Record<string, HelpDoc> = {
     demo: [
       { mock: 'click', caption: '1. Clique em + Novo (ou ↑ Importar)', label: '+ Novo' },
       { mock: 'type', caption: '2. Preencha telefone, nome e empresa', label: '5511999998888, João, Transp X' },
-      { mock: 'list', caption: '3. O contato aparece na lista', label: 'Contato', result: 'salvo ✅' },
+      { mock: 'list', caption: '3. O contato aparece na lista', label: 'Contato', result: 'salvo' },
     ],
     sections: [
       { title: 'Adicionar', steps: [
@@ -79,7 +80,7 @@ export const HELP: Record<string, HelpDoc> = {
     demo: [
       { mock: 'click', caption: '1. Clique em ↓ Importar TMS', label: '↓ Importar TMS' },
       { mock: 'list', caption: '2. Abra um item pra ver as versões', label: 'Tópico' },
-      { mock: 'click', caption: '3. Clique Aprovar — a Lia passa a usar', label: 'Aprovar', result: '✓ aprovada' },
+      { mock: 'click', caption: '3. Clique Aprovar — a Lia passa a usar', label: 'Aprovar', result: 'aprovada' },
     ],
     sections: [
       { title: 'Importar do TMS', steps: [
@@ -120,7 +121,7 @@ export const HELP: Record<string, HelpDoc> = {
     intro: 'Enviar mensagens em massa para uma lista, com proteção anti-bloqueio.',
     demo: [
       { mock: 'type', caption: '1. Escreva a mensagem com {{nome}}', label: 'Oi {{nome}}! Conhece o HiperTMS?' },
-      { mock: 'click', caption: '2. Clique em Iniciar', label: '▶ Iniciar' },
+      { mock: 'click', caption: '2. Clique em Iniciar', label: 'Iniciar' },
       { mock: 'card', caption: '3. Acompanhe o progresso e o limite do dia', label: '12/30', result: '40%' },
     ],
     sections: [
@@ -130,8 +131,8 @@ export const HELP: Record<string, HelpDoc> = {
         'Escolha "todos os contatos" ou cole uma lista de telefones.',
       ] },
       { title: 'Acompanhar', steps: [
-        'Clique "▶ Iniciar". A barra mostra o progresso (enviados/total).',
-        'Pode "⏸ Pausar" a qualquer momento.',
+        'Clique "Iniciar". A barra mostra o progresso (enviados/total).',
+        'Pode "Pausar" a qualquer momento.',
       ] },
       { title: 'Anti-ban (automático)', steps: [
         'Só dispara em horário comercial (7h-19h).',
@@ -163,7 +164,7 @@ export function HelpDrawer({ pathname, onClose }: { pathname: string; onClose: (
             <div className="text-xs font-semibold uppercase tracking-wide text-brand-600">Como usar</div>
             <h2 className="text-lg font-bold text-base-content">{doc.title}</h2>
           </div>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✕</button>
+          <button onClick={onClose} className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200"><Icon name="close" className="h-4 w-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <p className="mb-4 text-sm text-base-content/70">{doc.intro}</p>
@@ -183,7 +184,7 @@ export function HelpDrawer({ pathname, onClose }: { pathname: string; onClose: (
           ))}
           {doc.tip && (
             <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
-              💡 <span className="font-medium">Dica:</span> {doc.tip}
+<span className="font-medium">Dica:</span> {doc.tip}
             </div>
           )}
         </div>

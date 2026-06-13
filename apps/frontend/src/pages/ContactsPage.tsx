@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon } from '@/shared/ui';
 import { Icon } from '@/components/ui/icons';
 import {
   type Contact,
@@ -107,7 +107,7 @@ export function ContactsPage() {
   async function reactivate(c: Contact) {
     const ok = await confirm({
       title: 'Reativar contato',
-      message: `Reativar ${c.name || c.phone}? ⚠️ Só faça isso se a pessoa CONSENTIU em voltar a receber mensagens (LGPD).`,
+      message: `Reativar ${c.name || c.phone}? Só faça isso se a pessoa CONSENTIU em voltar a receber mensagens (LGPD).`,
       variant: 'warning',
       confirmLabel: 'Reativar',
     });
@@ -319,7 +319,7 @@ export function ContactsPage() {
             onKeyDown={(e) => e.key === 'Enter' && load()}
           />
           <Button variant="outline" onClick={load}>Buscar</Button>
-          <Button variant="outline" onClick={() => { setShowImport(true); setImportMsg(''); }}>↑ Importar</Button>
+          <Button variant="outline" onClick={() => { setShowImport(true); setImportMsg(''); }}><Icon name="upload" className="h-4 w-4" /> Importar</Button>
           <Button onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }}>+ Novo</Button>
         </div>
       </div>
@@ -375,12 +375,12 @@ export function ContactsPage() {
           <SkeletonList rows={6} />
         ) : shown.length === 0 ? (
           <EmptyState
-            icon="👥"
+            icon={<Icon name="contacts" className="h-9 w-9" />}
             title={search || filtro !== 'todos' ? 'Nenhum contato encontrado' : 'Nenhum contato ainda'}
             description={search || filtro !== 'todos' ? 'Tente outro filtro ou termo de busca.' : 'Importe sua lista ou cadastre o primeiro contato.'}
             action={
-              <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
-                ↑ Importar contatos
+              <button onClick={() => { setShowImport(true); setImportMsg(''); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
+                <Icon name="upload" className="h-4 w-4" /> Importar contatos
               </button>
             }
           />
@@ -420,7 +420,7 @@ export function ContactsPage() {
                 <td className="px-4 py-3 font-medium text-base-content">
                   {c.name || '—'}
                   {c.status === 'opted_out' && (
-                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">🚫 descadastrado</span>
+                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">descadastrado</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-base-content/80">{c.phone}</td>
@@ -450,10 +450,10 @@ export function ContactsPage() {
                       <Icon name="campaigns" className="h-4 w-4" />
                     </button>
                     {c.status === 'opted_out' && (
-                      <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-100">↩️ Reativar</button>
+                      <button onClick={() => reactivate(c)} title="Reativar (com consentimento)" className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-100"><Icon name="undo" className="h-3.5 w-3.5" /> Reativar</button>
                     )}
-                    <button onClick={() => openEdit(c)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">✏️</button>
-                    <button onClick={() => del(c)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-100">🗑️</button>
+                    <button onClick={() => openEdit(c)} title="Editar" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200"><Icon name="edit" className="h-4 w-4" /></button>
+                    <button onClick={() => del(c)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-100"><Icon name="trash" className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>
@@ -505,14 +505,14 @@ export function ContactsPage() {
 
           {/* opção: subir arquivo .csv/.txt + baixar modelo */}
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-base-300 bg-base-200 p-3">
-            <label className="btn-primary cursor-pointer text-xs">
-              📎 Escolher arquivo (.csv ou .txt)
+            <label className="btn-primary inline-flex cursor-pointer items-center gap-1.5 text-xs">
+              <Icon name="upload" className="h-4 w-4" /> Escolher arquivo (.csv ou .txt)
               <input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={onPickFile} />
             </label>
             <Button type="button" variant="outline" size="sm" onClick={baixarModelo}>
-              ⬇️ Baixar modelo
+              <Icon name="download" className="h-4 w-4" /> Baixar modelo
             </Button>
-            <span className="text-[11px] text-base-content/40">ou cole abaixo 👇</span>
+            <span className="text-[11px] text-base-content/40">ou cole abaixo</span>
           </div>
 
           <div>
@@ -552,7 +552,7 @@ export function ContactsPage() {
           <div className="py-8 text-center text-sm text-base-content/50">Carregando histórico…</div>
         ) : histList.length === 0 ? (
           <EmptyState
-            icon="📣"
+            icon={<Icon name="campaigns" className="h-9 w-9" />}
             title="Nenhuma campanha"
             description="Este contato ainda não recebeu nenhuma campanha."
           />
@@ -566,7 +566,7 @@ export function ContactsPage() {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-base-content">{h.name}</div>
                   <div className="text-[11px] text-base-content/50">
-                    {h.channel === 'email' ? '✉️ e-mail' : '💬 WhatsApp'} ·{' '}
+                    {h.channel === 'email' ? 'e-mail' : 'WhatsApp'} ·{' '}
                     {new Date(h.createdAt).toLocaleDateString('pt-BR')}
                   </div>
                 </div>

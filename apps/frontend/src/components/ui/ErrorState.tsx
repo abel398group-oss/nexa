@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { Icon } from '@/components/ui/icons';
 
 // Estado de erro — mesmo formato visual do EmptyState, com moldura de alerta.
 export function ErrorState({
@@ -21,7 +22,7 @@ export function ErrorState({
         className,
       )}
     >
-      <div className="text-3xl">⚠️</div>
+      <div className="flex h-12 w-12 items-center justify-center text-red-500"><Icon name="alert" className="h-9 w-9" /></div>
       <h3 className="text-sm font-semibold text-base-content">{title}</h3>
       {description && <p className="max-w-sm text-xs text-base-content/60">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
