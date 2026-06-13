@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Alert } from '@/shared/ui';
 
@@ -29,6 +29,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forgotHint, setForgotHint] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,28 +46,32 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative isolate flex min-h-app flex-col items-center justify-center overflow-hidden px-4 py-14">
-      {/* fundo: degradê suave + brilho laranja no topo (igual ao TMS) */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#f3ede8]/80 via-base-200 to-base-200" aria-hidden />
+    <div className="dark relative isolate flex min-h-app flex-col items-center justify-center overflow-hidden bg-[#0b0c0f] px-4 py-14 sm:py-16">
+      {/* fundo escuro: mais claro no topo, escuro embaixo (como o TMS) */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#2b2e38] via-[#181a20] to-[#0b0c0f]" aria-hidden />
+      {/* leve spotlight neutro no topo */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/[0.05] to-transparent" aria-hidden />
+      {/* brilho laranja embaixo do card (igual ao TMS) */}
       <div
-        className="pointer-events-none absolute -top-32 left-1/2 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full bg-gradient-to-b from-brand-500/[0.12] to-transparent blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-[60%] h-[24rem] w-[34rem] -translate-x-1/2 rounded-[50%] bg-brand-500/[0.20] blur-[110px]"
         aria-hidden
       />
 
-      <div className="relative w-full max-w-[440px]">
+      <div className="relative w-full max-w-[460px]">
         {/* borda laranja em degradê = o "glow" do card */}
-        <div className="rounded-[1.35rem] bg-gradient-to-br from-[#FF5A1F] via-[#ED4708] to-[#FF8A5C] p-[1px] shadow-[0_24px_56px_-16px_rgb(255_90_31_/_0.35),0_12px_28px_-12px_rgb(0_0_0_/_0.25)]">
-          <div className="rounded-[calc(1.35rem-1px)] bg-base-100 px-7 pb-9 pt-10 sm:px-9">
-            {/* logo + título */}
+        <div className="rounded-[1.35rem] bg-gradient-to-br from-[#FF5A1F] via-[#ED4708] to-[#FF8A5C] p-[1px] shadow-[0_24px_56px_-16px_rgb(255_90_31_/_0.33),0_12px_28px_-12px_rgb(30_58_95_/_0.18)]">
+          <div className="rounded-[calc(1.35rem-1px)] bg-base-100 px-7 pb-9 pt-10 sm:px-9 sm:pb-10 sm:pt-11">
+            {/* wordmark + título */}
             <div className="flex flex-col items-center text-center">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-base font-bold text-white">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-xl font-extrabold text-white shadow-sm">
                   N
                 </span>
-                <span className="text-2xl font-bold tracking-tight text-base-content">Nexa</span>
+                <span className="text-[34px] font-extrabold leading-none tracking-tight text-base-content">Nexa</span>
               </div>
-              <h1 className="mt-8 text-2xl font-extrabold tracking-tight text-base-content">Bem-vindo de volta</h1>
-              <p className="mt-1.5 text-sm text-base-content/55">Entre com suas credenciais para continuar.</p>
+              <h1 className="mt-8 text-2xl font-extrabold tracking-tight text-base-content sm:text-[1.65rem]">
+                Entrar na sua conta
+              </h1>
             </div>
 
             <form className="mt-9 space-y-5" onSubmit={onSubmit}>
@@ -87,9 +92,18 @@ export function LoginPage() {
               </div>
 
               <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-sm font-medium text-base-content" htmlFor="password">
-                  Senha
-                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="mb-0 text-sm font-medium text-base-content" htmlFor="password">
+                    Senha
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setForgotHint(true)}
+                    className="shrink-0 text-xs font-semibold text-brand-600 hover:underline sm:text-sm"
+                  >
+                    Esqueceu a senha?
+                  </button>
+                </div>
                 <div className="relative">
                   <Input
                     id="password"
@@ -110,10 +124,15 @@ export function LoginPage() {
                     {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                   </button>
                 </div>
+                {forgotHint && (
+                  <p className="text-xs text-base-content/55">
+                    Para redefinir a senha, fale com o administrador da sua conta.
+                  </p>
+                )}
               </div>
 
               {error && (
-                <Alert tone="danger" className="text-sm">
+                <Alert tone="danger" className="text-sm shadow-sm">
                   {error}
                 </Alert>
               )}
@@ -121,15 +140,36 @@ export function LoginPage() {
               <Button
                 type="submit"
                 loading={busy}
-                className="mt-2 !h-12 w-full justify-center !rounded-xl text-base font-semibold"
+                className="mt-2 !h-12 w-full justify-center !rounded-xl text-base font-semibold shadow-md shadow-brand-500/20 transition-[box-shadow,transform] hover:shadow-lg active:scale-[0.99]"
               >
                 {busy ? 'Entrando…' : 'Entrar'}
               </Button>
             </form>
 
-            <p className="mt-8 text-center text-xs leading-relaxed text-base-content/45">
-              Acesso restrito · Nexa v0.1
+            <p className="mt-8 text-center text-sm text-base-content/65">
+              Não tem conta?{' '}
+              <Link to="/" className="font-semibold text-brand-600 no-underline hover:underline">
+                Conheça o Nexa
+              </Link>
             </p>
+
+            <p className="mt-6 text-center text-[11px] leading-relaxed text-base-content/45">
+              Ao entrar, você aceita os{' '}
+              <Link to="/" className="font-medium text-brand-600 underline-offset-2 hover:underline">
+                Termos
+              </Link>{' '}
+              e a{' '}
+              <Link to="/" className="font-medium text-brand-600 underline-offset-2 hover:underline">
+                Política de privacidade
+              </Link>
+              .
+            </p>
+
+            <div className="mt-6 flex justify-center border-t border-base-content/[0.08] pt-6">
+              <Link to="/" className="text-sm font-semibold text-brand-600 no-underline hover:underline">
+                ← Voltar ao site
+              </Link>
+            </div>
           </div>
         </div>
       </div>

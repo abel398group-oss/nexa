@@ -25,6 +25,9 @@ type Channel = 'whatsapp' | 'email';
 export function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
   const [numbers, setNumbers] = useState<SenderNumber[]>([]);
+  // seleção em massa + visão de arquivadas
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [archivedView, setArchivedView] = useState(false);
   const [show, setShow] = useState(false);
   const [channel, setChannel] = useState<Channel>('whatsapp');
 
@@ -81,7 +84,10 @@ export function CampaignsPage() {
 
   async function load() {
     try {
-      const [c, n] = await Promise.allSettled([api.get('/campaigns'), api.get('/sender/numbers')]);
+      const [c, n] = await Promise.allSettled([
+        api.get('/campaigns', { params: { archived: archivedView } }),
+        api.get('/sender/numbers'),
+      ]);
       if (c.status === 'fulfilled') setItems(c.value.data);
       if (n.status === 'fulfilled') setNumbers(n.value.data);
     } finally {
@@ -89,10 +95,49 @@ export function CampaignsPage() {
     }
   }
   useEffect(() => {
+    setSelected(new Set()); // troca de visão limpa a seleção
     load();
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archivedView]);
+
+  // ----- seleção em massa -----
+  function toggleSel(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected((prev) => (prev.size === items.length ? new Set() : new Set(items.map((c) => c.id))));
+  }
+  const allSelected = items.length > 0 && selected.size === items.length;
+
+  async function archiveSelected(archive: boolean) {
+    const ids = [...selected];
+    if (!ids.length) return;
+    await api.post(`/campaigns/${archive ? 'archive' : 'unarchive'}`, { ids });
+    toast.success(archive ? `${ids.length} arquivada(s).` : `${ids.length} desarquivada(s).`);
+    setSelected(new Set());
+    await load();
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: 'Excluir campanhas',
+      message: `Excluir ${ids.length} campanha(s) selecionada(s)? O histórico de envios delas também será apagado. Esta ação não pode ser desfeita.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    await api.post('/campaigns/bulk-delete', { ids });
+    toast.success(`${ids.length} campanha(s) excluída(s).`);
+    setSelected(new Set());
+    await load();
+  }
 
   function resetForm() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
@@ -250,15 +295,72 @@ export function CampaignsPage() {
         actions={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
       />
 
+      {/* barra: filtro Ativas/Arquivadas + ações em massa */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-base-300 p-0.5 text-xs font-medium">
+          <button
+            onClick={() => setArchivedView(false)}
+            className={`rounded-md px-3 py-1.5 transition-colors ${!archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
+          >
+            Ativas
+          </button>
+          <button
+            onClick={() => setArchivedView(true)}
+            className={`rounded-md px-3 py-1.5 transition-colors ${archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
+          >
+            Arquivadas
+          </button>
+        </div>
+
+        {items.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-base-content/70">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="h-4 w-4 rounded border-base-300 accent-brand-500"
+              />
+              Selecionar todos
+            </label>
+            {selected.size > 0 && (
+              <>
+                <span className="text-xs text-base-content/50">{selected.size} selecionada(s)</span>
+                {archivedView ? (
+                  <Button size="sm" variant="outline" onClick={() => archiveSelected(false)}>
+                    <Icon name="undo" className="h-4 w-4" /> Desarquivar
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => archiveSelected(true)}>
+                    <Icon name="archive" className="h-4 w-4" /> Arquivar
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={deleteSelected} className="text-red-500 hover:bg-red-50">
+                  <Icon name="trash" className="h-4 w-4" /> Excluir
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-3">
         {loading && <SkeletonList rows={3} />}
         {!loading && items.length === 0 && (
-          <EmptyState
-            icon={<Icon name="campaigns" className="h-9 w-9" />}
-            title="Nenhuma campanha ainda"
-            description="Crie uma campanha de WhatsApp ou e-mail para disparar para seus leads."
-            action={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
-          />
+          archivedView ? (
+            <EmptyState
+              icon={<Icon name="archive" className="h-9 w-9" />}
+              title="Nenhuma campanha arquivada"
+              description="Campanhas que você arquivar ficam guardadas aqui, sem aparecer na lista de ativas."
+            />
+          ) : (
+            <EmptyState
+              icon={<Icon name="campaigns" className="h-9 w-9" />}
+              title="Nenhuma campanha ainda"
+              description="Crie uma campanha de WhatsApp ou e-mail para disparar para seus leads."
+              action={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
+            />
+          )
         )}
         {!loading && items.map((c) => {
           const total = Object.values(c.counts).reduce((a, b) => a + b, 0);
@@ -273,6 +375,14 @@ export function CampaignsPage() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSel(c.id)}
+                    className="h-4 w-4 shrink-0 rounded border-base-300 accent-brand-500"
+                    title="Selecionar"
+                  />
                   <span className="font-semibold text-base-content">{c.name}</span>
                   <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
                   {isEmail
@@ -281,10 +391,10 @@ export function CampaignsPage() {
                   }
                 </div>
                 <div className="flex gap-2">
-                  {c.status !== 'running' && c.status !== 'done' && (
+                  {!archivedView && c.status !== 'running' && c.status !== 'done' && (
                     <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm"><Icon name="play" className="h-3.5 w-3.5" /> Iniciar</Button>
                   )}
-                  {c.status === 'running' && (
+                  {!archivedView && c.status === 'running' && (
                     <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
                   )}
                   <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="icon-sm" className="text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></Button>

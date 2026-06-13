@@ -490,10 +490,12 @@ model Campaign {
   sendLimit Int?      @map("send_limit")
   createdAt DateTime  @default(now()) @map("created_at")
   startedAt DateTime? @map("started_at")
+  archivedAt DateTime? @map("archived_at") // arquivada (guardada) — escondida da lista padrão
 
   targets CampaignTarget[]
 
   @@index([tenantId])
+  @@index([archivedAt])
   @@map("campaigns")
 }
 

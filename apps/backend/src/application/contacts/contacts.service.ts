@@ -104,6 +104,13 @@ export class ContactsService {
     return { ok: true };
   }
 
+  // Exclusão em lote: apaga todos os ids do tenant numa única operação (atômica).
+  async deleteMany(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { deleted: 0 };
+    const r = await this.prisma.contact.deleteMany({ where: { id: { in: ids }, tenantId } });
+    return { deleted: r.count };
+  }
+
   // reativa um contato que tinha optado por sair (uso MANUAL pelo admin, com consentimento)
   async reactivate(tenantId: string, id: string) {
     await this.findOne(tenantId, id);

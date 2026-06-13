@@ -156,8 +156,11 @@ export class SenderService {
     return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms };
   }
 
-  async listCampaigns(tenantId: string) {
-    const camps = await this.prisma.campaign.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+  async listCampaigns(tenantId: string, archived = false) {
+    const camps = await this.prisma.campaign.findMany({
+      where: { tenantId, archivedAt: archived ? { not: null } : null },
+      orderBy: { createdAt: 'desc' },
+    });
     const withCounts = await Promise.all(
       camps.map(async (c) => {
         const grouped = await this.prisma.campaignTarget.groupBy({
@@ -263,6 +266,23 @@ export class SenderService {
     // alvos têm cascade; apaga a campanha (e o histórico de envios dela)
     const r = await this.prisma.campaign.deleteMany({ where: { id, tenantId } });
     return { ok: r.count > 0 };
+  }
+
+  /** Exclui várias campanhas de uma vez (com cascade nos alvos). */
+  async bulkRemoveCampaigns(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { count: 0 };
+    const r = await this.prisma.campaign.deleteMany({ where: { tenantId, id: { in: ids } } });
+    return { count: r.count };
+  }
+
+  /** Arquiva (guarda) ou desarquiva campanhas — só esconde da lista padrão, não apaga. */
+  async setArchived(tenantId: string, ids: string[], archived: boolean) {
+    if (!ids?.length) return { count: 0 };
+    const r = await this.prisma.campaign.updateMany({
+      where: { tenantId, id: { in: ids } },
+      data: { archivedAt: archived ? new Date() : null },
+    });
+    return { count: r.count };
   }
 
   // ---------- worker de disparo ----------

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -26,6 +26,10 @@ class CreateCampaignDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
 }
 
+class CampaignIdsDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}
+
 class CreateEmailCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(5) subject!: string;
@@ -47,8 +51,26 @@ export class SenderController {
   ) {}
 
   @Get('campaigns')
-  list(@CurrentTenant() tenantId: string) {
-    return this.sender.listCampaigns(tenantId ?? 'default');
+  list(@CurrentTenant() tenantId: string, @Query('archived') archived?: string) {
+    return this.sender.listCampaigns(tenantId ?? 'default', archived === 'true');
+  }
+
+  // arquivar (guardar) campanhas selecionadas
+  @Post('campaigns/archive')
+  archive(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
+    return this.sender.setArchived(tenantId ?? 'default', dto.ids, true);
+  }
+
+  // desarquivar
+  @Post('campaigns/unarchive')
+  unarchive(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
+    return this.sender.setArchived(tenantId ?? 'default', dto.ids, false);
+  }
+
+  // excluir várias de uma vez
+  @Post('campaigns/bulk-delete')
+  bulkDelete(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
+    return this.sender.bulkRemoveCampaigns(tenantId ?? 'default', dto.ids);
   }
 
   @Get('campaigns/:id')
