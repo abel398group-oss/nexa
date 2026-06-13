@@ -16,11 +16,19 @@ interface Campaign {
   template: string;
   subject?: string | null;
   status: string;
+  scheduledAt?: string | null;
   counts: Record<string, number>;
 }
 interface SenderNumber { phone: string; sentToday: number; dailyLimit: number; }
 
 type Channel = 'whatsapp' | 'email';
+type ScheduleMode = 'none' | '1h' | '3h' | 'tomorrow9' | 'custom';
+
+// Date → string aceita pelo <input type="datetime-local"> (horário LOCAL).
+function toLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
@@ -28,6 +36,11 @@ export function CampaignsPage() {
   // seleção em massa + visão de arquivadas
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [archivedView, setArchivedView] = useState(false);
+  // agendamento da nova campanha (datetime-local) + janela de envio do tenant
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('none');
+  const [settings, setSettings] = useState<{ waStartHour: number; waEndHour: number; emailStartHour: number; emailEndHour: number } | null>(null);
+  const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
   const [channel, setChannel] = useState<Channel>('whatsapp');
 
@@ -84,14 +97,29 @@ export function CampaignsPage() {
 
   async function load() {
     try {
-      const [c, n] = await Promise.allSettled([
+      const [c, n, s] = await Promise.allSettled([
         api.get('/campaigns', { params: { archived: archivedView } }),
         api.get('/sender/numbers'),
+        api.get('/sender/settings'),
       ]);
       if (c.status === 'fulfilled') setItems(c.value.data);
       if (n.status === 'fulfilled') setNumbers(n.value.data);
+      if (s.status === 'fulfilled') setSettings(s.value.data);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    if (!settings) return;
+    try {
+      const r = await api.put('/sender/settings', settings);
+      setSettings(r.data);
+      toast.success('Horários de envio atualizados.');
+      setShowHours(false);
+    } catch {
+      toast.error('Erro ao salvar os horários.');
     }
   }
   useEffect(() => {
@@ -143,7 +171,19 @@ export function CampaignsPage() {
     setName(''); setLink(''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
-    setAudience('todos'); setAudienceTag('');
+    setAudience('todos'); setAudienceTag(''); setScheduledAt(''); setScheduleMode('none');
+  }
+
+  // presets de agendamento (1 clique) — "Escolher data/hora" abre o input manual
+  function applySchedule(mode: ScheduleMode) {
+    setScheduleMode(mode);
+    if (mode === 'none') return setScheduledAt('');
+    if (mode === 'custom') return; // mantém o valor atual e revela o input
+    const d = new Date();
+    if (mode === '1h') d.setHours(d.getHours() + 1);
+    else if (mode === '3h') d.setHours(d.getHours() + 3);
+    else if (mode === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+    setScheduledAt(toLocalInput(d));
   }
 
   // carrega as tags para o seletor "por tag"
@@ -224,6 +264,7 @@ export function CampaignsPage() {
         else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).map((e) => ({ email: e }));
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
+        if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
         r = await api.post('/campaigns/email', payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
@@ -240,6 +281,7 @@ export function CampaignsPage() {
         if (link.trim()) payload.link = link.trim();
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
+        if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
         r = await api.post('/campaigns', payload);
       }
       setShow(false);
@@ -291,9 +333,60 @@ export function CampaignsPage() {
       <PageHeader
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Disparo' }]} />}
         title="Disparo de Leads"
-        subtitle={<>WhatsApp: 7h–19h · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: 8h–18h · 50/dia · delay 90–180s (anti-spam)</>}
-        actions={<Button onClick={() => setShow(true)}>+ Nova campanha</Button>}
+        subtitle={
+          <>
+            WhatsApp: {settings ? `${settings.waStartHour}h–${settings.waEndHour}h` : '—'} · {numbers.map((n) => `${n.phone}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: {settings ? `${settings.emailStartHour}h–${settings.emailEndHour}h` : '—'} · 50/dia · delay 90–180s (anti-spam)
+          </>
+        }
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setShowHours(true)}>
+              <Icon name="calendar" className="h-4 w-4" /> Horários
+            </Button>
+            <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
+          </>
+        }
       />
+
+      {/* modal: janela de horário de envio (por tenant, por canal) */}
+      <Modal open={showHours} onClose={() => setShowHours(false)} title="Horários de envio" size="sm">
+        {settings && (
+          <form onSubmit={saveSettings} className="space-y-4">
+            <p className="text-xs text-base-content/55">
+              Janela em que o sistema dispara (horário de Brasília). Fora dela, as campanhas ficam
+              em espera — ajuda no anti-bloqueio e no bom senso (LGPD). Vale pra todas as campanhas.
+            </p>
+            {([
+              ['WhatsApp', 'waStartHour', 'waEndHour'],
+              ['E-mail', 'emailStartHour', 'emailEndHour'],
+            ] as const).map(([label, startKey, endKey]) => (
+              <div key={label}>
+                <div className="mb-1 text-xs font-medium text-base-content/60">{label}</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={0} max={23}
+                    value={settings[startKey]}
+                    onChange={(e) => setSettings({ ...settings, [startKey]: Number(e.target.value) })}
+                    className="input !w-20 text-center"
+                  />
+                  <span className="text-base-content/40">às</span>
+                  <input
+                    type="number" min={0} max={23}
+                    value={settings[endKey]}
+                    onChange={(e) => setSettings({ ...settings, [endKey]: Number(e.target.value) })}
+                    className="input !w-20 text-center"
+                  />
+                  <span className="text-xs text-base-content/40">h</span>
+                </div>
+              </div>
+            ))}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="ghost" onClick={() => setShowHours(false)}>Cancelar</Button>
+              <Button>Salvar</Button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       {/* barra: filtro Ativas/Arquivadas + ações em massa */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -389,6 +482,11 @@ export function CampaignsPage() {
                     ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700"><Icon name="mail" className="h-3 w-3" /> e-mail</span>
                     : <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700"><Icon name="inbox" className="h-3 w-3" /> WhatsApp</span>
                   }
+                  {c.scheduledAt && new Date(c.scheduledAt).getTime() > Date.now() && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                      <Icon name="calendar" className="h-3 w-3" /> Agendada {new Date(c.scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {!archivedView && c.status !== 'running' && c.status !== 'done' && (
@@ -749,9 +847,51 @@ export function CampaignsPage() {
               </div>
             </div>
 
+            {/* Agendamento (opcional) — presets de 1 clique */}
+            <div className="rounded-xl border border-base-200 px-4 py-3">
+              <label className="mb-2 block text-xs font-medium text-base-content/60">Agendar início (opcional)</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['none', 'Sem agendar'],
+                  ['1h', 'Em 1 hora'],
+                  ['3h', 'Em 3 horas'],
+                  ['tomorrow9', 'Amanhã 9h'],
+                  ['custom', 'Escolher data/hora'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => applySchedule(mode)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      scheduleMode === mode
+                        ? 'bg-brand-500 text-white'
+                        : 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {(scheduleMode === 'custom' || (scheduledAt && scheduleMode !== 'none')) && (
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => { setScheduledAt(e.target.value); setScheduleMode('custom'); }}
+                  className="input mt-2 text-sm"
+                />
+              )}
+
+              <p className="mt-2 text-[11px] text-base-content/40">
+                {scheduledAt
+                  ? `Dispara em ${new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (respeitando a janela de envio).`
+                  : 'Sem agendar = você inicia manualmente com o botão Iniciar.'}
+              </p>
+            </div>
+
             {channel === 'email' && (
               <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700">
-<strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · horário 8h–18h · link de opt-out em todos os e-mails.
+<strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · link de opt-out em todos os e-mails.
               </div>
             )}
 

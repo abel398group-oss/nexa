@@ -66,9 +66,13 @@ export class EmailCampaignSenderService {
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   }
 
-  private withinBusinessHours(): boolean {
+  // janela de e-mail do tenant (cai no default env se não houver config salva)
+  private async withinEmailWindow(tenantId: string): Promise<boolean> {
+    const s = await this.prisma.senderSettings.findUnique({ where: { tenantId } });
+    const start = s?.emailStartHour ?? BUSINESS_START;
+    const end = s?.emailEndHour ?? BUSINESS_END;
     const h = (new Date().getUTCHours() - 3 + 24) % 24; // UTC-3 Brasília
-    return h >= BUSINESS_START && h < BUSINESS_END;
+    return h >= start && h < end;
   }
 
   private dailyLimit(): number {
@@ -107,8 +111,10 @@ export class EmailCampaignSenderService {
       link?: string;
       sendLinkOnFirst?: boolean; // false (padrão) = só envia link após resposta do lead
       sendLimit?: number;
+      scheduledAt?: string; // agendamento: só começa a enviar a partir desse horário
     },
   ) {
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     // Aviso de assunto perigoso (não bloqueia, apenas loga)
     if (!this.isSubjectSafe(dto.subject)) {
       this.logger.warn(`Assunto pode aumentar score de spam: "${dto.subject}"`);
@@ -152,6 +158,9 @@ export class EmailCampaignSenderService {
         link: dto.link?.trim() || null,
         sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
+        // agendada já entra como running; o worker só dispara a partir de scheduledAt
+        scheduledAt,
+        ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         targets: {
           create: targets.map((t) => ({
             tenantId,
@@ -198,19 +207,26 @@ export class EmailCampaignSenderService {
         data: { status: 'done' },
       });
 
-      if (!this.withinBusinessHours()) return;
       if (this.sentTodayCount >= this.dailyLimit()) {
         this.logger.warn(`Limite diário de e-mails atingido (${this.dailyLimit()}) — pausa hoje`);
         return;
       }
       if (Date.now() - this.lastSentAt < this.nextDelayMs) return;
 
-      // Pega campanha rodando
+      // Pega campanha rodando — respeitando agendamento (scheduledAt no futuro = espera)
       const campaign = await this.prisma.campaign.findFirst({
-        where: { channel: 'email', status: 'running', targets: { some: { status: 'queued' } } },
+        where: {
+          channel: 'email',
+          status: 'running',
+          targets: { some: { status: 'queued' } },
+          OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+        },
         orderBy: { createdAt: 'asc' },
       });
       if (!campaign) return;
+
+      // janela de envio de e-mail do tenant — fora do horário, espera
+      if (!(await this.withinEmailWindow(campaign.tenantId))) return;
 
       // Respeita sendLimit
       if (campaign.sendLimit) {

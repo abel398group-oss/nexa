@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -24,10 +24,18 @@ class CreateCampaignDto {
   @IsOptional() @IsString() mediaUrl?: string;
   @IsOptional() @IsString() mediaName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
+  @IsOptional() @IsString() scheduledAt?: string;
 }
 
 class CampaignIdsDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
+}
+
+class SenderSettingsDto {
+  @Type(() => Number) @IsInt() @Min(0) waStartHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) waEndHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) emailStartHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) emailEndHour!: number;
 }
 
 class CreateEmailCampaignDto {
@@ -39,6 +47,7 @@ class CreateEmailCampaignDto {
   @IsOptional() @IsString() link?: string;
   @IsOptional() @IsBoolean() sendLinkOnFirst?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
+  @IsOptional() @IsString() scheduledAt?: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -128,5 +137,16 @@ export class SenderController {
   @Get('sender/numbers')
   numbers(@CurrentTenant() tenantId: string) {
     return this.sender.listNumbers(tenantId ?? 'default');
+  }
+
+  // janela de envio (horários) por tenant — exibida/editada na tela de Disparo
+  @Get('sender/settings')
+  getSettings(@CurrentTenant() tenantId: string) {
+    return this.sender.getSettings(tenantId ?? 'default');
+  }
+
+  @Put('sender/settings')
+  updateSettings(@CurrentTenant() tenantId: string, @Body() dto: SenderSettingsDto) {
+    return this.sender.updateSettings(tenantId ?? 'default', dto);
   }
 }

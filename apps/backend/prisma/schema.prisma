@@ -491,12 +491,27 @@ model Campaign {
   createdAt DateTime  @default(now()) @map("created_at")
   startedAt DateTime? @map("started_at")
   archivedAt DateTime? @map("archived_at") // arquivada (guardada) — escondida da lista padrão
+  scheduledAt DateTime? @map("scheduled_at") // agendamento: só começa a enviar a partir desse horário
 
   targets CampaignTarget[]
 
   @@index([tenantId])
   @@index([archivedAt])
   @@map("campaigns")
+}
+
+// Configuração de horário de envio por tenant (janela comercial, por canal).
+// Editável na tela de Disparo. Fallback para os defaults caso não exista linha.
+model SenderSettings {
+  id             String   @id @default(uuid())
+  tenantId       String   @unique @map("tenant_id")
+  waStartHour    Int      @default(7)  @map("wa_start_hour")
+  waEndHour      Int      @default(19) @map("wa_end_hour")
+  emailStartHour Int      @default(8)  @map("email_start_hour")
+  emailEndHour   Int      @default(18) @map("email_end_hour")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("sender_settings")
 }
 
 model CampaignTarget {

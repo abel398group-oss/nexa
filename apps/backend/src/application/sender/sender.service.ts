@@ -73,9 +73,10 @@ export class SenderService {
     tenantId: string,
     dto: {
       name: string; template: string; phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
-      link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number;
+      link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
     },
   ) {
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     let targets = dto.phones ?? [];
     if (dto.fromContacts) {
       const contacts = await this.prisma.contact.findMany({
@@ -142,6 +143,9 @@ export class SenderService {
         mediaUrl: dto.mediaUrl || null,
         mediaName: dto.mediaName || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
+        // agendada já entra como running; o worker só dispara a partir de scheduledAt
+        scheduledAt,
+        ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         targets: {
           create: [
             // leads que podem receber a campanha
@@ -285,11 +289,43 @@ export class SenderService {
     return { count: r.count };
   }
 
+  // ---------- configurações de janela de envio (por tenant) ----------
+  // Lê a janela do tenant; cai nos defaults (env) se não houver linha salva.
+  async getSettings(tenantId: string) {
+    const s = await this.prisma.senderSettings.findUnique({ where: { tenantId } });
+    return {
+      tenantId,
+      waStartHour: s?.waStartHour ?? BUSINESS_START,
+      waEndHour: s?.waEndHour ?? BUSINESS_END,
+      emailStartHour: s?.emailStartHour ?? Number(process.env.SENDER_EMAIL_BUSINESS_START ?? 8),
+      emailEndHour: s?.emailEndHour ?? Number(process.env.SENDER_EMAIL_BUSINESS_END ?? 18),
+    };
+  }
+
+  async updateSettings(
+    tenantId: string,
+    dto: { waStartHour: number; waEndHour: number; emailStartHour: number; emailEndHour: number },
+  ) {
+    const clamp = (n: number) => Math.max(0, Math.min(23, Math.round(Number(n) || 0)));
+    const data = {
+      waStartHour: clamp(dto.waStartHour),
+      waEndHour: clamp(dto.waEndHour),
+      emailStartHour: clamp(dto.emailStartHour),
+      emailEndHour: clamp(dto.emailEndHour),
+    };
+    return this.prisma.senderSettings.upsert({ where: { tenantId }, update: data, create: { tenantId, ...data } });
+  }
+
   // ---------- worker de disparo ----------
   // BUG-06 fix: getHours() retorna UTC em containers Linux → usar UTC-3 explicitamente
-  private withinBusinessHours(): boolean {
-    const h = (new Date().getUTCHours() - 3 + 24) % 24;
-    return h >= BUSINESS_START && h < BUSINESS_END;
+  private currentHourBR(): number {
+    return (new Date().getUTCHours() - 3 + 24) % 24;
+  }
+  // janela do WhatsApp do tenant (este worker é o de WhatsApp)
+  private async withinWaWindow(tenantId: string): Promise<boolean> {
+    const s = await this.getSettings(tenantId);
+    const h = this.currentHourBR();
+    return h >= s.waStartHour && h < s.waEndHour;
   }
 
   @Interval(15000) // tenta a cada 15s; o delay real entre envios é controlado abaixo
@@ -316,14 +352,19 @@ export class SenderService {
         data: { status: 'done' },
       });
 
-      if (!this.withinBusinessHours()) return;
-
-      // pega uma campanha rodando com alvo na fila
+      // pega uma campanha rodando com alvo na fila — respeitando agendamento (scheduledAt no futuro = espera)
       const campaign = await this.prisma.campaign.findFirst({
-        where: { status: 'running', targets: { some: { status: 'queued' } } },
+        where: {
+          status: 'running',
+          targets: { some: { status: 'queued' } },
+          OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+        },
         orderBy: { createdAt: 'asc' },
       });
       if (!campaign) return;
+
+      // janela de envio do tenant (por canal WhatsApp) — fora do horário, espera
+      if (!(await this.withinWaWindow(campaign.tenantId))) return;
 
       // respeita o limite de quantidade da campanha (sendLimit) — checado ANTES do delay
       if (campaign.sendLimit) {
