@@ -71,6 +71,8 @@ export function CampaignsPage() {
   const [manualError, setManualError] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualSearch, setManualSearch] = useState('');
+  const [manualSort, setManualSort] = useState<'az' | 'za'>('az');
+  const [manualSnapshot, setManualSnapshot] = useState<Map<string, { phone: string; name?: string }> | null>(null);
   const [manualSelected, setManualSelected] = useState<Map<string, { phone: string; name?: string }>>(new Map());
   const [avulsos, setAvulsos] = useState<string[]>([]);
   const [avulsoInput, setAvulsoInput] = useState('');
@@ -919,69 +921,101 @@ export function CampaignsPage() {
 
                   {audience === 'manual' && (
                     <div className="space-y-2">
-                      {/* busca + selecionar todos */}
-                      <div className="flex items-center gap-2">
-                        <input
-                          className="input flex-1 text-sm"
-                          placeholder="Buscar nome, telefone ou empresa…"
-                          value={manualSearch}
-                          onChange={(e) => setManualSearch(e.target.value)}
-                        />
-                        {selectableVisible.length > 0 && (
-                          <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-base-content/70">
-                            <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 accent-brand-500" />
-                            Todos
-                          </label>
-                        )}
-                      </div>
+                      {/* seletor estilo filtro do Excel: clica no botão e abre a lista */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setManualOpen((o) => !o)}
+                          className="input flex w-full items-center justify-between text-sm"
+                        >
+                          <span className={manualSelected.size ? 'text-base-content' : 'text-base-content/50'}>
+                            {manualSelected.size ? `${manualSelected.size} contato(s) selecionado(s)` : 'Selecionar contatos da base…'}
+                          </span>
+                          <Icon name="chevronDown" className={`h-4 w-4 shrink-0 text-base-content/40 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                      {/* lista de contatos (scroll interno) */}
-                      <div className="max-h-60 overflow-auto rounded-xl border border-base-200">
-                        {!manualLoaded ? (
-                          <p className="px-3 py-6 text-center text-xs text-base-content/40">Carregando contatos…</p>
-                        ) : manualFiltered.length === 0 ? (
-                          <p className="px-3 py-6 text-center text-xs text-base-content/40">Nenhum contato encontrado. Adicione um avulso abaixo.</p>
-                        ) : (
-                          manualFiltered.map((c) => {
-                            const optedOut = c.status === 'opted_out';
-                            const checked = manualSelected.has(c.id);
-                            const initials = (c.name || c.phone).trim().slice(0, 2).toUpperCase();
-                            return (
-                              <label
-                                key={c.id}
-                                className={`flex items-center gap-2.5 border-b border-base-200 px-3 py-2 last:border-0 ${
-                                  optedOut ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-base-100'
-                                } ${checked ? 'bg-brand-500/[0.06]' : ''}`}
-                              >
+                        {manualOpen && (
+                          <>
+                            {/* backdrop: fecha ao clicar fora */}
+                            <div className="fixed inset-0 z-10" onClick={() => setManualOpen(false)} />
+                            <div className="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-xl border border-base-200 bg-[var(--surface-elevated)] shadow-elevated">
+                              {/* busca + selecionar todos */}
+                              <div className="flex items-center gap-2 border-b border-base-200 p-2">
                                 <input
-                                  type="checkbox"
-                                  disabled={optedOut}
-                                  checked={checked}
-                                  onChange={() => toggleManualContact(c)}
-                                  className="h-4 w-4 shrink-0 accent-brand-500 disabled:opacity-40"
+                                  autoFocus
+                                  className="input flex-1 text-sm"
+                                  placeholder="Buscar nome, telefone ou empresa…"
+                                  value={manualSearch}
+                                  onChange={(e) => setManualSearch(e.target.value)}
                                 />
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-base-200 text-[10px] font-semibold text-base-content/60">
-                                  {initials}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium text-base-content">
-                                    {c.name || '—'}
-                                    {optedOut && <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">descadastrado</span>}
-                                  </span>
-                                  <span className="block truncate text-[11px] text-base-content/50">
-                                    {c.phone}{c.company ? ` · ${c.company}` : ''}
-                                  </span>
-                                </span>
-                                {!!c.tags?.length && (
-                                  <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                                    {c.tags.slice(0, 2).map((t) => (
-                                      <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[9px] text-base-content/60">{t}</span>
-                                    ))}
-                                  </span>
+                                {selectableVisible.length > 0 && (
+                                  <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap pr-1 text-xs text-base-content/70">
+                                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 accent-brand-500" />
+                                    Todos
+                                  </label>
                                 )}
-                              </label>
-                            );
-                          })
+                              </div>
+                              {/* checklist */}
+                              <div className="max-h-56 overflow-auto">
+                                {!manualLoaded ? (
+                                  <p className="px-3 py-6 text-center text-xs text-base-content/40">Carregando contatos…</p>
+                                ) : manualError ? (
+                                  <p className="px-3 py-6 text-center text-xs text-base-content/50">
+                                    Não foi possível carregar os contatos.{' '}
+                                    <button type="button" onClick={loadManualContacts} className="font-medium text-brand-600 hover:underline">tentar de novo</button>
+                                  </p>
+                                ) : manualFiltered.length === 0 ? (
+                                  <p className="px-3 py-6 text-center text-xs text-base-content/40">Nenhum contato encontrado. Use "avulso" abaixo.</p>
+                                ) : (
+                                  manualFiltered.map((c) => {
+                                    const optedOut = c.status === 'opted_out';
+                                    const checked = manualSelected.has(c.id);
+                                    const initials = (c.name || c.phone).trim().slice(0, 2).toUpperCase();
+                                    return (
+                                      <label
+                                        key={c.id}
+                                        className={`flex items-center gap-2.5 border-b border-base-200 px-3 py-2 last:border-0 ${
+                                          optedOut ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-base-100'
+                                        } ${checked ? 'bg-brand-500/[0.06]' : ''}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          disabled={optedOut}
+                                          checked={checked}
+                                          onChange={() => toggleManualContact(c)}
+                                          className="h-4 w-4 shrink-0 accent-brand-500 disabled:opacity-40"
+                                        />
+                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-base-200 text-[10px] font-semibold text-base-content/60">
+                                          {initials}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate text-sm font-medium text-base-content">
+                                            {c.name || '—'}
+                                            {optedOut && <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">descadastrado</span>}
+                                          </span>
+                                          <span className="block truncate text-[11px] text-base-content/50">
+                                            {c.phone}{c.company ? ` · ${c.company}` : ''}
+                                          </span>
+                                        </span>
+                                        {!!c.tags?.length && (
+                                          <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                                            {c.tags.slice(0, 2).map((t) => (
+                                              <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[9px] text-base-content/60">{t}</span>
+                                            ))}
+                                          </span>
+                                        )}
+                                      </label>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <div className="border-t border-base-200 p-2 text-right">
+                                <button type="button" onClick={() => setManualOpen(false)} className="rounded-md px-3 py-1 text-xs font-medium text-brand-600 hover:bg-base-100">
+                                  Concluir
+                                </button>
+                              </div>
+                            </div>
+                          </>
                         )}
                       </div>
 
