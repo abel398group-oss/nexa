@@ -14,6 +14,9 @@ import {
   LoadingState,
   EmptyState,
   ErrorState,
+  PageContainer,
+  PageHeader,
+  Breadcrumb,
 } from '@/shared/ui';
 import { getCategoryConfig, getPriorityConfig, CATEGORY_CONFIG } from '@/lib/ticket-category';
 import { getStatusConfig } from '@/lib/conversation-status';
@@ -159,14 +162,12 @@ export function SupportPage() {
   ];
 
   return (
-    <div className="h-full overflow-auto bg-base-100 p-6">
-      {/* ===== Cabeçalho ===== */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-base-content">🛠️ Suporte</h1>
-        <p className="text-xs text-base-content/50">
-          Tickets de atendimento que a Lia abre e resolve para os clientes do HiperTMS.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Suporte' }]} />}
+        title="Suporte"
+        subtitle="Tickets de atendimento que a Lia abre e resolve para os clientes."
+      />
 
       {/* ===== Cards de resumo ===== */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -266,6 +267,6 @@ export function SupportPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageContainer>
   );
 }
