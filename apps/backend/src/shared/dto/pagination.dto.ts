@@ -7,7 +7,7 @@ export class PaginationQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(5000) // seletor de contatos da campanha carrega a base inteira (até 5000)
   limit: number = 50;
 
   @IsOptional()

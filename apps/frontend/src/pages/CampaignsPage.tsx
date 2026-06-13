@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '@/lib/api';
-import { listContacts, listTags, type TagCount } from '@/features/contact';
+import { listContacts, listTags, type TagCount, type Contact } from '@/features/contact';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
@@ -22,12 +22,22 @@ interface Campaign {
 interface SenderNumber { phone: string; sentToday: number; dailyLimit: number; }
 
 type Channel = 'whatsapp' | 'email';
-type ScheduleMode = 'none' | '1h' | '3h' | 'tomorrow9' | 'custom';
 
 // Date → string aceita pelo <input type="datetime-local"> (horário LOCAL).
 function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// rótulo do dia no dropdown: Hoje / Amanhã / dia da semana + data
+function dayLabel(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const data = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  if (offset === 0) return `Hoje (${data})`;
+  if (offset === 1) return `Amanhã (${data})`;
+  const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+  return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} (${data})`;
 }
 
 export function CampaignsPage() {
@@ -38,7 +48,9 @@ export function CampaignsPage() {
   const [archivedView, setArchivedView] = useState(false);
   // agendamento da nova campanha (datetime-local) + janela de envio do tenant
   const [scheduledAt, setScheduledAt] = useState('');
-  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('none');
+  const [schedEnabled, setSchedEnabled] = useState(false);
+  const [schedDayOffset, setSchedDayOffset] = useState(0);
+  const [schedHour, setSchedHour] = useState<number | null>(null);
   const [settings, setSettings] = useState<{ waStartHour: number; waEndHour: number; emailStartHour: number; emailEndHour: number } | null>(null);
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
@@ -50,17 +62,27 @@ export function CampaignsPage() {
   // WhatsApp: default "todos os contatos". Email: default lista manual (fromContacts=false)
   // pois normalmente não há e-mails cadastrados nos contatos ainda
   const [fromContacts, setFromContacts] = useState(true);
-  const [phonesText, setPhonesText] = useState('');
   // público do WhatsApp: todos ativos | por tag | manual
   const [audience, setAudience] = useState<'todos' | 'tag' | 'manual'>('todos');
   const [audienceTag, setAudienceTag] = useState('');
+  // aba Manual: seletor de contatos + avulsos
+  const [manualContacts, setManualContacts] = useState<Contact[]>([]);
+  const [manualLoaded, setManualLoaded] = useState(false);
+  const [manualError, setManualError] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSearch, setManualSearch] = useState('');
+  const [manualSelected, setManualSelected] = useState<Map<string, { phone: string; name?: string }>>(new Map());
+  const [avulsos, setAvulsos] = useState<string[]>([]);
+  const [avulsoInput, setAvulsoInput] = useState('');
+  const [seedPhones, setSeedPhones] = useState<{ phone: string; name?: string }[]>([]);
   const [tags, setTags] = useState<TagCount[]>([]);
   const [detail, setDetail] = useState<any | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
   const location = useLocation();
-  const [link, setLink] = useState('');
+  // link fixo: memoriza o último link usado (não precisa redigitar a cada campanha)
+  const [link, setLink] = useState(() => localStorage.getItem('nexa_campaign_link') ?? '');
   const [media, setMedia] = useState<{ url: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -168,23 +190,131 @@ export function CampaignsPage() {
   }
 
   function resetForm() {
-    setName(''); setLink(''); setMedia(null); setLimitMode('all');
+    setName(''); setLink(localStorage.getItem('nexa_campaign_link') ?? ''); setMedia(null); setLimitMode('all');
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
-    setAudience('todos'); setAudienceTag(''); setScheduledAt(''); setScheduleMode('none');
+    setAudience('todos'); setAudienceTag('');
+    setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null);
+    setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
+    setManualLoaded(false); setManualError(false); setManualOpen(false);
   }
 
-  // presets de agendamento (1 clique) — "Escolher data/hora" abre o input manual
-  function applySchedule(mode: ScheduleMode) {
-    setScheduleMode(mode);
-    if (mode === 'none') return setScheduledAt('');
-    if (mode === 'custom') return; // mantém o valor atual e revela o input
+  // janela permitida do canal atual (puxa as settings do tenant; cai no default)
+  const sendWindow = channel === 'email'
+    ? { start: settings?.emailStartHour ?? 8, end: settings?.emailEndHour ?? 18 }
+    : { start: settings?.waStartHour ?? 7, end: settings?.waEndHour ?? 19 };
+
+  // horas disponíveis pra um dia (limitadas à janela; "hoje" esconde horas já passadas)
+  function hoursFor(offset: number): number[] {
+    const hours: number[] = [];
+    for (let h = sendWindow.start; h < sendWindow.end; h++) hours.push(h);
+    if (offset === 0) {
+      const nowH = new Date().getHours();
+      return hours.filter((h) => h > nowH);
+    }
+    return hours;
+  }
+
+  // recalcula scheduledAt a partir de dia + hora escolhidos
+  function recomputeSchedule(offset: number, hour: number | null) {
+    if (hour == null) return setScheduledAt('');
     const d = new Date();
-    if (mode === '1h') d.setHours(d.getHours() + 1);
-    else if (mode === '3h') d.setHours(d.getHours() + 3);
-    else if (mode === 'tomorrow9') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+    d.setDate(d.getDate() + offset);
+    d.setHours(hour, 0, 0, 0);
     setScheduledAt(toLocalInput(d));
   }
+
+  function toggleSchedule(on: boolean) {
+    setSchedEnabled(on);
+    if (!on) { setSchedHour(null); setScheduledAt(''); }
+  }
+  function pickDay(offset: number) {
+    setSchedDayOffset(offset);
+    // se a hora escolhida não existe mais nesse dia (ex.: virou "hoje"), zera
+    const valid = hoursFor(offset);
+    const h = schedHour != null && valid.includes(schedHour) ? schedHour : null;
+    setSchedHour(h);
+    recomputeSchedule(offset, h);
+  }
+  function pickHour(hour: number) {
+    setSchedHour(hour);
+    recomputeSchedule(schedDayOffset, hour);
+  }
+
+  // ----- aba Manual: seletor de contatos + avulsos -----
+  const onlyDigits = (s: string) => s.replace(/\D/g, '');
+
+  async function loadManualContacts() {
+    setManualError(false);
+    try {
+      const r = await listContacts({ limit: 2000 });
+      setManualContacts(r.items);
+      setManualLoaded(true);
+    } catch {
+      setManualError(true);
+      setManualLoaded(true); // sai do "carregando" e mostra o erro/retry
+    }
+  }
+  // carrega a base de contatos quando a aba Manual abre (uma vez)
+  useEffect(() => {
+    if (audience !== 'manual' || channel !== 'whatsapp' || manualLoaded) return;
+    loadManualContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audience, channel, manualLoaded]);
+
+  // reconcilia telefones pré-preenchidos (vindo de Contatos / reenvio): casa com a base ou vira avulso
+  useEffect(() => {
+    if (!seedPhones.length || !manualLoaded) return;
+    const byPhone = new Map(manualContacts.map((c) => [onlyDigits(c.phone), c]));
+    const sel = new Map(manualSelected);
+    const extra: string[] = [];
+    for (const sp of seedPhones) {
+      const p = onlyDigits(sp.phone);
+      const c = byPhone.get(p);
+      if (c && c.status !== 'opted_out') sel.set(c.id, { phone: c.phone, name: c.name ?? undefined });
+      else if (p.length >= 12 && !extra.includes(p)) extra.push(p);
+    }
+    setManualSelected(sel);
+    setAvulsos((prev) => [...new Set([...prev, ...extra])]);
+    setSeedPhones([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPhones, manualLoaded]);
+
+  const manualFiltered = manualContacts.filter((c) => {
+    const q = manualSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (c.name || '').toLowerCase().includes(q)
+      || c.phone.includes(onlyDigits(q))
+      || (c.company || '').toLowerCase().includes(q);
+  });
+  const selectableVisible = manualFiltered.filter((c) => c.status !== 'opted_out');
+  const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every((c) => manualSelected.has(c.id));
+
+  function toggleManualContact(c: Contact) {
+    setManualSelected((prev) => {
+      const n = new Map(prev);
+      n.has(c.id) ? n.delete(c.id) : n.set(c.id, { phone: c.phone, name: c.name ?? undefined });
+      return n;
+    });
+  }
+  function toggleAllVisible() {
+    setManualSelected((prev) => {
+      const n = new Map(prev);
+      if (allVisibleSelected) selectableVisible.forEach((c) => n.delete(c.id));
+      else selectableVisible.forEach((c) => n.set(c.id, { phone: c.phone, name: c.name ?? undefined }));
+      return n;
+    });
+  }
+  function addAvulso() {
+    const p = onlyDigits(avulsoInput);
+    if (p.length < 12) { toast.error('Telefone inválido — use 55 + DDD + número.'); return; }
+    const selPhones = new Set([...manualSelected.values()].map((v) => onlyDigits(v.phone)));
+    if (avulsos.includes(p) || selPhones.has(p)) { toast.info('Esse telefone já está na lista.'); return; }
+    setAvulsos((a) => [...a, p]);
+    setAvulsoInput('');
+  }
+  // total de destinatários (avulsos já não duplicam selecionados)
+  const manualTotal = manualSelected.size + avulsos.filter((p) => !new Set([...manualSelected.values()].map((v) => onlyDigits(v.phone))).has(p)).length;
 
   // carrega as tags para o seletor "por tag"
   useEffect(() => {
@@ -195,7 +325,7 @@ export function CampaignsPage() {
   useEffect(() => {
     const st = location.state as { phones?: { phone: string; name?: string }[] } | null;
     if (st?.phones?.length) {
-      setPhonesText(st.phones.map((p) => p.phone).join('\n'));
+      setSeedPhones(st.phones);
       setAudience('manual');
       setChannel('whatsapp');
       setShow(true);
@@ -242,7 +372,7 @@ export function CampaignsPage() {
     if (failed.length === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
     setName(`Reenvio · ${detail.campaign.name}`);
     setTemplate(detail.campaign.template || template);
-    setPhonesText(failed.map((t: any) => t.phone).join('\n'));
+    setSeedPhones(failed.map((t: any) => ({ phone: t.phone })));
     setAudience('manual');
     setChannel('whatsapp');
     setShowDetail(false);
@@ -276,7 +406,11 @@ export function CampaignsPage() {
             .filter((c) => c.status !== 'opted_out')
             .map((c) => ({ phone: c.phone, name: c.name }));
         } else {
-          payload.phones = phonesText.split('\n').map((l) => l.trim()).filter(Boolean).map((p) => ({ phone: p.replace(/\D/g, '') }));
+          // união sem duplicar: contatos selecionados (com nome) + avulsos
+          const fromSel = [...manualSelected.values()].map((v) => ({ phone: onlyDigits(v.phone), name: v.name }));
+          const seenPhones = new Set(fromSel.map((c) => c.phone));
+          const extras = avulsos.filter((p) => !seenPhones.has(p)).map((p) => ({ phone: p }));
+          payload.phones = [...fromSel, ...extras];
         }
         if (link.trim()) payload.link = link.trim();
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
@@ -784,21 +918,117 @@ export function CampaignsPage() {
                   )}
 
                   {audience === 'manual' && (
-                    <textarea
-                      className="input w-full py-2 font-mono text-sm"
-                      style={{ minHeight: '90px', resize: 'vertical' }}
-                      placeholder="Um telefone por linha (5511...)"
-                      value={phonesText}
-                      onChange={(e) => setPhonesText(e.target.value)}
-                    />
+                    <div className="space-y-2">
+                      {/* busca + selecionar todos */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="input flex-1 text-sm"
+                          placeholder="Buscar nome, telefone ou empresa…"
+                          value={manualSearch}
+                          onChange={(e) => setManualSearch(e.target.value)}
+                        />
+                        {selectableVisible.length > 0 && (
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-base-content/70">
+                            <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 accent-brand-500" />
+                            Todos
+                          </label>
+                        )}
+                      </div>
+
+                      {/* lista de contatos (scroll interno) */}
+                      <div className="max-h-60 overflow-auto rounded-xl border border-base-200">
+                        {!manualLoaded ? (
+                          <p className="px-3 py-6 text-center text-xs text-base-content/40">Carregando contatos…</p>
+                        ) : manualFiltered.length === 0 ? (
+                          <p className="px-3 py-6 text-center text-xs text-base-content/40">Nenhum contato encontrado. Adicione um avulso abaixo.</p>
+                        ) : (
+                          manualFiltered.map((c) => {
+                            const optedOut = c.status === 'opted_out';
+                            const checked = manualSelected.has(c.id);
+                            const initials = (c.name || c.phone).trim().slice(0, 2).toUpperCase();
+                            return (
+                              <label
+                                key={c.id}
+                                className={`flex items-center gap-2.5 border-b border-base-200 px-3 py-2 last:border-0 ${
+                                  optedOut ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-base-100'
+                                } ${checked ? 'bg-brand-500/[0.06]' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={optedOut}
+                                  checked={checked}
+                                  onChange={() => toggleManualContact(c)}
+                                  className="h-4 w-4 shrink-0 accent-brand-500 disabled:opacity-40"
+                                />
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-base-200 text-[10px] font-semibold text-base-content/60">
+                                  {initials}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-base-content">
+                                    {c.name || '—'}
+                                    {optedOut && <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">descadastrado</span>}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-base-content/50">
+                                    {c.phone}{c.company ? ` · ${c.company}` : ''}
+                                  </span>
+                                </span>
+                                {!!c.tags?.length && (
+                                  <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                                    {c.tags.slice(0, 2).map((t) => (
+                                      <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[9px] text-base-content/60">{t}</span>
+                                    ))}
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* adicionar avulso */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="input flex-1 text-sm"
+                          placeholder="Adicionar avulso (55 + DDD + número)"
+                          value={avulsoInput}
+                          onChange={(e) => setAvulsoInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAvulso(); } }}
+                        />
+                        <Button type="button" variant="outline" size="sm" onClick={addAvulso}>
+                          <Icon name="plus" className="h-4 w-4" /> Adicionar
+                        </Button>
+                      </div>
+                      {avulsos.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {avulsos.map((p) => (
+                            <span key={p} className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/70">
+                              {p}
+                              <button type="button" onClick={() => setAvulsos((a) => a.filter((x) => x !== p))} className="text-base-content/40 hover:text-red-500">
+                                <Icon name="close" className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* rodapé somando */}
+                      <div className="rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
+                        <strong className="text-base-content">{manualSelected.size}</strong> contato(s) + <strong className="text-base-content">{avulsos.length}</strong> avulso(s) = <strong className="text-brand-600">{manualTotal} destinatário(s)</strong>
+                      </div>
+                    </div>
                   )}
                 </div>
 
                 {/* Link + Anexo lado a lado */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-base-content/60">Link (opcional)</label>
-                    <input className="input w-full" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." />
+                    <label className="mb-1 block text-xs font-medium text-base-content/60">Link (opcional · fica salvo)</label>
+                    <input
+                      className="input w-full"
+                      value={link}
+                      onChange={(e) => { setLink(e.target.value); localStorage.setItem('nexa_campaign_link', e.target.value); }}
+                      placeholder="https://..."
+                    />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium text-base-content/60">Anexo (PDF/Word)</label>
@@ -823,7 +1053,7 @@ export function CampaignsPage() {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-base-content/35">
+                <p className="text-[11px] text-base-content/70">
                   Número: {numbers[0] ? `${numbers[0].sentToday}/${numbers[0].dailyLimit} hoje` : '—'} · delay 30–90s · anti-ban ativo
                 </p>
               </>
@@ -847,45 +1077,58 @@ export function CampaignsPage() {
               </div>
             </div>
 
-            {/* Agendamento (opcional) — presets de 1 clique */}
+            {/* Agendamento (opcional) — dia + hora dentro do horário permitido */}
             <div className="rounded-xl border border-base-200 px-4 py-3">
-              <label className="mb-2 block text-xs font-medium text-base-content/60">Agendar início (opcional)</label>
-              <div className="flex flex-wrap gap-2">
-                {([
-                  ['none', 'Sem agendar'],
-                  ['1h', 'Em 1 hora'],
-                  ['3h', 'Em 3 horas'],
-                  ['tomorrow9', 'Amanhã 9h'],
-                  ['custom', 'Escolher data/hora'],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => applySchedule(mode)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                      scheduleMode === mode
-                        ? 'bg-brand-500 text-white'
-                        : 'border border-base-300 text-base-content/70 hover:bg-base-100'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-base-content/70">
+                <input
+                  type="checkbox"
+                  checked={schedEnabled}
+                  onChange={(e) => toggleSchedule(e.target.checked)}
+                  className="h-4 w-4 accent-brand-500"
+                />
+                Agendar início
+              </label>
+
+              {/* aviso do horário permitido (janela do canal) */}
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                <Icon name="alert" className="h-3.5 w-3.5" />
+                Horário permitido: {sendWindow.start}h–{sendWindow.end}h ({channel === 'email' ? 'e-mail' : 'WhatsApp'})
               </div>
 
-              {(scheduleMode === 'custom' || (scheduledAt && scheduleMode !== 'none')) && (
-                <input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => { setScheduledAt(e.target.value); setScheduleMode('custom'); }}
-                  className="input mt-2 text-sm"
-                />
+              {schedEnabled && (
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] text-base-content/50">Dia</label>
+                    <select
+                      value={schedDayOffset}
+                      onChange={(e) => pickDay(Number(e.target.value))}
+                      className="input text-sm"
+                    >
+                      {Array.from({ length: 14 }, (_, i) => (
+                        <option key={i} value={i}>{dayLabel(i)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] text-base-content/50">Hora</label>
+                    <select
+                      value={schedHour ?? ''}
+                      onChange={(e) => pickHour(Number(e.target.value))}
+                      className="input text-sm"
+                    >
+                      <option value="" disabled>Escolha</option>
+                      {hoursFor(schedDayOffset).map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               )}
 
               <p className="mt-2 text-[11px] text-base-content/40">
                 {scheduledAt
-                  ? `Dispara em ${new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (respeitando a janela de envio).`
-                  : 'Sem agendar = você inicia manualmente com o botão Iniciar.'}
+                  ? `Dispara em ${new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.`
+                  : `Sem agendar: você inicia manual e o envio acontece dentro do horário permitido (${sendWindow.start}h–${sendWindow.end}h).`}
               </p>
             </div>
 
