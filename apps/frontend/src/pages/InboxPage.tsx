@@ -224,7 +224,7 @@ export function InboxPage() {
                       <span className="truncate font-medium text-base-content">
                         {c.contact?.name || displayPhone(c.phone)}
                       </span>
-                      {stale && <Icon name="alert" title="Aguardando equipe há +2h" className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                      {stale && <span title="Aguardando equipe há +2h" className="inline-flex shrink-0 text-amber-500"><Icon name="alert" className="h-3.5 w-3.5" /></span>}
                     </div>
                     {c.contact?.name && (
                       <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>

@@ -19,7 +19,9 @@ export function ConversationStatusBadge({ status, lastActivityAt, size = 'sm' }:
     >
       <span>{cfg.labelPt}</span>
       {stale && (
-        <Icon name="alert" title="Sem movimentação há mais de 2h" className="h-3 w-3 text-amber-600" />
+        <span title="Sem movimentação há mais de 2h" className="inline-flex text-amber-600">
+          <Icon name="alert" className="h-3 w-3" />
+        </span>
       )}
     </span>
   );

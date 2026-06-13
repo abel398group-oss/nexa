@@ -33,7 +33,6 @@ export * from '@/components/ui/Tabs';
 export * from '@/components/ui/Pagination';
 export * from '@/components/ui/Chart';
 export * from '@/components/ui/Calendar';
-export * from '@/components/ui/DateRangePicker';
 
 // Feedback / status
 export * from '@/components/ui/StatusBadge';
