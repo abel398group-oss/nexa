@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getActingTenantId } from '@/lib/actingTenant';
+import { getActingTenantId, setActingTenantId } from '@/lib/actingTenant';
 import { confirmDestructive } from '@/lib/destructiveConfirm';
 
 // withCredentials -> envia o cookie HttpOnly (auth) automaticamente
@@ -40,6 +40,20 @@ api.interceptors.response.use(
     const original = error.config;
     const status = error.response?.status;
     const url: string = original?.url ?? '';
+
+    // Auto-cura: cliente (tenant) ativo ficou defasado/inativo -> o header enviado
+    // aponta pra um cliente que o backend nao reconhece (403 "Cliente (tenant)...").
+    // Limpa o cliente salvo e recarrega: cai na tela "Selecione um cliente".
+    if (
+      status === 403 &&
+      getActingTenantId() &&
+      typeof error.response?.data?.message === 'string' &&
+      error.response.data.message.includes('Cliente (tenant)')
+    ) {
+      setActingTenantId(null); // some o header nas proximas requisicoes -> sem loop
+      window.location.reload();
+      return Promise.reject(error);
+    }
 
     // Quebra de vidro: acao irreversivel bloqueada em modo cliente. Confirma e repete
     // a MESMA requisicao com o header de override.

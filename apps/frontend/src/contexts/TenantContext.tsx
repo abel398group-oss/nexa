@@ -44,7 +44,15 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     api
       .get('/admin/tenants')
-      .then((r) => setTenants(r.data))
+      .then((r) => {
+        setTenants(r.data);
+        // auto-cura: se o cliente salvo não está mais na lista (id defasado/inativo), limpa
+        const stored = getActingTenantId();
+        if (stored && !r.data.some((t: Tenant) => t.id === stored)) {
+          setActingTenantId(null);
+          setActingId(null);
+        }
+      })
       .catch(() => setTenants([]))
       .finally(() => setLoading(false));
   }, [isPlatformAdmin]);

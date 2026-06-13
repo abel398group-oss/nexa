@@ -188,38 +188,55 @@ export class SenderService {
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
 
-    // Engajamento por telefone: ack (1 enviado, 2 entregue, 3 lido) + se respondeu (inbound).
-    const phones = [...new Set(targets.map((t) => t.phone).filter(Boolean))];
+    // Engajamento DESTA campanha: só conta quem foi REALMENTE enviado nesta campanha,
+    // ack das mensagens carimbadas com este campaignId, e resposta só APÓS o envio dela.
+    // (evita marcar "respondeu/lido" por conversas antigas — ex.: campanha agendada/não enviada)
+    const sentPhones = [...new Set(targets.filter((t) => t.status === 'sent' && t.sentAt).map((t) => t.phone).filter(Boolean))];
     const engByPhone = new Map<string, { ack: number; replied: boolean }>();
-    if (phones.length) {
+    if (sentPhones.length) {
       const convs = await this.prisma.aiConversation.findMany({
-        where: { tenantId, phone: { in: phones } },
+        where: { tenantId, phone: { in: sentPhones } },
         select: { id: true, phone: true },
       });
       const convIds = convs.map((c) => c.id);
       const phoneByConv = new Map(convs.map((c) => [c.id, c.phone]));
       if (convIds.length) {
+        // mensagens DESTA campanha (carimbadas com campaignId): ack + horário de envio por telefone
         const outMsgs = await this.prisma.aiMessage.findMany({
-          where: { conversationId: { in: convIds }, direction: 'outbound', intent: 'outbound_campaign' },
-          select: { conversationId: true, ack: true },
+          where: {
+            conversationId: { in: convIds },
+            direction: 'outbound',
+            intent: 'outbound_campaign',
+            metadata: { path: ['campaignId'], equals: id },
+          },
+          select: { conversationId: true, ack: true, createdAt: true },
         });
-        const replied = await this.prisma.aiMessage.groupBy({
-          by: ['conversationId'],
-          where: { conversationId: { in: convIds }, direction: 'inbound' },
-          _count: true,
-        });
-        const repliedConvs = new Set(replied.map((r) => r.conversationId));
+        const sentAtByPhone = new Map<string, Date>();
         for (const m of outMsgs) {
           const phone = phoneByConv.get(m.conversationId);
           if (!phone) continue;
           const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
           cur.ack = Math.max(cur.ack, m.ack ?? 0);
           engByPhone.set(phone, cur);
+          const prev = sentAtByPhone.get(phone);
+          if (!prev || m.createdAt < prev) sentAtByPhone.set(phone, m.createdAt);
         }
-        for (const c of convs) {
-          const cur = engByPhone.get(c.phone) ?? { ack: 0, replied: false };
-          if (repliedConvs.has(c.id)) cur.replied = true;
-          engByPhone.set(c.phone, cur);
+        // resposta: inbound só conta se veio DEPOIS do envio desta campanha
+        if (sentAtByPhone.size) {
+          const inbound = await this.prisma.aiMessage.findMany({
+            where: { conversationId: { in: convIds }, direction: 'inbound' },
+            select: { conversationId: true, createdAt: true },
+          });
+          for (const m of inbound) {
+            const phone = phoneByConv.get(m.conversationId);
+            if (!phone) continue;
+            const sentAt = sentAtByPhone.get(phone);
+            if (sentAt && m.createdAt >= sentAt) {
+              const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
+              cur.replied = true;
+              engByPhone.set(phone, cur);
+            }
+          }
         }
       }
     }
@@ -233,10 +250,12 @@ export class SenderService {
       (a, t) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
       {} as Record<string, number>,
     );
-    // resumo de engajamento (só faz sentido p/ quem foi enviado)
+    // resumo de engajamento. Quem RESPONDEU conta como entregue+lido (responder prova
+    // recebimento e leitura) — evita o funil incoerente "3 responderam, 0 entregues"
+    // quando o WAHA não manda os recibos de ack.
     const engagement = {
-      delivered: enriched.filter((t) => t.ack >= 2).length,
-      read: enriched.filter((t) => t.ack >= 3).length,
+      delivered: enriched.filter((t) => t.ack >= 2 || t.replied).length,
+      read: enriched.filter((t) => t.ack >= 3 || t.replied).length,
       replied: enriched.filter((t) => t.replied).length,
     };
 

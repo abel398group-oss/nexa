@@ -44,10 +44,30 @@ export class WhatsappService {
     const p = rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {};
     const id = p.id?._serialized ?? p.id ?? p._data?.id?._serialized ?? p._data?.Info?.ID ?? null;
     const ack = Number(p.ack ?? p._data?.ack ?? 0);
+    // DEBUG temporário: ver se os recibos de ACK estão chegando do WAHA + estrutura do id
+    this.logger.log(`[ack] recebido id=${id} ack=${ack} payload=${JSON.stringify(p).slice(0, 300)}`);
     if (!id || !ack || ack < 1) return { ignored: true, reason: 'sem id/ack' };
-    const msg = await this.prisma.aiMessage.findFirst({ where: { externalId: String(id) } });
-    if (!msg) return { ignored: true, reason: 'msg não encontrada' };
+
+    // 1) match exato pela externalId salva no envio
+    let msg = await this.prisma.aiMessage.findFirst({ where: { externalId: String(id) } });
+    // 2) fallback tolerante: casa pelo id puro da mensagem (último segmento),
+    //    cobre quando o WAHA manda o prefixo fromMe/chat diferente do envio.
+    if (!msg) {
+      const tail = String(id).split('_').pop();
+      if (tail && tail.length >= 8) {
+        msg = await this.prisma.aiMessage.findFirst({
+          where: { externalId: { endsWith: tail } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (msg) this.logger.log(`[ack] casou por fallback (tail=${tail}) -> msg ${msg.id}`);
+      }
+    }
+    if (!msg) {
+      this.logger.warn(`[ack] msg NÃO encontrada para externalId=${id} (ack ${ack} descartado)`);
+      return { ignored: true, reason: 'msg não encontrada' };
+    }
     if (ack <= msg.ack) return { ignored: true, reason: 'ack não avança' };
+    this.logger.log(`[ack] atualizando msg ${msg.id}: ${msg.ack} → ${ack}`);
     await this.prisma.aiMessage.update({ where: { id: msg.id }, data: { ack } });
     this.emitter.emit('message.updated', { conversationId: msg.conversationId, id: msg.id, ack }); // ao vivo
     return { ok: true, ack };

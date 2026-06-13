@@ -52,6 +52,7 @@ export function CampaignsPage() {
   const [schedEnabled, setSchedEnabled] = useState(false);
   const [schedDayOffset, setSchedDayOffset] = useState(0);
   const [schedHour, setSchedHour] = useState<number | null>(null);
+  const [schedMinute, setSchedMinute] = useState(0);
   const [settings, setSettings] = useState<{ waStartHour: number; waEndHour: number; emailStartHour: number; emailEndHour: number } | null>(null);
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
@@ -197,7 +198,7 @@ export function CampaignsPage() {
     setPhonesText(''); setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
     setAudience('todos'); setAudienceTag('');
-    setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null);
+    setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null); setSchedMinute(0);
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
     setManualSort('az'); setManualSnapshot(null);
@@ -208,41 +209,55 @@ export function CampaignsPage() {
     ? { start: settings?.emailStartHour ?? 8, end: settings?.emailEndHour ?? 18 }
     : { start: settings?.waStartHour ?? 7, end: settings?.waEndHour ?? 19 };
 
-  // horas disponíveis pra um dia (limitadas à janela; "hoje" esconde horas já passadas)
+  // horas disponíveis pra um dia (limitadas à janela; "hoje" inclui a hora atual p/ minutos futuros)
   function hoursFor(offset: number): number[] {
     const hours: number[] = [];
     for (let h = sendWindow.start; h < sendWindow.end; h++) hours.push(h);
     if (offset === 0) {
       const nowH = new Date().getHours();
-      return hours.filter((h) => h > nowH);
+      return hours.filter((h) => h >= nowH);
     }
     return hours;
   }
 
-  // recalcula scheduledAt a partir de dia + hora escolhidos
-  function recomputeSchedule(offset: number, hour: number | null) {
+  // minutos disponíveis: lista completa, minuto a minuto (00 a 59)
+  function minutesFor(_offset: number, _hour: number | null): number[] {
+    return Array.from({ length: 60 }, (_, i) => i);
+  }
+
+  // recalcula scheduledAt a partir de dia + hora + minuto escolhidos
+  function recomputeSchedule(offset: number, hour: number | null, minute: number) {
     if (hour == null) return setScheduledAt('');
     const d = new Date();
     d.setDate(d.getDate() + offset);
-    d.setHours(hour, 0, 0, 0);
+    d.setHours(hour, minute, 0, 0);
     setScheduledAt(toLocalInput(d));
   }
 
   function toggleSchedule(on: boolean) {
     setSchedEnabled(on);
-    if (!on) { setSchedHour(null); setScheduledAt(''); }
+    if (!on) { setSchedHour(null); setSchedMinute(0); setScheduledAt(''); }
   }
   function pickDay(offset: number) {
     setSchedDayOffset(offset);
-    // se a hora escolhida não existe mais nesse dia (ex.: virou "hoje"), zera
-    const valid = hoursFor(offset);
-    const h = schedHour != null && valid.includes(schedHour) ? schedHour : null;
-    setSchedHour(h);
-    recomputeSchedule(offset, h);
+    // revalida hora/minuto pro novo dia (ex.: virou "hoje")
+    const validH = hoursFor(offset);
+    const h = schedHour != null && validH.includes(schedHour) ? schedHour : null;
+    const validM = minutesFor(offset, h);
+    const m = validM.includes(schedMinute) ? schedMinute : (validM[0] ?? 0);
+    setSchedHour(h); setSchedMinute(m);
+    recomputeSchedule(offset, h, m);
   }
   function pickHour(hour: number) {
     setSchedHour(hour);
-    recomputeSchedule(schedDayOffset, hour);
+    const validM = minutesFor(schedDayOffset, hour);
+    const m = validM.includes(schedMinute) ? schedMinute : (validM[0] ?? 0);
+    setSchedMinute(m);
+    recomputeSchedule(schedDayOffset, hour, m);
+  }
+  function pickMinute(minute: number) {
+    setSchedMinute(minute);
+    recomputeSchedule(schedDayOffset, schedHour, minute);
   }
 
   // ----- aba Manual: seletor de contatos + avulsos -----
@@ -368,6 +383,22 @@ export function CampaignsPage() {
       setDetailLoading(false);
     }
   }
+
+  // mantém o detalhe atualizado ao vivo enquanto o modal está aberto (sem piscar o loading)
+  useEffect(() => {
+    if (!showDetail || !detail?.campaign?.id) return;
+    const id = detail.campaign.id;
+    const t = setInterval(async () => {
+      try {
+        const r = await api.get(`/campaigns/${id}`);
+        setDetail((cur: any) => (cur?.campaign?.id === id ? r.data : cur));
+      } catch {
+        /* silencioso — não atrapalha o modal */
+      }
+    }, 6000);
+    return () => clearInterval(t);
+  }, [showDetail, detail?.campaign?.id]);
+
   const targetTone = (s: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' =>
     s === 'sent' ? 'success'
       : s === 'failed' ? 'danger'
@@ -687,7 +718,7 @@ export function CampaignsPage() {
                       className="text-base-content/40 hover:text-base-content"><Icon name="close" className="h-5 w-5" /></button>
             </div>
 
-            <div className="px-7 py-5 space-y-5">
+            <div className="px-7 pt-5 pb-8 space-y-5">
 
             {/* Canal */}
             <div className="flex rounded-xl border border-base-200 overflow-hidden text-sm font-medium">
@@ -1183,7 +1214,20 @@ export function CampaignsPage() {
                     >
                       <option value="" disabled>Escolha</option>
                       {hoursFor(schedDayOffset).map((h) => (
-                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] text-base-content/50">Minutos</label>
+                    <select
+                      value={schedMinute}
+                      onChange={(e) => pickMinute(Number(e.target.value))}
+                      disabled={schedHour == null}
+                      className="input text-sm disabled:opacity-40"
+                    >
+                      {minutesFor(schedDayOffset, schedHour).map((m) => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
                       ))}
                     </select>
                   </div>
