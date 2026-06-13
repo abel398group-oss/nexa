@@ -54,6 +54,17 @@ Resposta de lista (`Paginated<T>`):
 Rotas protegidas usam `@RequirePerm('<recurso>')` + `PermissionsGuard`. `admin`
 passa sempre; demais perfis precisam da permissão explícita. Sem decorator → rota
 sem exigência de permissão (ainda sujeita à autenticação quando aplicável).
+Rotas exclusivas da plataforma usam `PlatformAdminGuard` (somente `tenantId === null`).
+
+### Atuação multi-tenant (acting-as)
+
+O `EffectiveTenantInterceptor` resolve o tenant efetivo de cada request:
+
+- Cliente comum: tenant vem do token; headers de atuação são ignorados.
+- Platform admin: atua num cliente via header `x-acting-tenant-id` (validado).
+  Ações irreversíveis (DELETE, disparar campanha) exigem `x-acting-override`.
+
+Ver `docs/security/security-overview.md` e `docs/features/platform-admin/`.
 
 ## Rate limiting
 

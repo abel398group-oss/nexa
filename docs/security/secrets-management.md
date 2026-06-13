@@ -34,12 +34,19 @@
 | `TMS_API_BASE_URL` | URL base da API do TMS (conector) |
 | `TMS_SERVICE_TOKEN` | Token de autenticação do conector TMS |
 | `WAHA_API_URL` | Gateway WhatsApp (WAHA) |
+| `WAHA_WEBHOOK_TOKEN` | Token que autentica os webhooks do WAHA |
 | `NEXA_PUBLIC_URL` | URL pública (webhooks — ngrok/cloudflare/domínio) |
 | `CORS_ORIGINS` | Origens permitidas (CSV) |
-| `JWT`/`encryption` keys | Auth e criptografia (distintas por ambiente) |
+| `JWT_SECRET` | Segredo de assinatura do access token (entropia mínima exigida) |
+| `JWT_REFRESH_SECRET` | Segredo de assinatura do refresh token |
 
 > `AI_MODEL` não é segredo, mas entra aqui por ser configuração de ambiente
 > relevante. Os preços (`AI_PRICE_IN`/`AI_PRICE_OUT`) são opcionais.
+
+> **Validação no boot:** em produção, `validateEnv()` (`shared/config/validate-env.ts`)
+> **aborta o start** se `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`,
+> `ANTHROPIC_API_KEY` ou `WAHA_WEBHOOK_TOKEN` estiverem ausentes, fracos ou com
+> valor placeholder do `.env.example`. Ver `docs/security/security-overview.md`.
 
 > O cliente Anthropic trata `ANTHROPIC_API_KEY` ausente/placeholder (`xxxxx`)
 > como "não configurado" e degrada com segurança, sem vazar a chave.

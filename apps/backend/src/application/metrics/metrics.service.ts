@@ -57,6 +57,38 @@ export class MetricsService {
       this.prisma.complaint.groupBy({ by: ['topic'], where: { tenantId, ...dw }, _count: true }),
     ]);
 
+    // ── Engajamento de campanhas (CAMP-2) ───────────────────────────────────
+    const [campaignsTotal, sentTotal, ackRows] = await Promise.all([
+      this.prisma.campaign.count({ where: { tenantId, ...dw } }),
+      this.prisma.campaignTarget.count({ where: { tenantId, status: 'sent', ...dw } }),
+      this.prisma.aiMessage.groupBy({
+        by: ['ack'],
+        where: { tenantId, direction: 'outbound', intent: 'outbound_campaign', ...dw },
+        _count: true,
+      }),
+    ]);
+    const ackAtLeast = (min: number) =>
+      ackRows.filter((r) => (r.ack ?? 0) >= min).reduce((a, r) => a + (r._count as number), 0);
+    const campMsgTotal = ackRows.reduce((a, r) => a + (r._count as number), 0);
+    const delivered = ackAtLeast(2);
+    const read = ackAtLeast(3);
+    // respostas: conversas que receberam campanha E responderam (inbound)
+    const campConvRows = await this.prisma.aiMessage.findMany({
+      where: { tenantId, direction: 'outbound', intent: 'outbound_campaign', ...dw },
+      select: { conversationId: true },
+      distinct: ['conversationId'],
+    });
+    const campConvIds = campConvRows.map((r) => r.conversationId);
+    const repliedRows = campConvIds.length
+      ? await this.prisma.aiMessage.groupBy({
+          by: ['conversationId'],
+          where: { conversationId: { in: campConvIds }, direction: 'inbound' },
+          _count: true,
+        })
+      : [];
+    const replied = repliedRows.length;
+    const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
+
     const asMap = (rows: any[], key: string) =>
       rows.reduce((acc, r) => ({ ...acc, [r[key] ?? 'null']: r._count }), {} as Record<string, number>);
 
@@ -88,6 +120,16 @@ export class MetricsService {
       knowledge: { total: knowledgeTotal },
       events: { byStatus: asMap(eventsByStatus, 'status'), dlq: dlqTotal },
       complaints: { total: complaintsTotal, byTopic: asMap(complaintsByTopic, 'topic') },
+      campaigns: {
+        total: campaignsTotal,
+        sent: sentTotal,
+        delivered,
+        read,
+        replied,
+        deliveredPct: pct(delivered, campMsgTotal),
+        readPct: pct(read, campMsgTotal),
+        repliedPct: pct(replied, campConvIds.length),
+      },
     };
   }
 

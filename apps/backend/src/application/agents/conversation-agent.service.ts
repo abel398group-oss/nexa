@@ -30,8 +30,8 @@ export interface HandleResult {
   handoff?: { assigned: boolean; sellerName?: string; reason?: string };
 }
 
-// lead quente → vai pro vendedor
-const HOT_LEAD_SCORE = 70;
+// lead quente → vai pro vendedor (IA-3). Configurável via env.
+const HOT_LEAD_SCORE = Number(process.env.HOT_LEAD_SCORE ?? 70);
 // humanização: espera alguns segundos antes de auto-responder (parecer humano) — G5
 const HUMANIZE_MIN_MS = Number(process.env.HUMANIZE_MIN_MS ?? 3000);
 const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
@@ -325,7 +325,10 @@ export class ConversationAgentService {
     // HANDOFF: lead quente (sales + score alto) OU pediu humano → atribui + notifica vendedor.
     // Dedup interno (1 notificação por conversa). Acontece independente da autonomia.
     let handoff: HandleResult['handoff'];
-    const isHot = route.agent === 'sales' && route.leadScore >= HOT_LEAD_SCORE;
+    // IA-3: lead de vendas com score alto OU que pediu reunião → escala pro vendedor.
+    const isHot =
+      route.agent === 'sales' &&
+      (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
     if (conv && (isHot || route.agent === 'human')) {
       handoff = await this.sellers.handoff(tenantId, {
         conversationId: input.conversationId ?? '',
@@ -354,5 +357,32 @@ export class ConversationAgentService {
       blockedReason,
       handoff,
     };
+  }
+
+  // IA-3 (complemento): com a autonomia OFF, a Lia NÃO responde, mas ainda escala
+  // leads quentes / pedidos de humano pro vendedor — classificação leve, sem gerar rascunho.
+  async escalateOnly(tenantId: string, input: { message: string; conversationId: string }) {
+    const route = await this.router.route(input.message);
+    const conv = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+    let handoff: HandleResult['handoff'];
+    if (!conv) return { route, handoff };
+    const isHot =
+      route.agent === 'sales' &&
+      (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
+    if (isHot || route.agent === 'human') {
+      handoff = await this.sellers.handoff(tenantId, {
+        conversationId: input.conversationId,
+        contactPhone: conv.phone,
+        leadScore: route.leadScore,
+        summary: input.message.slice(0, 120),
+      });
+      await this.notifications.create(tenantId, {
+        type: isHot ? 'hot_lead' : 'info',
+        title: isHot ? `🔥 Lead quente (score ${route.leadScore})` : '🙋 Lead pediu atendente',
+        body: `${conv.phone}${handoff?.sellerName ? ` → ${handoff.sellerName}` : ''}: "${input.message.slice(0, 80)}" (IA off)`,
+        link: '/inbox',
+      });
+    }
+    return { route, handoff };
   }
 }

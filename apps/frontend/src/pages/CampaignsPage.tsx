@@ -141,6 +141,16 @@ export function CampaignsPage() {
       : s === 'queued' || s === 'sending' ? 'info'
       : 'neutral';
 
+  // chip de engajamento (entregue/lido/respondeu) a partir do ack + replied
+  const engChip = (t: any): { label: string; cls: string } | null => {
+    if (t?.replied) return { label: '💬 Respondeu', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15' };
+    if (t?.ack >= 3) return { label: '👁 Lido', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15' };
+    if (t?.ack >= 2) return { label: '✓✓ Entregue', cls: 'bg-base-200 text-base-content/60' };
+    return null;
+  };
+  const outcomeLabel = (o: string) =>
+    ({ won: '🏆 Ganho', lost: '❌ Perdido', no_response: '🔇 Sem resposta', opt_out: '🚫 Opt-out', em_aberto: '⏳ Em aberto' } as Record<string, string>)[o] || o;
+
   // pré-preenche o "Nova campanha" só com os que falharam/pularam
   function resendFailed() {
     const failed = (detail?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
@@ -693,6 +703,24 @@ export function CampaignsPage() {
                 </Button>
               )}
             </div>
+
+            {detail.engagement && (
+              <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">✓✓ Entregue: {detail.engagement.delivered}</span>
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">👁 Lido: {detail.engagement.read}</span>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">💬 Respondeu: {detail.engagement.replied}</span>
+              </div>
+            )}
+
+            {detail.conversion && detail.conversion.conversations > 0 && (
+              <div className="mb-3 rounded-lg border border-base-200 px-3 py-2 text-xs text-base-content/70">
+                <span className="font-medium text-base-content">Conversão:</span> {detail.conversion.conversations} conversa(s) originada(s)
+                {Object.entries(detail.conversion.byOutcome).map(([k, v]) => (
+                  <span key={k} className="ml-2">· {outcomeLabel(k)}: {v as number}</span>
+                ))}
+              </div>
+            )}
+
             {detailLoading ? (
               <div className="py-6 text-center text-sm text-base-content/50">Carregando destinatários…</div>
             ) : detail.targets?.length ? (
@@ -710,6 +738,11 @@ export function CampaignsPage() {
                       {t.sentAt && (
                         <span className="text-[11px] text-base-content/40">
                           {new Date(t.sentAt).toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                      {engChip(t) && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${engChip(t)!.cls}`}>
+                          {engChip(t)!.label}
                         </span>
                       )}
                       <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>

@@ -46,6 +46,32 @@ Configurados em `apps/backend/src/main.ts` e `app.module.ts`:
 | Financeiro | cobranças |
 | IA | read-only (solicita; backend executa conforme o perfil do solicitante) |
 
+## Platform Admin e atuação multi-tenant (acting-as)
+
+O **admin da plataforma** (`User.tenantId === null`) opera acima dos tenants.
+Dois controles garantem isolamento e auditoria:
+
+- **`PlatformAdminGuard`** (`shared/auth/platform-admin.guard.ts`) — libera apenas
+  rotas de plataforma para quem não tem tenant; demais usuários recebem 403.
+- **`EffectiveTenantInterceptor`** (`shared/tenant/effective-tenant.interceptor.ts`,
+  registrado como `APP_INTERCEPTOR`) — resolve o **tenant efetivo** antes do handler:
+  - Cliente comum: `tenantId` vem **sempre** do token; o header é ignorado (ADR 005 D2).
+  - Platform admin: só atua num cliente via header validado `x-acting-tenant-id`
+    (tenant precisa existir e estar `active`).
+  - Escrita em modo cliente é **permitida porém auditada**; ações **irreversíveis**
+    (DELETE, disparar campanha) exigem override explícito `x-acting-override`
+    — a "quebra de vidro".
+
+Detalhes e fases em `docs/features/platform-admin/` (STATUS e implementation).
+
+## Validação de ambiente no boot
+
+`validateEnv()` (`shared/config/validate-env.ts`) roda no início do `main.ts`. Em
+**produção**, aborta o boot se um segredo crítico (`DATABASE_URL`, `JWT_SECRET`,
+`JWT_REFRESH_SECRET`, `ANTHROPIC_API_KEY`, `WAHA_WEBHOOK_TOKEN`) estiver ausente,
+fraco ou ainda com valor placeholder do `.env.example`. Em dev, apenas avisa.
+Evita subir em produção com chave insegura.
+
 ## Segurança da IA
 
 Validação de entrada (prompt injection) e saída (alucinação/LGPD/tom) pelo

@@ -69,9 +69,14 @@ graph TB
 ### Transversais (`shared`)
 - **`ai`** — `AnthropicService` (cliente Claude, custo/tokens).
 - **`governance`** — `AutonomyService` (kill switch).
-- **`auth`** — JWT (cookie HttpOnly) + `PermissionsGuard`.
+- **`auth`** — JWT (cookie HttpOnly) + `PermissionsGuard` + `PlatformAdminGuard`.
+- **`tenant`** — `EffectiveTenantInterceptor` (tenant efetivo / acting-as + break-glass).
+- **`config`** — `validateEnv` (checagem de segredos no boot).
 - **`audit` / `middleware`** — auditoria + `correlationId` por request.
 - **`waha`** — cliente WhatsApp.
+
+> No boundary HTTP, além das features há `products` (catálogo via `ConnectorsService`)
+> e `health`.
 
 ### Infra
 - **`infra/prisma`** — `PrismaService` (acesso ao Postgres).

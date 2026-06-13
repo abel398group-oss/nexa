@@ -251,7 +251,15 @@ export class WhatsappService {
     } else if (rateLimited) {
       this.logger.warn(`Rate-limit: ${n.phone} (msg guardada, SEM resposta da IA — última há <${RATE_LIMIT_MS / 1000}s)`);
     } else if (!this.autonomy.isEnabled()) {
-      this.logger.warn(`Autonomia OFF: ${n.phone} (msg guardada, SEM resposta automática)`);
+      // IA-3 (complemento): a Lia não responde com a autonomia OFF, mas ainda escala leads
+      // quentes / pedidos de humano pro vendedor. Marca lastProcessed p/ aplicar o rate-limit.
+      this.lastProcessed.set(n.phone, Date.now());
+      const esc = await this.agent
+        .escalateOnly(tenantId, { message: n.text, conversationId: conv.id })
+        .catch(() => null);
+      this.logger.warn(
+        `Autonomia OFF: ${n.phone} (sem resposta; escalada=${esc?.handoff?.assigned ? esc.handoff.sellerName : 'não'})`,
+      );
     }
 
     return {

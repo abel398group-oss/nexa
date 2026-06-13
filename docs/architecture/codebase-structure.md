@@ -27,8 +27,8 @@ Arquitetura em camadas, influenciada por DDD (espelha o HiperTMS):
 
 ```
 src/
-  main.ts                 bootstrap: helmet, CORS, ValidationPipe, cookies, Swagger
-  app.module.ts           composição dos módulos + guards + logger + middleware
+  main.ts                 bootstrap: validateEnv + helmet, CORS, ValidationPipe, cookies, Swagger
+  app.module.ts           composição dos módulos + guards + interceptor + logger + middleware
   application/<feature>/   regras de negócio (1 pasta por feature)
     agents/               router, sales, support, diagnostic, resolution,
                           escalation, case-classifier, conversation, supervisor
@@ -39,6 +39,7 @@ src/
     auth/ users/ admin/
   presentation/
     http/<feature>/       controllers + DTOs (boundary HTTP, prefixo /api)
+                          inclui products/ (catálogo via Connector) e health/
     ws/                   gateways WebSocket (inbox em tempo real)
   infra/
     prisma/               PrismaModule / PrismaService
@@ -47,6 +48,9 @@ src/
     ai/                   anthropic.service (cliente Claude) + ai.module
     governance/           autonomy.service (kill switch)
     auth/                 jwt strategy/guard + permissions.guard (@RequirePerm)
+                          + platform-admin.guard (admin sem tenant)
+    tenant/               effective-tenant.interceptor (resolve tenant efetivo / acting-as)
+    config/               validate-env (aborta boot em produção com segredo inseguro)
     audit/ middleware/    auditoria + correlationId
     dto/                  pagination.dto
     waha/ decorators/ utils/
@@ -61,11 +65,16 @@ Ver `docs/architecture/frontend-architecture.md`. Resumo:
 
 ```
 src/
-  main.tsx App.tsx
-  pages/        uma página por tela (Inbox, Contacts, Campaigns, Knowledge, ...)
-  components/   Layout, HelpDrawer, GuidedTour, ui/ (primitivos), conversation/
+  main.tsx App.tsx        roteamento (landing pública + área protegida)
+  pages/        uma página por rota (Landing, Login, Inbox, Support, Contacts,
+                Campaigns, Knowledge, Sellers, Users, Playbook, Dashboard, ...)
+  components/
+    ui/         design system próprio (~30 componentes) + stories (Storybook)
+    conversation/  compostos do inbox/suporte (timeline, badges, métricas)
+    Layout, HelpDrawer, GuidedTour
   contexts/     Auth, Toast, Confirm, DateRange
   lib/          api.ts (axios) + helpers (conversation-status, ticket-category)
+.storybook/     configuração do Storybook (catálogo visual de UI)
 ```
 
 ## Banco de dados

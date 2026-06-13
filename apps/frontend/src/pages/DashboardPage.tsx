@@ -12,6 +12,16 @@ interface Overview {
   knowledge: { total: number };
   events: { byStatus: Record<string, number>; dlq: number };
   complaints: { total: number; byTopic: Record<string, number> };
+  campaigns?: {
+    total: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    replied: number;
+    deliveredPct: number;
+    readPct: number;
+    repliedPct: number;
+  };
 }
 
 function n(obj: Record<string, number>, key: string): number {
@@ -95,6 +105,41 @@ export function DashboardPage() {
         <ConversationMetricsCard label="Mensagens" value={m.messages.inbound + m.messages.outbound} icon="mail" accent="green" hint={`${m.messages.inbound} in · ${m.messages.outbound} out`} />
         <ConversationMetricsCard label="Base (KB)" value={m.knowledge.total} icon="knowledge" accent="amber" hint="itens de conhecimento" />
       </div>
+
+      {/* ── Engajamento de Campanhas (CAMP-2) ──────────────────────── */}
+      {m.campaigns && (
+        <>
+          <SectionTitle>Engajamento de Campanhas</SectionTitle>
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <ConversationMetricsCard
+              label="Enviados"
+              value={m.campaigns.sent}
+              emoji="📤"
+              hint={`${m.campaigns.total} campanha(s)`}
+            />
+            <ConversationMetricsCard
+              label="Entregue"
+              value={`${m.campaigns.delivered} · ${m.campaigns.deliveredPct}%`}
+              emoji="✓✓"
+              accent="blue"
+            />
+            <ConversationMetricsCard
+              label="Lido"
+              value={`${m.campaigns.read} · ${m.campaigns.readPct}%`}
+              emoji="👁"
+              accent="blue"
+              highlight={m.campaigns.read > 0}
+            />
+            <ConversationMetricsCard
+              label="Respondeu"
+              value={`${m.campaigns.replied} · ${m.campaigns.repliedPct}%`}
+              emoji="💬"
+              accent="green"
+              highlight={m.campaigns.replied > 0}
+            />
+          </div>
+        </>
+      )}
 
       {/* ── Monitoramento Operacional ──────────────────────────────── */}
       <SectionTitle>Monitoramento Operacional — Status</SectionTitle>

@@ -172,7 +172,7 @@ export class SenderService {
     return withCounts;
   }
 
-  // Detalhe de uma campanha: a campanha + destinatários (com status) + contagem.
+  // Detalhe de uma campanha: campanha + destinatários (status de envio + engajamento) + contagens.
   async campaignDetail(tenantId: string, id: string) {
     const campaign = await this.prisma.campaign.findFirst({ where: { id, tenantId } });
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
@@ -180,11 +180,76 @@ export class SenderService {
       where: { campaignId: id },
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
-    const counts = targets.reduce(
+
+    // Engajamento por telefone: ack (1 enviado, 2 entregue, 3 lido) + se respondeu (inbound).
+    const phones = [...new Set(targets.map((t) => t.phone).filter(Boolean))];
+    const engByPhone = new Map<string, { ack: number; replied: boolean }>();
+    if (phones.length) {
+      const convs = await this.prisma.aiConversation.findMany({
+        where: { tenantId, phone: { in: phones } },
+        select: { id: true, phone: true },
+      });
+      const convIds = convs.map((c) => c.id);
+      const phoneByConv = new Map(convs.map((c) => [c.id, c.phone]));
+      if (convIds.length) {
+        const outMsgs = await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds }, direction: 'outbound', intent: 'outbound_campaign' },
+          select: { conversationId: true, ack: true },
+        });
+        const replied = await this.prisma.aiMessage.groupBy({
+          by: ['conversationId'],
+          where: { conversationId: { in: convIds }, direction: 'inbound' },
+          _count: true,
+        });
+        const repliedConvs = new Set(replied.map((r) => r.conversationId));
+        for (const m of outMsgs) {
+          const phone = phoneByConv.get(m.conversationId);
+          if (!phone) continue;
+          const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
+          cur.ack = Math.max(cur.ack, m.ack ?? 0);
+          engByPhone.set(phone, cur);
+        }
+        for (const c of convs) {
+          const cur = engByPhone.get(c.phone) ?? { ack: 0, replied: false };
+          if (repliedConvs.has(c.id)) cur.replied = true;
+          engByPhone.set(c.phone, cur);
+        }
+      }
+    }
+
+    const enriched = targets.map((t) => {
+      const e = engByPhone.get(t.phone);
+      return { ...t, ack: e?.ack ?? 0, replied: e?.replied ?? false };
+    });
+
+    const counts = enriched.reduce(
       (a, t) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
       {} as Record<string, number>,
     );
-    return { campaign, targets, counts };
+    // resumo de engajamento (só faz sentido p/ quem foi enviado)
+    const engagement = {
+      delivered: enriched.filter((t) => t.ack >= 2).length,
+      read: enriched.filter((t) => t.ack >= 3).length,
+      replied: enriched.filter((t) => t.replied).length,
+    };
+
+    // CAMP-1: conversão — conversas originadas por ESTA campanha (msg carimbada com campaignId) + outcome
+    const campMsgs = await this.prisma.aiMessage.findMany({
+      where: { tenantId, intent: 'outbound_campaign', metadata: { path: ['campaignId'], equals: id } },
+      select: { conversationId: true },
+      distinct: ['conversationId'],
+    });
+    const convIds = campMsgs.map((m) => m.conversationId);
+    const convs = convIds.length
+      ? await this.prisma.aiConversation.findMany({ where: { id: { in: convIds } }, select: { outcome: true } })
+      : [];
+    const byOutcome = convs.reduce(
+      (a, c) => ({ ...a, [c.outcome ?? 'em_aberto']: (a[c.outcome ?? 'em_aberto'] ?? 0) + 1 }),
+      {} as Record<string, number>,
+    );
+    const conversion = { conversations: convIds.length, byOutcome };
+
+    return { campaign, targets: enriched, counts, engagement, conversion };
   }
 
   async setStatus(tenantId: string, id: string, status: 'running' | 'paused') {
@@ -306,7 +371,7 @@ export class SenderService {
         if (!conv) {
           conv = await this.conversations.create(campaign.tenantId, { contactId: contact.id, phone: target.phone, sourceChannel: 'whatsapp' });
         }
-        await this.conversations.addMessage(campaign.tenantId, conv.id, { direction: 'outbound', content: text, intent: 'outbound_campaign' });
+        await this.conversations.addMessage(campaign.tenantId, conv.id, { direction: 'outbound', content: text, intent: 'outbound_campaign', metadata: { campaignId: campaign.id } });
 
         // anexo NATIVO (PDF/Word) — só quando a API oficial do WhatsApp estiver habilitada.
         // WAHA grátis não envia arquivo; até habilitar, o material vai como link no texto (acima).

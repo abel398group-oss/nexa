@@ -73,16 +73,23 @@ Layered / DDD-influenced, mirroring the HiperTMS structure:
 - `presentation/ws/` — WebSocket gateways (real-time inbox via socket.io).
 - `infra/prisma/` — `PrismaModule` / Prisma access. `infra/tms/` — TMS lookup.
 - `shared/` — cross-cutting: `ai/` (Anthropic client), `governance/` (autonomy
-  kill switch), `auth/` (JWT guard, permissions guard), `audit/`, `waha/`
+  kill switch), `auth/` (JWT guard, permissions guard, **platform-admin guard**),
+  `tenant/` (**EffectiveTenantInterceptor** — resolves effective/acting tenant),
+  `config/` (**validateEnv** — boot-time secret check), `audit/`, `waha/`
   (WhatsApp client), `middleware/` (correlationId), `dto/` (pagination),
   `decorators/`, `utils/`.
 
-Cross-cutting tech (wired in `app.module.ts` / `main.ts`): JWT auth with HttpOnly
-cookies, role + permission guard (RBAC, `@RequirePerm`), `@nestjs/throttler`
-rate limiting (100 req/min/IP), Helmet, restricted CORS, Swagger, structured
-logging (pino) with `correlationId`, `EventEmitter` + `@nestjs/schedule`.
+Cross-cutting tech (wired in `app.module.ts` / `main.ts`): boot-time env
+validation (`validateEnv`), JWT auth with HttpOnly cookies, role + permission
+guard (RBAC, `@RequirePerm`), `@nestjs/throttler` rate limiting (100 req/min/IP),
+Helmet, restricted CORS, Swagger, structured logging (pino) with `correlationId`,
+`EventEmitter` + `@nestjs/schedule`, and a global `EffectiveTenantInterceptor`.
 Multi-tenant: `tenantId` always derived from the authenticated context, never
-from the request body or the lead's message.
+from the request body or the lead's message. The **platform admin** (`tenantId
+=== null`) may act on a tenant via the validated `x-acting-tenant-id` header;
+writes are audited and irreversible actions need an `x-acting-override`
+("break-glass"). See `docs/features/platform-admin/` and
+`docs/security/security-overview.md`.
 
 ### The AI layer (Lia)
 
@@ -102,10 +109,13 @@ from the request body or the lead's message.
 ### Frontend (`apps/frontend/src`)
 
 React 18 + Vite. `axios` (`lib/api.ts`) for HTTP, `socket.io-client` for the
-real-time inbox, `react-router-dom` 6 for routing, Tailwind 3 (proprietary design
-system mirroring HiperTMS — ADR 002 / ADR 014, dark mode via `html.dark`).
-`pages/` (one per screen), `components/` (`ui/` primitives + composites),
-`contexts/` (Auth, Toast, Confirm, DateRange), `lib/` (api client + helpers).
+real-time inbox, `react-router-dom` 6 for routing (public landing + protected
+area), Tailwind 3. Proprietary **design system** in `components/ui/` (~30
+components, dark mode via `html.dark` — ADR 002 / ADR 014) documented in
+**Storybook** (`pnpm storybook`, `.storybook/`). `pages/` (one per route),
+`components/conversation/` (inbox/support composites), `contexts/` (Auth, Toast,
+Confirm, DateRange), `lib/` (api client + helpers). See
+`docs/architecture/frontend-architecture.md`.
 
 ## Documentation map
 

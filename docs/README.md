@@ -46,6 +46,10 @@ Para agentes de IA trabalhando no repositório: começar por `CLAUDE.md` (raiz).
 - [Inbox](features/inbox/prd.md) — Conversas WhatsApp e atendimento humano
 - [Knowledge Base](features/knowledge/prd.md) — Base de conhecimento RAG da Lia
 - [Conectores](features/connectors/prd.md) — Integração com produtos (HiperTMS)
+- [Platform Admin](features/platform-admin/) — Admin da plataforma e atuação multi-tenant (acting-as + break-glass)
+
+> O **design system** do frontend já existe em código (`apps/frontend/src/components/ui/`)
+> e tem catálogo no Storybook — ver `architecture/frontend-architecture.md` e ADR 014.
 
 ## Decisões de Arquitetura (ADRs)
 

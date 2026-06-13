@@ -68,8 +68,8 @@ Todos com header `x-internal-token: <TMS_SERVICE_TOKEN>`, timeout 5s. Se a chama
 
 | # | Prioridade | Tarefa | Notas |
 |---|---|---|---|
-| CAMP-1 | 🟢 | Adicionar `campaignId` na conversa | Saber qual campanha originou cada conversa — útil para relatório de conversão |
-| CAMP-2 | ⬜ | Dashboard de conversão por campanha | Quantos leads de cada campanha viraram oportunidade |
+| CAMP-1 | ✅ | Vincular conversa → campanha (sem migration) | A msg de campanha é carimbada com `campaignId` no `metadata`. Detalhe da campanha mostra a **conversão** (outcomes das conversas originadas). Vale só p/ disparos novos |
+| CAMP-2 | ✅ | Engajamento de campanhas no Painel | Cards Enviados/Entregue/Lido/Respondeu + detalhe por destinatário (ack + resposta). Conversão *por campanha* (qual virou oportunidade) ainda depende do CAMP-1 |
 
 ---
 
@@ -81,6 +81,7 @@ Todos com header `x-internal-token: <TMS_SERVICE_TOKEN>`, timeout 5s. Se a chama
 | INFRA-2 | 🔴 | Hardening de segurança no deploy | HTTPS, variáveis de ambiente seguras, CORS, rate limit |
 | INFRA-3 | 🟡 | Configurar domínio `lia@hipertms.com.br` no SPF/DKIM | Melhorar entregabilidade de e-mail |
 | INFRA-4 | 🟡 | pgvector + embeddings (RAG avançado) | Fase 2 — busca semântica na base de conhecimento |
+| INFRA-5 | 🔴 | **Monitorar o túnel Cloudflare** (temporário) | Quebra os links de PDF das campanhas quando muda/cai. Regra: sempre verificar. Solução definitiva = domínio fixo no deploy (INFRA-1) + `MEDIA_PUBLIC_BASE` |
 
 ---
 
@@ -90,7 +91,7 @@ Todos com header `x-internal-token: <TMS_SERVICE_TOKEN>`, timeout 5s. Se a chama
 |---|---|---|---|
 | IA-1 | 🟢 | Ajustar prompt da Lia para HiperTMS | Personalizar tom, produto, objeções comuns do setor de transporte |
 | IA-2 | ⬜ | RAG com documentos do TMS | Lia responder com base em manual, tabela de preços, FAQ |
-| IA-3 | ⬜ | Escalada automática para vendedor humano | Quando `interest_score >= 70` ou `intent = meeting_request` |
+| IA-3 | ✅ | Escalada automática para vendedor humano | Score ≥ `HOT_LEAD_SCORE` (env, default 70), `meeting_request` ou `human` → `sellers.handoff` (round-robin + notifica). **Pendência:** hoje só dispara com autonomia LIGADA (a IA não classifica com o kill switch OFF) |
 
 ---
 
