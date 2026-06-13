@@ -9,6 +9,7 @@ import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { Icon, type IconName } from '@/components/ui/icons';
+import { TenantSelector } from '@/contexts/TenantContext';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa! 👋', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
@@ -19,17 +20,31 @@ const TOUR_STEPS: TourStep[] = [
   { selector: '[data-tour="killswitch"]', title: 'Controle da IA', text: 'Ligue/desligue a resposta automática da Lia a qualquer momento (botão de pânico).' },
 ];
 
-const items: { to: string; label: string; icon: string; ic: IconName; perm: string }[] = [
-  { to: '/dashboard', label: 'Painel', icon: '📊', ic: 'dashboard', perm: 'dashboard' },
-  { to: '/inbox', label: 'Inbox', icon: '💬', ic: 'inbox', perm: 'inbox' },
-  { to: '/support', label: 'Suporte', icon: '🛠️', ic: 'support', perm: 'inbox' },
-  { to: '/contacts', label: 'Contatos', icon: '👥', ic: 'contacts', perm: 'contacts' },
-  { to: '/knowledge', label: 'Conhecimento', icon: '📚', ic: 'knowledge', perm: 'knowledge' },
-  { to: '/sellers', label: 'Vendedores', icon: '🧑‍💼', ic: 'sellers', perm: 'sellers' },
-  { to: '/campaigns', label: 'Disparo', icon: '📣', ic: 'campaigns', perm: 'campaigns' },
-  { to: '/playbook', label: 'Playbook IA', icon: '🎯', ic: 'playbook', perm: 'ai_control' },
-  { to: '/users', label: 'Usuários', icon: '🔐', ic: 'users', perm: 'users' },
-  { to: '/settings/email-channel', label: 'Canal de E-mail', icon: '✉️', ic: 'mail', perm: 'admin' },
+type NavItem = { to: string; label: string; emoji: string; ic: IconName; perm: string };
+type NavGroup = { label: string | null; items: NavItem[] };
+
+// Navegação agrupada (padrão HiperTMS: Grupo → Item). Grupo sem label = item solto no topo.
+const NAV_GROUPS: NavGroup[] = [
+  { label: null, items: [
+    { to: '/dashboard', label: 'Painel', emoji: '📊', ic: 'dashboard', perm: 'dashboard' },
+  ] },
+  { label: 'Atendimento', items: [
+    { to: '/inbox', label: 'Inbox', emoji: '💬', ic: 'inbox', perm: 'inbox' },
+    { to: '/support', label: 'Suporte', emoji: '🛠️', ic: 'support', perm: 'inbox' },
+  ] },
+  { label: 'Comercial', items: [
+    { to: '/contacts', label: 'Contatos', emoji: '👥', ic: 'contacts', perm: 'contacts' },
+    { to: '/campaigns', label: 'Disparo', emoji: '📣', ic: 'campaigns', perm: 'campaigns' },
+    { to: '/sellers', label: 'Vendedores', emoji: '🧑‍💼', ic: 'sellers', perm: 'sellers' },
+    { to: '/playbook', label: 'Playbook IA', emoji: '🎯', ic: 'playbook', perm: 'ai_control' },
+  ] },
+  { label: 'Conhecimento', items: [
+    { to: '/knowledge', label: 'Base de Conhecimento', emoji: '📚', ic: 'knowledge', perm: 'knowledge' },
+  ] },
+  { label: 'Administração', items: [
+    { to: '/users', label: 'Usuários', emoji: '🔐', ic: 'users', perm: 'users' },
+    { to: '/settings/email-channel', label: 'Canal de E-mail', emoji: '✉️', ic: 'mail', perm: 'admin' },
+  ] },
 ];
 
 const titles: Record<string, string> = {
@@ -169,14 +184,15 @@ export function Layout() {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const perms = user?.permissions ?? [];
-  const visibleItems = items.filter((it) => isAdmin || perms.includes(it.perm));
+  const visibleGroups = NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((it) => isAdmin || perms.includes(it.perm)) }))
+    .filter((g) => g.items.length > 0);
+  const visibleItems = visibleGroups.flatMap((g) => g.items);
   const pageTitle = titles[location.pathname] ?? 'Nexa';
   const [helpOpen, setHelpOpen] = useState(false);
   const hasHelp = !!HELP[location.pathname];
   const [tourOpen, setTourOpen] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
-  // sidebar retrátil (estado salvo)
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('nexa_sidebar_collapsed') === '1');
   // command palette (Ctrl+K)
   const [cmdOpen, setCmdOpen] = useState(false);
 
@@ -185,13 +201,6 @@ export function Layout() {
     localStorage.setItem('nexa_theme', isDark ? 'dark' : 'light');
     setDark(isDark);
   }
-  function toggleCollapsed() {
-    setCollapsed((c) => {
-      localStorage.setItem('nexa_sidebar_collapsed', c ? '0' : '1');
-      return !c;
-    });
-  }
-
   // atalho global Ctrl/Cmd+K abre a busca
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -210,17 +219,16 @@ export function Layout() {
     ...visibleItems.map((it) => ({
       id: `nav:${it.to}`,
       label: it.label,
-      icon: it.icon,
+      icon: it.emoji,
       hint: 'Ir para',
       keywords: it.perm,
       run: () => navigate(it.to),
     })),
     { id: 'act:theme', label: dark ? 'Tema claro' : 'Tema escuro', icon: dark ? '☀️' : '🌙', hint: 'Ação', run: toggleTheme },
     { id: 'act:tour', label: 'Refazer o tour', icon: '🎓', hint: 'Ação', run: () => setTourOpen(true) },
-    { id: 'act:collapse', label: collapsed ? 'Expandir menu' : 'Recolher menu', icon: '↔️', hint: 'Ação', run: toggleCollapsed },
     { id: 'act:logout', label: 'Sair', icon: '⏻', hint: 'Ação', run: logout },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [visibleItems, dark, collapsed]);
+  ], [visibleItems, dark]);
 
   // tour automático na primeira vez
   useEffect(() => {
@@ -236,71 +244,65 @@ export function Layout() {
 
   return (
     <DateRangeProvider>
-    <div className="flex h-full">
-      {/* ===== SIDEBAR larga (midnight enterprise) ===== */}
-      <aside
-        style={{ width: collapsed ? '4rem' : '15rem', minWidth: collapsed ? '4rem' : '15rem' }}
-        className="flex shrink-0 flex-col overflow-hidden bg-sidebar text-white/90 transition-[width,min-width] duration-200 ease-in-out"
-      >
-        <div className={`flex h-14 items-center ${collapsed ? 'justify-center px-0' : 'gap-2 px-5'}`}>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-          {!collapsed && <span className="text-base font-semibold tracking-tight text-white">Nexa</span>}
+    <div className="h-full">
+      {/* ===== SIDEBAR (midnight) — rail que expande no hover (padrão HiperTMS) ===== */}
+      <aside className="group/sb fixed inset-y-0 left-0 z-30 flex w-16 flex-col overflow-hidden bg-sidebar text-white/90 transition-[width] duration-200 ease-layout hover:w-60 hover:shadow-elevated">
+        {/* marca: símbolo no rail, wordmark quando expande */}
+        <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
+          <span className="hidden whitespace-nowrap text-base font-semibold tracking-tight text-white group-hover/sb:inline">Nexa</span>
         </div>
-        {!collapsed && (
-          <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Menu</div>
-        )}
-        <nav className={`flex-1 space-y-0.5 ${collapsed ? 'px-2 pt-2' : 'px-2'}`}>
-          {visibleItems.map((it) => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              title={collapsed ? it.label : undefined}
-              className={({ isActive }) =>
-                `group relative flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${
-                  collapsed ? 'justify-center px-0' : 'gap-3 px-3'
-                } ${
-                  isActive
-                    ? 'bg-white/[0.13] text-white'
-                    : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
-                  )}
-                  <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                  {!collapsed && <span className="truncate">{it.label}</span>}
-                </>
+
+        <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
+          {visibleGroups.map((g, gi) => (
+            <div key={gi} className={gi > 0 ? 'pt-3' : ''}>
+              {g.label && (
+                <div className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 group-hover/sb:block">
+                  {g.label}
+                </div>
               )}
-            </NavLink>
+              {g.items.map((it) => (
+                <NavLink
+                  key={it.to}
+                  to={it.to}
+                  title={it.label}
+                  className={({ isActive }) =>
+                    `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors justify-center group-hover/sb:justify-start ${
+                      isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
+                      )}
+                      <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
+                      <span className="hidden truncate whitespace-nowrap group-hover/sb:inline">{it.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
-        {/* botão recolher/expandir */}
-        <button
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          className={`mx-2 mb-1 flex items-center rounded-lg py-2 text-sm font-medium text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white/90 ${
-            collapsed ? 'justify-center px-0' : 'gap-3 px-3'
-          }`}
-        >
-          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} className="h-5 w-5 shrink-0" />
-          {!collapsed && <span>Recolher</span>}
-        </button>
-        {!collapsed && (
-          <div className="border-t border-white/10 p-3 text-[11px] text-white/45">
-            {user?.email}
-            <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
-          </div>
-        )}
+
+        {/* rodapé — só quando expandido */}
+        <div className="hidden shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 group-hover/sb:block">
+          <div className="truncate">{user?.email}</div>
+          <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
+        </div>
       </aside>
 
-      {/* ===== COLUNA PRINCIPAL ===== */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* ===== COLUNA PRINCIPAL (deslocada pelo rail de 4rem) ===== */}
+      <div className="flex h-full min-w-0 flex-col pl-16">
         {/* topbar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-6" style={{ background: 'var(--surface)' }}>
-          <h1 className="text-base font-semibold text-base-content">{pageTitle}</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="truncate text-base font-semibold text-base-content">{pageTitle}</h1>
+            {/* seletor de cliente/tenant — só aparece para o admin da plataforma */}
+            <TenantSelector />
+          </div>
           <div className="flex items-center gap-2">
             {location.pathname === '/dashboard' && <DateRangePicker />}
             {/* busca rápida — sempre visível */}

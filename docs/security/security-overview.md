@@ -62,7 +62,8 @@ Dois controles garantem isolamento e auditoria:
     (DELETE, disparar campanha) exigem override explícito `x-acting-override`
     — a "quebra de vidro".
 
-Detalhes e fases em `docs/features/platform-admin/` (STATUS e implementation).
+Decisão consolidada em **ADR 025**; detalhes e fases em
+`docs/features/platform-admin/` (STATUS e implementation).
 
 ## Validação de ambiente no boot
 

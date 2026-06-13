@@ -37,6 +37,7 @@ e quais alternativas foram rejeitadas.
 | [022](022-botao-tms-lia.md) | Botão "Falar com a Lia" no Site/App do HiperTMS | Proposto |
 | [023](023-orquestrador-envio-unico.md) | Orquestrador de Envio Único e Roteamento TMS | Aceito |
 | [024](024-campanhas-filtro-tms.md) | Campanhas e Filtro TMS | Aceito |
+| [025](025-platform-admin-acting-as.md) | Platform Admin, Atuação Multi-tenant (acting-as) e Break-glass | Aceito |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.

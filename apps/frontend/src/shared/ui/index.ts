@@ -9,6 +9,10 @@
  * espelhando o globals.css do HiperTMS.
  */
 
+// Moldura de página
+export * from '@/components/ui/PageHeader';
+export * from '@/components/ui/Breadcrumb';
+
 // Primitivos base
 export * from '@/components/ui/Button';
 export * from '@/components/ui/Input';
