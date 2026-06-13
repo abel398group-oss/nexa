@@ -199,6 +199,7 @@ export function CampaignsPage() {
     setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null);
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
+    setManualSort('az'); setManualSnapshot(null);
   }
 
   // janela permitida do canal atual (puxa as settings do tenant; cai no default)
@@ -282,13 +283,28 @@ export function CampaignsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedPhones, manualLoaded]);
 
-  const manualFiltered = manualContacts.filter((c) => {
-    const q = manualSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (c.name || '').toLowerCase().includes(q)
-      || c.phone.includes(onlyDigits(q))
-      || (c.company || '').toLowerCase().includes(q);
-  });
+  const manualFiltered = manualContacts
+    .filter((c) => {
+      const q = manualSearch.trim().toLowerCase();
+      if (!q) return true;
+      return (c.name || '').toLowerCase().includes(q)
+        || c.phone.includes(onlyDigits(q))
+        || (c.company || '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const cmp = (a.name || a.phone).localeCompare(b.name || b.phone, 'pt-BR', { sensitivity: 'base' });
+      return manualSort === 'za' ? -cmp : cmp;
+    });
+
+  // abre o dropdown guardando um snapshot (pra o Cancelar reverter)
+  function openManual() {
+    if (!manualOpen) setManualSnapshot(new Map(manualSelected));
+    setManualOpen((o) => !o);
+  }
+  function cancelManual() {
+    if (manualSnapshot) setManualSelected(manualSnapshot);
+    setManualOpen(false);
+  }
   const selectableVisible = manualFiltered.filter((c) => c.status !== 'opted_out');
   const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every((c) => manualSelected.has(c.id));
 
@@ -925,7 +941,7 @@ export function CampaignsPage() {
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() => setManualOpen((o) => !o)}
+                          onClick={openManual}
                           className="input flex w-full items-center justify-between text-sm"
                         >
                           <span className={manualSelected.size ? 'text-base-content' : 'text-base-content/50'}>
@@ -939,24 +955,35 @@ export function CampaignsPage() {
                             {/* backdrop: fecha ao clicar fora */}
                             <div className="fixed inset-0 z-10" onClick={() => setManualOpen(false)} />
                             <div className="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-xl border border-base-200 bg-[var(--surface-elevated)] shadow-elevated">
-                              {/* busca + selecionar todos */}
-                              <div className="flex items-center gap-2 border-b border-base-200 p-2">
+                              {/* classificar A→Z / Z→A */}
+                              <div className="border-b border-base-200 py-1">
+                                <button type="button" onClick={() => setManualSort('az')}
+                                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-base-100 ${manualSort === 'az' ? 'font-semibold text-brand-600' : 'text-base-content/70'}`}>
+                                  <span className="font-mono text-[10px]">A→Z</span> Classificar de A a Z
+                                </button>
+                                <button type="button" onClick={() => setManualSort('za')}
+                                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-base-100 ${manualSort === 'za' ? 'font-semibold text-brand-600' : 'text-base-content/70'}`}>
+                                  <span className="font-mono text-[10px]">Z→A</span> Classificar de Z a A
+                                </button>
+                              </div>
+                              {/* pesquisar */}
+                              <div className="border-b border-base-200 p-2">
                                 <input
                                   autoFocus
-                                  className="input flex-1 text-sm"
-                                  placeholder="Buscar nome, telefone ou empresa…"
+                                  className="input w-full text-sm"
+                                  placeholder="Pesquisar"
                                   value={manualSearch}
                                   onChange={(e) => setManualSearch(e.target.value)}
                                 />
-                                {selectableVisible.length > 0 && (
-                                  <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap pr-1 text-xs text-base-content/70">
-                                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 accent-brand-500" />
-                                    Todos
-                                  </label>
-                                )}
                               </div>
                               {/* checklist */}
                               <div className="max-h-56 overflow-auto">
+                                {manualLoaded && !manualError && selectableVisible.length > 0 && (
+                                  <label className="flex cursor-pointer items-center gap-2.5 border-b border-base-200 px-3 py-2 hover:bg-base-100">
+                                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 shrink-0 accent-brand-500" />
+                                    <span className="text-sm font-medium text-base-content">(Selecionar Tudo)</span>
+                                  </label>
+                                )}
                                 {!manualLoaded ? (
                                   <p className="px-3 py-6 text-center text-xs text-base-content/40">Carregando contatos…</p>
                                 ) : manualError ? (
@@ -1009,9 +1036,12 @@ export function CampaignsPage() {
                                   })
                                 )}
                               </div>
-                              <div className="border-t border-base-200 p-2 text-right">
-                                <button type="button" onClick={() => setManualOpen(false)} className="rounded-md px-3 py-1 text-xs font-medium text-brand-600 hover:bg-base-100">
-                                  Concluir
+                              <div className="flex items-center justify-end gap-2 border-t border-base-200 p-2">
+                                <button type="button" onClick={cancelManual} className="rounded-md border border-base-300 px-4 py-1 text-xs font-medium text-base-content/70 hover:bg-base-100">
+                                  Cancelar
+                                </button>
+                                <button type="button" onClick={() => setManualOpen(false)} className="rounded-md bg-brand-500 px-5 py-1 text-xs font-semibold text-white hover:bg-brand-600">
+                                  OK
                                 </button>
                               </div>
                             </div>
