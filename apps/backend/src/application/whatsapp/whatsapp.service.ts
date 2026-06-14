@@ -7,6 +7,7 @@ import { ConversationAgentService } from '@/application/agents/conversation-agen
 import { FollowUpService } from '@/application/followup/followup.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { TranscriptionService } from '@/shared/ai/transcription.service';
 
 interface Normalized {
   phone: string;
@@ -36,6 +37,7 @@ export class WhatsappService {
     private readonly followup: FollowUpService,
     private readonly autonomy: AutonomyService,
     private readonly notifications: NotificationsService,
+    private readonly transcription: TranscriptionService,
     private readonly emitter: EventEmitter2,
   ) {}
 
@@ -145,6 +147,39 @@ export class WhatsappService {
     return p.id || p._data?.Info?.ID || p._data?.id || null;
   }
 
+  // Extrai a referência de áudio (URL + mimetype) do payload do WAHA, se for áudio.
+  private extractAudioRef(rawBody: any): { url: string; mimetype: string } | null {
+    const p = rawBody?.payload || rawBody?.body?.payload || rawBody?.body || rawBody || {};
+    const media = p.media || p._data?.media || {};
+    const url = media.url || p.mediaUrl || p._data?.mediaUrl || '';
+    const mimetype = String(media.mimetype || p.mimetype || p._data?.mimetype || '').toLowerCase();
+    const type = String(p.type || p._data?.type || '').toLowerCase();
+    const isAudio = mimetype.startsWith('audio') || ['ptt', 'audio', 'voice'].includes(type) || !!p._data?.Message?.audioMessage;
+    if (!url || !isAudio) return null;
+    return { url, mimetype: mimetype || 'audio/ogg' };
+  }
+
+  // Baixa o áudio do WAHA e transcreve. Retorna o texto ou null (à prova de falha).
+  private async transcribeInboundAudio(rawBody: any): Promise<string | null> {
+    if (!this.transcription.enabled) return null;
+    const ref = this.extractAudioRef(rawBody);
+    if (!ref) return null;
+    try {
+      const headers: Record<string, string> = {};
+      if (process.env.WAHA_API_KEY) headers['X-Api-Key'] = process.env.WAHA_API_KEY;
+      const res = await fetch(ref.url, { headers });
+      if (!res.ok) {
+        this.logger.warn(`download de áudio falhou (${res.status})`);
+        return null;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      return await this.transcription.transcribe(buf);
+    } catch (e: any) {
+      this.logger.warn(`transcrição de áudio inbound falhou: ${e?.message}`);
+      return null;
+    }
+  }
+
   async process(rawBody: any, tenantId = 'default') {
     if (this.isFromMe(rawBody)) return { ignored: true, reason: 'fromMe' };
 
@@ -161,7 +196,20 @@ export class WhatsappService {
     const n = this.normalize(rawBody);
     if (!n.phone) return { ignored: true, reason: 'sem telefone' };
     if (!n.isValidBrazilPhone) return { ignored: true, reason: `telefone inválido: ${n.phone}` };
-    if (n.isMedia) return { ignored: true, reason: 'mídia sem texto', phone: n.phone };
+    if (n.isMedia) {
+      // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
+      const transcript = await this.transcribeInboundAudio(rawBody).catch(() => null);
+      if (transcript) {
+        this.logger.log(`Áudio transcrito de ${n.phone}: "${transcript.slice(0, 80)}"`);
+        n.text = transcript;
+        n.normalizedText = transcript.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+        n.isOptOut = STOP_WORDS.some((w) => n.normalizedText.includes(w.normalize('NFD').replace(/\p{Diacritic}/gu, '')));
+        n.isMedia = false;
+        n.shouldProcess = true;
+      } else {
+        return { ignored: true, reason: 'mídia sem texto (sem transcrição)', phone: n.phone };
+      }
+    }
     if (!n.shouldProcess) return { ignored: true, reason: 'sem texto', phone: n.phone };
 
     // 1) upsert contato (idempotente por telefone)

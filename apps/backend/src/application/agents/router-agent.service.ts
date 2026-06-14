@@ -50,12 +50,8 @@ export class RouterAgentService {
 
   // Decide o destino da mensagem (qual agente / score do lead).
   async route(message: string): Promise<RouteDecision> {
-    // opt-out tem precedência e não depende de IA (regra de negócio + LGPD)
-    if (OPT_OUT_RE.test(message)) {
-      return { intent: 'opt_out', agent: 'optout', leadScore: 0, reason: 'palavra de opt-out', source: 'fallback', confidence: 1 };
-    }
-
-    // risco jurídico/comercial tem precedência → humano (a IA não negocia/responde isso)
+    // risco jurídico/comercial vem PRIMEIRO → humano (ANTES do opt-out: "parar no PROCON"
+    // não é descadastro; a IA nunca negocia/responde risco jurídico).
     if (LEGAL_RISK_RE.test(message)) {
       return {
         intent: 'human_needed',
@@ -68,6 +64,11 @@ export class RouterAgentService {
         isComplaint: true,
         complaintTopic: 'outro',
       };
+    }
+
+    // opt-out (regra de negócio + LGPD) — não depende de IA
+    if (OPT_OUT_RE.test(message)) {
+      return { intent: 'opt_out', agent: 'optout', leadScore: 0, reason: 'palavra de opt-out', source: 'fallback', confidence: 1 };
     }
 
     const system =
