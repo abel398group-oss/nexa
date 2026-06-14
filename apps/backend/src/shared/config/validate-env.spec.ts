@@ -20,6 +20,7 @@ function setValidProd() {
   process.env.DATABASE_URL = 'postgresql://nexa:S3nh4Forte@db:5432/nexa';
   process.env.JWT_SECRET = STRONG_A;
   process.env.JWT_REFRESH_SECRET = STRONG_B;
+  process.env.PORTAL_JWT_SECRET = 'P0rtalSecret9'.repeat(4); // 52 chars, forte e diferente
   process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-realvalue1234567890abcdef';
   process.env.WAHA_WEBHOOK_TOKEN = 'whk_realtoken1234567890abcdef';
   process.env.CORS_ORIGINS = 'https://app.hipertms.com.br';

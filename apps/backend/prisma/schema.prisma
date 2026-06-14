@@ -670,6 +670,8 @@ model FollowUp {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
+  @@map("follow_ups")
+}
 
 // ===================== OPORTUNIDADES (F6 — funil comercial) =====================
 // Lead com score >= 70 vira oportunidade (regras de negocio). Estagio textual
