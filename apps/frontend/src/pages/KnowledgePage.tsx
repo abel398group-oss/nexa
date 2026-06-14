@@ -15,6 +15,8 @@ interface KB {
   versions?: Version[];
 }
 
+const PAGE = 50;
+
 export function KnowledgePage() {
   const [items, setItems] = useState<KB[]>([]);
   const [total, setTotal] = useState(0);
@@ -24,15 +26,63 @@ export function KnowledgePage() {
   const [editing, setEditing] = useState(false);
   const [eTitle, setETitle] = useState('');
   const [eContent, setEContent] = useState('');
+  // busca + filtro + paginação + seleção em lote (padrão Contatos/Campanhas)
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useToast();
   const confirm = useConfirm();
 
   async function load() {
-    const r = await api.get('/knowledge', { params: { limit: 100 } });
-    setItems(r.data.items);
-    setTotal(r.data.total);
+    setLoading(true);
+    try {
+      const r = await api.get('/knowledge', {
+        params: { limit: PAGE, offset: page * PAGE, search: search || undefined, category: category || undefined },
+      });
+      setItems(r.data.items);
+      setTotal(r.data.total);
+    } finally {
+      setLoading(false);
+    }
   }
-  useEffect(() => { load(); }, []);
+  // recarrega com debounce ao mudar busca/categoria/página
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, category, page]);
+
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+  const categories = [...new Set(items.map((i) => i.category).filter(Boolean))];
+
+  function toggleSel(id: string) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleAll() {
+    setSelected((s) => (s.size === items.length ? new Set() : new Set(items.map((k) => k.id))));
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: 'Excluir conhecimento',
+      message: `Excluir ${ids.length} item(ns)? A Lia deixa de usar essas informações.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.post('/knowledge/bulk-delete', { ids });
+      toast.success(`${ids.length} item(ns) excluído(s).`);
+      if (sel && ids.includes(sel.id)) setSel(null);
+      setSelected(new Set());
+      await load();
+    } catch {
+      toast.error('Erro ao excluir em lote.');
+    }
+  }
 
   async function open(k: KB) {
     const r = await api.get(`/knowledge/${k.id}`);
@@ -114,20 +164,75 @@ export function KnowledgePage() {
           </Button>
         </div>
         {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700" style={{ borderColor: 'var(--border)' }}>{msg}</div>}
-        <div className="flex-1 overflow-y-auto">
-          {items.length === 0 && <p className="p-5 text-sm text-base-content/40">Vazio. Clique em "Importar TMS".</p>}
-          {items.map((k) => (
-            <button
-              key={k.id}
-              onClick={() => open(k)}
-              className={`block w-full border-b px-5 py-3 text-left transition-colors hover:bg-base-100 ${sel?.id === k.id ? 'bg-base-200' : ''}`}
-              style={{ borderColor: 'var(--border)' }}
+
+        {/* busca + filtro por categoria */}
+        <div className="space-y-2 border-b px-4 py-3" style={{ borderColor: 'var(--border)' }}>
+          <Input
+            placeholder="Buscar título, conteúdo, tópico…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="text-sm"
+          />
+          {categories.length > 0 && (
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setPage(0); }}
+              className="input w-full text-sm"
             >
-              <div className="text-sm font-medium text-base-content">{k.title}</div>
-              <div className="mt-0.5 text-xs text-base-content/50">{k.category} · {k.topic}</div>
-            </button>
-          ))}
+              <option value="">Todas as categorias</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
         </div>
+
+        {/* barra de seleção em lote */}
+        {items.length > 0 && (
+          <div className="flex items-center gap-2 border-b px-4 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-base-content/70">
+              <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleAll} className="h-4 w-4 accent-brand-500" />
+              Todos
+            </label>
+            {selected.size > 0 && (
+              <>
+                <span className="text-base-content/50">{selected.size} selecionado(s)</span>
+                <Button size="sm" variant="outline" onClick={deleteSelected} className="ml-auto text-red-500 hover:bg-red-50">
+                  <Icon name="trash" className="h-4 w-4" /> Excluir
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <p className="p-5 text-sm text-base-content/40">Carregando…</p>
+          ) : items.length === 0 ? (
+            <p className="p-5 text-sm text-base-content/40">{search || category ? 'Nada encontrado.' : 'Vazio. Clique em "Importar TMS".'}</p>
+          ) : (
+            items.map((k) => (
+              <div
+                key={k.id}
+                className={`flex items-start gap-2 border-b px-4 py-3 transition-colors hover:bg-base-100 ${sel?.id === k.id ? 'bg-base-200' : ''}`}
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <input type="checkbox" checked={selected.has(k.id)} onChange={() => toggleSel(k.id)} className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500" />
+                <button onClick={() => open(k)} className="min-w-0 flex-1 text-left">
+                  <div className="truncate text-sm font-medium text-base-content">{k.title}</div>
+                  <div className="mt-0.5 truncate text-xs text-base-content/50">{k.category} · {k.topic}</div>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* paginação */}
+        {pages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-2 text-xs text-base-content/60" style={{ borderColor: 'var(--border)' }}>
+            <button disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} className="rounded-md px-2 py-1 hover:bg-base-200 disabled:opacity-40">‹ Anterior</button>
+            <span>{page + 1} / {pages}</span>
+            <button disabled={page >= pages - 1} onClick={() => setPage((p) => Math.min(pages - 1, p + 1))} className="rounded-md px-2 py-1 hover:bg-base-200 disabled:opacity-40">Próxima ›</button>
+          </div>
+        )}
       </div>
 
       {/* detalhe */}

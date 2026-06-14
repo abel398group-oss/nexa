@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { UsersService, AREAS } from '@/application/users/users.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
+import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 
 class CreateUserDto {
   @IsString() @MinLength(2) name!: string;
@@ -29,7 +29,9 @@ export class UsersController {
   areas() { return AREAS; }
 
   @Get()
-  list(@CurrentTenant() tenantId: string) { return this.users.list(tenantId ?? 'default'); }
+  list(@CurrentTenant() tenantId: string, @Query('search') search?: string) {
+    return this.users.list(tenantId ?? 'default', search);
+  }
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateUserDto) {
@@ -44,5 +46,10 @@ export class UsersController {
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
     return this.users.setActive(tenantId ?? 'default', id, dto.active);
+  }
+
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string, @CurrentUser() user: any) {
+    return this.users.remove(tenantId ?? 'default', id, user?.userId);
   }
 }

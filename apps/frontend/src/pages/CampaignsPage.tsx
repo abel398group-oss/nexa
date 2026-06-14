@@ -195,7 +195,7 @@ export function CampaignsPage() {
 
   function resetForm() {
     setName(''); setLink(localStorage.getItem('nexa_campaign_link') ?? ''); setMedia(null); setLimitMode('all');
-    setPhonesText(''); setEmailsText(''); setEmailSubject('');
+    setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
     setAudience('todos'); setAudienceTag('');
     setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null); setSchedMinute(0);

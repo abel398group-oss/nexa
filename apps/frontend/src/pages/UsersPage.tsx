@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
+import { useToast } from '@/contexts/ToastContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 
 interface User {
   id: string; email: string; name?: string; role: string;
@@ -20,9 +22,39 @@ export function UsersPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] as string[] });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  async function load() { setItems((await api.get('/users')).data); }
-  useEffect(() => { load(); }, []);
+  async function load() {
+    setItems((await api.get('/users', { params: { search: search || undefined } })).data);
+  }
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  const roles = [...new Set(items.map((u) => u.role))];
+  const shown = items.filter((u) => !roleFilter || u.role === roleFilter);
+
+  async function del(u: User) {
+    const ok = await confirm({
+      title: 'Excluir usuário',
+      message: `Excluir o login de ${u.name || u.email}? Ele perde o acesso imediatamente.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/users/${u.id}`);
+      toast.success('Usuário excluído.');
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erro ao excluir o usuário.');
+    }
+  }
 
   function togglePerm(set: string[], p: string) {
     return set.includes(p) ? set.filter((x) => x !== p) : [...set, p];
@@ -59,8 +91,18 @@ export function UsersPage() {
         actions={<Button onClick={() => { setShow(true); setErr(''); }}>+ Novo usuário</Button>}
       />
 
+      {/* busca + filtro por perfil */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Input className="!w-64" placeholder="Buscar nome ou e-mail…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="input !w-auto text-sm" title="Filtrar por perfil">
+          <option value="">Todos os perfis</option>
+          {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <span className="text-xs text-base-content/40">{shown.length} usuário(s)</span>
+      </div>
+
       <div className="space-y-3">
-        {items.map((u) => (
+        {shown.map((u) => (
           <Card key={u.id} className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -69,9 +111,14 @@ export function UsersPage() {
                 <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] ${u.role === 'admin' ? 'bg-brand-100 text-brand-700' : 'bg-base-200 text-base-content/70'}`}>{u.role}</span>
                 {!u.isActive && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] text-red-700">inativo</span>}
               </div>
-              <button onClick={() => toggleActive(u)} className="rounded-md border border-base-300 px-3 py-1 text-xs hover:bg-base-100">
-                {u.isActive ? 'Desativar' : 'Ativar'}
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => toggleActive(u)} className="rounded-md border border-base-300 px-3 py-1 text-xs hover:bg-base-100">
+                  {u.isActive ? 'Desativar' : 'Ativar'}
+                </button>
+                <button onClick={() => del(u)} title="Excluir usuário" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">
+                  <Icon name="trash" className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             {u.role === 'admin' ? (
               <p className="text-xs text-base-content/50">Acesso total (administrador)</p>

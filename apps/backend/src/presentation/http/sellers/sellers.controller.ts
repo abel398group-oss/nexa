@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 import { SellersService } from '@/application/sellers/sellers.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -13,6 +13,9 @@ class CreateSellerDto {
 }
 class ActiveDto {
   @IsBoolean() active!: boolean;
+}
+class BulkDeleteDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
 }
 class UpdateSellerDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
@@ -28,13 +31,19 @@ export class SellersController {
   constructor(private readonly sellers: SellersService) {}
 
   @Get()
-  list(@CurrentTenant() tenantId: string) {
-    return this.sellers.list(tenantId ?? 'default');
+  list(@CurrentTenant() tenantId: string, @Query('search') search?: string) {
+    return this.sellers.list(tenantId ?? 'default', search);
   }
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateSellerDto) {
     return this.sellers.create(tenantId ?? 'default', dto);
+  }
+
+  // exclusão em lote (definir ANTES de :id)
+  @Post('bulk-delete')
+  bulkDelete(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
+    return this.sellers.deleteMany(tenantId ?? 'default', body.ids ?? []);
   }
 
   @Patch(':id/active')

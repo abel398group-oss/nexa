@@ -28,20 +28,54 @@ export function SellersPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useToast();
   const confirm = useConfirm();
 
   async function load() {
     setLoading(true);
     try {
-      const [s, k] = await Promise.allSettled([api.get('/sellers'), api.get('/metrics/sellers')]);
+      const [s, k] = await Promise.allSettled([
+        api.get('/sellers', { params: { search: search || undefined } }),
+        api.get('/metrics/sellers'),
+      ]);
       if (s.status === 'fulfilled') setItems(s.value.data);
       if (k.status === 'fulfilled') setKpis(k.value.data);
     } finally {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  // recarrega com debounce ao buscar
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  function toggleSel(id: string) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleAll() {
+    setSelected((s) => (s.size === items.length ? new Set() : new Set(items.map((x) => x.id))));
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: 'Excluir vendedores',
+      message: `Excluir ${ids.length} vendedor(es)? As conversas atribuídas e os logins são desvinculados (não apagados).`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await api.post('/sellers/bulk-delete', { ids });
+      toast.success(`${ids.length} vendedor(es) excluído(s).`);
+      setSelected(new Set());
+      await load();
+    } catch { toast.error('Erro ao excluir em lote.'); }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -187,6 +221,19 @@ export function SellersPage() {
       </form>
       {err && <p className="mb-4 text-sm text-red-500">{err}</p>}
 
+      {/* busca + ações em lote */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Input className="!w-64" placeholder="Buscar vendedor (nome ou telefone)…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {selected.size > 0 && (
+          <>
+            <span className="text-xs text-base-content/50">{selected.size} selecionado(s)</span>
+            <Button size="sm" variant="outline" onClick={deleteSelected} className="text-red-500 hover:bg-red-50">
+              <Icon name="trash" className="h-4 w-4" /> Excluir
+            </Button>
+          </>
+        )}
+      </div>
+
       {loading ? (
         <SkeletonList rows={3} />
       ) : items.length === 0 ? (
@@ -196,6 +243,9 @@ export function SellersPage() {
         <table className="w-full text-sm">
           <thead className="border-b text-left text-xs uppercase" style={{ background: 'var(--surface-muted)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             <tr>
+              <th className="w-10 px-4 py-3">
+                <input type="checkbox" checked={items.length > 0 && selected.size === items.length} onChange={toggleAll} className="h-4 w-4 align-middle accent-brand-500" />
+              </th>
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">WhatsApp</th>
               <th className="px-4 py-3">Leads recebidos</th>
@@ -204,9 +254,12 @@ export function SellersPage() {
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-base-content/40">Nenhum vendedor. Adicione um acima.</td></tr>}
+            {items.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-base-content/40">Nenhum vendedor. Adicione um acima.</td></tr>}
             {items.map((s) => (
-              <tr key={s.id} className="border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+              <tr key={s.id} className={`border-b last:border-0 ${selected.has(s.id) ? 'bg-brand-500/[0.06]' : ''}`} style={{ borderColor: 'var(--border)' }}>
+                <td className="px-4 py-3">
+                  <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSel(s.id)} className="h-4 w-4 align-middle accent-brand-500" />
+                </td>
                 <td className="px-4 py-3 font-medium text-base-content">
                   {s.name}
                   <div className="text-[11px] font-normal text-base-content/40">{s.loginEmail || 'sem login'}</div>

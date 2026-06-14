@@ -11,8 +11,15 @@ const SELECT = { id: true, email: true, name: true, role: true, permissions: tru
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(tenantId: string) {
-    return this.prisma.user.findMany({ where: { tenantId }, select: SELECT, orderBy: { createdAt: 'asc' } });
+  list(tenantId: string, search?: string) {
+    const where: any = { tenantId };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    return this.prisma.user.findMany({ where, select: SELECT, orderBy: { createdAt: 'asc' } });
   }
 
   async create(tenantId: string, dto: { name: string; email: string; password: string; role?: string; permissions?: string[] }) {
@@ -44,5 +51,14 @@ export class UsersService {
 
   async setActive(tenantId: string, id: string, active: boolean) {
     return this.prisma.user.updateMany({ where: { id, tenantId }, data: { isActive: active } });
+  }
+
+  // Exclui um usuário (login). Impede excluir o próprio usuário logado.
+  async remove(tenantId: string, id: string, currentUserId?: string) {
+    if (id === currentUserId) throw new BadRequestException('Você não pode excluir o próprio usuário.');
+    const u = await this.prisma.user.findFirst({ where: { id, tenantId } });
+    if (!u) throw new NotFoundException('usuário não encontrado');
+    await this.prisma.user.delete({ where: { id } });
+    return { ok: true };
   }
 }

@@ -13,8 +13,15 @@ export class SellersService {
     private readonly waha: WahaClientService,
   ) {}
 
-  async list(tenantId: string) {
-    const sellers = await this.prisma.seller.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
+  async list(tenantId: string, search?: string) {
+    const where: any = { tenantId };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search } },
+      ];
+    }
+    const sellers = await this.prisma.seller.findMany({ where, orderBy: { createdAt: 'asc' } });
     const ids = sellers.map((s) => s.id);
     const users = ids.length
       ? await this.prisma.user.findMany({ where: { sellerId: { in: ids } }, select: { sellerId: true, email: true } })
@@ -105,6 +112,18 @@ export class SellersService {
     // notificações têm cascade; remove o vendedor
     await this.prisma.seller.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // Exclusão em lote — desvincula conversas/login e remove (escopado por tenant).
+  async deleteMany(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { deleted: 0 };
+    const owned = await this.prisma.seller.findMany({ where: { id: { in: ids }, tenantId }, select: { id: true } });
+    const ownedIds = owned.map((o) => o.id);
+    if (!ownedIds.length) return { deleted: 0 };
+    await this.prisma.aiConversation.updateMany({ where: { assignedSellerId: { in: ownedIds } }, data: { assignedSellerId: null } });
+    await this.prisma.user.updateMany({ where: { sellerId: { in: ownedIds } }, data: { sellerId: null } });
+    const r = await this.prisma.seller.deleteMany({ where: { id: { in: ownedIds }, tenantId } });
+    return { deleted: r.count };
   }
 
   // Round-robin balanceado: escolhe o vendedor ativo com MENOS atribuições.

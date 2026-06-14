@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { IsArray, IsString } from 'class-validator';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -10,6 +11,10 @@ import {
   ApproveVersionDto,
 } from '@/application/knowledge/dto/create-knowledge.dto';
 
+class BulkDeleteDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}
+
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('knowledge')
 @Controller('knowledge')
@@ -17,8 +22,18 @@ export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   @Get()
-  findAll(@CurrentTenant() tenantId: string, @Query() q: PaginationQueryDto) {
-    return this.knowledge.findAll(tenantId ?? 'default', q);
+  findAll(
+    @CurrentTenant() tenantId: string,
+    @Query() q: PaginationQueryDto,
+    @Query('category') category?: string,
+  ) {
+    return this.knowledge.findAll(tenantId ?? 'default', q, category);
+  }
+
+  // exclusão em lote (definir ANTES de :id)
+  @Post('bulk-delete')
+  bulkDelete(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
+    return this.knowledge.deleteItems(tenantId ?? 'default', body.ids ?? []);
   }
 
   @Get(':id')

@@ -23,7 +23,7 @@ export class KnowledgeService {
     this.retrieveCache.delete(tenantId);
   }
 
-  async findAll(tenantId: string, q: PaginationQueryDto): Promise<Paginated<any>> {
+  async findAll(tenantId: string, q: PaginationQueryDto, category?: string): Promise<Paginated<any>> {
     const where: any = { tenantId };
     if (q.search) {
       where.OR = [
@@ -32,6 +32,7 @@ export class KnowledgeService {
         { topic: { contains: q.search, mode: 'insensitive' } },
       ];
     }
+    if (category) where.category = category;
     const [items, total] = await Promise.all([
       this.prisma.aiKnowledgeBase.findMany({
         where,
@@ -154,6 +155,22 @@ export class KnowledgeService {
     await this.prisma.aiKnowledgeVersion.deleteMany({ where: { knowledgeId: id } });
     await this.prisma.aiKnowledgeBase.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // Exclusão em lote de ITENS (não versões) — escopado por tenant.
+  async deleteItems(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { deleted: 0 };
+    this.invalidateCache(tenantId);
+    // só apaga itens do próprio tenant
+    const owned = await this.prisma.aiKnowledgeBase.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((o) => o.id);
+    if (!ownedIds.length) return { deleted: 0 };
+    await this.prisma.aiKnowledgeVersion.deleteMany({ where: { knowledgeId: { in: ownedIds } } });
+    const r = await this.prisma.aiKnowledgeBase.deleteMany({ where: { id: { in: ownedIds }, tenantId } });
+    return { deleted: r.count };
   }
 
   // Importa conhecimento de um produto conectado (TMS) → idempotente por (tenant, title)
