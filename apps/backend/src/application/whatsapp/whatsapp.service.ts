@@ -197,6 +197,7 @@ export class WhatsappService {
     if (!n.phone) return { ignored: true, reason: 'sem telefone' };
     if (!n.isValidBrazilPhone) return { ignored: true, reason: `telefone inválido: ${n.phone}` };
     if (n.isMedia) {
+      this.logger.warn(`[audio-debug] payload: ${JSON.stringify(rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {}).slice(0, 900)}`);
       // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
       const transcript = await this.transcribeInboundAudio(rawBody).catch(() => null);
       if (transcript) {
