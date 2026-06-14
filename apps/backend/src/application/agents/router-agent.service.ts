@@ -20,6 +20,9 @@ export interface RouteDecision {
   leadScore: number; // 0-100
   reason: string;
   source: 'ai' | 'fallback';
+  confidence: number; // 0-1 — confiança do roteamento (gate de esclarecimento, ADR 003)
+  needsClarification?: boolean; // confiança baixa + intenção indefinida → pedir esclarecimento
+  legalRisk?: boolean; // risco jurídico/comercial (advogado/procon/processo) → humano
   isComplaint?: boolean; // monitoramento interno (G4)
   complaintTopic?: string; // lentidao|bug|preco|atendimento|fiscal|outro
   isAggressive?: boolean; // ofensa (G8)
@@ -33,6 +36,12 @@ const MIN_SCORE: Partial<Record<Intent, number>> = {
 
 const OPT_OUT_RE = /\b(sair|parar|stop|descadastrar|cancelar inscri|remover|nao quero mais)\b/i;
 
+// Risco jurídico/comercial → handoff humano imediato (não depende de IA; a Lia nunca negocia isso).
+const LEGAL_RISK_RE = /\b(advogad[oa]|procon|processar|processo\s+judicial|a[çc][ãa]o\s+judicial|justi[çc]a|indeniza|reclame\s*aqui|notifica[çc][ãa]o\s+extrajudicial|direito\s+do\s+consumidor)\b/i;
+
+// Abaixo deste nível de confiança + intenção indefinida → pedir esclarecimento (ADR 003 / guardrails §5).
+const CONF_THRESHOLD = Number(process.env.ROUTER_CONF_THRESHOLD ?? 0.6);
+
 @Injectable()
 export class RouterAgentService {
   private readonly logger = new Logger('RouterAgent');
@@ -43,16 +52,32 @@ export class RouterAgentService {
   async route(message: string): Promise<RouteDecision> {
     // opt-out tem precedência e não depende de IA (regra de negócio + LGPD)
     if (OPT_OUT_RE.test(message)) {
-      return { intent: 'opt_out', agent: 'optout', leadScore: 0, reason: 'palavra de opt-out', source: 'fallback' };
+      return { intent: 'opt_out', agent: 'optout', leadScore: 0, reason: 'palavra de opt-out', source: 'fallback', confidence: 1 };
+    }
+
+    // risco jurídico/comercial tem precedência → humano (a IA não negocia/responde isso)
+    if (LEGAL_RISK_RE.test(message)) {
+      return {
+        intent: 'human_needed',
+        agent: 'human',
+        leadScore: 0,
+        reason: 'risco jurídico/comercial detectado',
+        source: 'fallback',
+        confidence: 1,
+        legalRisk: true,
+        isComplaint: true,
+        complaintTopic: 'outro',
+      };
     }
 
     const system =
       'Você classifica mensagens de leads B2B que chegam no WhatsApp de uma empresa que vende o ' +
       'sistema HiperTMS (gestão de transporte) para transportadoras. ' +
       'Responda APENAS com um JSON válido, sem texto extra, no formato: ' +
-      '{"intent": "...", "leadScore": 0-100, "reason": "...", "isComplaint": bool, "complaintTopic": "...", "isAggressive": bool}. ' +
+      '{"intent": "...", "leadScore": 0-100, "confidence": 0-1, "reason": "...", "isComplaint": bool, "complaintTopic": "...", "isAggressive": bool}. ' +
       'intent ∈ [opt_out, interested, pricing_question, meeting_request, support_question, not_now, wrong_person, human_needed, unknown]. ' +
       'leadScore: 0 (frio/sem fit) a 100 (quente, quer comprar). ' +
+      'confidence: 0 (não tenho certeza da intenção) a 1 (intenção muito clara). Use abaixo de 0.6 quando a mensagem for vaga, curta ou ambígua. ' +
       'pricing_question/interested/meeting_request = alto. support_question = cliente já existente. ' +
       'wrong_person/not_now = baixo. human_needed = pede humano/negociação complexa. ' +
       'isComplaint=true se for reclamação; complaintTopic ∈ [lentidao,bug,preco,atendimento,fiscal,outro]. ' +
@@ -60,7 +85,7 @@ export class RouterAgentService {
 
     try {
       const out = await this.ai.completeJson<{
-        intent: Intent; leadScore: number; reason: string;
+        intent: Intent; leadScore: number; confidence?: number; reason: string;
         isComplaint?: boolean; complaintTopic?: string; isAggressive?: boolean;
       }>(system, `Mensagem do lead: "${message}"`);
       let intent = out.intent ?? 'unknown';
@@ -70,12 +95,17 @@ export class RouterAgentService {
       // score mínimo por intenção (G9)
       const min = MIN_SCORE[intent];
       if (min && leadScore < min) leadScore = min;
+      const confidence = typeof out.confidence === 'number' ? Math.max(0, Math.min(1, out.confidence)) : 0.5;
+      // gate de esclarecimento: só quando a intenção ficou indefinida e a confiança é baixa
+      const needsClarification = intent === 'unknown' && confidence < CONF_THRESHOLD;
       return {
         intent,
         agent: this.toAgent(intent),
         leadScore,
         reason: out.reason ?? '',
         source: 'ai',
+        confidence,
+        needsClarification,
         isComplaint: !!out.isComplaint,
         complaintTopic: out.complaintTopic,
         isAggressive: !!out.isAggressive,
@@ -88,7 +118,16 @@ export class RouterAgentService {
         : /reuni[ãa]o|agenda|call|demonstra/i.test(message)
           ? 'meeting_request'
           : 'unknown';
-      return { intent, agent: this.toAgent(intent), leadScore: intent === 'unknown' ? 30 : 70, reason: 'heurística', source: 'fallback' };
+      const confidence = intent === 'unknown' ? 0.4 : 0.7;
+      return {
+        intent,
+        agent: this.toAgent(intent),
+        leadScore: intent === 'unknown' ? 30 : 70,
+        reason: 'heurística',
+        source: 'fallback',
+        confidence,
+        needsClarification: intent === 'unknown' && confidence < CONF_THRESHOLD,
+      };
     }
   }
 

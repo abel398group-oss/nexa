@@ -94,6 +94,45 @@ describe('RouterAgentService', () => {
     });
   });
 
+  describe('risco jurídico/comercial por regex (sem chamar IA)', () => {
+    const legalMessages = [
+      'vou chamar meu advogado',
+      'isso vai parar no PROCON',
+      'vou processar vocês',
+      'vou entrar com ação judicial',
+      'vou registrar no reclame aqui',
+    ];
+
+    test.each(legalMessages)('mensagem "%s" → human sem chamar IA', async (msg) => {
+      const result = await makeService().route(msg);
+      expect(result.agent).toBe('human');
+      expect(result.intent).toBe('human_needed');
+      expect(result.legalRisk).toBe(true);
+      expect(result.confidence).toBe(1);
+      expect(mockAnthropic.completeJson).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('gate de confiança', () => {
+    it('intenção indefinida + confiança baixa → needsClarification true', async () => {
+      vi.mocked(mockAnthropic.completeJson).mockResolvedValueOnce(
+        { intent: 'unknown', leadScore: 20, confidence: 0.3, reason: 'mensagem vaga', isComplaint: false, isAggressive: false },
+      );
+      const result = await makeService().route('oi');
+      expect(result.confidence).toBe(0.3);
+      expect(result.needsClarification).toBe(true);
+    });
+
+    it('intenção clara + confiança alta → needsClarification falsy', async () => {
+      vi.mocked(mockAnthropic.completeJson).mockResolvedValueOnce(
+        { intent: 'pricing_question', leadScore: 70, confidence: 0.95, reason: 'pergunta de preço', isComplaint: false, isAggressive: false },
+      );
+      const result = await makeService().route('quanto custa o plano profissional?');
+      expect(result.confidence).toBe(0.95);
+      expect(result.needsClarification).toBeFalsy();
+    });
+  });
+
   describe('fallback quando IA falha', () => {
     it('retorna fallback com source=fallback se IA lançar erro', async () => {
       vi.mocked(mockAnthropic.completeJson).mockRejectedValueOnce(new Error('timeout'));

@@ -45,8 +45,14 @@ O Supervisor valida toda mensagem **antes** de processar (ADR 012):
 - Tentativas de sobrescrever instruções ("ignore as regras", "você agora é…").
 - Pedidos para revelar prompt de sistema, credenciais ou dados de outro tenant.
 - Palavras de risco jurídico (processo, advogado, Procon) → escala humano.
+  ✅ Implementado no `router-agent.service` (`LEGAL_RISK_RE`, por regex, antes da IA):
+  advogado/procon/processo/ação judicial/indenização/reclame aqui → `agent: 'human'`.
 - O conteúdo do lead é **dado não confiável** — nunca vira instrução nem fonte de
   `tenantId`.
+
+> **Status:** a escalação por risco jurídico já está ativa. A validação de ENTRADA
+> contra prompt-injection pelo Supervisor (itens 1-2 acima) ainda é **pendente** —
+> hoje o Supervisor só audita a **saída** (§4). Ver GAP_DOCUMENTACAO.
 
 ## 4. Validação de saída (anti-alucinação / LGPD / tom)
 
@@ -61,7 +67,17 @@ O Supervisor valida toda resposta **antes** de enviar:
 ## 5. Confiança mínima
 
 `confidence < 0.60` → o Router pede esclarecimento ou escala. A IA não "chuta"
-em decisão de roteamento ou ação.
+em decisão de roteamento ou ação. ✅ Implementado: o `router-agent.service` retorna
+`confidence` + `needsClarification`; no 1º contato ambíguo o `conversation-agent`
+envia uma pergunta de direcionamento (vendas × suporte). Limiar configurável via
+`ROUTER_CONF_THRESHOLD` (default 0.6).
+
+## 5b. Anti-loop conversacional
+
+Para não prender o lead num ciclo de perguntas, após `MAX_AI_QUESTIONS` (default 3)
+turnos seguidos da Lia terminando em pergunta — sem o lead esquentar — o
+`conversation-agent` para de reperguntar e escala para um humano. ✅ Implementado
+(ia-autonoma §9.8).
 
 ## 6. Isolamento por tenant
 

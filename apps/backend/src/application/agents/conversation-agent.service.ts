@@ -35,6 +35,8 @@ const HOT_LEAD_SCORE = Number(process.env.HOT_LEAD_SCORE ?? 70);
 // humanização: espera alguns segundos antes de auto-responder (parecer humano) — G5
 const HUMANIZE_MIN_MS = Number(process.env.HUMANIZE_MIN_MS ?? 3000);
 const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
+// anti-loop (ia-autonoma §9.8): nº de perguntas seguidas da Lia antes de parar e escalar p/ humano.
+const MAX_AI_QUESTIONS = Number(process.env.MAX_AI_QUESTIONS ?? 3);
 
 @Injectable()
 export class ConversationAgentService {
@@ -182,6 +184,35 @@ export class ConversationAgentService {
     let scripted = false; // respostas fixas (optout/human) não precisam de supervisora IA
     let usage: { tokensIn: number; tokensOut: number; costUsd: number } | undefined;
 
+    // ── ANTI-LOOP (ia-autonoma §9.8): se a Lia já fez MAX_AI_QUESTIONS perguntas seguidas
+    // (cada turno dela terminando em "?") e o lead não esquentou, para de reperguntar e
+    // escala para um humano — evita o cliente preso num ciclo de perguntas.
+    const recentOutbound = msgs.filter((m: any) => m.direction === 'outbound');
+    const lastAiTurns = recentOutbound.slice(-MAX_AI_QUESTIONS);
+    const aiLoop =
+      lastAiTurns.length >= MAX_AI_QUESTIONS &&
+      lastAiTurns.every((m: any) => /\?\s*$/.test((m.content || '').trim())) &&
+      route.leadScore < HOT_LEAD_SCORE;
+    if (aiLoop && (route.agent === 'sales' || route.agent === 'support')) {
+      route = { ...route, agent: 'human', intent: 'human_needed', reason: 'anti-loop: reperguntas sem avanço' };
+      this.logger.log('Anti-loop acionado → escalando para humano');
+    }
+
+    // ── GATE DE CONFIANÇA (ADR 003 / guardrails §5): em 1º contato ambíguo (router com
+    // baixa confiança), pedir esclarecimento em vez de assumir a intenção e despejar pitch.
+    const clarify =
+      route.needsClarification === true &&
+      !liaAlreadyTalked &&
+      (route.agent === 'sales' || route.agent === 'support');
+
+    if (clarify) {
+      draft =
+        `${SalesAgentService.greeting()}! Aqui é a Lia, do HiperTMS. ` +
+        `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`;
+      suggestedAction = 'none';
+      scripted = true;
+      this.logger.log(`Gate de confiança acionado (confidence=${route.confidence}) → pedindo esclarecimento`);
+    } else {
     switch (route.agent) {
       case 'optout':
         draft = 'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏';
@@ -242,6 +273,7 @@ export class ConversationAgentService {
         break;
       }
     }
+    } // fim do else do gate de confiança
 
     // NUNCA cumprimentar 2x (vale p/ QUALQUER agente — sales, support): se a Lia já falou nesta
     // conversa, remove uma saudação no início do rascunho (o modelo às vezes insiste).

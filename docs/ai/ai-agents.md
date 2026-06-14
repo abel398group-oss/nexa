@@ -54,17 +54,30 @@ e o estado é compartilhado por `correlationId` (alinhado ao ADR 007 — Event C
 
 - **Handoff**: o Router decide o próximo agente; nunca agente→agente direto.
 - **Confiança**: `confidence < 0.60` → o Router pede esclarecimento ou escala
-  (não chuta).
+  (não chuta). ✅ Implementado — o `router-agent.service` retorna `confidence` (0-1)
+  e `needsClarification`; no 1º contato ambíguo o `conversation-agent` envia uma
+  pergunta de direcionamento em vez de assumir a intenção. Limiar via
+  `ROUTER_CONF_THRESHOLD` (default 0.6).
+- **Risco jurídico/comercial**: ✅ Implementado — `LEGAL_RISK_RE` no `router-agent.service`
+  detecta advogado/procon/processo/ação judicial/indenização/reclame aqui →
+  `agent: 'human'` imediato (não passa pela IA), registra como reclamação e
+  notifica o vendedor.
+- **Anti-loop**: ✅ Implementado — após `MAX_AI_QUESTIONS` (default 3) turnos seguidos
+  da Lia terminando em pergunta sem o lead esquentar, o `conversation-agent` para de
+  reperguntar e escala para humano.
 - **Ações externas**: nenhum agente chama TMS/cobrança direto — sempre via backend.
 
 ## Mapa de decisão do Router
 
 ```
-mensagem → Supervisor (valida entrada)
+mensagem → Supervisor (valida saída) ← (validação de ENTRADA: ver guardrails, ainda pendente)
+  → opt-out (regex) → descadastra
+  → risco jurídico (regex: advogado/procon/processo) → Escalação humana   ✅
   → é cliente ativo? ─sim→ Support / Billing / Onboarding (por intenção)
                      └não→ SDR/Conversation (qualifica) ──volta ao Router──→ Sales (vende)
+  → confidence < 0.60 + intenção indefinida → pedir esclarecimento          ✅
+  → Lia reperguntou ≥3x sem avanço (anti-loop) → Escalação humana           ✅
   → resposta → Supervisor (valida saída) → envia
-  → confidence < 0.60 → pedir esclarecimento ou escalar
   → risco / dúvida sem KB → Escalação humana
 ```
 
