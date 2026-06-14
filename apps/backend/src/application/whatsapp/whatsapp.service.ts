@@ -164,16 +164,24 @@ export class WhatsappService {
     if (!this.transcription.enabled) return null;
     const ref = this.extractAudioRef(rawBody);
     if (!ref) return null;
+    let dlUrl = ref.url;
+    try {
+      const base = process.env.WAHA_API_URL;
+      if (base) { const u = new URL(ref.url); dlUrl = base.replace(/\/+$/, '') + u.pathname + u.search; }
+    } catch { /* mantem ref.url */ }
     try {
       const headers: Record<string, string> = {};
       if (process.env.WAHA_API_KEY) headers['X-Api-Key'] = process.env.WAHA_API_KEY;
-      const res = await fetch(ref.url, { headers });
+      const res = await fetch(dlUrl, { headers });
       if (!res.ok) {
-        this.logger.warn(`download de áudio falhou (${res.status})`);
+        this.logger.warn(`download de áudio falhou (${res.status}) url=${dlUrl}`);
+        try { require('node:fs').appendFileSync('audio-debug.log', `${new Date().toISOString()} download falhou ${res.status} ${dlUrl}\n`); } catch {}
         return null;
       }
       const buf = Buffer.from(await res.arrayBuffer());
-      return await this.transcription.transcribe(buf);
+      const text = await this.transcription.transcribe(buf);
+      try { require('node:fs').appendFileSync('audio-debug.log', `${new Date().toISOString()} bytes=${buf.length} transcript=${JSON.stringify(text)}\n`); } catch {}
+      return text;
     } catch (e: any) {
       this.logger.warn(`transcrição de áudio inbound falhou: ${e?.message}`);
       return null;
@@ -182,6 +190,8 @@ export class WhatsappService {
 
   async process(rawBody: any, tenantId = 'default') {
     if (this.isFromMe(rawBody)) return { ignored: true, reason: 'fromMe' };
+    // DIAG TEMP: registra TODO inbound num arquivo sincrono (sem buffer) p/ diagnostico de audio
+    try { require('node:fs').appendFileSync('inbound-debug.log', new Date().toISOString() + ' ' + JSON.stringify(rawBody ?? {}).slice(0, 2000) + '\n'); } catch {}
 
     // DEDUP: se já processamos essa mensagem, ignora (evita resposta/processamento dobrado)
     const msgId = this.messageId(rawBody);
