@@ -13,11 +13,12 @@ import { ConversationsModule } from '@/application/conversations/conversations.m
 import { SellersModule } from '@/application/sellers/sellers.module';
 import { PlaybookModule } from '@/application/playbook/playbook.module';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
+import { OpportunitiesModule } from '@/application/opportunities/opportunities.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 
 @Module({
-  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule],
+  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule, OpportunitiesModule],
   controllers: [AgentsController],
   providers: [
     // Infra

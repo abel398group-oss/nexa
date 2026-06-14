@@ -133,6 +133,62 @@ export class MetricsService {
     };
   }
 
+  // Série temporal por dia (Q5): mensagens in/out e novas conversas por dia no
+  // período. Buckets preenchidos em JS (sem SQL bruto) — robusto e portável.
+  async timeseries(tenantId: string, sellerId?: string, range?: { from?: string; to?: string }) {
+    const toDate = range?.to ? new Date(`${range.to}T23:59:59.999`) : new Date();
+    const fromDate = range?.from
+      ? new Date(`${range.from}T00:00:00.000`)
+      : new Date(new Date(new Date().setHours(0, 0, 0, 0)).getTime() - 13 * 86_400_000);
+
+    const window = { gte: fromDate, lte: toDate };
+    let convWhere: any = { tenantId, createdAt: window };
+    let msgWhere: any = { tenantId, createdAt: window };
+
+    // escopo do vendedor: só a carteira dele
+    if (sellerId) {
+      const convIds = (
+        await this.prisma.aiConversation.findMany({
+          where: { tenantId, assignedSellerId: sellerId },
+          select: { id: true },
+        })
+      ).map((c) => c.id);
+      convWhere = { tenantId, assignedSellerId: sellerId, createdAt: window };
+      msgWhere = { conversationId: { in: convIds.length ? convIds : ['__none__'] }, createdAt: window };
+    }
+
+    const [msgs, convs] = await Promise.all([
+      this.prisma.aiMessage.findMany({ where: msgWhere, select: { createdAt: true, direction: true } }),
+      this.prisma.aiConversation.findMany({ where: convWhere, select: { createdAt: true } }),
+    ]);
+
+    // lista de dias (chave YYYY-MM-DD local) do período
+    const days: string[] = [];
+    for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+      days.push(this.isoDay(d));
+    }
+    const buckets = new Map(days.map((k) => [k, { day: k, inbound: 0, outbound: 0, conversations: 0 }]));
+
+    for (const m of msgs) {
+      const b = buckets.get(this.isoDay(m.createdAt));
+      if (b) b[m.direction === 'inbound' ? 'inbound' : 'outbound']++;
+    }
+    for (const c of convs) {
+      const b = buckets.get(this.isoDay(c.createdAt));
+      if (b) b.conversations++;
+    }
+
+    return { from: this.isoDay(fromDate), to: this.isoDay(toDate), series: days.map((k) => buckets.get(k)!) };
+  }
+
+  // YYYY-MM-DD no fuso local (chave de bucket diária).
+  private isoDay(d: Date): string {
+    const y = d.getFullYear();
+    const m = `${d.getMonth() + 1}`.padStart(2, '0');
+    const day = `${d.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   // KPIs por vendedor (desempenho de vendas).
   async sellersKpi(tenantId: string) {
     const sellers = await this.prisma.seller.findMany({ where: { tenantId }, orderBy: { name: 'asc' } });

@@ -10,6 +10,7 @@ import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.se
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { HandoffService } from '@/application/handoff/handoff.service';
+import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -54,6 +55,7 @@ export class ConversationAgentService {
     private readonly notifications: NotificationsService,
     private readonly tmsLookup: TmsLookupService,
     private readonly handoff: HandoffService,
+    private readonly opportunities: OpportunitiesService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -174,6 +176,15 @@ export class ConversationAgentService {
         }
       }
     }
+    // Omnichannel (portal S5): persiste o externalId na conversa quando a identidade e
+    // conhecida (handoff/portal), para o chamado aparecer no portal do cliente.
+    const knownExternalId = handoffContext?.externalId ?? input.portalIdentity?.externalId ?? null;
+    if (input.conversationId && knownExternalId) {
+      await this.prisma.aiConversation
+        .update({ where: { id: input.conversationId }, data: { externalId: knownExternalId } })
+        .catch(() => null);
+    }
+
     // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
     const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
     const history = priorHistory + msgs
@@ -384,6 +395,18 @@ export class ConversationAgentService {
       route.agent === 'sales' &&
       (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
     if (conv && (isHot || route.agent === 'human')) {
+      if (isHot) {
+        await this.opportunities
+          .createFromLead(tenantId, {
+            conversationId: input.conversationId,
+            contactId: conv.contactId,
+            phone: conv.phone,
+            interestScore: route.leadScore,
+            intent: route.intent,
+            summary: input.message.slice(0, 120),
+          })
+          .catch(() => null);
+      }
       handoff = await this.sellers.handoff(tenantId, {
         conversationId: input.conversationId ?? '',
         contactPhone: conv.phone,

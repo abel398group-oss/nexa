@@ -64,8 +64,13 @@ export class SenderService {
     return n;
   }
 
-  listNumbers(tenantId: string) {
-    return this.prisma.senderNumber.findMany({ where: { tenantId } });
+  async listNumbers(tenantId: string) {
+    const numbers = await this.prisma.senderNumber.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
+    // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
+    return numbers.map((n) => ({
+      ...n,
+      effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
+    }));
   }
 
   // ---------- campanhas ----------

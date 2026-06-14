@@ -19,6 +19,17 @@ export class MetricsController {
     return this.metrics.overview(tenantId ?? 'default', sellerId, { from, to });
   }
 
+  @Get('timeseries')
+  timeseries(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const sellerId = user?.role === 'vendedor' ? (user.sellerId ?? '__none__') : undefined;
+    return this.metrics.timeseries(tenantId ?? 'default', sellerId, { from, to });
+  }
+
   @Get('sellers')
   sellersKpi(@CurrentTenant() tenantId: string) {
     return this.metrics.sellersKpi(tenantId ?? 'default');

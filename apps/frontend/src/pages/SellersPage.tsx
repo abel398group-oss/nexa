@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { api } from '@/lib/api';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -6,6 +9,17 @@ import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { Badge } from '@/components/ui/Badge';
+
+// E8 — fatia 2: validação de formulário por schema (RHF + Zod), como referência.
+// email/password são opcionais; quando preenchidos, precisam ser válidos.
+const sellerSchema = z.object({
+  name: z.string().trim().min(1, 'Informe o nome'),
+  phone: z.string().trim().min(8, 'WhatsApp inválido (ex.: 5511999990000)'),
+  email: z.string().trim().email('E-mail inválido').optional().or(z.literal('')),
+  password: z.string().trim().min(6, 'Mínimo 6 caracteres').optional().or(z.literal('')),
+});
+type SellerForm = z.infer<typeof sellerSchema>;
+const emptyForm: SellerForm = { name: '', phone: '', email: '', password: '' };
 
 interface Seller {
   id: string;
@@ -20,12 +34,13 @@ interface Kpi { id: string; name: string; leads: number; emAndamento: number; ga
 export function SellersPage() {
   const [items, setItems] = useState<Seller[]>([]);
   const [kpis, setKpis] = useState<Kpi[]>([]);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<SellerForm>({ resolver: zodResolver(sellerSchema), defaultValues: emptyForm });
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -77,51 +92,40 @@ export function SellersPage() {
     } catch { toast.error('Erro ao excluir em lote.'); }
   }
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr('');
+  const onSubmit = async (data: SellerForm) => {
+    const payload = {
+      name: data.name,
+      phone: data.phone,
+      email: data.email || undefined,
+      password: data.password || undefined,
+    };
     try {
       if (editId) {
-        await api.patch(`/sellers/${editId}`, {
-          name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          password: password.trim() || undefined,
-        });
+        await api.patch(`/sellers/${editId}`, payload);
         toast.success('Vendedor atualizado!');
       } else {
-        await api.post('/sellers', {
-          name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          password: password.trim() || undefined,
-        });
+        await api.post('/sellers', payload);
         toast.success('Vendedor adicionado!');
       }
-      setName(''); setPhone(''); setEmail(''); setPassword(''); setEditId(null);
+      reset(emptyForm);
+      setEditId(null);
       await load();
     } catch (e: any) {
       const m = e?.response?.data?.message;
       const txt = Array.isArray(m) ? m.join(', ') : m || 'Erro';
-      setErr(txt);
+      setError('root', { message: txt }); // erro vindo do backend
       toast.error(txt);
-    } finally {
-      setBusy(false);
     }
-  }
+  };
 
   function openEdit(s: Seller) {
     setEditId(s.id);
-    setName(s.name);
-    setPhone(s.phone);
-    setEmail(s.loginEmail || '');
-    setPassword('');
-    setErr('');
+    reset({ name: s.name, phone: s.phone, email: s.loginEmail || '', password: '' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function cancelEdit() {
-    setEditId(null); setName(''); setPhone(''); setEmail(''); setPassword(''); setErr('');
+    setEditId(null);
+    reset(emptyForm);
   }
   async function del(s: Seller) {
     const ok = await confirm({
@@ -196,15 +200,27 @@ export function SellersPage() {
         )}
       </div>
 
-      <form onSubmit={add} className="card mb-6 p-4">
-        <div className="mb-2 flex flex-wrap gap-2">
-          <Input className="flex-1" placeholder="Nome do vendedor" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input className="flex-1" placeholder="WhatsApp (5511...)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <form onSubmit={handleSubmit(onSubmit)} className="card mb-6 p-4">
+        <div className="mb-2 flex flex-wrap items-start gap-2">
+          <div className="flex-1">
+            <Input placeholder="Nome do vendedor" {...register('name')} />
+            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+          </div>
+          <div className="flex-1">
+            <Input placeholder="WhatsApp (5511...)" {...register('phone')} />
+            {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>}
+          </div>
         </div>
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Input className="flex-1" placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input type="password" className="flex-1" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Button loading={busy}>
+        <div className="mb-2 flex flex-wrap items-start gap-2">
+          <div className="flex-1">
+            <Input placeholder={editId ? 'E-mail de login' : 'E-mail de login (opcional)'} {...register('email')} />
+            {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+          </div>
+          <div className="flex-1">
+            <Input type="password" placeholder={editId ? 'Nova senha (vazio = manter)' : 'Senha (mín. 6)'} {...register('password')} />
+            {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
+          </div>
+          <Button loading={isSubmitting}>
             {editId ? 'Salvar' : '+ Adicionar'}
           </Button>
           {editId && (
@@ -219,7 +235,7 @@ export function SellersPage() {
             : 'Preencha e-mail + senha para o vendedor ter login próprio (vê só a carteira dele).'}
         </p>
       </form>
-      {err && <p className="mb-4 text-sm text-red-500">{err}</p>}
+      {errors.root && <p className="mb-4 text-sm text-red-500">{errors.root.message}</p>}
 
       {/* busca + ações em lote */}
       <div className="mb-3 flex flex-wrap items-center gap-2">

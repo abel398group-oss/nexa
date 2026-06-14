@@ -1,68 +1,85 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { lazy, Suspense, type ReactElement } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { TenantProvider, TenantGate } from '@/contexts/TenantContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ConfirmProvider } from '@/contexts/ConfirmContext';
 import { Layout } from '@/components/Layout';
+import { ProtectedRoute, PermissionRoute } from '@/components/RouteGuards';
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
-import { InboxPage } from '@/pages/InboxPage';
-import { SupportPage } from '@/pages/SupportPage';
-import { ContactsPage } from '@/pages/ContactsPage';
-import { KnowledgePage } from '@/pages/KnowledgePage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { SellersPage } from '@/pages/SellersPage';
-import { CampaignsPage } from '@/pages/CampaignsPage';
-import { UsersPage } from '@/pages/UsersPage';
-import { PlaybookPage } from '@/pages/PlaybookPage';
-import { DevTokensPage } from '@/pages/DevTokensPage';
-import { EmailChannelSettingsPage } from '@/pages/EmailChannelSettingsPage';
 
-function Protected({ children }: { children: JSX.Element }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="flex h-full items-center justify-center text-base-content/40">Carregando...</div>;
-  return user ? children : <Navigate to="/login" replace />;
+// Páginas da área autenticada carregadas sob demanda (named exports → interop).
+const InboxPage = lazy(() => import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })));
+const SupportPage = lazy(() => import('@/pages/SupportPage').then((m) => ({ default: m.SupportPage })));
+const ContactsPage = lazy(() => import('@/pages/ContactsPage').then((m) => ({ default: m.ContactsPage })));
+const KnowledgePage = lazy(() => import('@/pages/KnowledgePage').then((m) => ({ default: m.KnowledgePage })));
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const SellersPage = lazy(() => import('@/pages/SellersPage').then((m) => ({ default: m.SellersPage })));
+const CampaignsPage = lazy(() => import('@/pages/CampaignsPage').then((m) => ({ default: m.CampaignsPage })));
+const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) => ({ default: m.NumberHealthPage })));
+const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
+const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
+const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
+const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
+// Portal do cliente — área pública e independente (auth própria, fora do Layout interno).
+const PortalPage = lazy(() => import('@/pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
+
+function PageFallback() {
+  return <div className="flex h-full items-center justify-center text-base-content/40">Carregando...</div>;
+}
+
+// Atalho: rota protegida por permissão (admin passa sempre).
+function Perm({ perm, children }: { perm: string; children: ReactElement }) {
+  return <PermissionRoute perm={perm}>{children}</PermissionRoute>;
 }
 
 export default function App() {
   return (
+    <QueryClientProvider client={queryClient}>
     <ToastProvider>
-    <ConfirmProvider>
-    <AuthProvider>
-    <TenantProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            element={
-              <Protected>
-                <TenantGate>
-                  <Layout />
-                </TenantGate>
-              </Protected>
-            }
-          >
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/support" element={<SupportPage />} />
-            <Route path="/contacts" element={<ContactsPage />} />
-            <Route path="/knowledge" element={<KnowledgePage />} />
-            <Route path="/sellers" element={<SellersPage />} />
-            <Route path="/campaigns" element={<CampaignsPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/playbook" element={<PlaybookPage />} />
-            <Route path="/settings/email-channel" element={<EmailChannelSettingsPage />} />
-            {import.meta.env.DEV && (
-              <Route path="/dev/tokens" element={<DevTokensPage />} />
-            )}
-          </Route>
-          <Route path="*" element={<Navigate to="/inbox" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </TenantProvider>
-    </AuthProvider>
-    </ConfirmProvider>
+      <ConfirmProvider>
+        <AuthProvider>
+          <TenantProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/portal" element={<Suspense fallback={<PageFallback />}><PortalPage /></Suspense>} />
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <TenantGate>
+                        <Layout />
+                      </TenantGate>
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route element={<Suspense fallback={<PageFallback />}><Outlet /></Suspense>}>
+                    {/* /inbox fica sem gate de permissão: é o destino de fallback universal */}
+                    <Route path="/inbox" element={<InboxPage />} />
+                    <Route path="/dashboard" element={<Perm perm="dashboard"><DashboardPage /></Perm>} />
+                    <Route path="/support" element={<Perm perm="inbox"><SupportPage /></Perm>} />
+                    <Route path="/contacts" element={<Perm perm="contacts"><ContactsPage /></Perm>} />
+                    <Route path="/knowledge" element={<Perm perm="knowledge"><KnowledgePage /></Perm>} />
+                    <Route path="/sellers" element={<Perm perm="sellers"><SellersPage /></Perm>} />
+                    <Route path="/campaigns" element={<Perm perm="campaigns"><CampaignsPage /></Perm>} />
+                    <Route path="/sender/health" element={<Perm perm="campaigns"><NumberHealthPage /></Perm>} />
+                    <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
+                    <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
+                    <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
+                    {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
+                  </Route>
+                </Route>
+                <Route path="*" element={<Navigate to="/inbox" replace />} />
+              </Routes>
+            </BrowserRouter>
+          </TenantProvider>
+        </AuthProvider>
+      </ConfirmProvider>
     </ToastProvider>
+    </QueryClientProvider>
   );
 }

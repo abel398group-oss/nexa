@@ -21,6 +21,7 @@ enum SourceChannel {
   instagram
   facebook
   email
+  portal
 }
 
 enum AgentType {
@@ -216,6 +217,7 @@ model AiConversation {
   @@index([tenantId])
   @@index([correlationId])
   @@index([contactId])
+  @@index([tenantId, externalId])
   @@map("ai_conversations")
 }
 
@@ -668,6 +670,44 @@ model FollowUp {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
-  @@index([status])
-  @@map("follow_ups")
+
+// ===================== OPORTUNIDADES (F6 — funil comercial) =====================
+// Lead com score >= 70 vira oportunidade (regras de negocio). Estagio textual
+// (new|qualified|proposal|won|lost) para evoluir sem migration de enum.
+model Opportunity {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  contactId      String?  @map("contact_id")
+  conversationId String?  @map("conversation_id") // origem (lead quente)
+  phone          String?
+  name           String?
+  company        String?
+  stage          String   @default("new") // new | qualified | proposal | won | lost
+  interestScore  Int      @default(0) @map("interest_score")
+  intent         String?
+  summary        String?
+  value          Decimal? @db.Decimal(12, 2) // valor estimado (opcional)
+  assignedTo     String?  @map("assigned_to") // sellerId/nome do vendedor
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  stageHistory   OpportunityStageHistory[]
+
+  @@index([tenantId])
+  @@index([tenantId, stage])
+  @@index([tenantId, conversationId])
+  @@map("opportunities")
+}
+
+model OpportunityStageHistory {
+  id            String      @id @default(uuid())
+  opportunityId String      @map("opportunity_id")
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  fromStage     String?     @map("from_stage")
+  toStage       String      @map("to_stage")
+  reason        String?
+  changedAt     DateTime    @default(now()) @map("changed_at")
+
+  @@index([opportunityId])
+  @@map("opportunity_stage_history")
 }

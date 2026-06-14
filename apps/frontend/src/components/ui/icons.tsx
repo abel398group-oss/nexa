@@ -49,7 +49,8 @@ export type IconName =
   | 'ban'
   | 'mute'
   | 'alert'
-  | 'archive';
+  | 'archive'
+  | 'pulse';
 
 const PATHS: Record<IconName, ReactNode> = {
   dashboard: (
@@ -275,6 +276,7 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M10 12h4" />
     </>
   ),
+  pulse: <path d="M3 12h4l2-6 4 12 2-6h6" />,
   help: (
     <>
       <circle cx="12" cy="12" r="9" />

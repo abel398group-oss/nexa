@@ -1,4 +1,5 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
@@ -11,8 +12,16 @@ import {
   Card,
 } from '@/shared/ui';
 
-// Gráfico do funil carregado sob demanda (recharts num chunk async).
+// Gráficos carregados sob demanda (recharts num chunk async).
 const DashboardCampaignChart = lazy(() => import('./DashboardCampaignChart'));
+const DashboardActivityChart = lazy(() => import('./DashboardActivityChart'));
+
+interface ActivityPoint {
+  day: string;
+  inbound: number;
+  outbound: number;
+  conversations: number;
+}
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -59,23 +68,35 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export function DashboardPage() {
-  const [m, setM] = useState<Overview | null>(null);
   const { range } = useDateRange();
 
-  async function load() {
-    const params: any = {};
-    if (range.from) params.from = range.from;
-    if (range.to) params.to = range.to;
-    const r = await api.get('/metrics/overview', { params });
-    setM(r.data);
+  // monta os params de período a partir do range selecionado
+  function params() {
+    const p: Record<string, string> = {};
+    if (range.from) p.from = range.from;
+    if (range.to) p.to = range.to;
+    return p;
   }
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.from, range.to]);
+  // React Query (E8 — fatia 1): substitui o useEffect+setInterval manual.
+  // A key inclui o range → troca de período refaz a query; refetchInterval = polling.
+  const overviewQ = useQuery({
+    queryKey: ['metrics-overview', range.from, range.to],
+    queryFn: async () => (await api.get<Overview>('/metrics/overview', { params: params() })).data,
+    refetchInterval: 10_000,
+  });
+  const seriesQ = useQuery({
+    queryKey: ['metrics-timeseries', range.from, range.to],
+    queryFn: async () => (await api.get<{ series: ActivityPoint[] }>('/metrics/timeseries', { params: params() })).data,
+    refetchInterval: 10_000,
+  });
+
+  const m = overviewQ.data;
+  const series = seriesQ.data?.series ?? null;
+  const refresh = () => {
+    overviewQ.refetch();
+    seriesQ.refetch();
+  };
 
   if (!m) return (
     <div className="flex h-full items-center justify-center text-base-content/40">
@@ -99,7 +120,7 @@ export function DashboardPage() {
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Dashboard' }]} />}
         title="Dashboard"
         subtitle={<>Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s</>}
-        actions={<Button variant="outline" onClick={load}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
+        actions={<Button variant="outline" onClick={refresh}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
       />
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
@@ -110,6 +131,23 @@ export function DashboardPage() {
         <ConversationMetricsCard label="Mensagens" value={m.messages.inbound + m.messages.outbound} icon="mail" accent="green" hint={`${m.messages.inbound} in · ${m.messages.outbound} out`} />
         <ConversationMetricsCard label="Base (KB)" value={m.knowledge.total} icon="knowledge" accent="amber" hint="itens de conhecimento" />
       </div>
+
+      {/* ── Atividade por período (Q5) ─────────────────────────────── */}
+      <SectionTitle>Atividade por período</SectionTitle>
+      <Card className="mb-6 p-5">
+        <div className="mb-3 text-sm font-semibold text-base-content/70">
+          Mensagens e novas conversas por dia
+        </div>
+        {series && series.length > 0 ? (
+          <Suspense fallback={<div className="h-[260px] animate-pulse rounded-lg bg-base-200" />}>
+            <DashboardActivityChart series={series} />
+          </Suspense>
+        ) : (
+          <div className="flex h-[260px] items-center justify-center text-sm text-base-content/40">
+            Sem atividade no período selecionado.
+          </div>
+        )}
+      </Card>
 
       {/* ── Engajamento de Campanhas (CAMP-2) ──────────────────────── */}
       {m.campaigns && (
