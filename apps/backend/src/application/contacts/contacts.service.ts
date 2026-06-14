@@ -59,6 +59,29 @@ export class ContactsService {
     return { updated };
   }
 
+  // Renomeia uma tag em TODOS os contatos do tenant (array_replace + DISTINCT p/ não duplicar).
+  async renameTag(tenantId: string, from: string, to: string) {
+    const f = (from ?? '').trim();
+    const t = (to ?? '').trim();
+    if (!f || !t || f === t) return { updated: 0 };
+    const r = await this.prisma.$executeRaw`
+      UPDATE contacts SET tags = (
+        SELECT array_agg(DISTINCT x) FROM unnest(array_replace(tags, ${f}, ${t})) AS x
+      )
+      WHERE tenant_id = ${tenantId} AND ${f} = ANY(tags)`;
+    return { updated: Number(r) };
+  }
+
+  // Exclui uma tag de TODOS os contatos do tenant.
+  async deleteTag(tenantId: string, tag: string) {
+    const t = (tag ?? '').trim();
+    if (!t) return { updated: 0 };
+    const r = await this.prisma.$executeRaw`
+      UPDATE contacts SET tags = array_remove(tags, ${t})
+      WHERE tenant_id = ${tenantId} AND ${t} = ANY(tags)`;
+    return { updated: Number(r) };
+  }
+
   async findOne(tenantId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({ where: { id, tenantId } });
     if (!contact) throw new NotFoundException('Contato não encontrado');

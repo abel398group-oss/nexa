@@ -14,6 +14,8 @@ export {
   listContacts,
   listTags,
   bulkTagContacts,
+  renameTag,
+  deleteTag,
   createContact,
   updateContact,
   reactivateContact,

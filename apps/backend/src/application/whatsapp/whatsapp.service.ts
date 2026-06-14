@@ -233,7 +233,13 @@ export class WhatsappService {
       await this.prisma.$transaction([
         this.prisma.aiConversation.update({
           where: { id: conv.id },
-          data: { status: 'open' as any, endedAt: null, lastActivityAt: new Date() },
+          // ao reabrir de um opt-out, limpa o outcome (a conversa voltou a ficar ativa)
+          data: {
+            status: 'open' as any,
+            endedAt: null,
+            lastActivityAt: new Date(),
+            ...(fromStatus === 'opt_out' ? { outcome: null, outcomeAt: null } : {}),
+          },
         }),
         this.prisma.conversationStageHistory.create({
           data: {

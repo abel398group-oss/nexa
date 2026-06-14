@@ -446,10 +446,28 @@ export class SenderService {
         }
       }
       try {
-        // acha/cria conversa e envia (addMessage outbound dispara o WAHA + aparece no inbox)
-        let conv = await this.prisma.aiConversation.findFirst({ where: { tenantId: campaign.tenantId, phone: target.phone, status: 'open' } });
+        // UMA thread por contato (igual ao recebimento): acha a conversa mais recente
+        // do telefone (qualquer status) e reaproveita; reabre se estava fechada; só cria
+        // se o contato nunca teve conversa. Evita threads duplicadas no inbox.
+        let conv = await this.prisma.aiConversation.findFirst({
+          where: { tenantId: campaign.tenantId, phone: target.phone },
+          orderBy: { startedAt: 'desc' },
+        });
         if (!conv) {
           conv = await this.conversations.create(campaign.tenantId, { contactId: contact.id, phone: target.phone, sourceChannel: 'whatsapp' });
+        } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
+          // reabre; se vinha de opt-out, limpa o outcome (voltou a ficar ativa).
+          // won/lost são preservados (não mexe).
+          const wasOptOut = (conv.status as string) === 'opt_out';
+          await this.prisma.aiConversation.update({
+            where: { id: conv.id },
+            data: {
+              status: 'open' as any,
+              endedAt: null,
+              lastActivityAt: new Date(),
+              ...(wasOptOut ? { outcome: null, outcomeAt: null } : {}),
+            },
+          });
         }
         await this.conversations.addMessage(campaign.tenantId, conv.id, { direction: 'outbound', content: text, intent: 'outbound_campaign', metadata: { campaignId: campaign.id } });
 

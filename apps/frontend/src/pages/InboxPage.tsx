@@ -6,6 +6,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
 import { displayPhone } from '@/lib/phone';
+import { bulkTagContacts } from '@/features/contact';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
@@ -24,7 +25,8 @@ interface Conversation {
   customerStage?: string | null;
   ticketCategory?: string | null;
   ticketPriority?: string | null;
-  contact?: { name?: string | null; nameSource?: string | null; tags?: string[] } | null;
+  contact?: { id?: string; name?: string | null; nameSource?: string | null; tags?: string[] } | null;
+  campaign?: { id: string; name: string } | null;
 }
 
 
@@ -73,6 +75,30 @@ export function InboxPage() {
   const [tmsLookup, setTmsLookup] = useState<TmsLookup | null>(null);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+
+  // tags do contato da conversa aberta: atualiza local + servidor
+  function setActiveTags(tags: string[]) {
+    setActive((a) => (a && a.contact ? { ...a, contact: { ...a.contact, tags } } : a));
+    setConvs((cs) => cs.map((c) => (c.id === active?.id && c.contact ? { ...c, contact: { ...c.contact, tags } } : c)));
+  }
+  async function addContactTag() {
+    const tag = tagInput.trim();
+    const cid = active?.contact?.id;
+    if (!tag || !cid) { setTagInput(''); return; }
+    const cur = active?.contact?.tags ?? [];
+    if (cur.includes(tag)) { setTagInput(''); return; }
+    setTagInput('');
+    setActiveTags([...cur, tag]); // otimista
+    try { await bulkTagContacts([cid], tag, 'add'); } catch { setActiveTags(cur); }
+  }
+  async function removeContactTag(tag: string) {
+    const cid = active?.contact?.id;
+    if (!cid) return;
+    const cur = active?.contact?.tags ?? [];
+    setActiveTags(cur.filter((t) => t !== tag)); // otimista
+    try { await bulkTagContacts([cid], tag, 'remove'); } catch { setActiveTags(cur); }
+  }
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
@@ -228,7 +254,7 @@ export function InboxPage() {
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
-                      {c.outcome && <ConversationOutcomeBadge outcome={c.outcome} />}
+                      {c.outcome && c.outcome !== c.status && <ConversationOutcomeBadge outcome={c.outcome} />}
                       {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
                         <ChannelBadge sourceChannel={c.sourceChannel} />
                       )}
@@ -240,6 +266,18 @@ export function InboxPage() {
                           {c.assignedSeller.name}
                         </span>
                       )}
+                      {c.campaign && (
+                        <span
+                          title={`Veio da campanha: ${c.campaign.name}`}
+                          className="inline-flex max-w-[120px] items-center gap-1 truncate rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                        >
+                          <Icon name="campaigns" className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{c.campaign.name}</span>
+                        </span>
+                      )}
+                      {(c.contact?.tags ?? []).slice(0, 3).map((t) => (
+                        <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">{t}</span>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -273,13 +311,24 @@ export function InboxPage() {
                   )}
                 </div>
 
+                {/* campanha de origem da conversa */}
+                {active.campaign && (
+                  <span
+                    title={`Veio da campanha: ${active.campaign.name}`}
+                    className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  >
+                    <Icon name="campaigns" className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{active.campaign.name}</span>
+                  </span>
+                )}
+
                 {/* status badge (tamanho md no header) */}
                 <ConversationStatusBadge
                   status={active.status}
                   lastActivityAt={active.lastActivityAt}
                   size="md"
                 />
-                {active.outcome && (
+                {active.outcome && active.outcome !== active.status && (
                   <ConversationOutcomeBadge outcome={active.outcome} size="md" />
                 )}
 
@@ -348,6 +397,27 @@ export function InboxPage() {
                   }`}
                 ><span className="inline-flex items-center gap-1"><Icon name="close" className="h-3.5 w-3.5" /> Perdeu</span></button>
               </div>
+            </div>
+
+            {/* tags livres do contato (mostrar + adicionar/remover) */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-base-200 bg-[var(--surface)] px-4 py-2">
+              <span className="text-[11px] text-base-content/40">Tags:</span>
+              {(active.contact?.tags ?? []).map((t) => (
+                <span key={t} className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/70">
+                  {t}
+                  <button onClick={() => removeContactTag(t)} className="text-base-content/40 hover:text-red-500" title="Remover tag">
+                    <Icon name="close" className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addContactTag(); } }}
+                placeholder="+ tag"
+                className="w-24 rounded-full border border-dashed border-base-300 bg-transparent px-2 py-0.5 text-[11px] text-base-content outline-none placeholder:text-base-content/40 focus:border-brand-500"
+                title="Digite e Enter para criar/adicionar"
+              />
             </div>
 
             <div className="flex flex-1 min-h-0">

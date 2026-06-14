@@ -17,6 +17,13 @@ class BulkTagDto {
   @IsString() tag!: string;
   @IsOptional() @IsIn(['add', 'remove']) mode?: 'add' | 'remove';
 }
+class RenameTagDto {
+  @IsString() from!: string;
+  @IsString() to!: string;
+}
+class DeleteTagDto {
+  @IsString() tag!: string;
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('contacts')
@@ -43,6 +50,18 @@ export class ContactsController {
   @Post('bulk-tag')
   bulkTag(@CurrentTenant() tenantId: string, @Body() body: BulkTagDto) {
     return this.contacts.bulkTag(tenantId ?? 'default', body.ids ?? [], body.tag ?? '', body.mode ?? 'add');
+  }
+
+  // renomeia uma tag em todos os contatos
+  @Patch('tags/rename')
+  renameTag(@CurrentTenant() tenantId: string, @Body() body: RenameTagDto) {
+    return this.contacts.renameTag(tenantId ?? 'default', body.from, body.to);
+  }
+
+  // exclui uma tag de todos os contatos
+  @Post('tags/delete')
+  deleteTag(@CurrentTenant() tenantId: string, @Body() body: DeleteTagDto) {
+    return this.contacts.deleteTag(tenantId ?? 'default', body.tag);
   }
 
   @Get(':id')

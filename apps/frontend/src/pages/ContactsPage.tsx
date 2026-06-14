@@ -10,6 +10,8 @@ import {
   listContacts,
   listTags,
   bulkTagContacts,
+  renameTag,
+  deleteTag,
   createContact,
   updateContact,
   reactivateContact,
@@ -41,6 +43,10 @@ export function ContactsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'optout'>('todos');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // gerenciador de tags
+  const [showTagMgr, setShowTagMgr] = useState(false);
+  const [renamingTag, setRenamingTag] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [tags, setTags] = useState<TagCount[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importTag, setImportTag] = useState('');
@@ -182,6 +188,35 @@ export function ContactsPage() {
       toast.error('Erro ao adicionar tag.');
     }
   }
+
+  // ----- gerenciador de tags (renomear / excluir global) -----
+  async function doRenameTag(from: string) {
+    const to = renameValue.trim();
+    if (!to || to === from) { setRenamingTag(null); return; }
+    try {
+      await renameTag(from, to);
+      toast.success(`Tag renomeada para "${to}".`);
+      setRenamingTag(null); setRenameValue('');
+      if (tagFilter === from) setTagFilter(to);
+      await load();
+    } catch { toast.error('Erro ao renomear a tag.'); }
+  }
+  async function doDeleteTag(tag: string) {
+    const ok = await confirm({
+      title: 'Excluir tag',
+      message: `Excluir a tag "${tag}" de todos os contatos? Os contatos não são apagados — só perdem essa etiqueta.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir tag',
+    });
+    if (!ok) return;
+    try {
+      await deleteTag(tag);
+      toast.success(`Tag "${tag}" excluída.`);
+      if (tagFilter === tag) setTagFilter(null);
+      await load();
+    } catch { toast.error('Erro ao excluir a tag.'); }
+  }
+
   // Leva os selecionados (ativos) para a tela de Disparo, já como público manual.
   function createCampaignFromSelected() {
     const chosen = items.filter((c) => selected.has(c.id) && c.status !== 'opted_out');
@@ -361,6 +396,12 @@ export function ContactsPage() {
                   {t.tag} <span className="opacity-60">{t.count}</span>
                 </button>
               ))}
+              <button
+                onClick={() => setShowTagMgr(true)}
+                className="ml-auto inline-flex items-center gap-1 rounded-full border border-base-300 px-3 py-1 text-xs font-medium text-base-content/70 hover:bg-base-100"
+              >
+                <Icon name="dots" className="h-3.5 w-3.5" /> Gerenciar tags
+              </button>
             </>
           ) : (
             <>
@@ -582,6 +623,49 @@ export function ContactsPage() {
             <Button loading={busy}>{busy ? 'Importando...' : 'Importar'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* modal gerenciar tags */}
+      <Modal open={showTagMgr} onClose={() => { setShowTagMgr(false); setRenamingTag(null); }} title="Gerenciar tags" size="sm">
+        {tags.length === 0 ? (
+          <p className="py-6 text-center text-sm text-base-content/50">
+            Nenhuma tag ainda. Crie uma adicionando a um contato (no card do Inbox ou na seleção em massa).
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {tags.map((t) => (
+              <div key={t.tag} className="flex items-center gap-2 rounded-lg border border-base-200 px-3 py-2">
+                {renamingTag === t.tag ? (
+                  <>
+                    <Input
+                      className="flex-1"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') doRenameTag(t.tag); if (e.key === 'Escape') setRenamingTag(null); }}
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={() => doRenameTag(t.tag)}>Salvar</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRenamingTag(null)}>Cancelar</Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 truncate text-sm font-medium text-base-content">{t.tag}</span>
+                    <span className="shrink-0 text-xs text-base-content/40">{t.count} contato(s)</span>
+                    <button onClick={() => { setRenamingTag(t.tag); setRenameValue(t.tag); }} title="Renomear" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200">
+                      <Icon name="edit" className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => doDeleteTag(t.tag)} title="Excluir" className="rounded-md px-2 py-1 text-red-500 hover:bg-red-50">
+                      <Icon name="trash" className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-base-content/40">
+          Para criar uma tag nova, adicione-a a um contato (no card do Inbox ou na seleção em massa). Renomear/excluir aqui vale pra todos os contatos.
+        </p>
       </Modal>
 
       {/* modal histórico de campanhas do contato */}

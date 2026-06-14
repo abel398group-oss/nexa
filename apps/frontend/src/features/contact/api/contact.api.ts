@@ -39,6 +39,18 @@ export async function bulkTagContacts(
   return r.data;
 }
 
+// renomeia uma tag em todos os contatos do tenant
+export async function renameTag(from: string, to: string): Promise<{ updated: number }> {
+  const r = await api.patch('/contacts/tags/rename', { from, to });
+  return r.data;
+}
+
+// exclui uma tag de todos os contatos do tenant
+export async function deleteTag(tag: string): Promise<{ updated: number }> {
+  const r = await api.post('/contacts/tags/delete', { tag });
+  return r.data;
+}
+
 export async function createContact(input: ContactInput): Promise<Contact> {
   const r = await api.post('/contacts', { ...normalize(input), source: 'manual' });
   return r.data;
