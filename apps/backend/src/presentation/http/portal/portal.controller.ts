@@ -78,14 +78,15 @@ export class PortalController {
   @UseGuards(PortalSessionGuard)
   @Get('tickets')
   listTickets(@Req() req: any, @Query() q: TicketsQueryDto) {
-    return this.tickets.list(req.portalCustomer, q);
+    const page = { limit: q.limit ?? 50, offset: q.offset ?? 0 } as any;
+    return this.tickets.list(req.portalCustomer, page, { status: q.status, category: q.category });
   }
 
   // Detalhe + mensagens de um chamado (404 se nao for do cliente).
   @UseGuards(PortalSessionGuard)
   @Get('tickets/:id')
   getTicket(@Req() req: any, @Param('id') id: string) {
-    return this.tickets.getOne(req.portalCustomer, id);
+    return this.tickets.detail(req.portalCustomer, id);
   }
 
   // Abre um novo chamado (entra no pipeline da Lia).

@@ -185,6 +185,7 @@ model AiConversation {
   id            String             @id @default(uuid())
   tenantId      String             @map("tenant_id")
   productCode   String?            @map("product_code")
+  externalId    String?            @map("external_id") // cliente externo (TMS) — usado pelo portal
   correlationId String             @map("correlation_id")
   contactId     String             @map("contact_id")
   phone         String
