@@ -59,7 +59,7 @@ export class ConversationAgentService {
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
   async handle(
     tenantId: string,
-    input: { message: string; conversationId?: string; productCode?: string },
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
   ): Promise<HandleResult> {
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
@@ -136,6 +136,12 @@ export class ConversationAgentService {
       route = { ...route, agent: 'support' };
       this.logger.log('Marcador [via-painel-tms] detectado → rota suporte direto');
     }
+    // Portal do cliente: identidade vem da SESSAO (token), nao do telefone -> forca suporte.
+    if (input.portalIdentity) {
+      route = { ...route, agent: 'support' };
+      tmsCustomer = { externalId: input.portalIdentity.externalId, name: input.portalIdentity.name ?? 'Cliente', isAdmin: false };
+      this.logger.log(`Portal: identidade da sessao ext=${input.portalIdentity.externalId} -> rota suporte`);
+    }
     // Remove marcadores da mensagem antes de processar (não aparecem na resposta)
     const cleanMessage = input.message
       .replace(VIA_PANEL_MARKER, '')
@@ -150,7 +156,7 @@ export class ConversationAgentService {
     // Busca o telefone da conversa para consultar o TMS antes de rotear
     // Roda tanto p/ 'sales' (redireciona cliente → suporte) quanto p/ 'support'
     // (precisamos saber se é cliente DE VERDADE; se não for, é prospect e tratamos abaixo).
-    if (input.conversationId && !handoffContext && !hasPanel && (route.agent === 'sales' || route.agent === 'support')) {
+    if (input.conversationId && !handoffContext && !hasPanel && !input.portalIdentity && (route.agent === 'sales' || route.agent === 'support')) {
       const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
       if (convForPhone?.phone) {
         const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]);

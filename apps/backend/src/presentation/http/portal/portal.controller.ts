@@ -14,6 +14,10 @@ class SessionDto {
   @IsString() @MinLength(4) token!: string;
 }
 
+class TicketMessageDto {
+  @IsString() @MinLength(1) message!: string;
+}
+
 class TicketsQueryDto {
   @IsOptional() @Type(() => Number) limit?: number;
   @IsOptional() @Type(() => Number) offset?: number;
@@ -82,6 +86,20 @@ export class PortalController {
   @Get('tickets/:id')
   getTicket(@Req() req: any, @Param('id') id: string) {
     return this.tickets.getOne(req.portalCustomer, id);
+  }
+
+  // Abre um novo chamado (entra no pipeline da Lia).
+  @UseGuards(PortalSessionGuard)
+  @Post('tickets')
+  openTicket(@Req() req: any, @Body() dto: TicketMessageDto) {
+    return this.tickets.open(req.portalCustomer, { message: dto.message });
+  }
+
+  // Cliente responde num chamado existente.
+  @UseGuards(PortalSessionGuard)
+  @Post('tickets/:id/messages')
+  replyTicket(@Req() req: any, @Param('id') id: string, @Body() dto: TicketMessageDto) {
+    return this.tickets.reply(req.portalCustomer, id, dto.message);
   }
 
   @Post('session/logout')
