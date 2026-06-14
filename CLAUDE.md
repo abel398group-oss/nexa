@@ -28,10 +28,12 @@ pnpm monorepo:
   servers running with file-watch, so check for a running instance / port
   conflict before starting another. Ports are deliberately offset from the
   HiperTMS / n8n MVP (3000/5432/6379) so both can run side by side.
-- **Database**: Claude generally has **no production `.env`** and cannot reach a
-  real DB. **Never** run migrations or seed against a shared DB (`pnpm db:migrate`,
-  `pnpm db:seed`, `prisma migrate deploy`). When a change needs a migration,
-  write the Prisma schema change, then **ask the user to run it**. In staging/prod
+- **Database**: the hard "never touch the DB" rule applies **only to the HiperTMS
+  database** — never run migrations/seed against it, ever. For the **Nexa** database,
+  Claude **may** run migrations and seed locally when the user asks (`pnpm db:migrate`,
+  `pnpm db:seed`). Caveat: Claude usually has **no production `.env`** and may not be
+  able to reach the user's running Nexa DB from its sandbox — in that case it writes
+  the Prisma schema change + migration and asks the user to run it. In staging/prod
   use `prisma migrate deploy`, **never** `migrate dev` (ADR 013).
 - **Git**: Claude may stage and commit on a branch without asking, but **must
   never push** without explicit authorization.

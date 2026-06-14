@@ -36,6 +36,13 @@ export class KnowledgeController {
     return this.knowledge.deleteItems(tenantId ?? 'default', body.ids ?? []);
   }
 
+  // (re)gera os vetores semânticos da KB (RAG). Rodar após a migração do pgvector.
+  // ?force=true reindexa tudo; senão só os itens sem vetor.
+  @Post('reindex')
+  reindex(@CurrentTenant() tenantId: string, @Query('force') force?: string) {
+    return this.knowledge.reindex(tenantId ?? 'default', force === 'true');
+  }
+
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.knowledge.findOne(tenantId ?? 'default', id);

@@ -312,6 +312,8 @@ model AiKnowledgeBase {
   content        String
   tags           String[]
   embeddingModel String?              @map("embedding_model")
+  // Vetor semântico (RAG / pgvector). Tipo não nativo do Prisma → lido/escrito via SQL bruto.
+  embedding      Unsupported("vector(384)")?
   createdAt      DateTime             @default(now()) @map("created_at")
 
   versions AiKnowledgeVersion[]

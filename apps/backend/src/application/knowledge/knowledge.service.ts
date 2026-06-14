@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
+import { EmbeddingsService, EMBEDDING_MODEL } from '@/shared/ai/embeddings.service';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 
 // Cache em memória por tenantId — evita recarregar a base a cada mensagem recebida em pico
@@ -17,6 +18,7 @@ export class KnowledgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly connectors: ConnectorsService,
+    private readonly embeddings: EmbeddingsService,
   ) {}
 
   private invalidateCache(tenantId: string) {
@@ -46,10 +48,44 @@ export class KnowledgeService {
   }
 
   // Recupera os KB mais relevantes p/ uma pergunta (retrieval p/ a Lia).
-  // Scoring textual simples (título>tags>tópico>conteúdo). pgvector entra depois.
-  // Cache em memória 30s por tenantId — evita recarregar toda a base a cada mensagem.
-  // Fix definitivo: GIN index no Postgres (pendente para escala > 500 artigos).
+  // 1ª opção: busca SEMÂNTICA (pgvector + embeddings e5-small) — entende sinônimo/paráfrase.
+  // Fallback: scoring TEXTUAL (título>tags>tópico>conteúdo) se embeddings indisponível
+  // ou se ainda não há vetores indexados (rodar reindex após a migração).
   async retrieve(tenantId: string, query: string, topN = 3) {
+    // ── BUSCA SEMÂNTICA ──────────────────────────────────────────────────────
+    if (this.embeddings.enabled && query?.trim()) {
+      try {
+        const vec = await this.embeddings.embed(query, 'query');
+        if (vec) {
+          const lit = EmbeddingsService.toVectorLiteral(vec);
+          const rows = await this.prisma.$queryRawUnsafe<any[]>(
+            `SELECT id, title, content, category, 1 - (embedding <=> $1::vector) AS score
+               FROM ai_knowledge_base
+              WHERE tenant_id = $2 AND embedding IS NOT NULL
+              ORDER BY embedding <=> $1::vector
+              LIMIT $3`,
+            lit,
+            tenantId,
+            topN,
+          );
+          if (rows && rows.length > 0) {
+            return rows.map((r) => ({
+              id: r.id,
+              title: r.title,
+              content: r.content,
+              category: r.category,
+              score: Number(r.score),
+            }));
+          }
+          // sem linhas com embedding ainda → cai no textual (precisa reindexar)
+        }
+      } catch (e: any) {
+        this.logger.warn(`retrieve semântico falhou (${e?.message}) — usando textual`);
+      }
+    }
+
+    // ── FALLBACK TEXTUAL ─────────────────────────────────────────────────────
+    // Cache em memória 30s por tenantId — evita recarregar toda a base a cada mensagem.
     const now = Date.now();
     const cached = this.retrieveCache.get(tenantId);
     let all: any[];
@@ -112,7 +148,7 @@ export class KnowledgeService {
   // cria KB + versão 1 (não aprovada — passa pela curadoria humana)
   async create(tenantId: string, dto: CreateKnowledgeDto, author = 'system') {
     this.invalidateCache(tenantId);
-    return this.prisma.aiKnowledgeBase.create({
+    const created = await this.prisma.aiKnowledgeBase.create({
       data: {
         tenantId,
         productCode: dto.productCode,
@@ -127,6 +163,8 @@ export class KnowledgeService {
       },
       include: { versions: true },
     });
+    await this.storeEmbedding(created.id, created.title, created.content);
+    return created;
   }
 
   // edita o conteúdo do conhecimento direto (uso pelo painel)
@@ -137,7 +175,7 @@ export class KnowledgeService {
   ) {
     this.invalidateCache(tenantId);
     await this.findOne(tenantId, id);
-    return this.prisma.aiKnowledgeBase.update({
+    const updated = await this.prisma.aiKnowledgeBase.update({
       where: { id },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
@@ -147,6 +185,11 @@ export class KnowledgeService {
         ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
       },
     });
+    // título/conteúdo mudaram → regenera o vetor semântico
+    if (dto.title !== undefined || dto.content !== undefined) {
+      await this.storeEmbedding(updated.id, updated.title, updated.content);
+    }
+    return updated;
   }
 
   async remove(tenantId: string, id: string) {
@@ -255,6 +298,48 @@ export class KnowledgeService {
         data: { content: version.content },
       }),
     ]);
+    this.invalidateCache(tenantId);
+    // conteúdo "fonte de verdade" mudou → regenera o vetor semântico
+    await this.storeEmbedding(kb.id, kb.title, version.content);
     return approved;
+  }
+
+  // ── EMBEDDINGS (RAG) ───────────────────────────────────────────────────────
+
+  // Gera e grava o vetor de um item (título + conteúdo). No-op se embeddings indisponível.
+  private async storeEmbedding(id: string, title: string, content: string) {
+    if (!this.embeddings.enabled) return;
+    const vec = await this.embeddings.embed(`${title}\n${content}`, 'passage');
+    if (!vec) return;
+    const lit = EmbeddingsService.toVectorLiteral(vec);
+    await this.prisma
+      .$executeRawUnsafe(
+        `UPDATE ai_knowledge_base SET embedding = $1::vector, embedding_model = $2 WHERE id = $3`,
+        lit,
+        EMBEDDING_MODEL,
+        id,
+      )
+      .catch((e: any) => this.logger.warn(`storeEmbedding(${id}) falhou: ${e?.message}`));
+  }
+
+  // Backfill: (re)gera os vetores da KB do tenant. Rodar após a migração do pgvector
+  // ou quando trocar de modelo. force=true reindexa tudo; senão só o que não tem vetor.
+  async reindex(tenantId: string, force = false) {
+    if (!this.embeddings.enabled) {
+      return { ok: false, reason: 'embeddings desabilitado ou modelo indisponível', indexed: 0 };
+    }
+    const where = force ? `tenant_id = $1` : `tenant_id = $1 AND embedding IS NULL`;
+    const rows = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, title, content FROM ai_knowledge_base WHERE ${where}`,
+      tenantId,
+    );
+    let indexed = 0;
+    for (const r of rows) {
+      await this.storeEmbedding(r.id, r.title, r.content);
+      indexed++;
+    }
+    this.invalidateCache(tenantId);
+    this.logger.log(`reindex(${tenantId}): ${indexed} itens vetorizados (force=${force})`);
+    return { ok: true, indexed };
   }
 }

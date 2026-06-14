@@ -14,14 +14,31 @@ KB resolve isso com **conteúdo versionado, aprovado e recuperável por relevân
 
 | Fase | Recuperação | Estado |
 |---|---|---|
-| Atual | Scoring textual por termos: título (3pts) > tags (2pts) > topic (2pts) > conteúdo (1pt); trecho injetado no prompt | implementado |
-| Alvo | Embeddings por artigo + busca semântica (pgvector) | planejado |
+| Semântica | Embeddings por artigo + busca por similaridade de cosseno (pgvector) | ✅ implementado |
+| Fallback | Scoring textual por termos: título (3pts) > tags (2pts) > topic (2pts) > conteúdo (1pt) | ✅ implementado |
 
-> O scoring textual atual e o endpoint de importação estão detalhados em
+> O scoring textual e o endpoint de importação estão detalhados em
 > [`docs/features/knowledge/prd.md`](../features/knowledge/prd.md).
 
-PostgreSQL 16 já roda com **pgvector** (ver `docker-compose.yml` e README),
-preparando o terreno para embeddings sem troca de banco.
+### Busca semântica (implementada)
+
+- **Modelo:** `multilingual-e5-small` (384 dims), rodando **local** no backend via
+  `@xenova/transformers` — sem vendor externo nem API key. Configurável por
+  `EMBEDDING_MODEL`; desligável por `EMBEDDINGS_ENABLED=false`.
+- **Serviço:** `shared/ai/embeddings.service.ts` (carregamento lazy, à prova de falha).
+- **Armazenamento:** coluna `embedding vector(384)` em `ai_knowledge_base` (extensão
+  `pgvector`, migração `20260614000000_add_kb_embeddings`).
+- **Recuperação:** `KnowledgeService.retrieve()` embeda a pergunta (prefixo `query:`)
+  e faz `ORDER BY embedding <=> $vec` (distância de cosseno). Se os embeddings
+  estiverem indisponíveis (sem rede/modelo) ou ainda não houver vetores, cai
+  automaticamente no **scoring textual** — nunca quebra.
+- **Indexação:** vetor gerado em create/update/approve (prefixo `passage:`). Backfill
+  da base existente via `POST /api/knowledge/reindex` (perm. `knowledge`); `?force=true`
+  reindexa tudo.
+- **Índice:** dispensável enquanto a KB é pequena; criar HNSW (`vector_cosine_ops`)
+  quando passar de ~1.000 artigos.
+
+PostgreSQL 16 já roda com **pgvector** (ver `docker-compose.yml` e README).
 
 ## Regras de uso (não negociáveis)
 
