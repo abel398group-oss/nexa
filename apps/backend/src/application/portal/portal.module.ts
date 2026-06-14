@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PortalController } from '@/presentation/http/portal/portal.controller';
 import { PortalSessionService } from './portal-session.service';
 import { PortalSessionGuard } from './portal-session.guard';
+import { PortalTicketsService } from './portal-tickets.service';
 
 // Auth do portal ISOLADA da interna: segredo + audience proprios (PORTAL_JWT_SECRET).
 // HandoffService e HiperTmsConnector sao @Global — injetam direto.
@@ -14,6 +15,6 @@ import { PortalSessionGuard } from './portal-session.guard';
     }),
   ],
   controllers: [PortalController],
-  providers: [PortalSessionService, PortalSessionGuard],
+  providers: [PortalSessionService, PortalSessionGuard, PortalTicketsService],
 })
 export class PortalModule {}
