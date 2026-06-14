@@ -10,7 +10,13 @@ export class HiperTmsConnector implements Connector {
   private readonly logger = new Logger('HiperTmsConnector');
 
   private get configured(): boolean {
-    return !!process.env.TMS_API_BASE_URL && !!process.env.TMS_SERVICE_TOKEN;
+    return !!process.env.TMS_API_BASE_URL && !!(process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN);
+  }
+
+  // Token enviado no header x-internal-token para a API interna do TMS (/nexa/*).
+  // Deve ser IGUAL ao NEXA_INTERNAL_TOKEN configurado no TMS.
+  private get internalToken(): string {
+    return process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN ?? '';
   }
 
   async healthCheck() {
@@ -626,8 +632,10 @@ export class HiperTmsConnector implements Connector {
 
   async getDocumentStatus(_externalId: string, _type: 'cte' | 'mdfe'): Promise<DocumentStatus | null> {
     if (!this.configured) return null;
-    // TODO(real): GET ${TMS_API_BASE_URL}/fiscal/documents/${externalId}?type=${type}
-    this.logger.warn('getDocumentStatus STUB — integração real pendente');
+    // Endpoint PRONTO no TMS: GET ${TMS_API_BASE_URL}/nexa/fiscal/document?tenantId=&type=&key=
+    // Falta a assinatura carregar tenantId + key (número/chave) até aqui — ajustar a interface
+    // Connector e o DiagnosticAgent quando formos usar o status de documento ao vivo.
+    this.logger.warn('getDocumentStatus STUB — endpoint /nexa/fiscal/document pronto; falta passar tenantId+key');
     return null;
   }
 
@@ -644,10 +652,34 @@ export class HiperTmsConnector implements Connector {
   }
 
   async getContractStatus(externalId: string): Promise<ContractStatus | null> {
-    if (!this.configured) return null;
-    // TODO(real): GET ${TMS_API_BASE_URL}/tenants/${externalId}/contract
-    this.logger.warn('getContractStatus STUB — integração real pendente');
-    return null;
+    if (!this.configured || !externalId) return null;
+    try {
+      const url = `${process.env.TMS_API_BASE_URL}/nexa/contract?tenantId=${encodeURIComponent(externalId)}`;
+      const res = await fetch(url, {
+        headers: { 'x-internal-token': this.internalToken },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
+
+      const data = await res.json() as { found: boolean; contract: any };
+      if (!data.found || !data.contract) return null;
+
+      const k = data.contract;
+      // TMS devolve 'inactive' (cancelado/expirado); o tipo ContractStatus usa 'cancelled'.
+      const raw = k.status === 'inactive' ? 'cancelled' : k.status;
+      const status = ['active', 'suspended', 'trial', 'cancelled'].includes(raw) ? raw : 'active';
+      return {
+        externalId:     String(k.externalId ?? externalId),
+        plan:           k.plan ?? '',
+        status:         status as ContractStatus['status'],
+        expiresAt:      k.expiresAt ?? undefined,
+        documentsUsed:  typeof k.documentsUsed === 'number' ? k.documentsUsed : undefined,
+        documentsLimit: typeof k.documentsLimit === 'number' ? k.documentsLimit : undefined,
+      };
+    } catch (err: any) {
+      this.logger.warn(`getContractStatus(${externalId}) falhou: ${err?.message}`);
+      return null;
+    }
   }
 
   // Verifica se o telefone já tem cadastro no HiperTMS.
@@ -658,29 +690,28 @@ export class HiperTmsConnector implements Connector {
       return null; // TMS não configurado — lead ainda é prospect
     }
     try {
-      // Usa o tenantId padrão se não configurado (ambiente dev/local)
-      const tenantId = process.env.TMS_TENANT_ID ?? 'default';
       const url =
-        `${process.env.TMS_API_BASE_URL}/api/companies/by-phone` +
-        `?phone=${encodeURIComponent(phone)}&tenantId=${encodeURIComponent(tenantId)}`;
+        `${process.env.TMS_API_BASE_URL}/nexa/customers/by-phone` +
+        `?phone=${encodeURIComponent(phone)}`;
 
       const res = await fetch(url, {
-        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+        headers: { 'x-internal-token': this.internalToken },
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
 
-      const data = await res.json() as { found: boolean; company: any };
-      if (!data.found || !data.company) return null;
+      const data = await res.json() as { found: boolean; customer: any };
+      if (!data.found || !data.customer) return null;
 
-      const c = data.company;
+      const c = data.customer;
+      const status = ['active', 'inactive', 'trial', 'suspended'].includes(c.status) ? c.status : 'active';
       return {
         externalId:   String(c.externalId),
         name:         c.name ?? '',
         email:        c.email ?? undefined,
         plan:         c.plan ?? undefined,
-        status:       c.status === 'ACTIVE' ? 'active' : c.status === 'INACTIVE' ? 'inactive' : 'active',
-        registeredAt: c.createdAt ?? undefined,
+        status:       status as TmsCustomer['status'],
+        registeredAt: c.registeredAt ?? undefined,
       };
     } catch (err: any) {
       this.logger.warn(`lookupCustomer(${phone}) falhou: ${err?.message}`);

@@ -433,6 +433,9 @@ export function InboxPage() {
                         ? 'rounded-tr-sm bg-brand-500 text-white'
                         : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
                     }`}>
+                      {(m.metadata as any)?.audioUrl && (
+                        <audio controls src={(m.metadata as any).audioUrl} className="mb-1 h-10 w-[320px] max-w-full rounded-lg" />
+                      )}
                       <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
                       <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
                         m.direction === 'outbound' ? 'text-white/70' : 'text-base-content/40'

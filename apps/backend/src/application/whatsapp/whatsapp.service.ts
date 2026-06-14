@@ -159,11 +159,13 @@ export class WhatsappService {
     return { url, mimetype: mimetype || 'audio/ogg' };
   }
 
-  // Baixa o áudio do WAHA e transcreve. Retorna o texto ou null (à prova de falha).
-  private async transcribeInboundAudio(rawBody: any): Promise<string | null> {
-    if (!this.transcription.enabled) return null;
+  // Baixa o áudio do WAHA, salva uma cópia (p/ tocar no inbox) e transcreve.
+  // Retorna { transcript, audioUrl } — null/null se falhar (à prova de falha).
+  private async transcribeInboundAudio(rawBody: any): Promise<{ transcript: string | null; audioUrl: string | null }> {
+    const empty = { transcript: null as string | null, audioUrl: null as string | null };
+    if (!this.transcription.enabled) return empty;
     const ref = this.extractAudioRef(rawBody);
-    if (!ref) return null;
+    if (!ref) return empty;
     let dlUrl = ref.url;
     try {
       const base = process.env.WAHA_API_URL;
@@ -175,23 +177,33 @@ export class WhatsappService {
       const res = await fetch(dlUrl, { headers });
       if (!res.ok) {
         this.logger.warn(`download de áudio falhou (${res.status}) url=${dlUrl}`);
-        try { require('node:fs').appendFileSync('audio-debug.log', `${new Date().toISOString()} download falhou ${res.status} ${dlUrl}\n`); } catch {}
-        return null;
+        return empty;
       }
       const buf = Buffer.from(await res.arrayBuffer());
-      const text = await this.transcription.transcribe(buf);
-      try { require('node:fs').appendFileSync('audio-debug.log', `${new Date().toISOString()} bytes=${buf.length} transcript=${JSON.stringify(text)}\n`); } catch {}
-      return text;
+      // salva uma cópia .ogg em uploads/audio (servido em /uploads) p/ tocar no inbox
+      let audioUrl: string | null = null;
+      try {
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const dir = path.join(process.cwd(), 'uploads', 'audio');
+        fs.mkdirSync(dir, { recursive: true });
+        const baseName = (path.basename(new URL(dlUrl).pathname).replace(/\.[^.]+$/, '') || String(Date.now()));
+        const file = `${baseName}.ogg`;
+        fs.writeFileSync(path.join(dir, file), buf);
+        audioUrl = `/uploads/audio/${file}`;
+      } catch (e: any) {
+        this.logger.warn(`falha ao salvar áudio p/ inbox: ${e?.message}`);
+      }
+      const transcript = await this.transcription.transcribe(buf);
+      return { transcript, audioUrl };
     } catch (e: any) {
       this.logger.warn(`transcrição de áudio inbound falhou: ${e?.message}`);
-      return null;
+      return empty;
     }
   }
 
   async process(rawBody: any, tenantId = 'default') {
     if (this.isFromMe(rawBody)) return { ignored: true, reason: 'fromMe' };
-    // DIAG TEMP: registra TODO inbound num arquivo sincrono (sem buffer) p/ diagnostico de audio
-    try { require('node:fs').appendFileSync('inbound-debug.log', new Date().toISOString() + ' ' + JSON.stringify(rawBody ?? {}).slice(0, 2000) + '\n'); } catch {}
 
     // DEDUP: se já processamos essa mensagem, ignora (evita resposta/processamento dobrado)
     const msgId = this.messageId(rawBody);
@@ -206,17 +218,18 @@ export class WhatsappService {
     const n = this.normalize(rawBody);
     if (!n.phone) return { ignored: true, reason: 'sem telefone' };
     if (!n.isValidBrazilPhone) return { ignored: true, reason: `telefone inválido: ${n.phone}` };
+    let inboundAudioUrl: string | null = null;
     if (n.isMedia) {
-      this.logger.warn(`[audio-debug] payload: ${JSON.stringify(rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {}).slice(0, 900)}`);
       // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
-      const transcript = await this.transcribeInboundAudio(rawBody).catch(() => null);
-      if (transcript) {
-        this.logger.log(`Áudio transcrito de ${n.phone}: "${transcript.slice(0, 80)}"`);
-        n.text = transcript;
-        n.normalizedText = transcript.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+      const r = await this.transcribeInboundAudio(rawBody).catch(() => ({ transcript: null, audioUrl: null }));
+      if (r.transcript) {
+        this.logger.log(`Áudio transcrito de ${n.phone}: "${r.transcript.slice(0, 80)}"`);
+        n.text = r.transcript;
+        n.normalizedText = r.transcript.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
         n.isOptOut = STOP_WORDS.some((w) => n.normalizedText.includes(w.normalize('NFD').replace(/\p{Diacritic}/gu, '')));
         n.isMedia = false;
         n.shouldProcess = true;
+        inboundAudioUrl = r.audioUrl;
       } else {
         return { ignored: true, reason: 'mídia sem texto (sem transcrição)', phone: n.phone };
       }
@@ -315,7 +328,7 @@ export class WhatsappService {
     }
 
     // 4) grava a mensagem inbound (empurra pro inbox via WebSocket)
-    await this.conversations.addMessage(tenantId, conv.id, { direction: 'inbound', content: n.text });
+    await this.conversations.addMessage(tenantId, conv.id, { direction: 'inbound', content: n.text, metadata: inboundAudioUrl ? { audioUrl: inboundAudioUrl, audio: true } : undefined });
 
     // lead respondeu → para a cadência de follow-up
     await this.followup.stop(conv.id, 'respondeu');

@@ -95,10 +95,19 @@ A integração de leitura com o TMS — usada pelo enriquecimento de contato (AD
 e pelo diagnóstico de suporte (ADR 015) — consome uma API ou conexão fornecida pelo
 Uelder. Este adendo registra o contrato acordado.
 
-> **⚠️ PREENCHER quando os endpoints/campos forem entregues pelo Uelder.**
-> Enquanto não chega: `lookupCustomer()` e demais métodos de diagnóstico continuam
-> com a implementação atual — retornam `null` quando `TMS_API_BASE_URL` não estiver
-> configurado (fallback seguro, sem quebrar o fluxo).
+> **✅ IMPLEMENTADO (2026-06-14).** O TMS expõe a API interna de leitura `/nexa/*`
+> (módulo `nexa-external`, read-only, protegido por `InternalTokenGuard`). O conector
+> Nexa (`HiperTmsConnector`) consome esses endpoints; sem `TMS_API_BASE_URL`/token,
+> retorna `null` (fallback seguro, sem quebrar o fluxo).
+>
+> **Endpoints (TMS):**
+> - `GET /nexa/customers/by-phone?phone=` → `{ found, customer: { externalId, name, email?, plan?, status, registeredAt? } }` — consumido por `lookupCustomer()`.
+> - `GET /nexa/contract?tenantId=` → `{ found, contract: { externalId, plan, status, expiresAt?, documentsUsed?, documentsLimit? } }` — consumido por `getContractStatus()` (`externalId` = `tenantId`).
+> - `GET /nexa/fiscal/document?tenantId=&type=cte|mdfe&key=` → `{ found, document: { documentId, type, status, issuedAt?, rejectionCode?, rejectionMessage? } }` — **pronto no TMS, ainda não ligado** no conector (a assinatura `getDocumentStatus(externalId, type)` precisa passar `tenantId` + `key`).
+>
+> **Auth:** header `x-internal-token`. Valor: TMS `NEXA_INTERNAL_TOKEN` = Nexa `TMS_INTERNAL_TOKEN` (fallback `TMS_SERVICE_TOKEN`). Read-only (somente SELECT, sempre filtrado por tenant).
+>
+> `getRejectionInfo()` continua resolvido por tabela local (não depende do TMS).
 
 ### Requisitos de segurança da conexão (não-negociáveis)
 
