@@ -50,19 +50,24 @@ describe('SenderService — regras de negocio', () => {
     });
   });
 
-  describe('withinBusinessHours (7h-19h Brasilia)', () => {
-    const within = () => (makeSvc() as any).withinBusinessHours() as boolean;
-    it('dentro do horario comercial -> true', () => {
+  describe('withinWaWindow (janela WhatsApp por tenant; default 7h-19h Brasilia)', () => {
+    // prisma mockado sem settings salvos -> cai nos defaults de env (7-19)
+    function svcWithPrisma(): SenderService {
+      const prisma = { senderSettings: { findUnique: vi.fn().mockResolvedValue(null) } };
+      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+    }
+    const within = () => (svcWithPrisma() as any).withinWaWindow('default') as Promise<boolean>;
+    it('dentro do horario comercial -> true', async () => {
       setUtc(13); // 10h BRT
-      expect(within()).toBe(true);
+      expect(await within()).toBe(true);
     });
-    it('antes das 7h -> false', () => {
+    it('antes das 7h -> false', async () => {
       setUtc(9); // 6h BRT
-      expect(within()).toBe(false);
+      expect(await within()).toBe(false);
     });
-    it('depois das 19h -> false', () => {
+    it('depois das 19h -> false', async () => {
       setUtc(23); // 20h BRT
-      expect(within()).toBe(false);
+      expect(await within()).toBe(false);
     });
   });
 
