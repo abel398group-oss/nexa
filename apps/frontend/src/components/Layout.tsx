@@ -253,23 +253,23 @@ export function Layout() {
   return (
     <DateRangeProvider>
     <div className="h-full">
-      {/* ===== SIDEBAR (midnight) — fixar/recolher empurrando o conteúdo (não sobrepõe) ===== */}
+      {/* ===== SIDEBAR (midnight) — fixada (empurra) OU expande no hover (sobreposto) ===== */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-[width] duration-200 ease-layout ${
-          navOpen ? 'w-60' : 'w-16'
+        className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-[width] duration-200 ease-layout ${
+          navOpen ? 'w-60' : 'w-16 hover:w-60 hover:shadow-elevated'
         }`}
       >
-        {/* marca: símbolo no rail, wordmark quando expandido */}
+        {/* marca: símbolo no rail, wordmark quando expandido (fixado ou hover) */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-          {navOpen && <span className="whitespace-nowrap text-base font-semibold tracking-tight text-white">Nexa</span>}
+          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${navOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>Nexa</span>
         </div>
 
         <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
           {visibleGroups.map((g, gi) => (
             <div key={gi} className={gi > 0 ? 'pt-3' : ''}>
-              {g.label && navOpen && (
-                <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+              {g.label && (
+                <div className={`px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${navOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
                   {g.label}
                 </div>
               )}
@@ -280,7 +280,7 @@ export function Layout() {
                   title={it.label}
                   className={({ isActive }) =>
                     `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      navOpen ? 'justify-start' : 'justify-center'
+                      navOpen ? 'justify-start' : 'justify-center group-hover/sb:justify-start'
                     } ${
                       isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
                     }`
@@ -292,7 +292,7 @@ export function Layout() {
                         <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
                       )}
                       <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                      {navOpen && <span className="truncate whitespace-nowrap">{it.label}</span>}
+                      <span className={`truncate whitespace-nowrap ${navOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{it.label}</span>
                     </>
                   )}
                 </NavLink>
@@ -301,24 +301,22 @@ export function Layout() {
           ))}
         </nav>
 
-        {/* rodapé — só quando expandido */}
-        {navOpen && (
-          <div className="shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45">
-            <div className="truncate">{user?.email}</div>
-            <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
-          </div>
-        )}
+        {/* rodapé — só quando expandido (fixado ou hover) */}
+        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${navOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
+          <div className="truncate">{user?.email}</div>
+          <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
+        </div>
       </aside>
 
-      {/* ===== COLUNA PRINCIPAL (empurrada pela largura da sidebar) ===== */}
+      {/* ===== COLUNA PRINCIPAL — empurrada só quando a sidebar está FIXADA (hover é sobreposto) ===== */}
       <div className={`flex h-full min-w-0 flex-col transition-[padding] duration-200 ${navOpen ? 'pl-60' : 'pl-16'}`}>
         {/* topbar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-6" style={{ background: 'var(--surface)' }}>
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={toggleNav}
-              title={navOpen ? 'Recolher menu' : 'Expandir menu'}
-              aria-label={navOpen ? 'Recolher menu' : 'Expandir menu'}
+              title={navOpen ? 'Desafixar menu (volta a abrir no hover)' : 'Fixar menu aberto'}
+              aria-label={navOpen ? 'Desafixar menu' : 'Fixar menu'}
               className="-ml-1 shrink-0 rounded-md p-1.5 text-base-content/60 outline-none transition-colors hover:bg-base-200 hover:text-base-content focus-visible:ring-2 focus-visible:ring-brand-500/30"
             >
               <Icon name={navOpen ? 'chevronLeft' : 'chevronRight'} className="h-5 w-5" />

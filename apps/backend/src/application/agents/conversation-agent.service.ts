@@ -146,13 +146,15 @@ export class ConversationAgentService {
 
     // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
     // Busca o telefone da conversa para consultar o TMS antes de rotear
-    if (input.conversationId && route.agent === 'sales') {
+    // Roda tanto p/ 'sales' (redireciona cliente → suporte) quanto p/ 'support'
+    // (precisamos saber se é cliente DE VERDADE; se não for, é prospect e tratamos abaixo).
+    if (input.conversationId && !handoffContext && !hasPanel && (route.agent === 'sales' || route.agent === 'support')) {
       const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
       if (convForPhone?.phone) {
         const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]);
         const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
         if (tmsInfo) {
-          // É cliente TMS: redireciona para suporte
+          // É cliente TMS: garante rota suporte + identidade
           route = { ...route, agent: 'support' };
           tmsCustomer = {
             name: tmsInfo.name,
@@ -215,6 +217,20 @@ export class ConversationAgentService {
 
       case 'support':
       default: {
+        // PROSPECT (não é cliente do TMS) pedindo suporte → suporte é pós-venda:
+        // a Lia orienta a se cadastrar em vez de atender. Cliente (tmsCustomer / painel /
+        // handoff) segue pro suporte normal. Pré-venda já fica em 'sales' (não cai aqui).
+        if (!tmsCustomer && !hasPanel && !handoffContext) {
+          const pb = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } }).catch(() => null);
+          const signup = pb?.signupUrl?.trim();
+          draft = signup
+            ? `Pra usar nosso suporte é só ter uma conta — leva 2 minutos: ${signup}\n\nDepois disso você tem o chat de suporte direto por aqui. Quer que eu te ajude a começar agora?`
+            : `Nosso suporte é exclusivo pra clientes. Criar sua conta é rapidinho — quer que eu te ajude a começar agora?`;
+          suggestedAction = 'none';
+          scripted = true;
+          this.logger.log('Prospect pediu suporte sem ser cliente → orientação de cadastro');
+          break;
+        }
         // Passa conversationId para que o SupportAgent recupere o histórico da conversa
         const r = await this.support.ask(tenantId, { question: agentMessage, conversationId: input.conversationId, tmsCustomer });
         draft = r.draft;
