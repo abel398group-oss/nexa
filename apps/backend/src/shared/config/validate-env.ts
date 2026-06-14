@@ -19,6 +19,7 @@ const REQUIRED_IN_PROD = [
   'JWT_REFRESH_SECRET',
   'ANTHROPIC_API_KEY',
   'WAHA_WEBHOOK_TOKEN',
+  'PORTAL_JWT_SECRET',
 ];
 
 // Marcas de valor "placeholder" herdado do .env.example — proibido em produção
@@ -41,7 +42,7 @@ export function validateEnv(): void {
   }
 
   // Segredos de assinatura precisam de entropia mínima
-  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'PORTAL_JWT_SECRET']) {
     const val = process.env[key] ?? '';
     if (val && val.length < 32) {
       problems.push(`${key} é curto demais (< 32 caracteres) — gere um segredo forte`);

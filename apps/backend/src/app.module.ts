@@ -12,6 +12,7 @@ import { GovernanceModule } from './shared/governance/governance.module';
 import { WahaModule } from './shared/waha/waha.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { AdminModule } from './application/admin/admin.module';
+import { PortalModule } from './application/portal/portal.module';
 import { MetricsModule } from './application/metrics/metrics.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { SellersModule } from './application/sellers/sellers.module';
@@ -74,6 +75,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     HandoffModule,
     EmailModule,
     AdminModule,
+    PortalModule,
     MetricsModule,
     WhatsappModule,
     SellersModule,
