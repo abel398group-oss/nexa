@@ -1,2 +1,0 @@
-✘ [ERROR] "loader" without extension only applies when reading from stdin
-
