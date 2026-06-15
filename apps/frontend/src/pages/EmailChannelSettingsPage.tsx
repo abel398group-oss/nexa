@@ -3,27 +3,32 @@
  * Rota: /settings/email-channel
  */
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { api } from '@/lib/api';
 import { Button, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
-interface FormState {
-  fromEmail: string;
-  fromName: string;
-  replyTo: string;
-  smtpHost: string;
-  smtpPort: string;
-  smtpUser: string;
-  smtpPass: string;
-  smtpSecure: boolean;
-  imapHost: string;
-  imapPort: string;
-  imapUser: string;
-  imapPass: string;
-  imapMailbox: string;
-  isActive: boolean;
-}
+// validação do canal de e-mail (RHF + Zod). Portas como string (input number → string).
+const emailSchema = z.object({
+  fromEmail: z.string().trim().email('E-mail de envio inválido'),
+  fromName: z.string().trim().optional().or(z.literal('')),
+  replyTo: z.string().trim().email('Reply-To inválido').optional().or(z.literal('')),
+  smtpHost: z.string().trim().min(1, 'Informe o servidor SMTP'),
+  smtpPort: z.string().trim().min(1, 'Informe a porta'),
+  smtpUser: z.string().trim().email('Usuário SMTP inválido'),
+  smtpPass: z.string().optional().or(z.literal('')),
+  smtpSecure: z.boolean(),
+  imapHost: z.string().trim().min(1, 'Informe o servidor IMAP'),
+  imapPort: z.string().trim().min(1, 'Informe a porta'),
+  imapUser: z.string().trim().email('Usuário IMAP inválido'),
+  imapPass: z.string().optional().or(z.literal('')),
+  imapMailbox: z.string().trim().min(1, "Normalmente 'INBOX'"),
+  isActive: z.boolean(),
+});
+type EmailForm = z.infer<typeof emailSchema>;
 
-const DEFAULT: FormState = {
+const DEFAULT: EmailForm = {
   fromEmail: '',
   fromName: 'Lia HiperTMS',
   replyTo: '',
@@ -41,19 +46,26 @@ const DEFAULT: FormState = {
 };
 
 export function EmailChannelSettingsPage() {
-  const [form, setForm] = useState<FormState>(DEFAULT);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
   const [showPasses, setShowPasses] = useState(false);
 
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<EmailForm>({ resolver: zodResolver(emailSchema), defaultValues: DEFAULT });
+
+  // carrega config existente e popula o form
   useEffect(() => {
     api.get('/settings/email-channel')
       .then((r) => {
         if (r.data) {
-          setForm((prev) => ({
-            ...prev,
+          reset({
+            ...DEFAULT,
             fromEmail: r.data.fromEmail ?? '',
             fromName: r.data.fromName ?? 'Lia HiperTMS',
             replyTo: r.data.replyTo ?? '',
@@ -66,22 +78,23 @@ export function EmailChannelSettingsPage() {
             imapUser: r.data.imapUser ?? '',
             imapMailbox: r.data.imapMailbox ?? 'INBOX',
             isActive: r.data.isActive ?? true,
-          }));
+          });
         }
       })
       .catch(() => {/* canal ainda não configurado — usa defaults */})
       .finally(() => setLoading(false));
-  }, []);
+  }, [reset]);
 
-  function set(key: keyof FormState, value: string | boolean) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
-  }
+  // some o aviso "salvo" assim que o usuário edita qualquer campo
+  useEffect(() => {
+    const sub = watch(() => setSaved(false));
+    return () => sub.unsubscribe();
+  }, [watch]);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
+  const smtpPass = watch('smtpPass');
+  const imapPass = watch('imapPass');
+
+  const onSubmit = async (form: EmailForm) => {
     setSaved(false);
     try {
       await api.put('/settings/email-channel', {
@@ -101,14 +114,12 @@ export function EmailChannelSettingsPage() {
         isActive: form.isActive,
       });
       setSaved(true);
-      // Limpa os campos de senha após salvar (segurança)
-      setForm((prev) => ({ ...prev, smtpPass: '', imapPass: '' }));
+      // limpa os campos de senha após salvar (segurança)
+      reset({ ...form, smtpPass: '', imapPass: '' });
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Erro ao salvar configurações.');
-    } finally {
-      setSaving(false);
+      setError('root', { message: err?.response?.data?.message ?? 'Erro ao salvar configurações.' });
     }
-  }
+  };
 
   if (loading) {
     return <div className="p-8 text-base-content/50">Carregando configurações...</div>;
@@ -123,7 +134,7 @@ export function EmailChannelSettingsPage() {
         subtitle="Configure o endereço de e-mail da Lia para enviar e receber mensagens. Use as credenciais do servidor de e-mail (Hostgator / cPanel)."
       />
 
-      <form onSubmit={save} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
         {/* ── Status ─────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between rounded-xl border border-base-200 bg-white p-4">
@@ -134,45 +145,21 @@ export function EmailChannelSettingsPage() {
             </div>
           </div>
           <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              className="peer sr-only"
-              checked={form.isActive}
-              onChange={(e) => set('isActive', e.target.checked)}
-            />
+            <input type="checkbox" className="peer sr-only" {...register('isActive')} />
             <div className="peer h-6 w-11 rounded-full bg-base-300 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-primary peer-checked:after:translate-x-full" />
           </label>
         </div>
 
         {/* ── Remetente ──────────────────────────────────────────────── */}
         <Section title="Remetente" subtitle="Endereço que o lead vê ao receber o e-mail.">
-          <Field label="E-mail de envio" required>
-            <input
-              type="email"
-              value={form.fromEmail}
-              onChange={(e) => set('fromEmail', e.target.value)}
-              placeholder="lia@hipertms.com.br"
-              className="input input-bordered w-full"
-              required
-            />
+          <Field label="E-mail de envio" required error={errors.fromEmail?.message}>
+            <input type="email" {...register('fromEmail')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
           </Field>
           <Field label="Nome de exibição">
-            <input
-              type="text"
-              value={form.fromName}
-              onChange={(e) => set('fromName', e.target.value)}
-              placeholder="Lia HiperTMS"
-              className="input input-bordered w-full"
-            />
+            <input type="text" {...register('fromName')} placeholder="Lia HiperTMS" className="input input-bordered w-full" />
           </Field>
-          <Field label="Reply-To (opcional)" hint="E-mail que recebe respostas manuais do lead.">
-            <input
-              type="email"
-              value={form.replyTo}
-              onChange={(e) => set('replyTo', e.target.value)}
-              placeholder="contato@hipertms.com.br"
-              className="input input-bordered w-full"
-            />
+          <Field label="Reply-To (opcional)" hint="E-mail que recebe respostas manuais do lead." error={errors.replyTo?.message}>
+            <input type="email" {...register('replyTo')} placeholder="contato@hipertms.com.br" className="input input-bordered w-full" />
           </Field>
         </Section>
 
@@ -180,54 +167,24 @@ export function EmailChannelSettingsPage() {
         <Section title="SMTP — Envio" subtitle="Servidor de saída. Hostgator: mail.hipertms.com.br porta 465.">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <Field label="Servidor SMTP">
-                <input
-                  type="text"
-                  value={form.smtpHost}
-                  onChange={(e) => set('smtpHost', e.target.value)}
-                  placeholder="mail.hipertms.com.br"
-                  className="input input-bordered w-full"
-                />
+              <Field label="Servidor SMTP" error={errors.smtpHost?.message}>
+                <input type="text" {...register('smtpHost')} placeholder="mail.hipertms.com.br" className="input input-bordered w-full" />
               </Field>
             </div>
             <div>
-              <Field label="Porta">
-                <input
-                  type="number"
-                  value={form.smtpPort}
-                  onChange={(e) => set('smtpPort', e.target.value)}
-                  className="input input-bordered w-full"
-                />
+              <Field label="Porta" error={errors.smtpPort?.message}>
+                <input type="number" {...register('smtpPort')} className="input input-bordered w-full" />
               </Field>
             </div>
           </div>
-          <Field label="Usuário SMTP" required>
-            <input
-              type="email"
-              value={form.smtpUser}
-              onChange={(e) => set('smtpUser', e.target.value)}
-              placeholder="lia@hipertms.com.br"
-              className="input input-bordered w-full"
-              required
-            />
+          <Field label="Usuário SMTP" required error={errors.smtpUser?.message}>
+            <input type="email" {...register('smtpUser')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
           </Field>
-          <Field label="Senha SMTP" hint={form.smtpPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
-            <input
-              type={showPasses ? 'text' : 'password'}
-              value={form.smtpPass}
-              onChange={(e) => set('smtpPass', e.target.value)}
-              placeholder="••••••••"
-              className="input input-bordered w-full"
-              autoComplete="new-password"
-            />
+          <Field label="Senha SMTP" hint={smtpPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
+            <input type={showPasses ? 'text' : 'password'} {...register('smtpPass')} placeholder="••••••••" className="input input-bordered w-full" autoComplete="new-password" />
           </Field>
           <label className="flex items-center gap-2 text-sm text-base-content/70">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm"
-              checked={form.smtpSecure}
-              onChange={(e) => set('smtpSecure', e.target.checked)}
-            />
+            <input type="checkbox" className="checkbox checkbox-sm" {...register('smtpSecure')} />
             Usar SSL/TLS (recomendado — porta 465)
           </label>
         </Section>
@@ -236,71 +193,35 @@ export function EmailChannelSettingsPage() {
         <Section title="IMAP — Recebimento" subtitle="Servidor de entrada. Hostgator: mail.hipertms.com.br porta 993.">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <Field label="Servidor IMAP">
-                <input
-                  type="text"
-                  value={form.imapHost}
-                  onChange={(e) => set('imapHost', e.target.value)}
-                  placeholder="mail.hipertms.com.br"
-                  className="input input-bordered w-full"
-                />
+              <Field label="Servidor IMAP" error={errors.imapHost?.message}>
+                <input type="text" {...register('imapHost')} placeholder="mail.hipertms.com.br" className="input input-bordered w-full" />
               </Field>
             </div>
             <div>
-              <Field label="Porta">
-                <input
-                  type="number"
-                  value={form.imapPort}
-                  onChange={(e) => set('imapPort', e.target.value)}
-                  className="input input-bordered w-full"
-                />
+              <Field label="Porta" error={errors.imapPort?.message}>
+                <input type="number" {...register('imapPort')} className="input input-bordered w-full" />
               </Field>
             </div>
           </div>
-          <Field label="Usuário IMAP" required>
-            <input
-              type="email"
-              value={form.imapUser}
-              onChange={(e) => set('imapUser', e.target.value)}
-              placeholder="lia@hipertms.com.br"
-              className="input input-bordered w-full"
-              required
-            />
+          <Field label="Usuário IMAP" required error={errors.imapUser?.message}>
+            <input type="email" {...register('imapUser')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
           </Field>
-          <Field label="Senha IMAP" hint={form.imapPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
-            <input
-              type={showPasses ? 'text' : 'password'}
-              value={form.imapPass}
-              onChange={(e) => set('imapPass', e.target.value)}
-              placeholder="••••••••"
-              className="input input-bordered w-full"
-              autoComplete="new-password"
-            />
+          <Field label="Senha IMAP" hint={imapPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
+            <input type={showPasses ? 'text' : 'password'} {...register('imapPass')} placeholder="••••••••" className="input input-bordered w-full" autoComplete="new-password" />
           </Field>
-          <Field label="Caixa IMAP" hint="Normalmente 'INBOX'.">
-            <input
-              type="text"
-              value={form.imapMailbox}
-              onChange={(e) => set('imapMailbox', e.target.value)}
-              placeholder="INBOX"
-              className="input input-bordered w-full"
-            />
+          <Field label="Caixa IMAP" hint="Normalmente 'INBOX'." error={errors.imapMailbox?.message}>
+            <input type="text" {...register('imapMailbox')} placeholder="INBOX" className="input input-bordered w-full" />
           </Field>
         </Section>
 
         {/* mostrar/ocultar senhas */}
         <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/60">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-xs"
-            checked={showPasses}
-            onChange={(e) => setShowPasses(e.target.checked)}
-          />
+          <input type="checkbox" className="checkbox checkbox-xs" checked={showPasses} onChange={(e) => setShowPasses(e.target.checked)} />
           Mostrar senhas
         </label>
 
-        {error && (
-          <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">{error}</div>
+        {errors.root && (
+          <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">{errors.root.message}</div>
         )}
         {saved && (
           <div className="rounded-lg bg-success/10 px-4 py-3 text-sm text-success">
@@ -309,8 +230,8 @@ export function EmailChannelSettingsPage() {
         )}
 
         <div className="flex justify-end gap-3 border-t border-base-200 pt-4">
-          <Button type="submit" loading={saving}>
-            {saving ? 'Salvando…' : 'Salvar configurações'}
+          <Button type="submit" loading={isSubmitting}>
+            {isSubmitting ? 'Salvando…' : 'Salvar configurações'}
           </Button>
         </div>
       </form>
@@ -332,14 +253,15 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
   );
 }
 
-function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+function Field({ label, required, hint, error, children }: { label: string; required?: boolean; hint?: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <label className="text-sm font-medium text-base-content/80">
         {label}{required && <span className="text-error ml-1">*</span>}
       </label>
       {children}
-      {hint && <p className="text-xs text-base-content/40">{hint}</p>}
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      {!error && hint && <p className="text-xs text-base-content/40">{hint}</p>}
     </div>
   );
 }

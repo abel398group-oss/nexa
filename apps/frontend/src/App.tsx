@@ -15,6 +15,7 @@ import { LoginPage } from '@/pages/LoginPage';
 const InboxPage = lazy(() => import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })));
 const SupportPage = lazy(() => import('@/pages/SupportPage').then((m) => ({ default: m.SupportPage })));
 const SupportConfigPage = lazy(() => import('@/pages/SupportConfigPage').then((m) => ({ default: m.SupportConfigPage })));
+const SupportClientsPage = lazy(() => import('@/pages/SupportClientsPage').then((m) => ({ default: m.SupportClientsPage })));
 const ContactsPage = lazy(() => import('@/pages/ContactsPage').then((m) => ({ default: m.ContactsPage })));
 const KnowledgePage = lazy(() => import('@/pages/KnowledgePage').then((m) => ({ default: m.KnowledgePage })));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
@@ -64,6 +65,7 @@ export default function App() {
                     <Route path="/dashboard" element={<Perm perm="dashboard"><DashboardPage /></Perm>} />
                     <Route path="/support" element={<Perm perm="inbox"><SupportPage /></Perm>} />
                     <Route path="/support/config" element={<Perm perm="ai_control"><SupportConfigPage /></Perm>} />
+                    <Route path="/support/clients" element={<Perm perm="inbox"><SupportClientsPage /></Perm>} />
                     <Route path="/contacts" element={<Perm perm="contacts"><ContactsPage /></Perm>} />
                     <Route path="/knowledge" element={<Perm perm="knowledge"><KnowledgePage /></Perm>} />
                     <Route path="/sellers" element={<Perm perm="sellers"><SellersPage /></Perm>} />

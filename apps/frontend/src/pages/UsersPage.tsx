@@ -114,7 +114,7 @@ export function UsersPage() {
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Usuários' }]} />}
         title="Usuários & Acessos"
         subtitle="Crie logins e marque quais áreas cada um pode acessar. Admin acessa tudo."
-        actions={<Button onClick={() => { setShow(true); setErr(''); }}>+ Novo usuário</Button>}
+        actions={<Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo usuário</Button>}
       />
 
       {/* busca + filtro por perfil */}
@@ -170,27 +170,36 @@ export function UsersPage() {
       </div>
 
       <Modal open={show} onClose={() => setShow(false)} title="Novo usuário" size="sm">
-        <form onSubmit={create} className="space-y-3">
-          <Input placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input placeholder="E-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input type="password" placeholder="Senha (mín. 6)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <div>
+            <Input placeholder="Nome" {...register('name')} />
+            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+          </div>
+          <div>
+            <Input placeholder="E-mail" {...register('email')} />
+            {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+          </div>
+          <div>
+            <Input type="password" placeholder="Senha (mín. 6)" {...register('password')} />
+            {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
+          </div>
           <div>
             <Label className="mb-1 block text-xs text-base-content/60">Papel</Label>
-            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <Select {...register('role')}>
               <option value="operacional">Operacional</option>
               <option value="gestor">Gestor</option>
               <option value="vendedor">Vendedor</option>
               <option value="admin">Administrador (acesso total)</option>
             </Select>
           </div>
-          {form.role !== 'admin' && (
+          {role !== 'admin' && (
             <div>
               <Label className="mb-1 block text-xs text-base-content/60">Áreas liberadas</Label>
               <div className="flex flex-wrap gap-2">
                 {ALL_AREAS.map((a) => {
-                  const on = form.permissions.includes(a);
+                  const on = permissions.includes(a);
                   return (
-                    <button type="button" key={a} onClick={() => setForm({ ...form, permissions: togglePerm(form.permissions, a) })}
+                    <button type="button" key={a} onClick={() => setValue('permissions', togglePerm(permissions, a))}
                       className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 bg-white text-base-content/50'}`}>
                       {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
                     </button>
@@ -199,10 +208,10 @@ export function UsersPage() {
               </div>
             </div>
           )}
-          {err && <p className="text-sm text-red-500">{err}</p>}
+          {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => setShow(false)}>Cancelar</Button>
-            <Button type="submit" loading={busy}>{busy ? 'Criando...' : 'Criar'}</Button>
+            <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Criando...' : 'Criar'}</Button>
           </div>
         </form>
       </Modal>
