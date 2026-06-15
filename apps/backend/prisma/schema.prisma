@@ -579,7 +579,8 @@ model Notification {
 model SalesPlaybook {
   id         String   @id @default(uuid())
   tenantId   String   @unique @map("tenant_id")
-  persona    String   @default("") // tom/identidade extra injetado no prompt
+  persona    String   @default("") // tom/identidade extra injetado no prompt (VENDAS)
+  supportPersona String @default("") @map("support_persona") // tom extra injetado no prompt (SUPORTE)
   objections Json     @default("[]") // [{ objection, guidance }]
   ctaCold    String   @default("") @map("cta_cold")
   ctaWarm    String   @default("") @map("cta_warm")

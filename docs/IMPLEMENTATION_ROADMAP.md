@@ -97,6 +97,10 @@ Depois:
 - [ ] Support Agent
 - [ ] Escalação para humano
 - [ ] Chatwoot (opcional — não necessário para validar o suporte)
+- [x] Separação Vendas × Suporte na UI + persona de suporte editável →
+  ver [`features/sales-support-separation/implementation.md`](features/sales-support-separation/implementation.md)
+- [x] Portal de Suporte do cliente →
+  ver [`features/support-portal/implementation.md`](features/support-portal/implementation.md)
 
 **Entregável:** clientes tiram dúvidas sozinhos.
 

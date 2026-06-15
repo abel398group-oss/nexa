@@ -127,6 +127,11 @@ model HandoffToken {
 
 ### Modalidade C — Web Chat Embutido (Phase 2)
 
+> **Status (2026-06): em implementação.** O detalhamento da Modalidade C foi
+> promovido para a **ADR 027 — Web Chat de Suporte embutido** (canal `web_chat`,
+> transporte Socket.IO, autenticação do widget, fallback de WhatsApp). PRD em
+> `docs/features/support-web-chat/prd.md`.
+
 Widget JavaScript embutido no painel do HiperTMS que abre um chat sem sair da tela.
 
 ```
@@ -148,7 +153,7 @@ Requer: novo `SourceChannel.web_chat`, widget frontend, autenticação por ifram
 |---|---|---|---|---|
 | A — Link + marcador `[via-painel-tms]` | Via lookupCustomer + roteamento direto | ❌ sem página/erro | 1h | **Agora** |
 | B — Token contextual assinado | ✅ token tem precedência sobre lookup | ✅ página + código de erro | 1 sprint | Pós-deploy |
-| C — Web chat embutido | ✅ total | ✅ total | 2-3 sprints | Roadmap |
+| C — Web chat embutido | ✅ total | ✅ total | 2-3 sprints | **Em implementação (ADR 027)** |
 
 ---
 

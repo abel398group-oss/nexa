@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
+import { PlaybookService } from '@/application/playbook/playbook.service';
 import { SalesAgentService } from './sales-agent.service';
 import { DiagnosticResult } from './diagnostic-agent.service';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
@@ -20,6 +21,7 @@ export class ResolutionAgentService {
   constructor(
     private readonly ai: AnthropicService,
     private readonly knowledge: KnowledgeService,
+    private readonly playbook: PlaybookService,
   ) {}
 
   async resolve(input: {
@@ -44,8 +46,13 @@ export class ResolutionAgentService {
 
     const customerName = input.tmsCustomer?.name ?? 'cliente';
 
+    // Persona/tom editável do SUPORTE (Config de Suporte). Só afeta o tom — as
+    // regras fixas abaixo (anti-alucinação, usar só KB/diagnóstico) prevalecem.
+    const cfg = await this.playbook.get(input.tenantId).catch(() => null);
+    const supportTone = cfg?.supportPersona?.trim() ? `${cfg.supportPersona.trim()}\n` : '';
+
     const system = `Você é a Lia, assistente de SUPORTE do HiperTMS.
-Você está atendendo ${customerName}, que já é cliente ativo.
+${supportTone}Você está atendendo ${customerName}, que já é cliente ativo.
 NÃO tente vender. Foco: resolver o problema.
 
 Regras:

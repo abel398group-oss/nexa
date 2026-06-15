@@ -28,16 +28,17 @@ const NAV_GROUPS: NavGroup[] = [
   { label: null, items: [
     { to: '/dashboard', label: 'Painel', ic: 'dashboard', perm: 'dashboard' },
   ] },
-  { label: 'Atendimento', items: [
-    { to: '/inbox', label: 'Inbox', ic: 'inbox', perm: 'inbox' },
-    { to: '/support', label: 'Suporte', ic: 'support', perm: 'inbox' },
-  ] },
-  { label: 'Comercial', items: [
+  { label: 'Vendas', items: [
+    { to: '/inbox', label: 'Inbox de Vendas', ic: 'inbox', perm: 'inbox' },
     { to: '/contacts', label: 'Contatos', ic: 'contacts', perm: 'contacts' },
     { to: '/campaigns', label: 'Disparo', ic: 'campaigns', perm: 'campaigns' },
     { to: '/sender/health', label: 'Saúde dos números', ic: 'pulse', perm: 'campaigns' },
     { to: '/sellers', label: 'Vendedores', ic: 'sellers', perm: 'sellers' },
-    { to: '/playbook', label: 'Playbook IA', ic: 'playbook', perm: 'ai_control' },
+    { to: '/playbook', label: 'Playbook de Vendas', ic: 'playbook', perm: 'ai_control' },
+  ] },
+  { label: 'Suporte', items: [
+    { to: '/support', label: 'Inbox de Suporte', ic: 'support', perm: 'inbox' },
+    { to: '/support/config', label: 'Config de Suporte', ic: 'bot', perm: 'ai_control' },
   ] },
   { label: 'Conhecimento', items: [
     { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
@@ -50,8 +51,9 @@ const NAV_GROUPS: NavGroup[] = [
 
 const titles: Record<string, string> = {
   '/dashboard': 'Painel',
-  '/inbox': 'Inbox',
-  '/support': 'Suporte',
+  '/inbox': 'Inbox de Vendas',
+  '/support': 'Inbox de Suporte',
+  '/support/config': 'Config de Suporte',
   '/contacts': 'Contatos',
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',

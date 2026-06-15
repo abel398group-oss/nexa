@@ -39,14 +39,17 @@
 | `CORS_ORIGINS` | Origens permitidas (CSV) |
 | `JWT_SECRET` | Segredo de assinatura do access token (entropia mínima exigida) |
 | `JWT_REFRESH_SECRET` | Segredo de assinatura do refresh token |
+| `PORTAL_JWT_SECRET` | Segredo de assinatura da sessão do **portal do cliente** — isolado da auth interna (audience `portal`). Entropia mínima exigida. Nunca reusar `JWT_SECRET`. |
 
 > `AI_MODEL` não é segredo, mas entra aqui por ser configuração de ambiente
 > relevante. Os preços (`AI_PRICE_IN`/`AI_PRICE_OUT`) são opcionais.
 
 > **Validação no boot:** em produção, `validateEnv()` (`shared/config/validate-env.ts`)
 > **aborta o start** se `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`,
-> `ANTHROPIC_API_KEY` ou `WAHA_WEBHOOK_TOKEN` estiverem ausentes, fracos ou com
-> valor placeholder do `.env.example`. Ver `docs/security/security-overview.md`.
+> `ANTHROPIC_API_KEY`, `WAHA_WEBHOOK_TOKEN` ou `PORTAL_JWT_SECRET` estiverem
+> ausentes, fracos ou com valor placeholder do `.env.example`. Os três segredos de
+> assinatura (`JWT_SECRET`, `JWT_REFRESH_SECRET`, `PORTAL_JWT_SECRET`) exigem ≥ 32
+> caracteres. Ver `docs/security/security-overview.md`.
 
 > O cliente Anthropic trata `ANTHROPIC_API_KEY` ausente/placeholder (`xxxxx`)
 > como "não configurado" e degrada com segurança, sem vazar a chave.

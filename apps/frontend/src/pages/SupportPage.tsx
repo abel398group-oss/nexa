@@ -24,6 +24,7 @@ import {
 } from '@/shared/ui';
 import { getCategoryConfig, getPriorityConfig, CATEGORY_CONFIG } from '@/lib/ticket-category';
 import { getStatusConfig } from '@/lib/conversation-status';
+import { isSupportTicket } from '@/lib/conversation';
 
 /**
  * SupportPage — módulo de Suporte do Nexa.
@@ -48,9 +49,6 @@ interface Conversation {
   contact?: { name?: string | null } | null;
 }
 
-function isSupportTicket(c: Conversation): boolean {
-  return !!c.ticketCategory || c.customerStage === 'cliente_ativo' || c.status === 'escalated';
-}
 
 function timeAgo(iso?: string | null): string {
   if (!iso) return '—';

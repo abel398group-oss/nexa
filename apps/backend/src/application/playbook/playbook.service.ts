@@ -7,6 +7,7 @@ export interface Objection {
 }
 export interface PlaybookConfig {
   persona: string;
+  supportPersona: string; // tom da Lia de SUPORTE (separado do de vendas)
   objections: Objection[];
   ctaCold: string;
   ctaWarm: string;
@@ -20,6 +21,7 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     'Adote postura institucional e profissional, adequada a uma negociação B2B entre empresas: a economia e o ganho são para a EMPRESA do cliente (a operação de transporte), não para a pessoa. ' +
     'Fundamente o valor na metodologia de precificação do HiperTMS — consumo de combustível (km/litro), manutenção preventiva, depreciação do veículo, custos com motorista, impostos do CT-e, margem-alvo e as demais variáveis que compõem o custo real do transporte de carga. ' +
     'Use o vocabulário técnico do setor (custo por km, margem, frota, CT-e) com naturalidade e fale como uma especialista em gestão de transporte. Seja objetiva, segura e consultiva; evite gírias e excesso de informalidade.',
+  supportPersona: '',
   objections: [
     { objection: 'Tá caro', guidance: 'Reposicione o custo como investimento da operação: o HiperTMS evita multa fiscal, retrabalho e erro de precificação. Mostre que ao precificar pelo custo real (consumo, manutenção, depreciação, margem) o sistema se paga ao evitar poucos fretes mal cotados por mês. Compare com o prejuízo de um CT-e errado.' },
     { objection: 'Já uso outro sistema', guidance: 'Pergunte o que falta no atual; destaque o diferencial (tudo integrado: fiscal + frota + financeiro + precificação por custo real) e que a migração é acompanhada.' },
@@ -48,6 +50,7 @@ export class PlaybookService {
         data: {
           tenantId,
           persona: PLAYBOOK_DEFAULTS.persona,
+          supportPersona: PLAYBOOK_DEFAULTS.supportPersona,
           objections: PLAYBOOK_DEFAULTS.objections as any,
           ctaCold: PLAYBOOK_DEFAULTS.ctaCold,
           ctaWarm: PLAYBOOK_DEFAULTS.ctaWarm,
@@ -58,6 +61,7 @@ export class PlaybookService {
     }
     return {
       persona: row.persona || '',
+      supportPersona: (row as any).supportPersona || '',
       objections: (Array.isArray(row.objections) ? row.objections : []) as unknown as Objection[],
       ctaCold: row.ctaCold || PLAYBOOK_DEFAULTS.ctaCold,
       ctaWarm: row.ctaWarm || PLAYBOOK_DEFAULTS.ctaWarm,
@@ -74,6 +78,7 @@ export class PlaybookService {
       where: { tenantId },
       update: {
         ...(dto.persona !== undefined ? { persona: dto.persona } : {}),
+        ...(dto.supportPersona !== undefined ? { supportPersona: dto.supportPersona } : {}),
         ...(dto.objections !== undefined ? { objections: clean as any } : {}),
         ...(dto.ctaCold !== undefined ? { ctaCold: dto.ctaCold } : {}),
         ...(dto.ctaWarm !== undefined ? { ctaWarm: dto.ctaWarm } : {}),
@@ -83,6 +88,7 @@ export class PlaybookService {
       create: {
         tenantId,
         persona: dto.persona ?? PLAYBOOK_DEFAULTS.persona,
+        supportPersona: dto.supportPersona ?? PLAYBOOK_DEFAULTS.supportPersona,
         objections: (dto.objections !== undefined ? clean : PLAYBOOK_DEFAULTS.objections) as any,
         ctaCold: dto.ctaCold ?? PLAYBOOK_DEFAULTS.ctaCold,
         ctaWarm: dto.ctaWarm ?? PLAYBOOK_DEFAULTS.ctaWarm,

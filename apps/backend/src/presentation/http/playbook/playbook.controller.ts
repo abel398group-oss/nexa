@@ -7,6 +7,7 @@ import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
 class UpdatePlaybookDto {
   @IsOptional() @IsString() persona?: string;
+  @IsOptional() @IsString() supportPersona?: string;
   @IsOptional() @IsArray() objections?: { objection: string; guidance: string }[];
   @IsOptional() @IsString() ctaCold?: string;
   @IsOptional() @IsString() ctaWarm?: string;

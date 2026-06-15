@@ -12,6 +12,7 @@ import { ConversationOutcomeBadge } from '@/components/conversation/Conversation
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
 import { ConversationTimeline } from '@/components/conversation/ConversationTimeline';
 import { isWaitingInternalStale } from '@/lib/conversation-status';
+import { isSupportTicket } from '@/lib/conversation';
 import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
 
 interface Conversation {
@@ -134,6 +135,7 @@ export function InboxPage() {
 
   // conversas filtradas + ordenação: escalated primeiro, depois por lastActivityAt
   const filtered = convs
+    .filter((c) => !isSupportTicket(c)) // só conversas de venda — tickets vão pro Inbox de Suporte
     .filter((c) => activeFilter === 'all' || c.status === activeFilter)
     .sort((a, b) => {
       // escalated sempre no topo
