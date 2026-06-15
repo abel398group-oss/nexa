@@ -29,3 +29,9 @@ pgdata/
 redisdata/
 backups/
 uploads/
+
+# backend runtime/debug output (nunca versionar)
+apps/backend/.be.*
+apps/backend/.studio*
+apps/backend/err.txt
+*.tmp
