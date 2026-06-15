@@ -108,14 +108,11 @@ CORS_ORIGINS=https://nexa.SEU_DOMINIO,https://app.hipertms.SEU_DOMINIO  # CSV de
 
 ## Variáveis de build do frontend (CI)
 
-O `VITE_*` é resolvido **no build** (CI), não no runtime do container:
-
-| Variável (build) | Descrição |
-|---|---|
-| `VITE_API_URL` | Aponta para `NEXA_API_URL` (a API pública do Nexa). |
-| `VITE_WS_URL` | Endpoint WebSocket (`/ws`) público do Nexa. |
-
-(Confirmar os nomes reais de `VITE_*` no `apps/frontend` ao criar o workflow.)
+**Nenhuma.** O frontend usa `baseURL: '/api'` (relativo) e o Socket.IO conecta na
+mesma origem — ou seja, não há `VITE_*` de API/WS a injetar no build. O reverse proxy
+do host serve o SPA em `/` e roteia `/api` e `/ws` para o backend no **mesmo domínio**.
+Basta `pnpm --filter frontend build` gerar o `dist/`; o `Dockerfile` do frontend só
+empacota os estáticos no nginx.
 
 ## Checklist
 

@@ -48,7 +48,7 @@ function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   }
   return null;
 }
-interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; }
+interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; metadata?: Record<string, unknown> | null; }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
 interface TmsLookup { found: boolean; customer: TmsCustomer | null; }
 

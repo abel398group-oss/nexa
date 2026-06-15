@@ -1,0 +1,103 @@
+# ============================================================
+# Docker Compose - Producao (Droplet DigitalOcean)
+# ============================================================
+# Sem credenciais aqui. Tudo vem do .env (env_file), baseado no
+# .env.production.example. O BANCO do Nexa e Postgres GERENCIADO
+# (cluster DO) - NAO esta neste compose (ver deploy-managed-postgres.md).
+# Portas so em loopback (atras do reverse proxy do host). Rede propria
+# `nexa-network`, isolada do TMS. Portas/limites distintos do TMS.
+# ============================================================
+
+services:
+  backend:
+    image: ${DOCKERHUB_USERNAME:-ueldermartin}/nexa-backend:${IMAGE_TAG:-latest}
+    # .env carrega TODAS as vars de runtime (DATABASE_URL, JWT, ANTHROPIC, WAHA, TMS...).
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - TRANSFORMERS_CACHE=/usr/src/app/.cache
+    # Loopback: a API e alcancada pelo reverse proxy do host, nunca exposta crua.
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      redis:
+        condition: service_started
+      waha:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    # backend + modelos de IA. Ajustar a RAM real do droplet. Se estourar, o
+    # Docker mata SO este container (protege o TMS) em vez de derrubar o host.
+    mem_limit: 900m
+    volumes:
+      - nexa-models:/usr/src/app/.cache    # persiste o download dos modelos (embeddings/whisper)
+      - nexa-uploads:/usr/src/app/uploads  # audios/arquivos salvos (servidos em /uploads)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-ueldermartin}/nexa-frontend:${IMAGE_TAG:-latest}
+    # Loopback: servido pelo reverse proxy do host. 8081 p/ nao colidir com o TMS (8080).
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    # SEM porta no host - acessivel so dentro da nexa-network (redis://:senha@redis:6379)
+    volumes:
+      - nexa-redis:/data
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  waha:
+    image: devlikeapro/waha:latest   # gateway WhatsApp (NAO-oficial; sera trocado pela Cloud API)
+    environment:
+      - WAHA_API_KEY=${WAHA_API_KEY}  # mesma chave usada pelo backend (header X-Api-Key)
+      - WAHA_PRINT_QR=false           # QR via dashboard (tunel SSH na 1a vez) - ver runbook
+    # SEM porta no host - o backend chama http://waha:3000 pela nexa-network.
+    volumes:
+      - nexa-waha:/app/.sessions       # PERSISTE o pareamento (sobrevive a recreate - fix P5)
+    mem_limit: 512m                    # WAHA (engine WhatsApp Web) consome memoria
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+volumes:
+  nexa-redis:
+  nexa-waha:
+  nexa-models:
+  nexa-uploads:
+
+networks:
+  default:
+    name: nexa-network
+    driver: bridge

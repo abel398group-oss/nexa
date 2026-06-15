@@ -1,0 +1,68 @@
+# ============================================================
+# Dockerfile de producao - Nexa backend (NestJS + Prisma + IA local)
+# ============================================================
+# Imagem Debian "slim" (NAO alpine): os modulos nativos de IA
+# (onnxruntime-node, sharp, bcrypt) tem prebuilts para glibc, mas
+# frequentemente NAO para musl/alpine. Debian evita falhas nativas.
+# Espelha o padrao do TMS (build 2 estagios + `pnpm deploy`).
+# ============================================================
+
+# ---------- Estagio 1: build ----------
+FROM node:22-bookworm-slim AS builder
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# openssl: exigido pelo Prisma. python3/build-essential: fallback p/ compilar
+# qualquer modulo nativo sem prebuilt (bcrypt etc.).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl ca-certificates python3 build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Arquivos de dependencias primeiro (maximiza cache de layers)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/backend/prisma ./apps/backend/prisma
+COPY apps/backend/tsconfig*.json apps/backend/nest-cli.json ./apps/backend/
+COPY apps/backend/src ./apps/backend/src
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter backend exec prisma generate
+RUN pnpm --filter backend build
+
+# pnpm deploy: pacote standalone com node_modules portavel (evita MODULE_NOT_FOUND)
+RUN pnpm deploy --filter=backend --prod /prod/backend
+
+# (OPCIONAL - Opcao A do doc) pre-baixar os modelos de IA para dentro da imagem.
+# O servico de embeddings e a prova de falha (cai na busca textual se nao carregar),
+# entao por padrao usamos download em runtime + volume (Opcao B). Para pre-baixar,
+# descomente abaixo (aumenta a imagem ~200MB e exige rede no build):
+# RUN TRANSFORMERS_CACHE=/prod/backend/.cache node -e "const imp=new Function('m','return import(m)'); imp('@xenova/transformers').then(async({pipeline,env})=>{env.cacheDir='/prod/backend/.cache'; await pipeline('feature-extraction','Xenova/multilingual-e5-small'); await pipeline('automatic-speech-recognition','Xenova/whisper-base');})"
+
+# ---------- Estagio 2: runtime ----------
+FROM node:22-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+# Cache dos modelos de IA num caminho fixo e gravavel. Monte um volume aqui
+# (ver docker-compose.production.yml) para persistir o download entre recreates.
+ENV TRANSFORMERS_CACHE=/usr/src/app/.cache
+
+WORKDIR /usr/src/app
+
+# Copia do pacote standalone (ja inclui node_modules, dist, package.json, prisma)
+COPY --from=builder /prod/backend ./
+
+# pnpm deploy nao inclui o .prisma/client gerado - gerar no stage final
+RUN npx prisma@5 generate
+
+RUN mkdir -p uploads .cache
+
+EXPOSE 3001
+
+CMD ["node", "dist/main.js"]
