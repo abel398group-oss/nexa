@@ -31,7 +31,7 @@ export class ResolutionAgentService {
     history: string;
     tmsCustomer: { name: string } | null;
   }): Promise<ResolutionResult> {
-    const kb = await this.knowledge.retrieve(input.tenantId, input.message, 3);
+    const kb = await this.knowledge.retrieve(input.tenantId, input.message, 3, { excludeCategories: ['comercial'] });
     const usedKnowledge = kb.map((k) => ({ id: k.id, title: k.title, score: k.score }));
     const kbCtx = kb.map((k, i) => `[KB ${i + 1}: ${k.title}]\n${k.content}`).join('\n\n');
 

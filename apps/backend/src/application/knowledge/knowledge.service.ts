@@ -51,22 +51,23 @@ export class KnowledgeService {
   // 1ª opção: busca SEMÂNTICA (pgvector + embeddings e5-small) — entende sinônimo/paráfrase.
   // Fallback: scoring TEXTUAL (título>tags>tópico>conteúdo) se embeddings indisponível
   // ou se ainda não há vetores indexados (rodar reindex após a migração).
-  async retrieve(tenantId: string, query: string, topN = 3) {
+  async retrieve(tenantId: string, query: string, topN = 3, opts?: { excludeCategories?: string[] }) {
+    const ex = opts?.excludeCategories ?? [];
     // ── BUSCA SEMÂNTICA ──────────────────────────────────────────────────────
     if (this.embeddings.enabled && query?.trim()) {
       try {
         const vec = await this.embeddings.embed(query, 'query');
         if (vec) {
           const lit = EmbeddingsService.toVectorLiteral(vec);
+          const exClause = ex.length ? ' AND NOT (category = ANY($4::text[]))' : '';
+          const params: any[] = ex.length ? [lit, tenantId, topN, ex] : [lit, tenantId, topN];
           const rows = await this.prisma.$queryRawUnsafe<any[]>(
             `SELECT id, title, content, category, 1 - (embedding <=> $1::vector) AS score
                FROM ai_knowledge_base
-              WHERE tenant_id = $2 AND embedding IS NOT NULL
+              WHERE tenant_id = $2 AND embedding IS NOT NULL${exClause}
               ORDER BY embedding <=> $1::vector
               LIMIT $3`,
-            lit,
-            tenantId,
-            topN,
+            ...params,
           );
           if (rows && rows.length > 0) {
             return rows.map((r) => ({
@@ -108,7 +109,9 @@ export class KnowledgeService {
     if (terms.length === 0) return [];
 
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-    const scored = all
+    const exSet = new Set(ex);
+    const pool = exSet.size ? all.filter((kb) => !exSet.has(kb.category)) : all;
+    const scored = pool
       .map((kb) => {
         const title = norm(kb.title);
         const content = norm(kb.content);

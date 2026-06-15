@@ -48,7 +48,7 @@ export class SalesAgentService {
   ): Promise<SalesReply> {
     const productCode = input.productCode ?? 'hipertms';
     const [kb, plans, cfg] = await Promise.all([
-      this.knowledge.retrieve(tenantId, input.question, 2),
+      this.knowledge.retrieve(tenantId, input.question, 2, { excludeCategories: ['suporte'] }),
       this.connectors.getPlans(productCode).catch(() => []),
       this.playbook.get(tenantId),
     ]);
