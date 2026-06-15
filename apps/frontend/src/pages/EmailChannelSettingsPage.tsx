@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/lib/api';
-import { Button, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { Button, Input, Checkbox, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 // validação do canal de e-mail (RHF + Zod). Portas como string (input number → string).
 const emailSchema = z.object({
@@ -153,13 +153,13 @@ export function EmailChannelSettingsPage() {
         {/* ── Remetente ──────────────────────────────────────────────── */}
         <Section title="Remetente" subtitle="Endereço que o lead vê ao receber o e-mail.">
           <Field label="E-mail de envio" required error={errors.fromEmail?.message}>
-            <input type="email" {...register('fromEmail')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
+            <Input type="email" {...register('fromEmail')} placeholder="lia@hipertms.com.br" />
           </Field>
           <Field label="Nome de exibição">
-            <input type="text" {...register('fromName')} placeholder="Lia HiperTMS" className="input input-bordered w-full" />
+            <Input type="text" {...register('fromName')} placeholder="Lia HiperTMS" />
           </Field>
           <Field label="Reply-To (opcional)" hint="E-mail que recebe respostas manuais do lead." error={errors.replyTo?.message}>
-            <input type="email" {...register('replyTo')} placeholder="contato@hipertms.com.br" className="input input-bordered w-full" />
+            <Input type="email" {...register('replyTo')} placeholder="contato@hipertms.com.br" />
           </Field>
         </Section>
 
@@ -168,23 +168,23 @@ export function EmailChannelSettingsPage() {
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <Field label="Servidor SMTP" error={errors.smtpHost?.message}>
-                <input type="text" {...register('smtpHost')} placeholder="mail.hipertms.com.br" className="input input-bordered w-full" />
+                <Input type="text" {...register('smtpHost')} placeholder="mail.hipertms.com.br" />
               </Field>
             </div>
             <div>
               <Field label="Porta" error={errors.smtpPort?.message}>
-                <input type="number" {...register('smtpPort')} className="input input-bordered w-full" />
+                <Input type="number" {...register('smtpPort')} />
               </Field>
             </div>
           </div>
           <Field label="Usuário SMTP" required error={errors.smtpUser?.message}>
-            <input type="email" {...register('smtpUser')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
+            <Input type="email" {...register('smtpUser')} placeholder="lia@hipertms.com.br" />
           </Field>
           <Field label="Senha SMTP" hint={smtpPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
-            <input type={showPasses ? 'text' : 'password'} {...register('smtpPass')} placeholder="••••••••" className="input input-bordered w-full" autoComplete="new-password" />
+            <Input type={showPasses ? 'text' : 'password'} {...register('smtpPass')} placeholder="••••••••" autoComplete="new-password" />
           </Field>
           <label className="flex items-center gap-2 text-sm text-base-content/70">
-            <input type="checkbox" className="checkbox checkbox-sm" {...register('smtpSecure')} />
+            <Checkbox {...register('smtpSecure')} />
             Usar SSL/TLS (recomendado — porta 465)
           </label>
         </Section>
@@ -194,29 +194,29 @@ export function EmailChannelSettingsPage() {
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <Field label="Servidor IMAP" error={errors.imapHost?.message}>
-                <input type="text" {...register('imapHost')} placeholder="mail.hipertms.com.br" className="input input-bordered w-full" />
+                <Input type="text" {...register('imapHost')} placeholder="mail.hipertms.com.br" />
               </Field>
             </div>
             <div>
               <Field label="Porta" error={errors.imapPort?.message}>
-                <input type="number" {...register('imapPort')} className="input input-bordered w-full" />
+                <Input type="number" {...register('imapPort')} />
               </Field>
             </div>
           </div>
           <Field label="Usuário IMAP" required error={errors.imapUser?.message}>
-            <input type="email" {...register('imapUser')} placeholder="lia@hipertms.com.br" className="input input-bordered w-full" />
+            <Input type="email" {...register('imapUser')} placeholder="lia@hipertms.com.br" />
           </Field>
           <Field label="Senha IMAP" hint={imapPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
-            <input type={showPasses ? 'text' : 'password'} {...register('imapPass')} placeholder="••••••••" className="input input-bordered w-full" autoComplete="new-password" />
+            <Input type={showPasses ? 'text' : 'password'} {...register('imapPass')} placeholder="••••••••" autoComplete="new-password" />
           </Field>
           <Field label="Caixa IMAP" hint="Normalmente 'INBOX'." error={errors.imapMailbox?.message}>
-            <input type="text" {...register('imapMailbox')} placeholder="INBOX" className="input input-bordered w-full" />
+            <Input type="text" {...register('imapMailbox')} placeholder="INBOX" />
           </Field>
         </Section>
 
         {/* mostrar/ocultar senhas */}
         <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/60">
-          <input type="checkbox" className="checkbox checkbox-xs" checked={showPasses} onChange={(e) => setShowPasses(e.target.checked)} />
+          <Checkbox checked={showPasses} onChange={(e) => setShowPasses(e.target.checked)} />
           Mostrar senhas
         </label>
 

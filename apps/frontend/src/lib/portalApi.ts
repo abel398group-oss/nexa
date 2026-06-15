@@ -15,6 +15,7 @@ export interface PortalMe {
   externalId: string;
   tenantId: string;
   name: string | null;
+  phone: string | null; // telefone do cadastro (prefill do form de abrir chamado)
   contract: { plan?: string; status?: string; [k: string]: unknown } | null;
 }
 

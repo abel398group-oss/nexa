@@ -178,6 +178,7 @@ model Contact {
   @@unique([tenantId, email])  // NULL é OK — Postgres aceita múltiplos NULL em unique (ADR 021)
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, externalContactId])
   @@map("contacts")
 }
 
@@ -218,6 +219,7 @@ model AiConversation {
   @@index([correlationId])
   @@index([contactId])
   @@index([tenantId, externalId])
+  @@index([status, lastActivityAt])
   @@map("ai_conversations")
 }
 
@@ -514,7 +516,7 @@ model SenderSettings {
   waEndHour      Int      @default(19) @map("wa_end_hour")
   emailStartHour Int      @default(8)  @map("email_start_hour")
   emailEndHour   Int      @default(18) @map("email_end_hour")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @updatedAt @default(now()) @map("updated_at")
 
   @@map("sender_settings")
 }
@@ -671,6 +673,7 @@ model FollowUp {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
+  @@index([status])
   @@map("follow_ups")
 }
 

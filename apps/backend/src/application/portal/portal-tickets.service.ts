@@ -68,17 +68,28 @@ export class PortalTicketsService {
 
   // Abre um chamado: cria a conversa (canal 'portal', externalId da sessao) e joga a
   // 1a mensagem no MESMO pipeline da Lia (router->support->supervisor).
-  async open(customer: PortalCustomer, dto: { message: string }) {
-    const contact = await this.ensureContact(customer);
+  // dto: assunto (rootCause/titulo), area (ticketCategory), mensagem e telefone de
+  // contato (pra o suporte humano ligar — vem do cadastro ou preenchido pelo cliente).
+  async open(
+    customer: PortalCustomer,
+    dto: { subject?: string; category?: string; message: string; phone?: string },
+  ) {
+    const real = dto.phone?.trim() ? dto.phone.replace(/\D/g, '') : '';
+    const contact = await this.ensureContact(customer, real);
     const conv = await this.conversations.create(customer.tenantId, {
       contactId: contact.id,
-      phone: contact.phone,
+      phone: real || contact.phone, // telefone de contato p/ o suporte humano
       sourceChannel: 'portal',
     });
-    // marca a conversa como do cliente (externalId) e cliente ativo
+    // marca a conversa como do cliente (externalId), cliente ativo, + assunto/area
     await this.prisma.aiConversation.update({
       where: { id: conv.id },
-      data: { externalId: customer.externalId, customerStage: 'cliente_ativo' },
+      data: {
+        externalId: customer.externalId,
+        customerStage: 'cliente_ativo',
+        ...(dto.subject?.trim() ? { rootCause: dto.subject.trim() } : {}),
+        ...(dto.category?.trim() ? { ticketCategory: dto.category.trim() } : {}),
+      },
     });
     await this.conversations.addMessage(customer.tenantId, conv.id, {
       direction: 'inbound',
@@ -115,11 +126,20 @@ export class PortalTicketsService {
   // Find-or-create do contato do portal por externalContactId (nao duplica entre sessoes).
   // Cliente do portal pode nao ter telefone -> usa phone namespaced 'portal:<externalId>'
   // (phone e obrigatorio no schema; valor nao-discavel, nunca vai pra WhatsApp por engano).
-  private async ensureContact(customer: PortalCustomer) {
+  // Se o cliente informar um telefone real e o contato ainda estiver com o sintetico,
+  // persiste o real (best-effort) pra prefill futuro e pro suporte humano ligar.
+  private async ensureContact(customer: PortalCustomer, realPhone = '') {
     const existing = await this.prisma.contact.findFirst({
       where: { tenantId: customer.tenantId, externalContactId: customer.externalId },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (realPhone && existing.phone.startsWith('portal:')) {
+        await this.prisma.contact
+          .update({ where: { id: existing.id }, data: { phone: realPhone } })
+          .catch(() => {}); // ignora conflito de unique (telefone ja usado por outro contato)
+      }
+      return existing;
+    }
     return this.prisma.contact.create({
       data: {
         tenantId: customer.tenantId,
@@ -127,8 +147,17 @@ export class PortalTicketsService {
         name: customer.name ?? undefined,
         nameSource: 'tms',
         source: 'portal',
-        phone: `portal:${customer.externalId}`,
+        phone: realPhone || `portal:${customer.externalId}`,
       },
     });
+  }
+
+  // Telefone de contato do cliente (pro prefill do form) — null se so houver o sintetico.
+  async contactPhone(customer: PortalCustomer): Promise<string | null> {
+    const c = await this.prisma.contact.findFirst({
+      where: { tenantId: customer.tenantId, externalContactId: customer.externalId },
+      select: { phone: true },
+    });
+    return c && !c.phone.startsWith('portal:') ? c.phone : null;
   }
 }

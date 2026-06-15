@@ -8,8 +8,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Badge, statusVariant } from '@/components/ui/Badge';
-import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
+import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon, Badge, statusVariant } from '@/shared/ui';
 
 interface Campaign {
   id: string;

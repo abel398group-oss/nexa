@@ -18,6 +18,14 @@ class TicketMessageDto {
   @IsString() @MinLength(1) message!: string;
 }
 
+// abertura de chamado: assunto + area + descricao + telefone de contato
+class OpenTicketDto {
+  @IsString() @MinLength(1) message!: string;
+  @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() phone?: string;
+}
+
 class TicketsQueryDto {
   @IsOptional() @Type(() => Number) limit?: number;
   @IsOptional() @Type(() => Number) offset?: number;
@@ -71,7 +79,8 @@ export class PortalController {
     } catch {
       contract = null;
     }
-    return { externalId: c.externalId, tenantId: c.tenantId, name: c.name, contract };
+    const phone = await this.tickets.contactPhone(c).catch(() => null);
+    return { externalId: c.externalId, tenantId: c.tenantId, name: c.name, phone, contract };
   }
 
   // Lista os chamados do cliente (escopo por externalId da sessao).
@@ -92,8 +101,8 @@ export class PortalController {
   // Abre um novo chamado (entra no pipeline da Lia).
   @UseGuards(PortalSessionGuard)
   @Post('tickets')
-  openTicket(@Req() req: any, @Body() dto: TicketMessageDto) {
-    return this.tickets.open(req.portalCustomer, { message: dto.message });
+  openTicket(@Req() req: any, @Body() dto: OpenTicketDto) {
+    return this.tickets.open(req.portalCustomer, dto);
   }
 
   // Cliente responde num chamado existente.
