@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
 import { displayPhone } from '@/lib/phone';
@@ -26,18 +30,30 @@ import { useConfirm } from '@/contexts/ConfirmContext';
 
 const empty = { phone: '', name: '', company: '', email: '' };
 
+// validação do form de contato (RHF + Zod) — telefone obrigatório; e-mail válido se preenchido
+const contactSchema = z.object({
+  phone: z.string().trim().min(8, 'Telefone inválido (DDD + número)'),
+  name: z.string().trim().optional().or(z.literal('')),
+  company: z.string().trim().optional().or(z.literal('')),
+  email: z.string().trim().email('E-mail inválido').optional().or(z.literal('')),
+});
+type ContactForm = z.infer<typeof contactSchema>;
+
 export function ContactsPage() {
-  const [items, setItems] = useState<Contact[]>([]);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(empty);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // usado pelo modal de importação
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactForm>({ resolver: zodResolver(contactSchema), defaultValues: empty });
   const [showImport, setShowImport] = useState(false);
   const [csv, setCsv] = useState('');
   const [importMsg, setImportMsg] = useState('');
-  const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'optout'>('todos');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -45,7 +61,6 @@ export function ContactsPage() {
   const [showTagMgr, setShowTagMgr] = useState(false);
   const [renamingTag, setRenamingTag] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [tags, setTags] = useState<TagCount[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importTag, setImportTag] = useState('');
   const [bulkTagValue, setBulkTagValue] = useState('');
@@ -57,56 +72,44 @@ export function ContactsPage() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  async function load() {
-    setLoading(true);
-    setSelected(new Set());
-    try {
-      const [r, t] = await Promise.all([
-        listContacts({ search, limit: 100, tag: tagFilter ?? undefined }),
-        listTags(),
-      ]);
-      setItems(r.items);
-      setTotal(r.total);
-      setTags(t);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagFilter]);
+  // React Query: lista de contatos (busca aplicada no Enter + filtro de tag) e tags
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['contacts', appliedSearch, tagFilter],
+    queryFn: () => listContacts({ search: appliedSearch, limit: 100, tag: tagFilter ?? undefined }),
+  });
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const { data: tags = [] } = useQuery({ queryKey: ['contact-tags'], queryFn: () => listTags() });
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['contacts'] }),
+      queryClient.invalidateQueries({ queryKey: ['contact-tags'] }),
+    ]);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr('');
+  const onSubmit = async (formData: ContactForm) => {
     try {
       if (editId) {
-        // edição (não reenvia source)
-        await updateContact(editId, form);
+        await updateContact(editId, formData); // edição (não reenvia source)
         toast.success('Contato atualizado!');
       } else {
-        await createContact(form);
+        await createContact(formData);
         toast.success('Contato salvo!');
       }
-      setForm(empty);
+      reset(empty);
       setEditId(null);
       setShowForm(false);
-      await load();
+      await invalidate();
     } catch (e: any) {
       const msg = e?.response?.data?.message;
-      setErr(Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao salvar');
-    } finally {
-      setBusy(false);
+      setError('root', { message: Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao salvar' });
     }
-  }
+  };
 
   function openEdit(c: Contact) {
     setEditId(c.id);
-    setForm({ phone: c.phone, name: c.name || '', company: c.company || '', email: c.email || '' });
-    setErr('');
+    reset({ phone: c.phone, name: c.name || '', company: c.company || '', email: c.email || '' });
     setShowForm(true);
   }
 
@@ -121,7 +124,7 @@ export function ContactsPage() {
     try {
       await reactivateContact(c.id);
       toast.success('Contato reativado.');
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao reativar.');
     }
@@ -139,7 +142,7 @@ export function ContactsPage() {
       await optOutContact(id);
       toast.success('Contato descadastrado (opt-out).');
       setShowForm(false);
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao descadastrar.');
     }
@@ -156,7 +159,7 @@ export function ContactsPage() {
     try {
       await deleteContact(c.id);
       toast.success('Contato excluído.');
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao excluir.');
     }
@@ -181,7 +184,7 @@ export function ContactsPage() {
       await bulkTagContacts([...selected], tag, 'add');
       toast.success(`Tag "${tag}" adicionada a ${selected.size} contato(s).`);
       setBulkTagValue('');
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao adicionar tag.');
     }
@@ -196,7 +199,7 @@ export function ContactsPage() {
       toast.success(`Tag renomeada para "${to}".`);
       setRenamingTag(null); setRenameValue('');
       if (tagFilter === from) setTagFilter(to);
-      await load();
+      await invalidate();
     } catch { toast.error('Erro ao renomear a tag.'); }
   }
   async function doDeleteTag(tag: string) {
@@ -211,7 +214,7 @@ export function ContactsPage() {
       await deleteTag(tag);
       toast.success(`Tag "${tag}" excluída.`);
       if (tagFilter === tag) setTagFilter(null);
-      await load();
+      await invalidate();
     } catch { toast.error('Erro ao excluir a tag.'); }
   }
 
@@ -237,7 +240,7 @@ export function ContactsPage() {
       // uma única requisição: apaga todos de uma vez (1 confirmação de break-glass, não N)
       const r = await bulkDeleteContacts([...selected]);
       toast.success(`${r.deleted} contato(s) excluído(s).`);
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao excluir os contatos.');
     }
@@ -291,7 +294,7 @@ export function ContactsPage() {
       setCsv('');
       setImportTag('');
       setShowImport(false);
-      await load();
+      await invalidate();
     } catch (e: any) {
       toast.error('Erro ao importar contatos.');
     } finally {
@@ -370,11 +373,11 @@ export function ContactsPage() {
             placeholder="Buscar nome, telefone, empresa..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && load()}
+            onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(search)}
           />
-          <Button variant="outline" onClick={load}>Buscar</Button>
+          <Button variant="outline" onClick={() => setAppliedSearch(search)}>Buscar</Button>
           <Button variant="outline" onClick={() => { setShowImport(true); setImportMsg(''); }}><Icon name="upload" className="h-4 w-4" /> Importar</Button>
-          <Button onClick={() => { setEditId(null); setForm(empty); setShowForm(true); setErr(''); }}>+ Novo</Button>
+          <Button onClick={() => { setEditId(null); reset(empty); setShowForm(true); }}>+ Novo</Button>
         </div>
       </div>
 
@@ -530,23 +533,20 @@ export function ContactsPage() {
         title={editId ? 'Editar contato' : 'Novo contato'}
         size="sm"
       >
-        <form onSubmit={save} className="space-y-3">
-          {[
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          {([
             { k: 'phone', label: 'Telefone (DDD + número)', ph: '11999998888' },
             { k: 'name', label: 'Nome', ph: 'João Silva' },
             { k: 'company', label: 'Empresa', ph: 'Transportadora X' },
             { k: 'email', label: 'Email', ph: 'joao@empresa.com' },
-          ].map((f) => (
+          ] as const).map((f) => (
             <div key={f.k}>
               <Label className="mb-1 block text-xs text-base-content/50">{f.label}</Label>
-              <Input
-                placeholder={f.ph}
-                value={(form as any)[f.k]}
-                onChange={(e) => setForm({ ...form, [f.k]: e.target.value })}
-              />
+              <Input placeholder={f.ph} {...register(f.k)} />
+              {errors[f.k] && <p className="mt-1 text-xs text-red-500">{errors[f.k]?.message}</p>}
             </div>
           ))}
-          {err && <p className="text-sm text-red-500">{err}</p>}
+          {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
           {/* ação de status (só ao editar): descadastrar (opt-out) ou reativar */}
           {editId && (() => {
             const editing = items.find((c) => c.id === editId);
@@ -573,7 +573,7 @@ export function ContactsPage() {
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
               Cancelar
             </Button>
-            <Button loading={busy}>{busy ? 'Salvando...' : 'Salvar'}</Button>
+            <Button loading={isSubmitting}>{isSubmitting ? 'Salvando...' : 'Salvar'}</Button>
           </div>
         </form>
       </Modal>

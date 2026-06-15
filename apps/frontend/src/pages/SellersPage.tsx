@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,8 +31,6 @@ interface Seller {
 interface Kpi { id: string; name: string; leads: number; emAndamento: number; ganhos: number; perdidos: number; taxaConversao: number; }
 
 export function SellersPage() {
-  const [items, setItems] = useState<Seller[]>([]);
-  const [kpis, setKpis] = useState<Kpi[]>([]);
   const {
     register,
     handleSubmit,
@@ -39,32 +38,34 @@ export function SellersPage() {
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SellerForm>({ resolver: zodResolver(sellerSchema), defaultValues: emptyForm });
-  const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useToast();
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [s, k] = await Promise.allSettled([
-        api.get('/sellers', { params: { search: search || undefined } }),
-        api.get('/metrics/sellers'),
-      ]);
-      if (s.status === 'fulfilled') setItems(s.value.data);
-      if (k.status === 'fulfilled') setKpis(k.value.data);
-    } finally {
-      setLoading(false);
-    }
-  }
-  // recarrega com debounce ao buscar
+  // debounce da busca (250ms) → alimenta a queryKey
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // React Query: lista de vendedores (busca) + KPIs por vendedor
+  const { data: items = [], isLoading: loading } = useQuery({
+    queryKey: ['sellers', debouncedSearch],
+    queryFn: () => api.get('/sellers', { params: { search: debouncedSearch || undefined } }).then((r) => r.data as Seller[]),
+  });
+  const { data: kpis = [] } = useQuery({
+    queryKey: ['sellers-kpis'],
+    queryFn: () => api.get('/metrics/sellers').then((r) => r.data as Kpi[]),
+  });
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['sellers'] }),
+      queryClient.invalidateQueries({ queryKey: ['sellers-kpis'] }),
+    ]);
 
   function toggleSel(id: string) {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -86,7 +87,7 @@ export function SellersPage() {
       await api.post('/sellers/bulk-delete', { ids });
       toast.success(`${ids.length} vendedor(es) excluído(s).`);
       setSelected(new Set());
-      await load();
+      await invalidate();
     } catch { toast.error('Erro ao excluir em lote.'); }
   }
 
@@ -107,7 +108,7 @@ export function SellersPage() {
       }
       reset(emptyForm);
       setEditId(null);
-      await load();
+      await invalidate();
     } catch (e: any) {
       const m = e?.response?.data?.message;
       const txt = Array.isArray(m) ? m.join(', ') : m || 'Erro';
@@ -136,7 +137,7 @@ export function SellersPage() {
     try {
       await api.delete(`/sellers/${s.id}`);
       toast.success('Vendedor excluído.');
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao excluir.');
     }
@@ -144,7 +145,7 @@ export function SellersPage() {
 
   async function toggle(s: Seller) {
     await api.patch(`/sellers/${s.id}/active`, { active: !s.active });
-    await load();
+    await invalidate();
   }
 
   return (

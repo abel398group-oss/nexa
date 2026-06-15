@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { api } from '@/lib/api';
 import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { useToast } from '@/contexts/ToastContext';
@@ -10,6 +13,17 @@ interface User {
   permissions: string[]; isActive: boolean;
 }
 
+// validação do form de novo usuário (RHF + Zod)
+const userSchema = z.object({
+  name: z.string().trim().optional().or(z.literal('')),
+  email: z.string().trim().email('E-mail inválido'),
+  password: z.string().trim().min(6, 'Mínimo 6 caracteres'),
+  role: z.string(),
+  permissions: z.array(z.string()),
+});
+type UserForm = z.infer<typeof userSchema>;
+const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] };
+
 // rótulos amigáveis das áreas
 const AREA_LABEL: Record<string, string> = {
   dashboard: 'Painel', inbox: 'Inbox', contacts: 'Contatos', knowledge: 'Conhecimento',
@@ -19,9 +33,12 @@ const ALL_AREAS = ['dashboard', 'inbox', 'contacts', 'knowledge', 'sellers', 'ca
 
 export function UsersPage() {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] as string[] });
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
+  const {
+    register, handleSubmit, reset, watch, setValue, setError,
+    formState: { errors, isSubmitting },
+  } = useForm<UserForm>({ resolver: zodResolver(userSchema), defaultValues: emptyUser });
+  const role = watch('role');
+  const permissions = watch('permissions');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -66,17 +83,17 @@ export function UsersPage() {
     return set.includes(p) ? set.filter((x) => x !== p) : [...set, p];
   }
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setErr('');
+  const onSubmit = async (data: UserForm) => {
     try {
-      await api.post('/users', form);
+      await api.post('/users', data);
       setShow(false);
-      setForm({ name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] });
+      reset(emptyUser);
       await invalidate();
     } catch (e: any) {
-      const m = e?.response?.data?.message; setErr(Array.isArray(m) ? m.join(', ') : m || 'Erro');
-    } finally { setBusy(false); }
-  }
+      const m = e?.response?.data?.message;
+      setError('root', { message: Array.isArray(m) ? m.join(', ') : m || 'Erro' });
+    }
+  };
 
   // salva permissões direto na linha (toggle inline)
   async function savePerms(u: User, perms: string[]) {

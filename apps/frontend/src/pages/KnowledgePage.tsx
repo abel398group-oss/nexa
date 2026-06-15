@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
@@ -18,8 +19,6 @@ interface KB {
 const PAGE = 50;
 
 export function KnowledgePage() {
-  const [items, setItems] = useState<KB[]>([]);
-  const [total, setTotal] = useState(0);
   const [sel, setSel] = useState<KB | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,31 +27,31 @@ export function KnowledgePage() {
   const [eContent, setEContent] = useState('');
   // busca + filtro + paginação + seleção em lote (padrão Contatos/Campanhas)
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [category, setCategory] = useState('');
   const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useToast();
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
 
-  async function load() {
-    setLoading(true);
-    try {
-      const r = await api.get('/knowledge', {
-        params: { limit: PAGE, offset: page * PAGE, search: search || undefined, category: category || undefined },
-      });
-      setItems(r.data.items);
-      setTotal(r.data.total);
-    } finally {
-      setLoading(false);
-    }
-  }
-  // recarrega com debounce ao mudar busca/categoria/página
+  // debounce da busca (250ms) → alimenta a queryKey
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, category, page]);
+  }, [search]);
+
+  // React Query: lista paginada (busca/categoria/página entram na queryKey)
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['knowledge', debouncedSearch, category, page],
+    queryFn: () =>
+      api
+        .get('/knowledge', { params: { limit: PAGE, offset: page * PAGE, search: debouncedSearch || undefined, category: category || undefined } })
+        .then((r) => r.data as { items: KB[]; total: number }),
+  });
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['knowledge'] });
 
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))];
@@ -78,7 +77,7 @@ export function KnowledgePage() {
       toast.success(`${ids.length} item(ns) excluído(s).`);
       if (sel && ids.includes(sel.id)) setSel(null);
       setSelected(new Set());
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao excluir em lote.');
     }
@@ -103,7 +102,7 @@ export function KnowledgePage() {
       await api.patch(`/knowledge/${sel.id}`, { title: eTitle, content: eContent });
       toast.success('Conhecimento atualizado! A Lia já usa o novo texto.');
       setEditing(false);
-      await load();
+      await invalidate();
       const r = await api.get(`/knowledge/${sel.id}`);
       setSel(r.data);
     } catch {
@@ -125,7 +124,7 @@ export function KnowledgePage() {
       await api.delete(`/knowledge/${sel.id}`);
       toast.success('Conhecimento excluído.');
       setSel(null);
-      await load();
+      await invalidate();
     } catch {
       toast.error('Erro ao excluir.');
     }
@@ -137,7 +136,7 @@ export function KnowledgePage() {
     try {
       const r = await api.post('/knowledge/import/hipertms');
       setMsg(`Import: ${r.data.created} novos, ${r.data.updated} atualizados (${r.data.received} recebidos)`);
-      await load();
+      await invalidate();
     } finally {
       setBusy(false);
     }
