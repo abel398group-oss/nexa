@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
 import { useLocation } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { displayPhone, toBrPhone } from '@/lib/phone';
@@ -40,6 +41,33 @@ function dayLabel(offset: number): string {
   const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
   return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} (${data})`;
 }
+
+// Validação da campanha (Zod). Mantém a máquina do form intacta — só checa antes
+// de enviar e devolve erros por campo (name / message / emailSubject / recipients).
+const campaignSchema = z
+  .object({
+    channel: z.string(),
+    name: z.string().trim().min(1, 'Informe o nome da campanha'),
+    template: z.string(),
+    emailSubject: z.string(),
+    emailTemplate: z.string(),
+    fromContacts: z.boolean(),
+    emailCount: z.number(),
+    audience: z.string(),
+    audienceTag: z.string(),
+    recipientCount: z.number(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.channel === 'email') {
+      if (!v.emailSubject.trim()) ctx.addIssue({ code: 'custom', path: ['emailSubject'], message: 'Informe o assunto' });
+      if (!v.emailTemplate.trim()) ctx.addIssue({ code: 'custom', path: ['message'], message: 'Escreva a mensagem do e-mail' });
+      if (!v.fromContacts && v.emailCount === 0) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Adicione ao menos um e-mail válido' });
+    } else {
+      if (!v.template.trim()) ctx.addIssue({ code: 'custom', path: ['message'], message: 'Escreva a mensagem' });
+      if (v.audience === 'tag' && !v.audienceTag) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Escolha uma tag' });
+      if (v.audience === 'manual' && v.recipientCount === 0) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Selecione ao menos um contato ou avulso' });
+    }
+  });
 
 export function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
@@ -103,6 +131,7 @@ export function CampaignsPage() {
   const [limitMode, setLimitMode] = useState<'all' | 'limit'>('all');
   const [sendLimit, setSendLimit] = useState(30);
   const [busy, setBusy] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const confirm = useConfirm();
@@ -202,6 +231,7 @@ export function CampaignsPage() {
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
     setManualSort('az'); setManualSnapshot(null);
+    setFormErrors({});
   }
 
   // janela permitida do canal atual (puxa as settings do tenant; cai no default)
@@ -431,6 +461,22 @@ export function CampaignsPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    // validação (Zod) — bloqueia o envio e mostra os erros, sem mexer no resto do fluxo
+    const emailCount = channel === 'email' && !fromContacts
+      ? emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).length
+      : 0;
+    const recipientCount = manualSelected.size + avulsos.length;
+    const check = campaignSchema.safeParse({
+      channel, name, template, emailSubject, emailTemplate, fromContacts,
+      emailCount, audience, audienceTag, recipientCount,
+    });
+    if (!check.success) {
+      const errs: Record<string, string> = {};
+      for (const issue of check.error.issues) errs[String(issue.path[0])] = issue.message;
+      setFormErrors(errs);
+      return;
+    }
+    setFormErrors({});
     setBusy(true);
     try {
       let r: any;
@@ -742,6 +788,7 @@ export function CampaignsPage() {
             <div>
               <label className="mb-1 block text-xs font-medium text-base-content/60">Nome da campanha</label>
               <input className="input w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Prospecção Junho" required />
+              {formErrors.name && <p className="mt-1 text-xs text-red-500">{formErrors.name}</p>}
             </div>
 
             {channel === 'email' ? (
@@ -919,6 +966,7 @@ export function CampaignsPage() {
                     onChange={(e) => setTemplate(e.target.value)}
                     required
                   />
+                  {formErrors.message && <p className="mt-1 text-xs text-red-500">{formErrors.message}</p>}
                 </div>
 
                 {/* Destinatários WA — seletor de público */}
@@ -1248,6 +1296,12 @@ export function CampaignsPage() {
             )}
 
             </div>{/* fim px-7 py-5 */}
+
+            {Object.keys(formErrors).length > 0 && (
+              <div className="border-t border-base-200 bg-red-50 px-7 py-3 text-sm text-red-600 dark:bg-red-500/10">
+                Revise antes de criar: {Object.values(formErrors).join(' · ')}
+              </div>
+            )}
 
             {/* Footer fixo */}
             <div className="sticky bottom-0 flex justify-end gap-3 border-t border-base-200 px-7 py-4"
