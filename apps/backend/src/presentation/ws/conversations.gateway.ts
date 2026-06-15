@@ -10,9 +10,25 @@ import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Server, Socket } from 'socket.io';
 
+// CORS do WebSocket: mesma allowlist do HTTP (CORS_ORIGINS, ver main.ts) — fonte única.
+// Função lazy: lê o env no handshake (evita problema de ordem de carregamento do .env).
+// Requisições sem Origin (same-origin / server-to-server) são aceitas; origem fora da
+// lista é recusada. Trocar origin:true (qualquer origem) por allowlist explícita.
+function wsCorsOrigin(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void,
+): void {
+  const allowed = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (!origin || allowed.includes(origin)) return callback(null, true);
+  return callback(new Error(`Origin não permitida pelo WebSocket: ${origin}`), false);
+}
+
 // Gateway de tempo real: o frontend (inbox) entra na "sala" da conversa e recebe
 // mensagens novas instantaneamente. Desacoplado via EventEmitter (message.created).
-@WebSocketGateway({ cors: { origin: true, credentials: true }, path: '/ws' })
+@WebSocketGateway({ cors: { origin: wsCorsOrigin, credentials: true }, path: '/ws' })
 export class ConversationsGateway implements OnGatewayInit {
   private readonly logger = new Logger('ConversationsGateway');
 
