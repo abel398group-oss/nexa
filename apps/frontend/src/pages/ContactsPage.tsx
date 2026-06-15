@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Badge, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
 import { displayPhone } from '@/lib/phone';
 import {
   type Contact,
@@ -329,14 +329,9 @@ export function ContactsPage() {
     URL.revokeObjectURL(url);
   }
 
-  const badge = (s?: string) => {
-    const map: Record<string, string> = {
-      hot: 'bg-red-100 text-red-700',
-      warm: 'bg-amber-100 text-amber-700',
-      cold: 'bg-sky-100 text-sky-700',
-    };
-    return map[s ?? ''] || 'bg-base-200 text-base-content/60';
-  };
+  // estágio do lead → variante do Badge (cores equivalentes ao mapa antigo)
+  const leadVariant = (s?: string): 'error' | 'warning' | 'info' | 'neutral' =>
+    s === 'hot' ? 'error' : s === 'warm' ? 'warning' : s === 'cold' ? 'info' : 'neutral';
 
   const chipCls = (active: boolean) =>
     `rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -483,7 +478,7 @@ export function ContactsPage() {
                 <td className="px-4 py-3 font-medium text-base-content">
                   {c.name || '—'}
                   {c.status === 'opted_out' && (
-                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">descadastrado</span>
+                    <span className="ml-2"><Badge variant="error">descadastrado</Badge></span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-base-content/80">{displayPhone(c.phone)}</td>
@@ -502,9 +497,7 @@ export function ContactsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${badge(c.leadStatus)}`}>
-                    {c.leadStatus || 'novo'}
-                  </span>
+                  <Badge variant={leadVariant(c.leadStatus)}>{c.leadStatus || 'novo'}</Badge>
                 </td>
                 <td className="px-4 py-3 text-xs text-base-content/50">{c.source || '—'}</td>
                 <td className="px-4 py-3 text-right">
