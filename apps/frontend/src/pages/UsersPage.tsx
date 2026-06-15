@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { useToast } from '@/contexts/ToastContext';
@@ -17,24 +18,29 @@ const AREA_LABEL: Record<string, string> = {
 const ALL_AREAS = ['dashboard', 'inbox', 'contacts', 'knowledge', 'sellers', 'campaigns', 'ai_control', 'users'];
 
 export function UsersPage() {
-  const [items, setItems] = useState<User[]>([]);
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] as string[] });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const toast = useToast();
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
 
-  async function load() {
-    setItems((await api.get('/users', { params: { search: search || undefined } })).data);
-  }
+  // debounce da busca (250ms) → alimenta a queryKey
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // React Query: lista de usuários (refaz quando a busca muda)
+  const { data: items = [] } = useQuery({
+    queryKey: ['users', debouncedSearch],
+    queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then((r) => r.data as User[]),
+  });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] });
 
   const roles = [...new Set(items.map((u) => u.role))];
   const shown = items.filter((u) => !roleFilter || u.role === roleFilter);
@@ -50,7 +56,7 @@ export function UsersPage() {
     try {
       await api.delete(`/users/${u.id}`);
       toast.success('Usuário excluído.');
-      await load();
+      await invalidate();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Erro ao excluir o usuário.');
     }
@@ -66,7 +72,7 @@ export function UsersPage() {
       await api.post('/users', form);
       setShow(false);
       setForm({ name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] });
-      await load();
+      await invalidate();
     } catch (e: any) {
       const m = e?.response?.data?.message; setErr(Array.isArray(m) ? m.join(', ') : m || 'Erro');
     } finally { setBusy(false); }
@@ -74,12 +80,15 @@ export function UsersPage() {
 
   // salva permissões direto na linha (toggle inline)
   async function savePerms(u: User, perms: string[]) {
-    setItems((prev) => prev.map((x) => x.id === u.id ? { ...x, permissions: perms } : x));
+    // otimista no cache do React Query
+    queryClient.setQueryData<User[]>(['users', debouncedSearch], (prev) =>
+      prev?.map((x) => (x.id === u.id ? { ...x, permissions: perms } : x)) ?? prev,
+    );
     await api.patch(`/users/${u.id}`, { permissions: perms });
   }
   async function toggleActive(u: User) {
     await api.patch(`/users/${u.id}/active`, { active: !u.isActive });
-    await load();
+    await invalidate();
   }
 
   return (

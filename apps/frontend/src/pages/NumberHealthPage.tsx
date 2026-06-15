@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { displayPhone } from '@/lib/phone';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
@@ -27,22 +27,12 @@ function UsageBar({ used, total }: { used: number; total: number }) {
 }
 
 export function NumberHealthPage() {
-  const [items, setItems] = useState<SenderNumber[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  async function load() {
-    try {
-      const r = await api.get('/sender/numbers');
-      setItems(r.data);
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10000); // atualiza a cada 10s
-    return () => clearInterval(t);
-  }, []);
+  // React Query: leitura + polling (10s) sem useEffect/setInterval manual.
+  const { data: items = [], isLoading, refetch } = useQuery({
+    queryKey: ['sender-numbers'],
+    queryFn: () => api.get('/sender/numbers').then((r) => r.data as SenderNumber[]),
+    refetchInterval: 10_000,
+  });
 
   const totalSent = items.reduce((a, n) => a + n.sentToday, 0);
   const totalCap = items.reduce((a, n) => a + n.effectiveDailyLimit, 0);
@@ -54,7 +44,7 @@ export function NumberHealthPage() {
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Saúde dos números' }]} />}
         title="Saúde dos números"
         subtitle="Status, limites e aquecimento dos números de WhatsApp (anti-ban). Atualiza a cada 10s."
-        actions={<Button variant="outline" onClick={load}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
+        actions={<Button variant="outline" onClick={() => refetch()}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
       />
 
       {/* resumo */}
@@ -76,7 +66,7 @@ export function NumberHealthPage() {
         </Card>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <p className="py-10 text-center text-sm text-base-content/40">Carregando…</p>
       ) : items.length === 0 ? (
         <Card className="p-8 text-center">

@@ -3,12 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/lib/api';
-import { SkeletonList } from '@/components/ui/Skeleton';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { displayPhone } from '@/lib/phone';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
-import { Badge } from '@/components/ui/Badge';
+import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon, Badge, SkeletonList, EmptyState } from '@/shared/ui';
 
 // E8 — fatia 2: validação de formulário por schema (RHF + Zod), como referência.
 // email/password são opcionais; quando preenchidos, precisam ser válidos.
@@ -280,7 +278,7 @@ export function SellersPage() {
                   {s.name}
                   <div className="text-[11px] font-normal text-base-content/40">{s.loginEmail || 'sem login'}</div>
                 </td>
-                <td className="px-4 py-3 text-base-content/70">{s.phone}</td>
+                <td className="px-4 py-3 text-base-content/70">{displayPhone(s.phone)}</td>
                 <td className="px-4 py-3 text-base-content/70">{s.assignedCount}</td>
                 <td className="px-4 py-3">
                   <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>

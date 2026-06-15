@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -64,7 +64,9 @@ function Recibo({ ack }: { ack?: number }) {
   return <span className="text-white/60" title="Enviando">enviando</span>;
 }
 
-export function InboxPage() {
+// Inbox de conversas (lista + chat), compartilhado por Vendas e Suporte.
+// `scope` controla só o filtro: vendas exclui tickets de suporte; suporte só tickets.
+export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'support' }) {
   const { user } = useAuth();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -135,7 +137,8 @@ export function InboxPage() {
 
   // conversas filtradas + ordenação: escalated primeiro, depois por lastActivityAt
   const filtered = convs
-    .filter((c) => !isSupportTicket(c)) // só conversas de venda — tickets vão pro Inbox de Suporte
+    // vendas: exclui tickets de suporte · suporte: só tickets
+    .filter((c) => (scope === 'support' ? isSupportTicket(c) : !isSupportTicket(c)))
     .filter((c) => activeFilter === 'all' || c.status === activeFilter)
     .sort((a, b) => {
       // escalated sempre no topo
@@ -147,11 +150,33 @@ export function InboxPage() {
       return tb - ta;
     });
 
-  function openConv(c: Conversation) {
+  // Agrupa por contato (estilo WhatsApp): 1 card por pessoa, a conversa mais
+  // recente como representante. `filtered` já vem ordenado (mais recente 1º), então
+  // a 1ª ocorrência de cada contato é o representante. Mantém as conversas por baixo.
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; rep: Conversation; convs: Conversation[] }>();
+    for (const c of filtered) {
+      const key = c.contact?.id ?? c.phone;
+      const g = map.get(key);
+      if (g) g.convs.push(c);
+      else map.set(key, { key, rep: c, convs: [c] });
+    }
+    return Array.from(map.values());
+  }, [filtered]);
+
+  function openGroup(g: { rep: Conversation; convs: { id: string }[] }) {
+    const c = g.rep;
     setActive(c);
     setTmsLookup(null);
     setShowTimeline(false);
-    api.get(`/conversations/${c.id}/messages`).then((r) => setMessages(r.data));
+    // histórico unificado: junta as mensagens de todas as conversas do contato, em ordem
+    Promise.all(
+      g.convs.map((cv) => api.get(`/conversations/${cv.id}/messages`).then((r) => r.data as Message[])),
+    ).then((lists) => {
+      const all = lists.flat().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      setMessages(all);
+    });
+    // realtime: novas mensagens entram na conversa mais recente (o representante)
     socketRef.current?.emit('join', { conversationId: c.id });
     api.get(`/connectors/lookup?phone=${encodeURIComponent(c.phone)}`)
       .then((r) => setTmsLookup(r.data))
@@ -224,12 +249,13 @@ export function InboxPage() {
               Nenhuma conversa com este filtro.
             </div>
           )}
-          {!loadingConvs && filtered.map((c) => {
+          {!loadingConvs && groups.map((g) => {
+            const c = g.rep;
             const stale = c.status === 'waiting_internal' && isWaitingInternalStale(c.lastActivityAt);
             return (
               <button
-                key={c.id}
-                onClick={() => openConv(c)}
+                key={g.key}
+                onClick={() => openGroup(g)}
                 className={[
                   'block w-full border-b px-4 py-3 text-left text-sm hover:bg-base-100 transition-colors',
                   active?.id === c.id ? 'bg-base-200' : '',
@@ -256,6 +282,11 @@ export function InboxPage() {
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
+                      {g.convs.length > 1 && (
+                        <span title={`${g.convs.length} conversas com este contato`} className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">
+                          <Icon name="inbox" className="h-3 w-3" /> {g.convs.length}
+                        </span>
+                      )}
                       {c.outcome && c.outcome !== c.status && <ConversationOutcomeBadge outcome={c.outcome} />}
                       {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
                         <ChannelBadge sourceChannel={c.sourceChannel} />
@@ -491,4 +522,9 @@ export function InboxPage() {
       </main>
     </div>
   );
+}
+
+// Inbox de Vendas (rota /inbox) — conversas comerciais.
+export function InboxPage() {
+  return <ConversationInbox scope="sales" />;
 }

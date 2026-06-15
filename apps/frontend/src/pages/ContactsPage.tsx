@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon } from '@/shared/ui';
+import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
 import { displayPhone } from '@/lib/phone';
 import {
   type Contact,
@@ -23,8 +23,6 @@ import {
 } from '@/features/contact';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
-import { SkeletonList } from '@/components/ui/Skeleton';
-import { EmptyState } from '@/components/ui/EmptyState';
 
 const empty = { phone: '', name: '', company: '', email: '' };
 
