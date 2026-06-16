@@ -116,6 +116,21 @@ export class ContactsService {
     });
   }
 
+  // Grava o nome do contato a partir do pushName do WhatsApp respeitando a precedência
+  // do nameSource (ADR 020): pushname < tms < manual. Só grava se o nome atual estiver
+  // vazio OU também for 'pushname' — nunca sobrescreve um nome do TMS ou manual.
+  async applyPushName(tenantId: string, phone: string, pushName: string) {
+    const name = (pushName ?? '').trim();
+    if (!name) return;
+    const p = normalizePhone(phone) || phone;
+    const c = await this.prisma.contact.findUnique({ where: { tenantId_phone: { tenantId, phone: p } } });
+    if (!c) return;
+    const src = (c as any).nameSource ?? 'pushname';
+    if (c.name && src !== 'pushname') return; // nome de fonte superior → não toca
+    if (c.name === name) return; // sem mudança
+    await this.prisma.contact.update({ where: { id: c.id }, data: { name, nameSource: 'pushname' } });
+  }
+
   async update(tenantId: string, id: string, dto: UpdateContactDto) {
     await this.findOne(tenantId, id);
     return this.prisma.contact.update({ where: { id }, data: { ...dto } });

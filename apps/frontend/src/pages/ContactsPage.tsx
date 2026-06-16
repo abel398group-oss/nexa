@@ -39,6 +39,7 @@ const contactSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
 });
 type ContactForm = z.infer<typeof contactSchema>;
+const PAGE = 50;
 
 export function ContactsPage() {
   const [search, setSearch] = useState('');
@@ -57,6 +58,7 @@ export function ContactsPage() {
   const [importMsg, setImportMsg] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'optout'>('todos');
+  const [page, setPage] = useState(0);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   // gerenciador de tags
   const [showTagMgr, setShowTagMgr] = useState(false);
@@ -75,13 +77,17 @@ export function ContactsPage() {
 
   const queryClient = useQueryClient();
 
-  // React Query: lista de contatos (busca aplicada no Enter + filtro de tag) e tags
+  // filtro de situação resolvido no backend (paginação coerente)
+  const statusParam = filtro === 'ativos' ? 'active' : filtro === 'optout' ? 'opted_out' : undefined;
+  // React Query: lista PAGINADA (busca/tag/situação/página entram na queryKey)
   const { data, isLoading: loading } = useQuery({
-    queryKey: ['contacts', appliedSearch, tagFilter],
-    queryFn: () => listContacts({ search: appliedSearch, limit: 100, tag: tagFilter ?? undefined }),
+    queryKey: ['contacts', appliedSearch, tagFilter, filtro, page],
+    queryFn: () =>
+      listContacts({ search: appliedSearch, tag: tagFilter ?? undefined, status: statusParam, limit: PAGE, offset: page * PAGE }),
   });
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE));
   const { data: tags = [] } = useQuery({ queryKey: ['contact-tags'], queryFn: () => listTags() });
   const invalidate = () =>
     Promise.all([
@@ -339,10 +345,7 @@ export function ContactsPage() {
       active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/70 hover:bg-base-300'
     }`;
 
-  const optOutCount = items.filter((c) => c.status === 'opted_out').length;
-  const shown = items.filter((c) =>
-    filtro === 'todos' ? true : filtro === 'ativos' ? c.status !== 'opted_out' : c.status === 'opted_out',
-  );
+  const shown = items; // filtro de situação já aplicado no backend
 
   return (
     <div className="flex h-full flex-col bg-base-100">
@@ -351,13 +354,13 @@ export function ContactsPage() {
         <div>
           <Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Contatos' }]} />
           <h1 className="text-lg font-bold text-base-content">Contatos</h1>
-          <p className="text-xs text-base-content/50">{total} cadastrados{optOutCount > 0 && ` · ${optOutCount} descadastrado(s)`}</p>
+          <p className="text-xs text-base-content/50">{total} contato(s){filtro !== 'todos' ? ` · filtro: ${filtro === 'ativos' ? 'ativos' : 'descadastrados'}` : ''}</p>
         </div>
         <div className="flex gap-2">
           <Select
             className="!w-auto"
             value={filtro}
-            onChange={(e) => setFiltro(e.target.value as any)}
+            onChange={(e) => { setFiltro(e.target.value as any); setPage(0); }}
             title="Filtrar por situação"
           >
             <option value="todos">Todos</option>
@@ -369,9 +372,9 @@ export function ContactsPage() {
             placeholder="Buscar nome, telefone, empresa..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(search)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { setAppliedSearch(search); setPage(0); } }}
           />
-          <Button variant="outline" onClick={() => setAppliedSearch(search)}>Buscar</Button>
+          <Button variant="outline" onClick={() => { setAppliedSearch(search); setPage(0); }}>Buscar</Button>
           <Button variant="outline" onClick={() => { setShowImport(true); setImportMsg(''); }}><Icon name="upload" className="h-4 w-4" /> Importar</Button>
           <Button onClick={() => { setEditId(null); reset(empty); setShowForm(true); }}>+ Novo</Button>
         </div>
@@ -383,11 +386,11 @@ export function ContactsPage() {
           {selected.size === 0 ? (
             <>
               <span className="text-xs text-base-content/50">Tags:</span>
-              <button onClick={() => setTagFilter(null)} className={chipCls(tagFilter === null)}>Todas</button>
+              <button onClick={() => { setTagFilter(null); setPage(0); }} className={chipCls(tagFilter === null)}>Todas</button>
               {tags.map((t) => (
                 <button
                   key={t.tag}
-                  onClick={() => setTagFilter(tagFilter === t.tag ? null : t.tag)}
+                  onClick={() => { setTagFilter(tagFilter === t.tag ? null : t.tag); setPage(0); }}
                   className={chipCls(tagFilter === t.tag)}
                 >
                   {t.tag} <span className="opacity-60">{t.count}</span>
@@ -519,6 +522,23 @@ export function ContactsPage() {
         </table>
         )}
       </div>
+
+      {/* paginação */}
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-3 border-t border-base-200 px-4 py-3 text-xs" style={{ borderColor: 'var(--border)' }}>
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="rounded-md border border-base-300 px-3 py-1 text-base-content/70 hover:bg-base-100 disabled:opacity-40"
+          >‹ Anterior</button>
+          <span className="text-base-content/50">Página {page + 1} de {pages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+            disabled={page >= pages - 1}
+            className="rounded-md border border-base-300 px-3 py-1 text-base-content/70 hover:bg-base-100 disabled:opacity-40"
+          >Próxima ›</button>
+        </div>
+      )}
 
       {/* modal novo contato */}
       <Modal

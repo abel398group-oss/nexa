@@ -10,6 +10,6 @@ export class FollowUpController {
 
   @Get()
   list(@CurrentTenant() tenantId: string) {
-    return this.followup.list(tenantId ?? 'default');
+    return this.followup.list(tenantId);
   }
 }

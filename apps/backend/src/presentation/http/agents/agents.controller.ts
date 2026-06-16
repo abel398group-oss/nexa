@@ -27,12 +27,12 @@ export class AgentsController {
   // Suporte direto (rascunho por padrão; auto-envia só com autonomia ligada)
   @Post('ask')
   ask(@CurrentTenant() tenantId: string, @Body() dto: AskDto) {
-    return this.support.ask(tenantId ?? 'default', dto);
+    return this.support.ask(tenantId, dto);
   }
 
   // Pipeline completo: classifica intenção → roteia (sales/support/human/optout) → responde
   @Post('handle')
   handle(@CurrentTenant() tenantId: string, @Body() dto: HandleDto) {
-    return this.conversation.handle(tenantId ?? 'default', dto);
+    return this.conversation.handle(tenantId, dto);
   }
 }

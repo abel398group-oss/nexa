@@ -29,7 +29,7 @@ landing preservada em `/landing`). Falta **commit + push** para o deploy automá
 **Aceite:** abrir `nexa.hipertms.com.br` cai no login (não na landing). Ver
 `docs/features/internal-mode/implementation.md`.
 
-## 3. Lado-Nexa do suporte nativo do TMS  — [prioridade: média]
+## 3. Lado-Nexa do suporte nativo do TMS — ✅ FEITO (Nexa pronto; falta o TMS)
 
 **O quê:** preparar a parte que vive NO NEXA para a tela de suporte nativa que o TMS vai
 consumir — sem tocar no TMS. Inclui: confirmar/ajustar CORS para o domínio do TMS na API

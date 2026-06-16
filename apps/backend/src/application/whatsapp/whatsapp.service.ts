@@ -17,6 +17,7 @@ interface Normalized {
   isOptOut: boolean;
   isValidBrazilPhone: boolean;
   isMedia: boolean;
+  pushName: string;
   shouldProcess: boolean;
 }
 
@@ -123,6 +124,12 @@ export class WhatsappService {
     );
     const isMedia = isValidBrazilPhone && normalizedText.length === 0;
 
+    // nome do contato vindo do WhatsApp (pushName) — exibir no inbox (ADR 020: fonte 'pushname')
+    const pany = payload as any;
+    const pushName = String(
+      pany._data?.Info?.PushName || pany.notifyName || pany._data?.PushName || pany._data?.notifyName || '',
+    ).trim();
+
     return {
       phone,
       from,
@@ -131,6 +138,7 @@ export class WhatsappService {
       isOptOut,
       isValidBrazilPhone,
       isMedia,
+      pushName,
       shouldProcess: isValidBrazilPhone && normalizedText.length > 0,
     };
   }
@@ -238,6 +246,8 @@ export class WhatsappService {
 
     // 1) upsert contato (idempotente por telefone)
     const contact = await this.contacts.create(tenantId, { phone: n.phone, source: 'whatsapp' });
+    // nome do WhatsApp (pushName) → exibir no inbox, respeitando precedência do nameSource (ADR 020)
+    if (n.pushName) await this.contacts.applyPushName(tenantId, n.phone, n.pushName).catch(() => null);
 
     // 2) opt-out tem precedência (LGPD)
     if (n.isOptOut) {

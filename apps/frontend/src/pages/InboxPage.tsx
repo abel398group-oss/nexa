@@ -111,6 +111,14 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     queryKey: ['sellers-mini'],
     queryFn: () => api.get('/sellers').then((r) => r.data as { id: string; name: string }[]),
   });
+  // follow-ups automáticos (read-only) pra indicar no header da conversa
+  const { data: followups = [] } = useQuery({
+    queryKey: ['followups'],
+    queryFn: () => api.get('/followups').then((r) => r.data as { conversationId: string; status: string; nextRunAt: string }[]),
+  });
+  const activeFollowup = active
+    ? followups.find((f) => f.conversationId === active.id && f.status === 'pending') ?? null
+    : null;
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
@@ -217,6 +225,16 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     const assignedSellerId = r.data?.assignedSellerId ?? null;
     setActive((a) => (a ? { ...a, assignedSeller, assignedSellerId } : a));
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedSeller, assignedSellerId } : c)));
+  }
+
+  // suporte: marcar o chamado como resolvido (fecha) ou reabrir
+  async function resolveTicket(resolved: boolean) {
+    if (!active) return;
+    const r = await api.patch(`/conversations/${active.id}/resolve`, { resolved });
+    const status = r.data?.status ?? (resolved ? 'closed' : 'open');
+    const outcome = r.data?.outcome ?? (resolved ? 'resolved' : null);
+    setActive((a) => (a ? { ...a, status, outcome } : a));
+    setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, status, outcome } : c)));
   }
 
   async function suggest() {
@@ -382,13 +400,23 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 </div>
 
                 {/* campanha de origem da conversa */}
-                {active.campaign && (
+                {scope === 'sales' && active.campaign && (
                   <span
                     title={`Veio da campanha: ${active.campaign.name}`}
                     className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
                   >
                     <Icon name="campaigns" className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{active.campaign.name}</span>
+                  </span>
+                )}
+
+                {/* follow-up automático agendado (read-only) — só vendas */}
+                {scope === 'sales' && activeFollowup && (
+                  <span
+                    title="Follow-up automático agendado pela Lia"
+                    className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                  >
+                    <Icon name="calendar" className="h-3.5 w-3.5" /> Follow-up {new Date(activeFollowup.nextRunAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
 
@@ -448,36 +476,57 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                   <span className="inline-flex items-center gap-1"><Icon name="knowledge" className="h-3.5 w-3.5" /> Timeline</span>
                 </button>
 
-                {/* vendedor responsável (reatribuir lead) */}
-                <span className="text-xs text-base-content/50">Vendedor:</span>
-                <Select
-                  value={active.assignedSellerId ?? ''}
-                  onChange={(e) => assignSeller(e.target.value || null)}
-                  className="!h-8 !w-auto text-xs"
-                  title="Reatribuir este lead a um vendedor"
-                >
-                  <option value="">Sem vendedor</option>
-                  {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
+                {scope === 'sales' && (
+                  <>
+                    {/* vendedor responsável (reatribuir lead) */}
+                    <span className="text-xs text-base-content/50">Vendedor:</span>
+                    <Select
+                      value={active.assignedSellerId ?? ''}
+                      onChange={(e) => assignSeller(e.target.value || null)}
+                      className="!h-8 !w-auto text-xs"
+                      title="Reatribuir este lead a um vendedor"
+                    >
+                      <option value="">Sem vendedor</option>
+                      {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </Select>
 
-                {/* resultado da venda */}
-                <span className="text-xs text-base-content/50">Resultado:</span>
-                <button
-                  onClick={() => setOutcome(active.outcome === 'won' ? null : 'won')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    active.outcome === 'won'
-                      ? 'bg-emerald-600 text-white'
-                      : 'border border-base-300 text-base-content/70 hover:bg-base-100'
-                  }`}
-                ><span className="inline-flex items-center gap-1"><Icon name="check" className="h-3.5 w-3.5" /> Ganhou</span></button>
-                <button
-                  onClick={() => setOutcome(active.outcome === 'lost' ? null : 'lost')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    active.outcome === 'lost'
-                      ? 'bg-red-600 text-white'
-                      : 'border border-base-300 text-base-content/70 hover:bg-base-100'
-                  }`}
-                ><span className="inline-flex items-center gap-1"><Icon name="close" className="h-3.5 w-3.5" /> Perdeu</span></button>
+                    {/* resultado da venda */}
+                    <span className="text-xs text-base-content/50">Resultado:</span>
+                    <button
+                      onClick={() => setOutcome(active.outcome === 'won' ? null : 'won')}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        active.outcome === 'won'
+                          ? 'bg-emerald-600 text-white'
+                          : 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                      }`}
+                    ><span className="inline-flex items-center gap-1"><Icon name="check" className="h-3.5 w-3.5" /> Ganhou</span></button>
+                    <button
+                      onClick={() => setOutcome(active.outcome === 'lost' ? null : 'lost')}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        active.outcome === 'lost'
+                          ? 'bg-red-600 text-white'
+                          : 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                      }`}
+                    ><span className="inline-flex items-center gap-1"><Icon name="close" className="h-3.5 w-3.5" /> Perdeu</span></button>
+                  </>
+                )}
+
+                {/* suporte: resolver / reabrir o chamado */}
+                {scope === 'support' && (
+                  <button
+                    onClick={() => resolveTicket(active.status !== 'closed')}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      active.status === 'closed'
+                        ? 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Icon name={active.status === 'closed' ? 'undo' : 'check'} className="h-3.5 w-3.5" />
+                      {active.status === 'closed' ? 'Reabrir' : 'Resolver'}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 

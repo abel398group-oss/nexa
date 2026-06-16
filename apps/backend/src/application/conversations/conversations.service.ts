@@ -161,6 +161,33 @@ export class ConversationsService {
     return { id, assignedSellerId: updated.assignedSellerId, assignedSeller: updated.assignedSeller };
   }
 
+  // Suporte: marca o chamado como resolvido (fecha) ou reabre. Grava histórico.
+  async setResolved(tenantId: string, id: string, resolved: boolean) {
+    const conv = await this.findOne(tenantId, id);
+    const now = new Date();
+    const toStatus = resolved ? 'closed' : 'open';
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.update({
+        where: { id },
+        data: resolved
+          ? { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, resolvedAt: now, endedAt: now }
+          : { status: 'open' as any, outcome: null, outcomeAt: null, resolvedAt: null, endedAt: null },
+      }),
+      this.prisma.conversationStageHistory.create({
+        data: {
+          conversationId: id,
+          fromStatus: conv.status as string,
+          toStatus,
+          fromOutcome: conv.outcome ?? null,
+          toOutcome: resolved ? 'resolved' : null,
+          reason: resolved ? 'resolvido_manual' : 'reaberto_manual',
+          changedAt: now,
+        },
+      }),
+    ]);
+    return { id, status: toStatus, outcome: resolved ? 'resolved' : null };
+  }
+
   // Atualiza last_activity_at — chamado sempre que uma mensagem é gravada
   async touchActivity(conversationId: string) {
     return this.prisma.aiConversation.update({

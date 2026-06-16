@@ -17,7 +17,9 @@ export async function listContacts(params: ContactListParams = {}): Promise<Cont
     params: {
       search: params.search || undefined,
       tag: params.tag || undefined,
+      status: params.status || undefined,
       limit: params.limit ?? 100,
+      offset: params.offset || undefined,
     },
   });
   return r.data;

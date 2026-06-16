@@ -10,16 +10,16 @@ export class NotificationsController {
 
   @Get()
   list(@CurrentTenant() tenantId: string) {
-    return this.notifications.list(tenantId ?? 'default');
+    return this.notifications.list(tenantId);
   }
 
   @Post('read-all')
   readAll(@CurrentTenant() tenantId: string) {
-    return this.notifications.markAllRead(tenantId ?? 'default');
+    return this.notifications.markAllRead(tenantId);
   }
 
   @Patch(':id/read')
   read(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.notifications.markRead(tenantId ?? 'default', id);
+    return this.notifications.markRead(tenantId, id);
   }
 }

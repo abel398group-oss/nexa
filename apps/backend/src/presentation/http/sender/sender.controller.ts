@@ -70,46 +70,46 @@ export class SenderController {
 
   @Get('campaigns')
   list(@CurrentTenant() tenantId: string, @Query('archived') archived?: string) {
-    return this.sender.listCampaigns(tenantId ?? 'default', archived === 'true');
+    return this.sender.listCampaigns(tenantId, archived === 'true');
   }
 
   // arquivar (guardar) campanhas selecionadas
   @Post('campaigns/archive')
   archive(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
-    return this.sender.setArchived(tenantId ?? 'default', dto.ids, true);
+    return this.sender.setArchived(tenantId, dto.ids, true);
   }
 
   // desarquivar
   @Post('campaigns/unarchive')
   unarchive(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
-    return this.sender.setArchived(tenantId ?? 'default', dto.ids, false);
+    return this.sender.setArchived(tenantId, dto.ids, false);
   }
 
   // excluir várias de uma vez
   @Post('campaigns/bulk-delete')
   bulkDelete(@CurrentTenant() tenantId: string, @Body() dto: CampaignIdsDto) {
-    return this.sender.bulkRemoveCampaigns(tenantId ?? 'default', dto.ids);
+    return this.sender.bulkRemoveCampaigns(tenantId, dto.ids);
   }
 
   @Get('campaigns/:id')
   detail(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sender.campaignDetail(tenantId ?? 'default', id);
+    return this.sender.campaignDetail(tenantId, id);
   }
 
   @Post('campaigns')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateCampaignDto) {
-    return this.sender.createCampaign(tenantId ?? 'default', dto);
+    return this.sender.createCampaign(tenantId, dto);
   }
 
   // editar campanha em rascunho (nome/mensagem/assunto/link/limite)
   @Patch('campaigns/:id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateCampaignDto) {
-    return this.sender.updateCampaign(tenantId ?? 'default', id, dto);
+    return this.sender.updateCampaign(tenantId, id, dto);
   }
 
   @Post('campaigns/email')
   createEmail(@CurrentTenant() tenantId: string, @Body() dto: CreateEmailCampaignDto) {
-    return this.emailCampaign.createEmailCampaign(tenantId ?? 'default', dto);
+    return this.emailCampaign.createEmailCampaign(tenantId, dto);
   }
 
   // upload do anexo (PDF/Word) — retorna a URL pública p/ usar na campanha
@@ -136,32 +136,32 @@ export class SenderController {
 
   @Post('campaigns/:id/start')
   start(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sender.setStatus(tenantId ?? 'default', id, 'running');
+    return this.sender.setStatus(tenantId, id, 'running');
   }
 
   @Post('campaigns/:id/pause')
   pause(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sender.setStatus(tenantId ?? 'default', id, 'paused');
+    return this.sender.setStatus(tenantId, id, 'paused');
   }
 
   @Delete('campaigns/:id')
   remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sender.removeCampaign(tenantId ?? 'default', id);
+    return this.sender.removeCampaign(tenantId, id);
   }
 
   @Get('sender/numbers')
   numbers(@CurrentTenant() tenantId: string) {
-    return this.sender.listNumbers(tenantId ?? 'default');
+    return this.sender.listNumbers(tenantId);
   }
 
   // janela de envio (horários) por tenant — exibida/editada na tela de Disparo
   @Get('sender/settings')
   getSettings(@CurrentTenant() tenantId: string) {
-    return this.sender.getSettings(tenantId ?? 'default');
+    return this.sender.getSettings(tenantId);
   }
 
   @Put('sender/settings')
   updateSettings(@CurrentTenant() tenantId: string, @Body() dto: SenderSettingsDto) {
-    return this.sender.updateSettings(tenantId ?? 'default', dto);
+    return this.sender.updateSettings(tenantId, dto);
   }
 }

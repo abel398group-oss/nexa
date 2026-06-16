@@ -30,26 +30,26 @@ export class UsersController {
 
   @Get()
   list(@CurrentTenant() tenantId: string, @Query('search') search?: string) {
-    return this.users.list(tenantId ?? 'default', search);
+    return this.users.list(tenantId, search);
   }
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateUserDto) {
-    return this.users.create(tenantId ?? 'default', dto);
+    return this.users.create(tenantId, dto);
   }
 
   @Patch(':id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.users.update(tenantId ?? 'default', id, dto);
+    return this.users.update(tenantId, id, dto);
   }
 
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
-    return this.users.setActive(tenantId ?? 'default', id, dto.active);
+    return this.users.setActive(tenantId, id, dto.active);
   }
 
   @Delete(':id')
   remove(@CurrentTenant() tenantId: string, @Param('id') id: string, @CurrentUser() user: any) {
-    return this.users.remove(tenantId ?? 'default', id, user?.userId);
+    return this.users.remove(tenantId, id, user?.userId);
   }
 }

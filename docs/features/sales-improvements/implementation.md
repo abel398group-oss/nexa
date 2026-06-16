@@ -158,14 +158,17 @@
   `Contact.notes`, que o backend já aceitava).
 - [x] **Fatia 4 — Filtrar Inbox por vendedor** · seletor de vendedor na sidebar do Inbox
   de Vendas (inclui "Sem vendedor").
+- [x] **Fatia 5 — Paginação em Contatos** · filtro de situação movido pro backend
+  (`?status=`) + paginação por página (50/pág) com Anterior/Próxima. (Ordenação por
+  coluna ficou de fora — opcional, client-side.)
 - [x] **Fatia 6 (parcial) — Validação de e-mail** no disparo (regex real no lugar de só `@`).
-- [ ] **Fatia 5 — Paginação + ordenação em Contatos** — pendente (decidir filtro de
-  situação server-side antes).
-- [ ] **Fatia 6 (resto) — aviso "limite < selecionados"** na campanha — pendente.
-- [ ] **Fatia 7 — Follow-up na UI** — pendente (investigar endpoints do módulo `followup`).
+- [x] **Fatia 7 — Follow-up na UI** · indicador "Follow-up <data>" no header da conversa
+  (read-only, via `GET /followups`).
+- [ ] **Fatia 6 (resto) — aviso "limite < selecionados"** na campanha — pendente (único
+  item menor que sobra; só dá pra calcular no público manual).
 
-> Backend novo a subir: `PATCH /conversations/:id/assign` e `PATCH /campaigns/:id`
-> (reiniciar o backend). Sem migration nesta entrega.
+> Backend novo a subir: `PATCH /conversations/:id/assign`, `PATCH /campaigns/:id` e o
+> `?status=` no `GET /contacts` (reiniciar o backend). Sem migration nesta entrega.
 
 ## Checklist de validação (pós-deploy)
 
@@ -183,3 +186,7 @@
   e a nota continua lá.
 - [ ] **Validação de e-mail:** campanha por e-mail com uma linha "texto inválido" e uma
   "valido@dominio.com" → só a válida conta como destinatário; se nenhuma válida, bloqueia.
+- [ ] **Paginação Contatos:** com +50 contatos, navega Anterior/Próxima; trocar o filtro
+  de situação (todos/ativos/descadastrados) refaz a contagem e volta pra página 1.
+- [ ] **Follow-up:** numa conversa com follow-up agendado, o header mostra o chip
+  "Follow-up <data>".

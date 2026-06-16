@@ -16,22 +16,22 @@ export class ConversationsController {
 
   @Get()
   findAll(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query() q: PaginationQueryDto) {
-    return this.conversations.findAll(tenantId ?? 'default', q, sellerScope(user));
+    return this.conversations.findAll(tenantId, q, sellerScope(user));
   }
 
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.findOne(tenantId ?? 'default', id);
+    return this.conversations.findOne(tenantId, id);
   }
 
   @Get(':id/messages')
   messages(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.getMessages(tenantId ?? 'default', id);
+    return this.conversations.getMessages(tenantId, id);
   }
 
   @Get(':id/timeline')
   timeline(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.getTimeline(tenantId ?? 'default', id);
+    return this.conversations.getTimeline(tenantId, id);
   }
 
   @Post()
@@ -39,7 +39,7 @@ export class ConversationsController {
     @CurrentTenant() tenantId: string,
     @Body() dto: { contactId: string; phone: string; productCode?: string; sourceChannel?: string },
   ) {
-    return this.conversations.create(tenantId ?? 'default', dto);
+    return this.conversations.create(tenantId, dto);
   }
 
   @Patch(':id/outcome')
@@ -48,7 +48,7 @@ export class ConversationsController {
     @Param('id') id: string,
     @Body() dto: { outcome: 'won' | 'lost' | null },
   ) {
-    return this.conversations.setOutcome(tenantId ?? 'default', id, dto.outcome);
+    return this.conversations.setOutcome(tenantId, id, dto.outcome);
   }
 
   @Patch(':id/assign')
@@ -57,7 +57,7 @@ export class ConversationsController {
     @Param('id') id: string,
     @Body() dto: { sellerId: string | null },
   ) {
-    return this.conversations.assign(tenantId ?? 'default', id, dto.sellerId ?? null);
+    return this.conversations.assign(tenantId, id, dto.sellerId ?? null);
   }
 
   @Post(':id/messages')
@@ -66,6 +66,6 @@ export class ConversationsController {
     @Param('id') id: string,
     @Body() dto: { direction: 'inbound' | 'outbound'; content: string; intent?: string },
   ) {
-    return this.conversations.addMessage(tenantId ?? 'default', id, dto);
+    return this.conversations.addMessage(tenantId, id, dto);
   }
 }

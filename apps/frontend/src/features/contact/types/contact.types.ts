@@ -34,7 +34,9 @@ export interface ImportContactInput {
 export interface ContactListParams {
   search?: string;
   limit?: number;
+  offset?: number;
   tag?: string;
+  status?: string; // 'active' | 'opted_out'
 }
 
 // Tag com contagem de contatos (para filtros e seletor de público).

@@ -18,14 +18,6 @@ class TicketMessageDto {
   @IsString() @MinLength(1) message!: string;
 }
 
-// abertura de chamado: assunto + area + descricao + telefone de contato
-class OpenTicketDto {
-  @IsString() @MinLength(1) message!: string;
-  @IsOptional() @IsString() subject?: string;
-  @IsOptional() @IsString() category?: string;
-  @IsOptional() @IsString() phone?: string;
-}
-
 class TicketsQueryDto {
   @IsOptional() @Type(() => Number) limit?: number;
   @IsOptional() @Type(() => Number) offset?: number;
@@ -65,7 +57,10 @@ export class PortalController {
       maxAge: MAX_AGE_MS,
       path: '/api/portal',
     });
-    return { ok: true, name: ctx.name ?? null };
+    // session: o MESMO JWT no corpo, para o embed NATIVO no TMS usar como
+    // Authorization: Bearer (cross-subdominio, sem depender de cookie). O portal-pagina
+    // standalone continua usando o cookie acima. Ver docs/features/tms-native-support.
+    return { ok: true, name: ctx.name ?? null, session: jwt };
   }
 
   // Perfil do cliente logado + dados read-only do TMS (degrada se o connector cair).
@@ -79,8 +74,7 @@ export class PortalController {
     } catch {
       contract = null;
     }
-    const phone = await this.tickets.contactPhone(c).catch(() => null);
-    return { externalId: c.externalId, tenantId: c.tenantId, name: c.name, phone, contract };
+    return { externalId: c.externalId, tenantId: c.tenantId, name: c.name, contract };
   }
 
   // Lista os chamados do cliente (escopo por externalId da sessao).
@@ -101,8 +95,8 @@ export class PortalController {
   // Abre um novo chamado (entra no pipeline da Lia).
   @UseGuards(PortalSessionGuard)
   @Post('tickets')
-  openTicket(@Req() req: any, @Body() dto: OpenTicketDto) {
-    return this.tickets.open(req.portalCustomer, dto);
+  openTicket(@Req() req: any, @Body() dto: TicketMessageDto) {
+    return this.tickets.open(req.portalCustomer, { message: dto.message });
   }
 
   // Cliente responde num chamado existente.

@@ -32,32 +32,32 @@ export class SellersController {
 
   @Get()
   list(@CurrentTenant() tenantId: string, @Query('search') search?: string) {
-    return this.sellers.list(tenantId ?? 'default', search);
+    return this.sellers.list(tenantId, search);
   }
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateSellerDto) {
-    return this.sellers.create(tenantId ?? 'default', dto);
+    return this.sellers.create(tenantId, dto);
   }
 
   // exclusão em lote (definir ANTES de :id)
   @Post('bulk-delete')
   bulkDelete(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
-    return this.sellers.deleteMany(tenantId ?? 'default', body.ids ?? []);
+    return this.sellers.deleteMany(tenantId, body.ids ?? []);
   }
 
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
-    return this.sellers.setActive(tenantId ?? 'default', id, dto.active);
+    return this.sellers.setActive(tenantId, id, dto.active);
   }
 
   @Patch(':id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateSellerDto) {
-    return this.sellers.update(tenantId ?? 'default', id, dto);
+    return this.sellers.update(tenantId, id, dto);
   }
 
   @Delete(':id')
   remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sellers.remove(tenantId ?? 'default', id);
+    return this.sellers.remove(tenantId, id);
   }
 }

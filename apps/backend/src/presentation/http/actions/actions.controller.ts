@@ -20,11 +20,11 @@ export class ActionsController {
       payload?: Record<string, unknown>;
     },
   ) {
-    return this.actions.request(tenantId ?? 'default', dto);
+    return this.actions.request(tenantId, dto);
   }
 
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.actions.findOne(tenantId ?? 'default', id);
+    return this.actions.findOne(tenantId, id);
   }
 }

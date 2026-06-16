@@ -23,16 +23,16 @@ export class PlaybookController {
 
   @Get()
   get(@CurrentTenant() tenantId: string) {
-    return this.playbook.get(tenantId ?? 'default');
+    return this.playbook.get(tenantId);
   }
 
   @Put()
   update(@CurrentTenant() tenantId: string, @Body() dto: UpdatePlaybookDto) {
-    return this.playbook.update(tenantId ?? 'default', dto);
+    return this.playbook.update(tenantId, dto);
   }
 
   @Post('reset')
   reset(@CurrentTenant() tenantId: string) {
-    return this.playbook.reset(tenantId ?? 'default');
+    return this.playbook.reset(tenantId);
   }
 }

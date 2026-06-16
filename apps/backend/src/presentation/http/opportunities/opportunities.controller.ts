@@ -35,37 +35,37 @@ export class OpportunitiesController {
 
   @Get()
   findAll(@CurrentTenant() tenantId: string, @Query() q: PaginationQueryDto, @Query('stage') stage?: string) {
-    return this.opps.findAll(tenantId ?? 'default', q, stage);
+    return this.opps.findAll(tenantId, q, stage);
   }
 
   // antes de :id para nao casar 'summary' como id
   @Get('summary')
   summary(@CurrentTenant() tenantId: string) {
-    return this.opps.summary(tenantId ?? 'default');
+    return this.opps.summary(tenantId);
   }
 
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.opps.findOne(tenantId ?? 'default', id);
+    return this.opps.findOne(tenantId, id);
   }
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateOpportunityDto) {
-    return this.opps.create(tenantId ?? 'default', dto);
+    return this.opps.create(tenantId, dto);
   }
 
   @Patch(':id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateOpportunityDto) {
-    return this.opps.update(tenantId ?? 'default', id, dto);
+    return this.opps.update(tenantId, id, dto);
   }
 
   @Patch(':id/stage')
   moveStage(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: MoveStageDto) {
-    return this.opps.moveStage(tenantId ?? 'default', id, dto.stage, dto.reason);
+    return this.opps.moveStage(tenantId, id, dto.stage, dto.reason);
   }
 
   @Delete(':id')
   remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.opps.remove(tenantId ?? 'default', id);
+    return this.opps.remove(tenantId, id);
   }
 }
