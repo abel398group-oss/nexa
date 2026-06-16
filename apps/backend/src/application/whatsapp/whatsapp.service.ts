@@ -155,6 +155,47 @@ export class WhatsappService {
     return p.id || p._data?.Info?.ID || p._data?.id || null;
   }
 
+  // WhatsApp passou a anonimizar remetentes via LID (<id>@lid), sem o numero.
+  // Sem resolver, o normalize() rejeita como "telefone invalido" e a Lia nunca processa.
+  private extractLid(rawBody: any): string | null {
+    const body = rawBody?.body || rawBody || {};
+    const payload = body.payload || body;
+    const cands = [
+      payload._data?.Info?.Sender,
+      payload._data?.Info?.Chat,
+      payload._data?.Info?.Participant,
+      payload.participant,
+      payload.from,
+      payload.chatId,
+      payload._data?.from,
+    ];
+    for (const c of cands) {
+      const ss = String(c || '');
+      if (ss.endsWith('@lid')) return ss;
+    }
+    return null;
+  }
+
+  // Resolve um LID para o numero real (<phone>@c.us) consultando os contatos do WAHA.
+  private async resolveLidToPhone(lid: string): Promise<string | null> {
+    const base = process.env.WAHA_API_URL;
+    const key = process.env.WAHA_API_KEY;
+    const session = process.env.WAHA_SESSION ?? 'default';
+    if (!base || !lid) return null;
+    try {
+      const url = `${base.replace(/\/+$/, '')}/api/contacts?session=${session}&contactId=${encodeURIComponent(lid)}`;
+      const headers: Record<string, string> = {};
+      if (key) headers['X-Api-Key'] = key;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      const data = (await res.json()) as any;
+      const num = String(data?.number ?? data?.id?.user ?? '').replace(/\D/g, '');
+      return num || null;
+    } catch {
+      return null;
+    }
+  }
+
   // Extrai a referência de áudio (URL + mimetype) do payload do WAHA, se for áudio.
   private extractAudioRef(rawBody: any): { url: string; mimetype: string } | null {
     const p = rawBody?.payload || rawBody?.body?.payload || rawBody?.body || rawBody || {};
@@ -225,7 +266,21 @@ export class WhatsappService {
 
     const n = this.normalize(rawBody);
     if (!n.phone) return { ignored: true, reason: 'sem telefone' };
-    if (!n.isValidBrazilPhone) return { ignored: true, reason: `telefone inválido: ${n.phone}` };
+    if (!n.isValidBrazilPhone) {
+      // LID (privacidade do WhatsApp): tenta resolver o <id>@lid para o numero real.
+      const lid = this.extractLid(rawBody);
+      const resolved = lid ? await this.resolveLidToPhone(lid) : null;
+      if (resolved && resolved.startsWith('55') && resolved.length >= 12 && resolved.length <= 13) {
+        this.logger.log(`LID ${lid} resolvido p/ número ${resolved}`);
+        n.phone = resolved;
+        n.from = `${resolved}@c.us`;
+        n.isValidBrazilPhone = true;
+        n.isMedia = n.normalizedText.length === 0;
+        n.shouldProcess = n.normalizedText.length > 0;
+      } else {
+        return { ignored: true, reason: `telefone inválido: ${n.phone}` };
+      }
+    }
     let inboundAudioUrl: string | null = null;
     if (n.isMedia) {
       // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
