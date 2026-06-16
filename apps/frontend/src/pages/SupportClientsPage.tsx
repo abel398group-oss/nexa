@@ -1,21 +1,10 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { api } from '@/shared/lib/api';
 import { displayPhone } from '@/shared/lib/phone';
 import { isSupportTicket } from '@/shared/lib/conversation';
 import { Card, PageContainer, PageHeader, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
-
-interface Conv {
-  id: string;
-  phone: string;
-  status: string;
-  lastActivityAt?: string | null;
-  customerStage?: string | null;
-  ticketCategory?: string | null;
-  ticketPriority?: string | null;
-  contact?: { id?: string; name?: string | null } | null;
-}
+import { listConversations } from '@/entities/conversation';
 
 interface Client {
   key: string;
@@ -39,7 +28,7 @@ function fmt(ts: number): string {
 export function SupportClientsPage() {
   const { data: convs = [], isLoading } = useQuery({
     queryKey: ['conversations'],
-    queryFn: () => api.get('/conversations').then((r) => r.data.items as Conv[]),
+    queryFn: () => listConversations().then((r) => r.items),
   });
 
   const clients = useMemo<Client[]>(() => {

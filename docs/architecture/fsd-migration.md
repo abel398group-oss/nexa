@@ -4,8 +4,46 @@
 > de uma vez.** É refactor de imports do projeto inteiro — fazer **uma fatia por vez,
 > validando o build (`pnpm build` / dev server) entre cada passo**.
 >
-> Status: plano (não executado). Risco: alto se feito às cegas (quebra de import-path).
-> Ganho: organização/escala — **zero impacto pro usuário final**.
+> Status: **fatias 1, 2 e 3 executadas e validadas (type-check OK)** · fatias 4-6 pendentes.
+> Risco: alto se feito às cegas (quebra de import-path). Ganho: organização/escala —
+> **zero impacto pro usuário final**.
+>
+> ### Progresso
+> - [x] **Fatia 1 — `shared/`**: `lib/` → `shared/lib/` (47 imports `@/lib/` → `@/shared/lib/`). Build OK.
+> - [x] **Fatia 2 — `app/`**: `contexts/` → `app/providers/` (16 imports) + `App.tsx` → `app/App.tsx` + `main.tsx`. Build OK.
+> - [x] **Fatia 3 — `entities/`** (model/api por entidade). `tsc --noEmit` 0 erros. Detalhe abaixo.
+> - [ ] **Fatia 4 — `features/`** (ações em slices).
+> - [ ] **Fatia 5 — `widgets/`** (ConversationInbox, app-shell).
+> - [ ] **Fatia 6 — `pages/` finas**.
+>
+> O alias `@/*` → `src/*` já cobre `@/entities/*` — **nenhuma mudança em tsconfig/vite** foi necessária.
+> As fatias 4-6 são reestruturação de código (não só mover arquivo) — fazer uma por
+> vez, com build verde entre cada.
+
+### Fatia 3 — `entities/` (feito em jun/2026)
+
+Cinco entidades, cada uma com `types/` (tipos de domínio) + `api/` (chamadas puras,
+sem React) + `index.ts` (barrel público). As páginas passaram a consumir os barrels
+em vez de declarar tipos e chamar `api.get/post` inline.
+
+| Entity | Tipos | API pura | Consumido por |
+|---|---|---|---|
+| `contact` | Contact, ContactInput, … | listContacts, createContact, … | Campaigns, Contacts, Inbox (promovido de `features/contact`) |
+| `conversation` | Conversation, Message | listConversations, sendMessage, assignSeller, setConversationResolved, … | Inbox, SupportClients |
+| `seller` | Seller, SellerKpi, SellerMini | listSellers, createSeller, toggleSellerActive, … | Sellers, Inbox |
+| `campaign` | Campaign, SenderNumber, SenderSettings, … | listCampaigns, create*/update/start/pause/delete, listSenderNumbers, … | Campaigns, NumberHealth |
+| `ticket` | PortalMe, PortalTicket* | getPortalMe, listPortalTickets, openPortalTicket, … (sobre `portalApi`) | portal/PortalPage |
+
+Notas:
+- `features/contact` virou `entities/contact` (a pasta `features/` ficou vazia e foi removida).
+- Os **tipos do ticket saíram de `shared/lib/portalApi`** para `entities/ticket`; o `shared/lib/portalApi`
+  agora expõe só a instância axios isolada do portal (transporte = camada shared, correto no FSD).
+- `Conversation` e `SenderNumber` viraram **supersets** (a forma rica), já que telas diferentes
+  liam subconjuntos do mesmo endpoint.
+
+> **Validação:** `tsc --noEmit` rodado contra cópia do `src` (o mount do sandbox adiciona bytes NUL
+> no fim dos arquivos editados — artefato de mount, não corrupção do arquivo real) → **0 erros de tipo**.
+> O build de produção (`pnpm build`) deve ser rodado localmente pelo usuário a cada fatia.
 
 ---
 

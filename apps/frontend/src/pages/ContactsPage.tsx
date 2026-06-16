@@ -24,7 +24,7 @@ import {
   bulkDeleteContacts,
   importContacts,
   getContactCampaigns,
-} from '@/features/contact';
+} from '@/entities/contact';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 

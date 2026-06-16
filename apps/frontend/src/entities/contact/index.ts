@@ -1,5 +1,5 @@
 // Barrel público da feature "contact" (FSD — padrão HiperTMS).
-// Importe SEMPRE por aqui: `@/features/contact`. Nunca alcance o interior.
+// Importe SEMPRE por aqui: `@/entities/contact`. Nunca alcance o interior.
 export type {
   Contact,
   ContactInput,

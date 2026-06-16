@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useLocation } from 'react-router-dom';
-import { api } from '@/shared/lib/api';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
-import { listContacts, listTags, type TagCount, type Contact } from '@/features/contact';
+import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
+import {
+  type Campaign,
+  type SenderNumber,
+  type SenderSettings,
+  listCampaigns,
+  getCampaign,
+  createWhatsappCampaign,
+  createEmailCampaign,
+  updateCampaign,
+  startCampaign,
+  pauseCampaign,
+  deleteCampaign,
+  bulkDeleteCampaigns,
+  setCampaignsArchived,
+  uploadCampaignMedia,
+  listSenderNumbers,
+  getSenderSettings,
+  saveSenderSettings,
+} from '@/entities/campaign';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon, Badge, statusVariant } from '@/shared/ui';
-
-interface Campaign {
-  id: string;
-  name: string;
-  channel?: string;
-  template: string;
-  subject?: string | null;
-  status: string;
-  scheduledAt?: string | null;
-  counts: Record<string, number>;
-}
-interface SenderNumber { phone: string; sentToday: number; dailyLimit: number; }
 
 type Channel = 'whatsapp' | 'email';
 
@@ -83,7 +89,7 @@ export function CampaignsPage() {
   const [schedDayOffset, setSchedDayOffset] = useState(0);
   const [schedHour, setSchedHour] = useState<number | null>(null);
   const [schedMinute, setSchedMinute] = useState(0);
-  const [settings, setSettings] = useState<{ waStartHour: number; waEndHour: number; emailStartHour: number; emailEndHour: number } | null>(null);
+  const [settings, setSettings] = useState<SenderSettings | null>(null);
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
   const [channel, setChannel] = useState<Channel>('whatsapp');
@@ -146,12 +152,10 @@ export function CampaignsPage() {
   async function uploadFile(file: File) {
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const r = await api.post('/campaigns/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setMedia({ url: r.data.url, name: r.data.name });
+      const m = await uploadCampaignMedia(file);
+      setMedia({ url: m.url, name: m.name });
       // Para e-mail: o link é a URL do arquivo hospedado
-      if (channel === 'email') setLink(r.data.url);
+      if (channel === 'email') setLink(m.url);
     } finally {
       setUploading(false);
     }
@@ -160,13 +164,13 @@ export function CampaignsPage() {
   async function load() {
     try {
       const [c, n, s] = await Promise.allSettled([
-        api.get('/campaigns', { params: { archived: archivedView } }),
-        api.get('/sender/numbers'),
-        api.get('/sender/settings'),
+        listCampaigns(archivedView),
+        listSenderNumbers(),
+        getSenderSettings(),
       ]);
-      if (c.status === 'fulfilled') setItems(c.value.data);
-      if (n.status === 'fulfilled') setNumbers(n.value.data);
-      if (s.status === 'fulfilled') setSettings(s.value.data);
+      if (c.status === 'fulfilled') setItems(c.value);
+      if (n.status === 'fulfilled') setNumbers(n.value);
+      if (s.status === 'fulfilled') setSettings(s.value);
     } finally {
       setLoading(false);
     }
@@ -176,8 +180,8 @@ export function CampaignsPage() {
     e.preventDefault();
     if (!settings) return;
     try {
-      const r = await api.put('/sender/settings', settings);
-      setSettings(r.data);
+      const updated = await saveSenderSettings(settings);
+      setSettings(updated);
       toast.success('Horários de envio atualizados.');
       setShowHours(false);
     } catch {
@@ -208,7 +212,7 @@ export function CampaignsPage() {
   async function archiveSelected(archive: boolean) {
     const ids = [...selected];
     if (!ids.length) return;
-    await api.post(`/campaigns/${archive ? 'archive' : 'unarchive'}`, { ids });
+    await setCampaignsArchived(ids, archive);
     toast.success(archive ? `${ids.length} arquivada(s).` : `${ids.length} desarquivada(s).`);
     setSelected(new Set());
     await load();
@@ -223,7 +227,7 @@ export function CampaignsPage() {
       confirmLabel: 'Excluir',
     });
     if (!ok) return;
-    await api.post('/campaigns/bulk-delete', { ids });
+    await bulkDeleteCampaigns(ids);
     toast.success(`${ids.length} campanha(s) excluída(s).`);
     setSelected(new Set());
     await load();
@@ -412,8 +416,8 @@ export function CampaignsPage() {
     setDetailError(false);
     setDetail({ campaign: c, targets: [], counts: c.counts });
     try {
-      const r = await api.get(`/campaigns/${c.id}`);
-      setDetail(r.data);
+      const d = await getCampaign(c.id);
+      setDetail(d);
     } catch {
       setDetailError(true);
     } finally {
@@ -427,8 +431,8 @@ export function CampaignsPage() {
     const id = detail.campaign.id;
     const t = setInterval(async () => {
       try {
-        const r = await api.get(`/campaigns/${id}`);
-        setDetail((cur: any) => (cur?.campaign?.id === id ? r.data : cur));
+        const d = await getCampaign(id);
+        setDetail((cur: any) => (cur?.campaign?.id === id ? d : cur));
       } catch {
         /* silencioso — não atrapalha o modal */
       }
@@ -491,7 +495,7 @@ export function CampaignsPage() {
     if (!editC) return;
     setEditBusy(true);
     try {
-      await api.patch(`/campaigns/${editC.id}`, { name: editName.trim(), template: editMsg.trim() });
+      await updateCampaign(editC.id, { name: editName.trim(), template: editMsg.trim() });
       toast.success('Campanha atualizada!');
       setEditC(null);
       await load();
@@ -522,7 +526,7 @@ export function CampaignsPage() {
     setFormErrors({});
     setBusy(true);
     try {
-      let r: any;
+      let r: { included?: number; skippedOptOut?: number; _count?: { targets?: number } };
       if (channel === 'email') {
         const payload: any = {
           name: name.trim(),
@@ -534,7 +538,7 @@ export function CampaignsPage() {
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
-        r = await api.post('/campaigns/email', payload);
+        r = await createEmailCampaign(payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
         if (audience === 'todos') {
@@ -555,12 +559,12 @@ export function CampaignsPage() {
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
-        r = await api.post('/campaigns', payload);
+        r = await createWhatsappCampaign(payload);
       }
       setShow(false);
       resetForm();
-      const inc = r.data?.included ?? r.data?._count?.targets ?? 0;
-      const skip = r.data?.skippedOptOut ?? 0;
+      const inc = r.included ?? r._count?.targets ?? 0;
+      const skip = r.skippedOptOut ?? 0;
       toast.success(`Campanha criada! ${inc} contato(s)${skip > 0 ? ` · ${skip} pulado(s) por opt-out` : ''}.`);
       await load();
     } catch {
@@ -579,11 +583,11 @@ export function CampaignsPage() {
       confirmLabel: 'Iniciar disparo',
     });
     if (!ok) return;
-    await api.post(`/campaigns/${c.id}/start`);
+    await startCampaign(c.id);
     toast.success('Campanha iniciada');
     await load();
   }
-  async function pause(id: string) { await api.post(`/campaigns/${id}/pause`); toast.info('Campanha pausada.'); await load(); }
+  async function pause(id: string) { await pauseCampaign(id); toast.info('Campanha pausada.'); await load(); }
   async function del(c: Campaign) {
     const ok = await confirm({
       title: 'Excluir campanha',
@@ -593,7 +597,7 @@ export function CampaignsPage() {
     });
     if (!ok) return;
     try {
-      await api.delete(`/campaigns/${c.id}`);
+      await deleteCampaign(c.id);
       toast.success('Campanha excluída.');
       await load();
     } catch {

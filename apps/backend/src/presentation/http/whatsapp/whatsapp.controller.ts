@@ -1,11 +1,15 @@
 import { Body, Controller, ForbiddenException, Logger, Post, Query } from '@nestjs/common';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
+import { WahaHealthService } from '@/application/whatsapp/waha-health.service';
 
 // Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token OBRIGATÓRIO.
 @Controller('webhooks')
 export class WhatsappController {
   private readonly logger = new Logger('WahaWebhook');
-  constructor(private readonly whatsapp: WhatsappService) {}
+  constructor(
+    private readonly whatsapp: WhatsappService,
+    private readonly health: WahaHealthService,
+  ) {}
 
   @Post('waha')
   async waha(@Body() body: any, @Query('token') token?: string) {
@@ -23,6 +27,11 @@ export class WhatsappController {
     // recibos de entrega/leitura (✓✓) → atualiza o status da mensagem
     if (event === 'message.ack') {
       return this.whatsapp.handleAck(body);
+    }
+    // mudança de estado da sessão (CONNECTED/STOPPED/FAILED) → monitor de saúde
+    if (event === 'session.status') {
+      await this.health.handleStatusEvent(body);
+      return { ok: true };
     }
     // só processa eventos de mensagem nova
     if (event && event !== 'message') {

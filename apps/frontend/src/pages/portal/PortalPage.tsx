@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  portalApi,
   type PortalMe,
   type PortalTicketSummary,
   type PortalTicketDetail,
-} from '@/shared/lib/portalApi';
+  portalSession,
+  portalLogout,
+  getPortalMe,
+  listPortalTickets,
+  getPortalTicket,
+  openPortalTicket,
+  replyPortalTicket,
+} from '@/entities/ticket';
 import { Button, Card, Input, Select, Textarea, Icon } from '@/shared/ui';
 
 // Áreas/módulos do HiperTMS — o cliente escolhe onde está o problema.
@@ -57,13 +63,13 @@ export function PortalPage() {
       const url = new URL(window.location.href);
       const token = url.searchParams.get('t');
       if (token) {
-        try { await portalApi.post('/session', { token }); } catch { /* token inválido → cai no /me */ }
+        try { await portalSession(token); } catch { /* token inválido → cai no /me */ }
         url.searchParams.delete('t');
         window.history.replaceState({}, '', url.pathname + url.search);
       }
       try {
-        const r = await portalApi.get<PortalMe>('/me');
-        setMe(r.data);
+        const me = await getPortalMe();
+        setMe(me);
         setPhase('ready');
       } catch {
         setPhase('no-session');
@@ -72,10 +78,8 @@ export function PortalPage() {
   }, []);
 
   const loadTickets = useCallback(async () => {
-    const r = await portalApi.get<{ items: PortalTicketSummary[]; total: number }>('/tickets', {
-      params: { limit: 100, offset: 0 },
-    });
-    setTickets(r.data.items);
+    const r = await listPortalTickets(100, 0);
+    setTickets(r.items);
   }, []);
 
   useEffect(() => {
@@ -83,8 +87,8 @@ export function PortalPage() {
   }, [phase, loadTickets]);
 
   const loadDetail = useCallback(async (id: string) => {
-    const r = await portalApi.get<PortalTicketDetail>(`/tickets/${id}`);
-    setDetail(r.data);
+    const d = await getPortalTicket(id);
+    setDetail(d);
   }, []);
 
   useEffect(() => {
@@ -112,7 +116,7 @@ export function PortalPage() {
     if (!ntSubject.trim() || !draft.trim() || sending) return;
     setSending(true);
     try {
-      const r = await portalApi.post<PortalTicketDetail>('/tickets', {
+      const d = await openPortalTicket({
         subject: ntSubject.trim(),
         category: ntArea || undefined,
         message: draft.trim(),
@@ -120,8 +124,8 @@ export function PortalPage() {
       });
       setDraft('');
       setComposing(false);
-      setDetail(r.data);
-      setSelected(r.data.id);
+      setDetail(d);
+      setSelected(d.id);
       await loadTickets();
     } finally {
       setSending(false);
@@ -132,9 +136,9 @@ export function PortalPage() {
     if (!draft.trim() || sending || !selected) return;
     setSending(true);
     try {
-      const r = await portalApi.post<PortalTicketDetail>(`/tickets/${selected}/messages`, { message: draft.trim() });
+      const d = await replyPortalTicket(selected, draft.trim());
       setDraft('');
-      setDetail(r.data);
+      setDetail(d);
       loadTickets();
     } finally {
       setSending(false);
@@ -142,7 +146,7 @@ export function PortalPage() {
   }
 
   async function logout() {
-    try { await portalApi.post('/session/logout', {}); } finally { setMe(null); setPhase('no-session'); }
+    try { await portalLogout(); } finally { setMe(null); setPhase('no-session'); }
   }
 
   // ── estados de sessão ─────────────────────────────────────────────────────

@@ -45,9 +45,13 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
 
       const sessionData = (await sessionRes.json()) as any;
       const existingWebhooks: any[] = sessionData?.config?.webhooks ?? [];
+      const desiredEvents = ['message', 'message.ack', 'session.status'];
 
-      // Verifica se o webhook já está registrado com a URL correta
-      const alreadyRegistered = existingWebhooks.some((w: any) => w.url === webhookUrl);
+      // Já registrado COM a URL certa E todos os eventos desejados?
+      // Se faltar algum evento (ex.: session.status novo), re-registra.
+      const alreadyRegistered = existingWebhooks.some(
+        (w: any) => w.url === webhookUrl && desiredEvents.every((e) => (w.events ?? []).includes(e)),
+      );
       if (alreadyRegistered) {
         this.logger.log(`WahaBootstrap: webhook já registrado — ${webhookUrl}`);
         return;
@@ -60,7 +64,7 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
       // Adiciona o webhook atualizado
       filtered.push({
         url: webhookUrl,
-        events: ['message', 'message.ack'],
+        events: desiredEvents,
         hmac: null,
         retries: null,
         customHeaders: null,

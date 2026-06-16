@@ -1,19 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/shared/lib/api';
 import { displayPhone } from '@/shared/lib/phone';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
-
-interface SenderNumber {
-  id: string;
-  phone: string;
-  active: boolean;
-  dailyLimit: number;
-  sentToday: number;
-  hourlyLimit: number;
-  sentThisHour: number;
-  warmupStage: number;
-  effectiveDailyLimit: number;
-}
+import { listSenderNumbers } from '@/entities/campaign';
 
 // barra de progresso com cor por nível de uso (verde → âmbar → vermelho)
 function UsageBar({ used, total }: { used: number; total: number }) {
@@ -30,7 +18,7 @@ export function NumberHealthPage() {
   // React Query: leitura + polling (10s) sem useEffect/setInterval manual.
   const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: ['sender-numbers'],
-    queryFn: () => api.get('/sender/numbers').then((r) => r.data as SenderNumber[]),
+    queryFn: listSenderNumbers,
     refetchInterval: 10_000,
   });
 

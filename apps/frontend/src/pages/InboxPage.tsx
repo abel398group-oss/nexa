@@ -8,7 +8,18 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
 import { displayPhone } from '@/shared/lib/phone';
-import { bulkTagContacts } from '@/features/contact';
+import { bulkTagContacts } from '@/entities/contact';
+import { listSellersMini } from '@/entities/seller';
+import {
+  type Conversation,
+  type Message,
+  listConversations,
+  getConversationMessages,
+  sendMessage,
+  setConversationOutcome,
+  assignSeller as reassignSeller,
+  setConversationResolved,
+} from '@/entities/conversation';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
@@ -16,23 +27,6 @@ import { ConversationTimeline } from '@/components/conversation/ConversationTime
 import { isWaitingInternalStale } from '@/shared/lib/conversation-status';
 import { isSupportTicket } from '@/shared/lib/conversation';
 import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
-
-interface Conversation {
-  id: string;
-  phone: string;
-  sourceChannel?: string | null;
-  status: string;
-  outcome?: string | null;
-  lastActivityAt?: string | null;
-  assignedSeller?: { name: string } | null;
-  assignedSellerId?: string | null;
-  customerStage?: string | null;
-  ticketCategory?: string | null;
-  ticketPriority?: string | null;
-  contact?: { id?: string; name?: string | null; nameSource?: string | null; tags?: string[] } | null;
-  campaign?: { id: string; name: string } | null;
-}
-
 
 function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   if (sourceChannel === 'email') {
@@ -51,7 +45,6 @@ function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   }
   return null;
 }
-interface Message { id: string; direction: string; content: string; createdAt: string; ack?: number; metadata?: Record<string, unknown> | null; }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
 interface TmsLookup { found: boolean; customer: TmsCustomer | null; }
 
@@ -109,7 +102,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // vendedores (pra reatribuir lead no header da conversa)
   const { data: sellers = [] } = useQuery({
     queryKey: ['sellers-mini'],
-    queryFn: () => api.get('/sellers').then((r) => r.data as { id: string; name: string }[]),
+    queryFn: listSellersMini,
   });
   // follow-ups automáticos (read-only) pra indicar no header da conversa
   const { data: followups = [] } = useQuery({
@@ -124,8 +117,8 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   useEffect(() => {
     const controller = new AbortController();
-    api.get('/conversations', { signal: controller.signal })
-      .then((r) => setConvs(r.data.items))
+    listConversations(controller.signal)
+      .then((r) => setConvs(r.items))
       .catch((e) => { if (e?.code !== 'ERR_CANCELED') console.error(e); })
       .finally(() => setLoadingConvs(false));
     return () => controller.abort();
@@ -191,7 +184,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setShowTimeline(false);
     // histórico unificado: junta as mensagens de todas as conversas do contato, em ordem
     Promise.all(
-      g.convs.map((cv) => api.get(`/conversations/${cv.id}/messages`).then((r) => r.data as Message[])),
+      g.convs.map((cv) => getConversationMessages(cv.id)),
     ).then((lists) => {
       const all = lists.flat().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       setMessages(all);
@@ -205,14 +198,14 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   async function send() {
     if (!active || !text.trim()) return;
-    await api.post(`/conversations/${active.id}/messages`, { direction: 'outbound', content: text });
+    await sendMessage(active.id, text);
     setText('');
     setLiaInfo('');
   }
 
   async function setOutcome(outcome: 'won' | 'lost' | null) {
     if (!active) return;
-    await api.patch(`/conversations/${active.id}/outcome`, { outcome });
+    await setConversationOutcome(active.id, outcome);
     const updated = { ...active, outcome };
     setActive(updated);
     setConvs((prev) => prev.map((c) => (c.id === active.id ? { ...c, outcome } : c)));
@@ -220,9 +213,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   async function assignSeller(sellerId: string | null) {
     if (!active) return;
-    const r = await api.patch(`/conversations/${active.id}/assign`, { sellerId });
-    const assignedSeller = r.data?.assignedSeller ?? null;
-    const assignedSellerId = r.data?.assignedSellerId ?? null;
+    const r = await reassignSeller(active.id, sellerId);
+    const assignedSeller = r?.assignedSeller ?? null;
+    const assignedSellerId = r?.assignedSellerId ?? null;
     setActive((a) => (a ? { ...a, assignedSeller, assignedSellerId } : a));
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedSeller, assignedSellerId } : c)));
   }
@@ -230,9 +223,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // suporte: marcar o chamado como resolvido (fecha) ou reabrir
   async function resolveTicket(resolved: boolean) {
     if (!active) return;
-    const r = await api.patch(`/conversations/${active.id}/resolve`, { resolved });
-    const status = r.data?.status ?? (resolved ? 'closed' : 'open');
-    const outcome = r.data?.outcome ?? (resolved ? 'resolved' : null);
+    const r = await setConversationResolved(active.id, resolved);
+    const status = r?.status ?? (resolved ? 'closed' : 'open');
+    const outcome = r?.outcome ?? (resolved ? 'resolved' : null);
     setActive((a) => (a ? { ...a, status, outcome } : a));
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, status, outcome } : c)));
   }

@@ -3,11 +3,21 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api } from '@/shared/lib/api';
 import { displayPhone } from '@/shared/lib/phone';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon, Badge, SkeletonList, EmptyState } from '@/shared/ui';
+import {
+  type Seller,
+  type SellerKpi,
+  listSellers,
+  listSellerKpis,
+  createSeller,
+  updateSeller,
+  toggleSellerActive,
+  deleteSeller,
+  bulkDeleteSellers,
+} from '@/entities/seller';
 
 // E8 — fatia 2: validação de formulário por schema (RHF + Zod), como referência.
 // email/password são opcionais; quando preenchidos, precisam ser válidos.
@@ -19,16 +29,6 @@ const sellerSchema = z.object({
 });
 type SellerForm = z.infer<typeof sellerSchema>;
 const emptyForm: SellerForm = { name: '', phone: '', email: '', password: '' };
-
-interface Seller {
-  id: string;
-  name: string;
-  phone: string;
-  active: boolean;
-  assignedCount: number;
-  loginEmail?: string | null;
-}
-interface Kpi { id: string; name: string; leads: number; emAndamento: number; ganhos: number; perdidos: number; taxaConversao: number; }
 
 export function SellersPage() {
   const {
@@ -55,11 +55,11 @@ export function SellersPage() {
   // React Query: lista de vendedores (busca) + KPIs por vendedor
   const { data: items = [], isLoading: loading } = useQuery({
     queryKey: ['sellers', debouncedSearch],
-    queryFn: () => api.get('/sellers', { params: { search: debouncedSearch || undefined } }).then((r) => r.data as Seller[]),
+    queryFn: () => listSellers(debouncedSearch),
   });
-  const { data: kpis = [] } = useQuery({
+  const { data: kpis = [] } = useQuery<SellerKpi[]>({
     queryKey: ['sellers-kpis'],
-    queryFn: () => api.get('/metrics/sellers').then((r) => r.data as Kpi[]),
+    queryFn: listSellerKpis,
   });
   const invalidate = () =>
     Promise.all([
@@ -84,7 +84,7 @@ export function SellersPage() {
     });
     if (!ok) return;
     try {
-      await api.post('/sellers/bulk-delete', { ids });
+      await bulkDeleteSellers(ids);
       toast.success(`${ids.length} vendedor(es) excluído(s).`);
       setSelected(new Set());
       await invalidate();
@@ -100,10 +100,10 @@ export function SellersPage() {
     };
     try {
       if (editId) {
-        await api.patch(`/sellers/${editId}`, payload);
+        await updateSeller(editId, payload);
         toast.success('Vendedor atualizado!');
       } else {
-        await api.post('/sellers', payload);
+        await createSeller(payload);
         toast.success('Vendedor adicionado!');
       }
       reset(emptyForm);
@@ -135,7 +135,7 @@ export function SellersPage() {
     });
     if (!ok) return;
     try {
-      await api.delete(`/sellers/${s.id}`);
+      await deleteSeller(s.id);
       toast.success('Vendedor excluído.');
       await invalidate();
     } catch {
@@ -144,7 +144,7 @@ export function SellersPage() {
   }
 
   async function toggle(s: Seller) {
-    await api.patch(`/sellers/${s.id}/active`, { active: !s.active });
+    await toggleSellerActive(s.id, !s.active);
     await invalidate();
   }
 
