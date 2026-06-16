@@ -93,3 +93,24 @@ real do HiperTMS.
 - Mudança 1 (login na raiz) — implementada, falta subir (item 2).
 - Docs: `internal-mode`, `tms-native-support`, `sales-improvements`.
 - WAHA: pareamento documentado em `docs/infra/deploy-runbook.md` (item de execução, não código).
+
+---
+
+## Progresso — sessao 2026-06-16
+
+- [x] **1. CI** — verde apos push (era commit antigo).
+- [x] **2. Login na raiz** — RootRedirect; landing preservada em /landing. No ar.
+- [x] **3. Lado-Nexa do suporte nativo** — PortalSessionGuard aceita Bearer alem do cookie;
+      POST /api/portal/session devolve `session` (JWT) no corpo. + teste do guard.
+- [x] **4. Revisao dos docs** — internal-mode, tms-native-support e sales-improvements OK.
+- [~] **6. Fail-closed do tenant** — removido `?? 'default'` de 14 controllers autenticados
+      (13 via sed + email-channel via @CurrentTenant). FALTA so o `admin.controller` (1x),
+      deixado de proposito (contexto platform-admin, sensivel).
+- [ ] **5. Rotacionar segredos** — STAND-BY (decisao do usuario). ANTHROPIC_API_KEY, senha
+      nexa_app e chave SSH de deploy apareceram no chat; rotacionar quando quiser.
+- [ ] **7. Testes de frontend** — front squad.
+- [ ] **8. Limpar dados de teste** — quando terminar de validar.
+- [ ] **9. Lint bloqueante no CI** — depois de zerar os warnings.
+
+> Nota: o mount do Windows ficou instavel pra escrita nesta sessao (truncou arquivos).
+> Edicoes de codigo feitas via sandbox (git show + sed + cp) com verificacao de chaves.

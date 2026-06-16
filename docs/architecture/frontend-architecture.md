@@ -21,17 +21,20 @@ Storybook: `pnpm storybook` (`:6006`).
 
 ## Organização (`src/`)
 
-- **`pages/`** — uma página por rota: `LandingPage` (pública `/`), `LoginPage`,
-  `DashboardPage`, `InboxPage`, `SupportPage`, `ContactsPage`, `KnowledgePage`,
-  `SellersPage`, `CampaignsPage`, `UsersPage`, `PlaybookPage`,
-  `EmailChannelSettingsPage`, `DevTokensPage`.
+- **`pages/`** — uma página por rota: `LoginPage`, `DashboardPage`, `InboxPage`,
+  `SupportPage`, `SupportConfigPage`, `SupportClientsPage`, `ContactsPage`,
+  `KnowledgePage`, `SellersPage`, `CampaignsPage`, `NumberHealthPage`, `UsersPage`,
+  `PlaybookPage`, `EmailChannelSettingsPage`, `DevTokensPage`, e `portal/PortalPage`
+  (área pública do cliente). A `LandingPage` fica em `/landing` (modo interno: a
+  raiz `/` redireciona p/ login ou app via `RootRedirect` — ver `internal-mode`).
 - **`components/ui/`** — **design system / biblioteca de UI** própria (ver abaixo).
 - **`components/conversation/`** — compostos do inbox/suporte:
   `ConversationTimeline`, `ConversationStatusBadge`, `ConversationStatusFilter`,
   `ConversationOutcomeBadge`, `ConversationMetricsCard`, `TicketCategoryBadge`.
 - **`components/`** — chrome do app: `Layout`, `HelpDrawer`, `HelpDemo`, `GuidedTour`.
-- **`contexts/`** — estado de app via React Context: `AuthContext`, `ToastContext`,
-  `ConfirmContext`, `DateRangeContext`.
+- **`contexts/`** — estado de app via React Context: `AuthContext`, `TenantContext`
+  (seletor de cliente do platform admin — `TenantProvider`/`TenantGate`),
+  `ToastContext`, `ConfirmContext`, `DateRangeContext`.
 - **`lib/`** — `api.ts` (instância axios), helpers de domínio
   (`conversation-status.ts`, `ticket-category.ts`).
 

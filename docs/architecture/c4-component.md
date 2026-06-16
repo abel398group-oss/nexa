@@ -63,6 +63,8 @@ graph TB
   fronteira única com produtos externos.
 - **`knowledge`** — KB versionada/aprovada + retrieval (RAG futuro).
 - **`conversations` / `contacts` / `events`** — núcleo conversacional + event bus.
+- **`opportunities`** — pipeline de vendas (estágios new→qualified→proposal→won/lost).
+- **`portal`** — sessão e chamados do cliente (Portal de Suporte; ADR 022/025).
 - **Canais**: `whatsapp` (WAHA), `email`, `sender`, `followup`.
 - **Operação**: `sellers`, `handoff`, `playbook`, `metrics`, `notifications`.
 

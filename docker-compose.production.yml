@@ -80,6 +80,7 @@ services:
     environment:
       - WAHA_API_KEY=${WAHA_API_KEY}  # mesma chave usada pelo backend (header X-Api-Key)
       - WAHA_PRINT_QR=false           # QR via dashboard (tunel SSH na 1a vez) - ver runbook
+      - WHATSAPP_RESTART_ALL_SESSIONS=true   # religa a sessao automaticamente apos restart/deploy
     # SEM porta no host - o backend chama http://waha:3000 pela nexa-network.
     volumes:
       - nexa-waha:/app/.sessions       # PERSISTE o pareamento (sobrevive a recreate - fix P5)

@@ -36,6 +36,8 @@ src/
     connectors/           connector.interface.ts + hipertms.connector.ts
     contacts/ conversations/ events/ knowledge/ playbook/ handoff/
     followup/ sellers/ sender/ email/ whatsapp/ metrics/ notifications/
+    opportunities/        pipeline de vendas (estágios new→qualified→proposal→won/lost)
+    portal/               sessão + chamados do cliente (Portal de Suporte)
     auth/ users/ admin/
   presentation/
     http/<feature>/       controllers + DTOs (boundary HTTP, prefixo /api)
@@ -66,8 +68,9 @@ Ver `docs/architecture/frontend-architecture.md`. Resumo:
 ```
 src/
   main.tsx App.tsx        roteamento (landing pública + área protegida)
-  pages/        uma página por rota (Landing, Login, Inbox, Support, Contacts,
-                Campaigns, Knowledge, Sellers, Users, Playbook, Dashboard, ...)
+  pages/        uma página por rota (Landing, Login, Inbox, Support,
+                Support/Config, Support/Clients, Contacts, Campaigns, Knowledge,
+                Sellers, NumberHealth, Users, Playbook, Dashboard, portal/PortalPage, ...)
   components/
     ui/         design system próprio (~30 componentes) + stories (Storybook)
     conversation/  compostos do inbox/suporte (timeline, badges, métricas)

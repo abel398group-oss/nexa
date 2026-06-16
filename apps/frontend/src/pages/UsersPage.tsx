@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/lib/api';
-import { Button, Card, Modal, Input, Select, Label, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
+import { Button, Card, Modal, Input, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 
@@ -22,7 +22,8 @@ const userSchema = z.object({
   permissions: z.array(z.string()),
 });
 type UserForm = z.infer<typeof userSchema>;
-const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: ['dashboard', 'inbox'] };
+// Usuários aqui = ADMINS (acesso total). Vendedores são criados na tela "Vendedores".
+const emptyUser: UserForm = { name: '', email: '', password: '', role: 'admin', permissions: [] };
 
 // rótulos amigáveis das áreas
 const AREA_LABEL: Record<string, string> = {
@@ -34,11 +35,9 @@ const ALL_AREAS = ['dashboard', 'inbox', 'contacts', 'knowledge', 'sellers', 'ca
 export function UsersPage() {
   const [show, setShow] = useState(false);
   const {
-    register, handleSubmit, reset, watch, setValue, setError,
+    register, handleSubmit, reset, setError,
     formState: { errors, isSubmitting },
   } = useForm<UserForm>({ resolver: zodResolver(userSchema), defaultValues: emptyUser });
-  const role = watch('role');
-  const permissions = watch('permissions');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -60,7 +59,8 @@ export function UsersPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] });
 
   const roles = [...new Set(items.map((u) => u.role))];
-  const shown = items.filter((u) => !roleFilter || u.role === roleFilter);
+  // vendedores são gerenciados na tela "Vendedores" — aqui só admins/internos
+  const shown = items.filter((u) => u.role !== 'vendedor' && (!roleFilter || u.role === roleFilter));
 
   async function del(u: User) {
     const ok = await confirm({
@@ -113,8 +113,8 @@ export function UsersPage() {
       <PageHeader
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Usuários' }]} />}
         title="Usuários & Acessos"
-        subtitle="Crie logins e marque quais áreas cada um pode acessar. Admin acessa tudo."
-        actions={<Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo usuário</Button>}
+        subtitle="Administradores do sistema (acesso total). Vendedores têm login próprio criado na tela Vendedores."
+        actions={<Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo administrador</Button>}
       />
 
       {/* busca + filtro por perfil */}
@@ -169,7 +169,7 @@ export function UsersPage() {
         ))}
       </div>
 
-      <Modal open={show} onClose={() => setShow(false)} title="Novo usuário" size="sm">
+      <Modal open={show} onClose={() => setShow(false)} title="Novo administrador" size="sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <div>
             <Input placeholder="Nome" {...register('name')} />
@@ -183,35 +183,14 @@ export function UsersPage() {
             <Input type="password" placeholder="Senha (mín. 6)" {...register('password')} />
             {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
           </div>
-          <div>
-            <Label className="mb-1 block text-xs text-base-content/60">Papel</Label>
-            <Select {...register('role')}>
-              <option value="operacional">Operacional</option>
-              <option value="gestor">Gestor</option>
-              <option value="vendedor">Vendedor</option>
-              <option value="admin">Administrador (acesso total)</option>
-            </Select>
-          </div>
-          {role !== 'admin' && (
-            <div>
-              <Label className="mb-1 block text-xs text-base-content/60">Áreas liberadas</Label>
-              <div className="flex flex-wrap gap-2">
-                {ALL_AREAS.map((a) => {
-                  const on = permissions.includes(a);
-                  return (
-                    <button type="button" key={a} onClick={() => setValue('permissions', togglePerm(permissions, a))}
-                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 bg-white text-base-content/50'}`}>
-                      {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <p className="text-[11px] text-base-content/40">
+            Administrador tem acesso total. Para criar um vendedor (com login e carteira própria),
+            use a tela <strong>Vendedores</strong>.
+          </p>
           {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => setShow(false)}>Cancelar</Button>
-            <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Criando...' : 'Criar'}</Button>
+            <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Criando...' : 'Criar administrador'}</Button>
           </div>
         </form>
       </Modal>

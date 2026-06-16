@@ -23,20 +23,25 @@ editar/excluir/lote (ver §6).
 
 ## 2. Matriz de capacidades (estado atual)
 
+> **Atualizado em 2026-06** após auditoria do código: os gaps de Knowledge e
+> Sellers foram fechados (FE + BE); Users e Playbook ainda têm pendências; surgiu
+> o módulo **Opportunities** (pipeline de vendas, backend pronto, **sem página**).
+
 Legenda: ✅ existe · ⚠️ parcial · ❌ falta · — não se aplica
 
 | Módulo | Busca | Filtros | Criar | Editar | Excluir | Lote | Paginação | Onde está o gap |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|---|
 | **Contatos** (referência) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ref. de busca/filtro/CRUD/lote; paginação só no backend (UI: ver Campanhas) |
 | **Campanhas** (ref. paginação) | ✅ | ⚠️ | ✅ | — | ✅ | ✅ | ✅ | editar (rever se aplica) — **referência de paginação na UI** |
-| **Knowledge** | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | frontend completo + 1 rota backend (bulk-delete) |
-| **Sellers** | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | frontend + backend (paginação/busca/bulk) |
-| **Users** | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | frontend + backend (delete/bulk/busca/paginação) |
-| **Playbook** | ⚠️ | ❌ | ✅ | ⚠️ | ❌ | ❌ | ❌ | frontend + backend (delete/busca/paginação) |
-| Conversations/Inbox | ✅ | ✅ | — | ⚠️ | — | — | ✅ | feed de conversa (§6) |
+| **Knowledge** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ concluído (FE + BE) |
+| **Sellers** | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ concluído (FE + BE) |
+| **Users** | ✅ | ⚠️ | ✅ | ❌ | ✅ | ❌ | ✅ | falta **editar (UI)** e lote |
+| **Playbook** | ❌ | ❌ | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | frontend + backend (busca/delete/paginação) |
+| **Opportunities** (novo) | ✅ | ✅ (stage) | ✅ | ✅ | ✅ | ❌ | ✅ | **sem página no frontend** (backend pronto: CRUD + summary + stage) |
+| Conversations/Inbox | ✅ | ✅ | — | ⚠️ | — | — | ✅ | feed de conversa (§6); arquivar = `conversation-archive` |
 | Notificações | — | — | — | — | — | — | ✅ | feed (§6) |
 
-**Prioridade sugerida:** Knowledge (rápido, só FE) → Sellers → Users → Playbook.
+**Prioridade restante:** Users (editar UI) → Playbook → criar a página de Opportunities.
 
 ---
 
@@ -155,38 +160,33 @@ Regras:
 
 > Cada tarefa segue a **Definition of Done** da §7.
 
-### 5.1 Knowledge — frontend completo + 1 rota backend
-O backend (`knowledge.service`) já tem busca, paginação, update e delete por id.
-> **Atenção:** o `deleteMany` existente no service é só cascata de *versões* de um
-> item (`aiKnowledgeVersion`), **não** é exclusão em lote de itens. Falta criar o
-> bulk real.
+### 5.1 Knowledge — ✅ CONCLUÍDO (FE + BE)
+Busca, filtro por categoria, paginação, criar/editar/excluir e **exclusão em lote**
+implementados no `KnowledgePage` + `knowledge.service`. Sem pendências.
 
-- [ ] Backend: `deleteMany(tenantId, ids)` de itens + rota `@Post('bulk-delete')` com `BulkDeleteDto`.
-- [ ] Frontend: campo de busca (`?search=`).
-- [ ] Frontend: filtro por `category` (comercial/técnico/suporte) via `Select`.
-- [ ] Frontend: paginação (`limit/offset`, padrão CampaignsPage).
-- [ ] Frontend: seleção + exclusão em lote (`POST /knowledge/bulk-delete`).
-- [ ] Confirmação de exclusão (`useConfirm`) + toasts.
+### 5.2 Sellers — ✅ CONCLUÍDO (FE + BE)
+`findAll` com paginação/busca, criar/editar/excluir e lote implementados. Sem pendências.
 
-### 5.2 Sellers — frontend + backend
-- [ ] Backend: `findAll` com `PaginationQueryDto` + busca (`name`/`email` contains) + `orderBy`.
-- [ ] Backend: `@Post('bulk-delete')` + `deleteMany(tenantId, ids)`.
-- [ ] Frontend: busca, paginação, seleção/exclusão em lote (editar/excluir já existem).
-- [ ] Confirmação + toasts; estados vazio/erro.
+### 5.3 Users — parcial (falta editar UI + lote)
+Backend já tem paginação/busca e `@Delete(':id')`. Frontend já tem busca, paginação
+e excluir. **Pendente:**
+- [ ] Frontend: UI de **editar** (modal — backend já tem `PATCH`).
+- [ ] (Opcional) seleção + exclusão em lote.
+- [ ] Garantir: impedir auto-exclusão do próprio admin; respeitar permissões.
 
-### 5.3 Users — frontend + backend
-- [ ] Backend: `findAll` com paginação + busca; `@Delete(':id')` + `remove` (validar
-      posse; impedir auto-exclusão do próprio admin); opcional `bulk-delete`.
-- [ ] Frontend: UI de **editar** (modal — backend já tem `PATCH`), **excluir**,
-      busca, filtro por perfil/role, paginação.
-- [ ] Confirmação + toasts; respeitar permissões.
-
-### 5.4 Playbook — frontend + backend
+### 5.4 Playbook — pendente (FE + BE)
 - [ ] Backend: `findAll` com paginação + busca; `@Delete(':id')` + `remove`.
 - [ ] Frontend: lista com busca, editar (modal), excluir, paginação.
 - [ ] Confirmação + toasts.
 
-### 5.5 Campanhas — revisão
+### 5.5 Opportunities — falta a página (backend pronto)
+O backend (`opportunities.service`/controller) já tem CRUD + `summary` + filtro por
+`stage` + paginação/busca. **Pendente:**
+- [ ] Frontend: criar a **OpportunitiesPage** (lista do pipeline por estágio
+      new→qualified→proposal→won/lost, com busca, filtro de stage, criar/editar/excluir).
+- [ ] Rota no `App.tsx` + item no menu (com permissão adequada).
+
+### 5.6 Campanhas — revisão
 - [ ] Decidir com produto se campanha é **editável** após criada (hoje não há
       `PATCH`). Se sim, adicionar `update` (backend + modal). Se não, documentar
       como decisão (não é gap).

@@ -53,8 +53,9 @@ Para agentes de IA trabalhando no repositório: começar por `CLAUDE.md` (raiz).
 
 ## Decisões de Arquitetura (ADRs)
 
-Índice em [`adr/README.md`](adr/README.md) — 22 ADRs por domínio (automação,
-agentes, event bus, segurança, KB, conectores, ambiente, suporte, e-mail, …).
+Índice em [`adr/README.md`](adr/README.md) — 27 ADRs por domínio (automação,
+agentes, event bus, segurança, KB, conectores, ambiente, suporte, e-mail,
+platform admin, web chat embutido, …).
 
 ## Repositório e componentes
 

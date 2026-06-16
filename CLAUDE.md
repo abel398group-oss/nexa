@@ -69,7 +69,8 @@ Layered / DDD-influenced, mirroring the HiperTMS structure:
 - `application/<feature>/` — services and business logic, one folder per feature
   (`agents`, `actions`, `connectors`, `contacts`, `conversations`, `events`,
   `knowledge`, `playbook`, `handoff`, `followup`, `sellers`, `sender`, `email`,
-  `whatsapp`, `metrics`, `notifications`, `auth`, `users`, `admin`).
+  `whatsapp`, `metrics`, `notifications`, `opportunities` (sales pipeline),
+  `portal` (customer support portal), `auth`, `users`, `admin`).
 - `presentation/http/<feature>/` — controllers + DTOs (HTTP boundary). All routes
   are under the global prefix `/api`.
 - `presentation/ws/` — WebSocket gateways (real-time inbox via socket.io).
