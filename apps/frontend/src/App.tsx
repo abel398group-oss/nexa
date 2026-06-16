@@ -7,7 +7,7 @@ import { TenantProvider, TenantGate } from '@/contexts/TenantContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ConfirmProvider } from '@/contexts/ConfirmContext';
 import { Layout } from '@/components/Layout';
-import { ProtectedRoute, PermissionRoute } from '@/components/RouteGuards';
+import { ProtectedRoute, PermissionRoute, RootRedirect } from '@/components/RouteGuards';
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 
@@ -47,7 +47,10 @@ export default function App() {
           <TenantProvider>
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<LandingPage />} />
+                {/* Modo interno: "/" leva ao login/app. A landing fica preservada em /landing
+                    (reativar venda = trocar "/" de volta para <LandingPage />). */}
+                <Route path="/" element={<RootRedirect />} />
+                <Route path="/landing" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/portal" element={<Suspense fallback={<PageFallback />}><PortalPage /></Suspense>} />
                 <Route

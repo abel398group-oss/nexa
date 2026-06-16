@@ -143,6 +143,24 @@ export class ConversationsService {
     return { id, status: 'open', outcome: null };
   }
 
+  // Reatribui a conversa a um vendedor (ou null pra desatribuir). Valida o seller do tenant.
+  async assign(tenantId: string, id: string, sellerId: string | null) {
+    await this.findOne(tenantId, id); // valida escopo do tenant
+    if (sellerId) {
+      const seller = await this.prisma.seller.findFirst({
+        where: { id: sellerId, tenantId },
+        select: { id: true },
+      });
+      if (!seller) throw new NotFoundException('Vendedor não encontrado');
+    }
+    const updated = await this.prisma.aiConversation.update({
+      where: { id },
+      data: { assignedSellerId: sellerId, assignedAt: sellerId ? new Date() : null },
+      include: { assignedSeller: { select: { name: true } } },
+    });
+    return { id, assignedSellerId: updated.assignedSellerId, assignedSeller: updated.assignedSeller };
+  }
+
   // Atualiza last_activity_at — chamado sempre que uma mensagem é gravada
   async touchActivity(conversationId: string) {
     return this.prisma.aiConversation.update({

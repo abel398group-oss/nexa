@@ -51,6 +51,15 @@ export class ConversationsController {
     return this.conversations.setOutcome(tenantId ?? 'default', id, dto.outcome);
   }
 
+  @Patch(':id/assign')
+  assign(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: { sellerId: string | null },
+  ) {
+    return this.conversations.assign(tenantId ?? 'default', id, dto.sellerId ?? null);
+  }
+
   @Post(':id/messages')
   addMessage(
     @CurrentTenant() tenantId: string,

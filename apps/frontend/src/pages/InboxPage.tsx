@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { Select } from '@/shared/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -23,6 +25,7 @@ interface Conversation {
   outcome?: string | null;
   lastActivityAt?: string | null;
   assignedSeller?: { name: string } | null;
+  assignedSellerId?: string | null;
   customerStage?: string | null;
   ticketCategory?: string | null;
   ticketPriority?: string | null;
@@ -102,6 +105,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setActiveTags(cur.filter((t) => t !== tag)); // otimista
     try { await bulkTagContacts([cid], tag, 'remove'); } catch { setActiveTags(cur); }
   }
+  // vendedores (pra reatribuir lead no header da conversa)
+  const { data: sellers = [] } = useQuery({
+    queryKey: ['sellers-mini'],
+    queryFn: () => api.get('/sellers').then((r) => r.data as { id: string; name: string }[]),
+  });
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
@@ -196,6 +204,15 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     const updated = { ...active, outcome };
     setActive(updated);
     setConvs((prev) => prev.map((c) => (c.id === active.id ? { ...c, outcome } : c)));
+  }
+
+  async function assignSeller(sellerId: string | null) {
+    if (!active) return;
+    const r = await api.patch(`/conversations/${active.id}/assign`, { sellerId });
+    const assignedSeller = r.data?.assignedSeller ?? null;
+    const assignedSellerId = r.data?.assignedSellerId ?? null;
+    setActive((a) => (a ? { ...a, assignedSeller, assignedSellerId } : a));
+    setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedSeller, assignedSellerId } : c)));
   }
 
   async function suggest() {
@@ -410,6 +427,18 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 >
                   <span className="inline-flex items-center gap-1"><Icon name="knowledge" className="h-3.5 w-3.5" /> Timeline</span>
                 </button>
+
+                {/* vendedor responsável (reatribuir lead) */}
+                <span className="text-xs text-base-content/50">Vendedor:</span>
+                <Select
+                  value={active.assignedSellerId ?? ''}
+                  onChange={(e) => assignSeller(e.target.value || null)}
+                  className="!h-8 !w-auto text-xs"
+                  title="Reatribuir este lead a um vendedor"
+                >
+                  <option value="">Sem vendedor</option>
+                  {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
 
                 {/* resultado da venda */}
                 <span className="text-xs text-base-content/50">Resultado:</span>

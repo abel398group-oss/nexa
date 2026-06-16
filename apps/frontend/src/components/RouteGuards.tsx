@@ -10,6 +10,18 @@ function RouteLoading() {
 }
 
 /**
+ * RootRedirect — destino da raiz "/" no MODO INTERNO (sem landing de venda).
+ * Enquanto o `/auth/me` resolve, mostra loading; autenticado → /inbox (app);
+ * não autenticado → /login. A LandingPage segue no código (rota /landing) para
+ * reativação fácil quando formos vender — basta trocar "/" de volta no App.tsx.
+ */
+export function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <RouteLoading />;
+  return <Navigate to={user ? '/inbox' : '/login'} replace />;
+}
+
+/**
  * ProtectedRoute — exige usuário autenticado. Enquanto o `/auth/me` resolve,
  * mostra loading; sem usuário, redireciona para /login.
  */
