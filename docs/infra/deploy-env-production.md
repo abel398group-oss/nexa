@@ -63,9 +63,10 @@ TMS_API_BASE_URL=https://api.hipertms.SEU_DOMINIO
 TMS_SERVICE_TOKEN=TOKEN_SERVER_TO_SERVER
 
 # ---- URLs públicas / CORS ----
-NEXA_PUBLIC_URL=https://nexa.SEU_DOMINIO       # base pública (webhooks, links)
+NEXA_PUBLIC_URL=https://nexa.SEU_DOMINIO       # base pública (webhooks, server-to-server)
 NEXA_API_URL=https://nexa.SEU_DOMINIO/api      # base da API (frontend/integrações)
 NEXA_PORTAL_URL=https://nexa.SEU_DOMINIO/portal # entrada do Portal do cliente
+MEDIA_PUBLIC_BASE=https://material.hipertms.com.br  # link de PDF VISÍVEL pro lead (subdomínio neutro → mesmo backend)
 CORS_ORIGINS=https://nexa.SEU_DOMINIO,https://app.hipertms.SEU_DOMINIO  # CSV de origens
 ```
 
@@ -98,7 +99,8 @@ CORS_ORIGINS=https://nexa.SEU_DOMINIO,https://app.hipertms.SEU_DOMINIO  # CSV de
 | `TMS_DB_URL` | — | Banco do TMS, **read-only** (conector). Nunca migrar/escrever aqui. |
 | `TMS_API_BASE_URL` | — | API do TMS (endpoints `/nexa/*` read-only). |
 | `TMS_SERVICE_TOKEN` | — | Token server-to-server do conector/handoff. |
-| `NEXA_PUBLIC_URL` | — | Base pública do Nexa (webhooks, links). |
+| `NEXA_PUBLIC_URL` | — | Base pública do Nexa (webhooks WAHA, server-to-server). Não é vista pelo lead — pode ser `nexa.*`. |
+| `MEDIA_PUBLIC_BASE` | — | Domínio do link de PDF/material **visível pro lead**. Tem prioridade sobre `NEXA_PUBLIC_URL`. Use subdomínio neutro/da marca (ex.: `material.hipertms.com.br`) apontando pro mesmo backend que serve `/uploads/`. |
 | `NEXA_API_URL` | — | Base da API (consumida pelo frontend/integrações). |
 | `NEXA_PORTAL_URL` | — | URL de entrada do Portal do cliente. |
 | `CORS_ORIGINS` | — | Origens permitidas (CSV) — inclui o domínio do Nexa e o do TMS (widget). |

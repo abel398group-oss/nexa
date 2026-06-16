@@ -97,8 +97,14 @@ export class WahaHealthService {
       if (!this.downSince) this.downSince = Date.now();
       this.logger.warn(`Sessão WhatsApp fora do ar (status=${status}) — tentando religar...`);
       await this.tryStart();
-      await this.sleep(8000);
-      const status2 = await this.getStatus();
+
+      // aguarda a sessão voltar (poll até ~30s) — o restart passa por STARTING antes de WORKING
+      let status2 = status;
+      for (let i = 0; i < 6; i++) {
+        await this.sleep(5000);
+        status2 = await this.getStatus();
+        if (status2 === 'WORKING') break;
+      }
 
       if (status2 === 'WORKING') {
         await this.alert(
@@ -109,7 +115,14 @@ export class WahaHealthService {
         return;
       }
 
-      // ainda fora — alerta crítico com cooldown
+      // ainda inicializando dentro da janela de 10 min → não alarma, espera o próximo ciclo
+      const downMs = Date.now() - this.downSince;
+      if (status2 === 'STARTING' && downMs < 10 * 60 * 1000) {
+        this.logger.warn(`Sessão ainda STARTING (há ${Math.round(downMs / 1000)}s) — aguardando próximo ciclo.`);
+        return;
+      }
+
+      // ainda fora (STOPPED/FAILED/SCAN_QR_CODE/UNREACHABLE ou STARTING travado) → alerta crítico com cooldown
       if (Date.now() - this.lastAlertAt > this.ALERT_COOLDOWN_MS) {
         this.lastAlertAt = Date.now();
         await this.alert(
