@@ -8,10 +8,11 @@ import { AgentsModule } from '@/application/agents/agents.module';
 import { FollowUpModule } from '@/application/followup/followup.module';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { WhatsappController } from '@/presentation/http/whatsapp/whatsapp.controller';
+import { WhatsappStatusController } from '@/presentation/http/whatsapp/whatsapp-status.controller';
 
 @Module({
   imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule],
-  controllers: [WhatsappController],
+  controllers: [WhatsappController, WhatsappStatusController],
   providers: [WhatsappService, WahaBootstrapService, WahaHealthService],
 })
 export class WhatsappModule {}

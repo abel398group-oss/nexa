@@ -137,20 +137,13 @@ export class WahaHealthService {
     }
   }
 
-  /** Reage instantaneamente ao evento session.status do WAHA (webhook). */
+  /** Reage ao evento session.status do WAHA (webhook) — delega ao health-check. */
   async handleStatusEvent(rawBody: any): Promise<void> {
     const p = rawBody?.payload ?? rawBody?.body?.payload ?? rawBody ?? {};
     const status = String(p?.status ?? p?.state ?? '').toUpperCase();
     this.logger.log(`[session.status] ${status || '(sem status)'}`);
-    if (!status || status === 'WORKING' || status === 'CONNECTED') {
-      if (this.downSince) {
-        await this.alert('✅ WhatsApp reconectado', 'A sessão do WhatsApp voltou a funcionar.');
-        this.downSince = null;
-      }
-      return;
-    }
-    // estados de queda (STOPPED, FAILED, ...) → dispara um ciclo imediato de health-check,
-    // que tenta religar e alerta conforme o resultado.
+    // Qualquer mudança dispara uma verificação. O flag `checking` coalesce chamadas
+    // concorrentes (STOPPED/STARTING/WORKING do mesmo ciclo) — evita alerta/notif. duplicados.
     await this.healthCheck();
   }
 
@@ -187,30 +180,62 @@ export class WahaHealthService {
   private async notifyWhatsapp(text: string): Promise<void> {
     const phone = (process.env.ALERT_ADMIN_PHONE ?? '').replace(/\D/g, '');
     if (!phone) return;
-    try {
-      const r = await this.waha.sendText(phone, text);
-      if (!r.sent) this.logger.warn(`alerta WhatsApp não enviado: ${r.reason}`);
-    } catch (e: any) {
-      this.logger.warn(`notifyWhatsapp falhou: ${e?.message}`);
+    // A sessão pode ter acabado de voltar a WORKING e ainda não estar pronta p/ enviar
+    // (WAHA responde 500). Tenta algumas vezes, espaçado, antes de desistir.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const r = await this.waha.sendText(phone, text);
+        if (r.sent) return;
+        this.logger.warn(`alerta WhatsApp não enviado (tentativa ${attempt}/3): ${r.reason}`);
+      } catch (e: any) {
+        this.logger.warn(`notifyWhatsapp falhou (tentativa ${attempt}/3): ${e?.message}`);
+      }
+      if (attempt < 3) await this.sleep(6000);
     }
   }
 
   private async notifyEmail(subject: string, body: string): Promise<void> {
     const to = process.env.ALERT_ADMIN_EMAIL;
-    const host = process.env.EMAIL_SMTP_HOST;
-    const user = process.env.EMAIL_SMTP_USER;
-    const pass = process.env.EMAIL_SMTP_PASS;
-    if (!to || !host || !user || !pass) return;
+    if (!to) return;
+
+    // Resolve SMTP: canal de e-mail ATIVO no banco (mesma conta da Lia) OU fallback .env.
+    let host: string | undefined;
+    let user: string | undefined;
+    let pass: string | undefined;
+    let port = 465;
+    let secure = true;
+    let fromName = 'Nexa Monitor';
+
+    const ch = await this.prisma.emailChannel
+      .findFirst({ where: { isActive: true } })
+      .catch(() => null);
+    if (ch?.smtpHost && ch.smtpUser && ch.smtpPass) {
+      host = ch.smtpHost;
+      user = ch.smtpUser;
+      pass = ch.smtpPass;
+      port = ch.smtpPort;
+      secure = ch.smtpSecure;
+      fromName = ch.fromName ?? fromName;
+    } else {
+      host = process.env.EMAIL_SMTP_HOST;
+      user = process.env.EMAIL_SMTP_USER;
+      pass = process.env.EMAIL_SMTP_PASS;
+      port = Number(process.env.EMAIL_SMTP_PORT ?? 465);
+      secure = (process.env.EMAIL_SMTP_SECURE ?? 'true') !== 'false';
+      fromName = process.env.EMAIL_FROM_NAME ?? fromName;
+    }
+    if (!host || !user || !pass) return;
+
     try {
       const transporter = nodemailer.createTransport({
         host,
-        port: Number(process.env.EMAIL_SMTP_PORT ?? 465),
-        secure: (process.env.EMAIL_SMTP_SECURE ?? 'true') !== 'false',
+        port,
+        secure,
         auth: { user, pass },
         tls: { rejectUnauthorized: false },
       });
       await transporter.sendMail({
-        from: `"${process.env.EMAIL_FROM_NAME ?? 'Nexa Monitor'}" <${user}>`,
+        from: `"${fromName}" <${user}>`,
         to,
         subject: `[Nexa] ${subject}`,
         text: body,

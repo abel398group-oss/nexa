@@ -1,0 +1,34 @@
+// Tipos do domínio "vendedor" (FSD — entities/seller).
+export interface Seller {
+  id: string;
+  name: string;
+  phone: string;
+  active: boolean;
+  assignedCount: number;
+  loginEmail?: string | null;
+}
+
+// KPIs de conversão por vendedor (GET /metrics/sellers).
+export interface SellerKpi {
+  id: string;
+  name: string;
+  leads: number;
+  emAndamento: number;
+  ganhos: number;
+  perdidos: number;
+  taxaConversao: number;
+}
+
+// Forma reduzida usada em seletores (ex.: reatribuir lead no Inbox).
+export interface SellerMini {
+  id: string;
+  name: string;
+}
+
+// Dados de criação/edição (form da tela Vendedores).
+export interface SellerInput {
+  name: string;
+  phone: string;
+  email?: string;
+  password?: string;
+}

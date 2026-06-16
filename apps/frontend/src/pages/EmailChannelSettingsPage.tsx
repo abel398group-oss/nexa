@@ -16,12 +16,14 @@ const emailSchema = z.object({
   replyTo: z.string().trim().email('Reply-To inválido').optional().or(z.literal('')),
   smtpHost: z.string().trim().min(1, 'Informe o servidor SMTP'),
   smtpPort: z.string().trim().min(1, 'Informe a porta'),
-  smtpUser: z.string().trim().email('Usuário SMTP inválido'),
+  // usuário SMTP/IMAP normalmente é o e-mail, mas alguns provedores usam só um
+  // login — não força formato de e-mail (espelha o HiperTMS), só exige preenchido.
+  smtpUser: z.string().trim().min(1, 'Informe o usuário SMTP'),
   smtpPass: z.string().optional().or(z.literal('')),
   smtpSecure: z.boolean(),
   imapHost: z.string().trim().min(1, 'Informe o servidor IMAP'),
   imapPort: z.string().trim().min(1, 'Informe a porta'),
-  imapUser: z.string().trim().email('Usuário IMAP inválido'),
+  imapUser: z.string().trim().min(1, 'Informe o usuário IMAP'),
   imapPass: z.string().optional().or(z.literal('')),
   imapMailbox: z.string().trim().min(1, "Normalmente 'INBOX'"),
   isActive: z.boolean(),
@@ -178,7 +180,7 @@ export function EmailChannelSettingsPage() {
             </div>
           </div>
           <Field label="Usuário SMTP" required error={errors.smtpUser?.message}>
-            <Input type="email" {...register('smtpUser')} placeholder="lia@hipertms.com.br" />
+            <Input type="text" autoComplete="username" {...register('smtpUser')} placeholder="lia@hipertms.com.br" />
           </Field>
           <Field label="Senha SMTP" hint={smtpPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
             <Input type={showPasses ? 'text' : 'password'} {...register('smtpPass')} placeholder="••••••••" autoComplete="new-password" />
@@ -204,7 +206,7 @@ export function EmailChannelSettingsPage() {
             </div>
           </div>
           <Field label="Usuário IMAP" required error={errors.imapUser?.message}>
-            <Input type="email" {...register('imapUser')} placeholder="lia@hipertms.com.br" />
+            <Input type="text" autoComplete="username" {...register('imapUser')} placeholder="lia@hipertms.com.br" />
           </Field>
           <Field label="Senha IMAP" hint={imapPass === '' ? 'Deixe vazio para manter a senha atual.' : ''}>
             <Input type={showPasses ? 'text' : 'password'} {...register('imapPass')} placeholder="••••••••" autoComplete="new-password" />

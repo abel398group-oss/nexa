@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useDateRange } from '@/app/providers/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
+import { WhatsappConnectionStatus } from '@/components/WhatsappConnectionStatus';
 import {
   Button,
   Icon,
@@ -120,7 +121,12 @@ export function DashboardPage() {
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Dashboard' }]} />}
         title="Dashboard"
         subtitle={<>Período: <strong className="text-base-content/70">{range.label}</strong> · atualiza a cada 10s</>}
-        actions={<Button variant="outline" onClick={refresh}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
+        actions={
+          <div className="flex items-center gap-4">
+            <WhatsappConnectionStatus compact />
+            <Button variant="outline" onClick={refresh}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>
+          </div>
+        }
       />
 
       {/* ── Visão geral ────────────────────────────────────────────── */}

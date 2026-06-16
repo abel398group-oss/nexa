@@ -1,0 +1,56 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Design System/Visão Geral" />
+
+# Design System — Nexa
+
+Documentação viva dos componentes de UI, tokens e padrões do frontend.
+Use o seletor **Claro/Escuro** na toolbar para validar qualquer componente nos dois temas.
+
+> Referência: o design system espelha fielmente o do **HiperTMS** (cores, sidebar
+> midnight, marca Laranja-Ignição, zoom global). Os tokens vivem em
+> `src/index.css` + `tailwind.config.js`.
+
+---
+
+## Princípios
+
+- **Tokens primeiro.** Cores, sombras e superfícies vêm de variáveis CSS
+  (`--surface`, `--text-primary`, `--border`) e das escalas Tailwind `brand-*` /
+  `base-*`. Prefira essas a cores cruas (`bg-zinc-100`).
+- **Dark mode por classe.** O tema escuro é ativado pela classe `.dark` no `<html>`.
+  Todo componente deve funcionar nos dois temas — sempre teste o toggle.
+- **Zoom global de UI.** A aplicação roda com `--app-ui-zoom: 0.8`; tamanhos em `rem`
+  acompanham o zoom.
+
+---
+
+## Onde ficam os componentes
+
+| Pasta | Papel |
+|-------|-------|
+| `src/components/ui/` | **Implementação base.** Primitivos (Button, Input, Card, Table, Tabs…) e componentes de aplicação (EmptyState, ErrorState, LoadingState). |
+| `src/shared/ui` | **API pública (fachada).** Um barrel (`index.ts`) que re-exporta os primitivos. |
+
+### Regra de importação
+
+Para telas e features, importe **sempre pela fachada**:
+
+```tsx
+import { Button, Badge, Card, Table, Input, StatusBadge } from '@/shared/ui';
+```
+
+Importe direto de `@/components/ui/*` apenas dentro do próprio design system.
+
+---
+
+## Confirmação imperativa
+
+Para diálogos de confirmar/cancelar, use o hook `useConfirm()`:
+
+```tsx
+const confirm = useConfirm();
+if (await confirm({ message: 'Excluir campanha?', variant: 'danger' })) {
+  // ...
+}
+```
