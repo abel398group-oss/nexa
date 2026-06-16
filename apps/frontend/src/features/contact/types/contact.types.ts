@@ -9,6 +9,7 @@ export interface Contact {
   status?: string; // active | opted_out
   source?: string;
   tags?: string[];
+  notes?: string | null;
   createdAt: string;
 }
 
@@ -18,6 +19,7 @@ export interface ContactInput {
   name?: string;
   company?: string;
   email?: string;
+  notes?: string;
 }
 
 // Linha de importação em lote (CSV já parseado).

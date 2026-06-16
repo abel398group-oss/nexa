@@ -145,3 +145,41 @@
   `application/followup/*` · `prisma/schema.prisma` (`AiConversation.assignedSellerId`,
   `Contact.notes`)
 - Padrões: `docs/SPEC-LISTAS-FILTROS-CRUD.md` · `docs/api/api-standards.md`
+
+---
+
+## Status de implementação (jun/2026)
+
+- [x] **Fatia 1 — Reatribuir lead** · backend `PATCH /conversations/:id/assign` + dropdown
+  "Vendedor" no header da conversa (Inbox de Vendas).
+- [x] **Fatia 2 — Editar / Clonar campanha** · backend `PATCH /campaigns/:id` (rascunho) +
+  botões "Editar" (modal compacto, só rascunho) e "Clonar" (pré-preenche o form) no card.
+- [x] **Fatia 3 — Notas internas** · campo "Notas internas" no form de contato (usa
+  `Contact.notes`, que o backend já aceitava).
+- [x] **Fatia 4 — Filtrar Inbox por vendedor** · seletor de vendedor na sidebar do Inbox
+  de Vendas (inclui "Sem vendedor").
+- [x] **Fatia 6 (parcial) — Validação de e-mail** no disparo (regex real no lugar de só `@`).
+- [ ] **Fatia 5 — Paginação + ordenação em Contatos** — pendente (decidir filtro de
+  situação server-side antes).
+- [ ] **Fatia 6 (resto) — aviso "limite < selecionados"** na campanha — pendente.
+- [ ] **Fatia 7 — Follow-up na UI** — pendente (investigar endpoints do módulo `followup`).
+
+> Backend novo a subir: `PATCH /conversations/:id/assign` e `PATCH /campaigns/:id`
+> (reiniciar o backend). Sem migration nesta entrega.
+
+## Checklist de validação (pós-deploy)
+
+**Pré:** reiniciar o backend (endpoints novos). Sem migration.
+
+- [ ] **Reatribuir lead:** Inbox de Vendas → abrir conversa → trocar "Vendedor" no header →
+  nome muda no card e persiste no F5; "Sem vendedor" desatribui.
+- [ ] **Filtro por vendedor:** Inbox de Vendas → seletor na sidebar → escolher um vendedor
+  mostra só a carteira dele; "Sem vendedor" mostra os não atribuídos.
+- [ ] **Editar campanha:** criar campanha e NÃO iniciar → botão "Editar" → muda nome/mensagem
+  → salva; campanha já iniciada NÃO mostra "Editar"; tentar editar iniciada (via API) dá erro.
+- [ ] **Clonar campanha:** "Clonar" em qualquer campanha → abre o form com "Cópia de …" e a
+  mensagem preenchida → cria nova normalmente.
+- [ ] **Notas internas:** editar um contato → escrever em "Notas internas" → salvar → reabrir
+  e a nota continua lá.
+- [ ] **Validação de e-mail:** campanha por e-mail com uma linha "texto inválido" e uma
+  "valido@dominio.com" → só a válida conta como destinatário; se nenhuma válida, bloqueia.

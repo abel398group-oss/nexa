@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
@@ -281,6 +281,32 @@ export class SenderService {
     const conversion = { conversations: convIds.length, byOutcome };
 
     return { campaign, targets: enriched, counts, engagement, conversion };
+  }
+
+  // Edita uma campanha que ainda NÃO foi iniciada (status 'draft'). Só campos seguros.
+  async updateCampaign(
+    tenantId: string,
+    id: string,
+    dto: { name?: string; template?: string; subject?: string; link?: string; sendLimit?: number },
+  ) {
+    const c = await this.prisma.campaign.findFirst({
+      where: { id, tenantId },
+      select: { id: true, status: true },
+    });
+    if (!c) throw new NotFoundException('Campanha não encontrada');
+    if (c.status !== 'draft') {
+      throw new BadRequestException('Só dá pra editar uma campanha que ainda não foi iniciada.');
+    }
+    return this.prisma.campaign.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.template !== undefined ? { template: dto.template } : {}),
+        ...(dto.subject !== undefined ? { subject: dto.subject } : {}),
+        ...(dto.link !== undefined ? { link: dto.link || null } : {}),
+        ...(dto.sendLimit !== undefined ? { sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null } : {}),
+      },
+    });
   }
 
   async setStatus(tenantId: string, id: string, status: 'running' | 'paused') {

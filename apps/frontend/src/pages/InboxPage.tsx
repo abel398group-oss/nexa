@@ -73,6 +73,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const { user } = useAuth();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [sellerFilter, setSellerFilter] = useState(''); // '' = todos · '__none__' = sem vendedor
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -148,6 +149,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     // vendas: exclui tickets de suporte · suporte: só tickets
     .filter((c) => (scope === 'support' ? isSupportTicket(c) : !isSupportTicket(c)))
     .filter((c) => activeFilter === 'all' || c.status === activeFilter)
+    .filter((c) =>
+      !sellerFilter || (sellerFilter === '__none__' ? !c.assignedSellerId : c.assignedSellerId === sellerFilter),
+    )
     .sort((a, b) => {
       // escalated sempre no topo
       if (a.status === 'escalated' && b.status !== 'escalated') return -1;
@@ -252,6 +256,22 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
             onChange={setActiveFilter}
             counts={statusCounts}
           />
+        )}
+
+        {/* filtro por vendedor (só vendas) */}
+        {scope === 'sales' && sellers.length > 0 && (
+          <div className="border-b border-base-200 px-3 py-2" style={{ borderColor: 'var(--border)' }}>
+            <Select
+              value={sellerFilter}
+              onChange={(e) => setSellerFilter(e.target.value)}
+              className="!h-8 text-xs"
+              title="Filtrar por vendedor"
+            >
+              <option value="">Todos os vendedores</option>
+              <option value="__none__">Sem vendedor</option>
+              {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          </div>
         )}
 
         <div className="flex-1 overflow-y-auto">

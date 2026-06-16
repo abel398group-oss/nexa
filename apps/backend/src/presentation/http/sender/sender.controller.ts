@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -29,6 +29,15 @@ class CreateCampaignDto {
 
 class CampaignIdsDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
+}
+
+// edição de campanha em rascunho (só campos seguros)
+class UpdateCampaignDto {
+  @IsOptional() @IsString() @MinLength(2) name?: string;
+  @IsOptional() @IsString() @MinLength(3) template?: string;
+  @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() link?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
 }
 
 class SenderSettingsDto {
@@ -90,6 +99,12 @@ export class SenderController {
   @Post('campaigns')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateCampaignDto) {
     return this.sender.createCampaign(tenantId ?? 'default', dto);
+  }
+
+  // editar campanha em rascunho (nome/mensagem/assunto/link/limite)
+  @Patch('campaigns/:id')
+  update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateCampaignDto) {
+    return this.sender.updateCampaign(tenantId ?? 'default', id, dto);
   }
 
   @Post('campaigns/email')

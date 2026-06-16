@@ -5,7 +5,7 @@
 > abaixo são do **lado do Nexa** (não exigem alteração no repositório do HiperTMS).
 > Ordem sugerida de ataque no topo. Atualizar o status conforme formos fazendo.
 
-## 1. Consertar o CI (`ci.yml`) que está vermelho  — [prioridade: alta]
+## 1. Consertar o CI (`ci.yml`) — ✅ FEITO (verde apos push; era commit antigo)
 
 **O quê:** o workflow `.github/workflows/ci.yml` ("Build & Lint") falha em todo push
 desde commits do squad (testes do backend OU build do frontend). O lint é não-bloqueante,
@@ -21,7 +21,7 @@ local (`pnpm --filter backend test`, `pnpm --filter frontend build`). Corrigir a
 
 **Aceite:** CI verde num push limpo.
 
-## 2. Subir a Mudança 1 (login na raiz)  — [prioridade: alta, rápido]
+## 2. Mudança 1 (login na raiz) — ✅ FEITO (no ar)
 
 **O quê:** o código já está pronto (`RootRedirect` em `RouteGuards.tsx`, `/` → login,
 landing preservada em `/landing`). Falta **commit + push** para o deploy automático subir.

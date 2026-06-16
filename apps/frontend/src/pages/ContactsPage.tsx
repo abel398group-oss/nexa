@@ -28,7 +28,7 @@ import {
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 
-const empty = { phone: '', name: '', company: '', email: '' };
+const empty = { phone: '', name: '', company: '', email: '', notes: '' };
 
 // validação do form de contato (RHF + Zod) — telefone obrigatório; e-mail válido se preenchido
 const contactSchema = z.object({
@@ -36,6 +36,7 @@ const contactSchema = z.object({
   name: z.string().trim().optional().or(z.literal('')),
   company: z.string().trim().optional().or(z.literal('')),
   email: z.string().trim().email('E-mail inválido').optional().or(z.literal('')),
+  notes: z.string().optional().or(z.literal('')),
 });
 type ContactForm = z.infer<typeof contactSchema>;
 
@@ -109,7 +110,7 @@ export function ContactsPage() {
 
   function openEdit(c: Contact) {
     setEditId(c.id);
-    reset({ phone: c.phone, name: c.name || '', company: c.company || '', email: c.email || '' });
+    reset({ phone: c.phone, name: c.name || '', company: c.company || '', email: c.email || '', notes: c.notes || '' });
     setShowForm(true);
   }
 
@@ -539,6 +540,10 @@ export function ContactsPage() {
               {errors[f.k] && <p className="mt-1 text-xs text-red-500">{errors[f.k]?.message}</p>}
             </div>
           ))}
+          <div>
+            <Label className="mb-1 block text-xs text-base-content/50">Notas internas</Label>
+            <Textarea placeholder="Anotações sobre o lead (visível pra equipe)" rows={3} {...register('notes')} />
+          </div>
           {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
           {/* ação de status (só ao editar): descadastrar (opt-out) ou reativar */}
           {editId && (() => {

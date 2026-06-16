@@ -68,6 +68,9 @@ const campaignSchema = z
     }
   });
 
+// validação real de e-mail (em vez de só checar '@')
+const isEmail = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
+
 export function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
   const [numbers, setNumbers] = useState<SenderNumber[]>([]);
@@ -131,6 +134,11 @@ export function CampaignsPage() {
   const [sendLimit, setSendLimit] = useState(30);
   const [busy, setBusy] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // edição de campanha em rascunho (modal compacto)
+  const [editC, setEditC] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editMsg, setEditMsg] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const confirm = useConfirm();
@@ -458,11 +466,47 @@ export function CampaignsPage() {
     setShow(true);
   }
 
+  // Clonar: pré-preenche o form de Nova campanha com nome/mensagem/canal (cria nova).
+  function cloneCampaign(c: any) {
+    resetForm();
+    setName(`Cópia de ${c.name}`);
+    if (c.channel === 'email') {
+      setChannel('email');
+      setEmailTemplate(c.template || '');
+      if (c.subject) setEmailSubject(c.subject);
+    } else {
+      setChannel('whatsapp');
+      setTemplate(c.template || '');
+    }
+    setShow(true);
+  }
+
+  // Editar (só rascunho): abre modal compacto com nome + mensagem.
+  function openEditCampaign(c: any) {
+    setEditC(c);
+    setEditName(c.name || '');
+    setEditMsg(c.template || '');
+  }
+  async function saveEditCampaign() {
+    if (!editC) return;
+    setEditBusy(true);
+    try {
+      await api.patch(`/campaigns/${editC.id}`, { name: editName.trim(), template: editMsg.trim() });
+      toast.success('Campanha atualizada!');
+      setEditC(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erro ao editar a campanha.');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
     // validação (Zod) — bloqueia o envio e mostra os erros, sem mexer no resto do fluxo
     const emailCount = channel === 'email' && !fromContacts
-      ? emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).length
+      ? emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).length
       : 0;
     const recipientCount = manualSelected.size + avulsos.length;
     const check = campaignSchema.safeParse({
@@ -486,7 +530,7 @@ export function CampaignsPage() {
           template: emailTemplate.trim(),
         };
         if (fromContacts) payload.fromContacts = true;
-        else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => l.includes('@')).map((e) => ({ email: e }));
+        else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).map((e) => ({ email: e }));
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
@@ -724,6 +768,10 @@ export function CampaignsPage() {
                   {!archivedView && c.status === 'running' && (
                     <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
                   )}
+                  {!archivedView && c.status === 'draft' && (
+                    <Button onClick={(e) => { e.stopPropagation(); openEditCampaign(c); }} variant="outline" size="sm" title="Editar campanha"><Icon name="edit" className="h-3.5 w-3.5" /> Editar</Button>
+                  )}
+                  <Button onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }} variant="outline" size="sm" title="Duplicar campanha"><Icon name="campaigns" className="h-3.5 w-3.5" /> Clonar</Button>
                   <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="icon-sm" className="text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></Button>
                 </div>
               </div>
@@ -746,6 +794,26 @@ export function CampaignsPage() {
           );
         })}
       </div>
+
+      {editC && (
+        <Modal open onClose={() => setEditC(null)} title="Editar campanha" size="sm">
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-base-content/60">Nome</label>
+              <input className="input w-full" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-base-content/60">Mensagem</label>
+              <textarea className="input w-full py-2" style={{ minHeight: '110px', resize: 'vertical' }} value={editMsg} onChange={(e) => setEditMsg(e.target.value)} />
+            </div>
+            <p className="text-[11px] text-base-content/40">Só é possível editar campanha que ainda não foi iniciada.</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="ghost" onClick={() => setEditC(null)}>Cancelar</Button>
+              <Button onClick={saveEditCampaign} loading={editBusy} disabled={!editName.trim() || !editMsg.trim()}>Salvar</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {show && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30 p-4" onClick={() => setShow(false)}>
@@ -940,7 +1008,7 @@ export function CampaignsPage() {
                         required={!fromContacts}
                       />
                       <p className="mt-1 text-[11px] text-base-content/40">
-                        Um e-mail por linha · <strong>{emailsText.split('\n').filter((l) => l.includes('@')).length}</strong> e-mail(s) detectado(s)
+                        Um e-mail por linha · <strong>{emailsText.split('\n').filter((l) => isEmail(l)).length}</strong> e-mail(s) detectado(s)
                       </p>
                     </>
                   ) : (
