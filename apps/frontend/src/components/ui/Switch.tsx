@@ -1,4 +1,4 @@
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Toggle on/off controlado.
 export function Switch({

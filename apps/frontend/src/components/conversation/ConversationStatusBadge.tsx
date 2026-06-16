@@ -1,4 +1,4 @@
-import { getStatusConfig, isWaitingInternalStale } from '@/lib/conversation-status';
+import { getStatusConfig, isWaitingInternalStale } from '@/shared/lib/conversation-status';
 import { Icon } from '@/components/ui/icons';
 
 interface Props {

@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
-import { getActingTenantId, setActingTenantId } from '@/lib/actingTenant';
-import { setDestructiveConfirmHandler } from '@/lib/destructiveConfirm';
+import { api } from '@/shared/lib/api';
+import { useAuth } from '@/app/providers/AuthContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
+import { getActingTenantId, setActingTenantId } from '@/shared/lib/actingTenant';
+import { setDestructiveConfirmHandler } from '@/shared/lib/destructiveConfirm';
 import { Popover } from '@/components/ui/Popover';
 import { Icon } from '@/components/ui/icons';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 export interface Tenant {
   id: string;

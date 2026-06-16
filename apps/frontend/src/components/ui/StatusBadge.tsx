@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 /**
  * StatusBadge — badge de status canônico (porte do TMS).

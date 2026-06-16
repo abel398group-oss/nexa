@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Tabs controladas ou não controladas, sem dependências (Radix-free).
 interface TabsCtx {

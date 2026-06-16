@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Alerta/banner contextual. Tons com variantes dark explícitas.
 export type AlertTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral';

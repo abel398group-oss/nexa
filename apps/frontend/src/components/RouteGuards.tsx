@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/app/providers/AuthContext';
 
 /** Tela de carregamento padrão enquanto o auth resolve. */
 function RouteLoading() {

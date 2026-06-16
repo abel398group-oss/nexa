@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useDateRange, lastDays, ALL_TIME, DateRange } from '@/contexts/DateRangeContext';
+import { useDateRange, lastDays, ALL_TIME, DateRange } from '@/app/providers/DateRangeContext';
 import { Icon } from '@/components/ui/icons';
 
 // Seletor de período da topbar (como o calendário do TMS) — filtra o painel.

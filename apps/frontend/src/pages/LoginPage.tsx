@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/app/providers/AuthContext';
 import { Button, Input, Alert } from '@/shared/ui';
 
 // Ícones inline (nexa não usa lucide) — mostrar/ocultar senha.

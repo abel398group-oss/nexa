@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Popover leve: clique no gatilho abre/fecha; clique fora ou Esc fecha. Sem dependências.
 export type PopoverAlign = 'start' | 'center' | 'end';

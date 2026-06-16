@@ -1,5 +1,5 @@
 import { HTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Card — reaproveita a classe atômica `.card` (var(--surface) + sombra) já existente.
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

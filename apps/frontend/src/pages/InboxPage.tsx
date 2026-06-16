@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api } from '@/shared/lib/api';
 import { Select } from '@/shared/ui';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/app/providers/AuthContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
-import { displayPhone } from '@/lib/phone';
+import { displayPhone } from '@/shared/lib/phone';
 import { bulkTagContacts } from '@/features/contact';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
 import { ConversationTimeline } from '@/components/conversation/ConversationTimeline';
-import { isWaitingInternalStale } from '@/lib/conversation-status';
-import { isSupportTicket } from '@/lib/conversation';
+import { isWaitingInternalStale } from '@/shared/lib/conversation-status';
+import { isSupportTicket } from '@/shared/lib/conversation';
 import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
 
 interface Conversation {

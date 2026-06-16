@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Wrappers de tabela. O tema dark é resolvido pelos overrides `table/thead/...` em index.css.
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {

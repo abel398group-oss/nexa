@@ -1,4 +1,4 @@
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Paginação simples (anterior / página atual / próxima).
 export function Pagination({

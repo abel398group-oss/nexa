@@ -1,5 +1,5 @@
 import { SelectHTMLAttributes, forwardRef } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Select nativo estilizado (mesma linguagem do Input). Dark via overrides de index.css.
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(

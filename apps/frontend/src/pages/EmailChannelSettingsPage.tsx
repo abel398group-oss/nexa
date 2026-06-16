@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api } from '@/lib/api';
+import { api } from '@/shared/lib/api';
 import { Button, Input, Checkbox, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 
 // validação do canal de e-mail (RHF + Zod). Portas como string (input number → string).

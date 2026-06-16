@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 import { Icon } from '@/components/ui/icons';
 
 // Estado de erro — mesmo formato visual do EmptyState, com moldura de alerta.

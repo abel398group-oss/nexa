@@ -1,5 +1,5 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Botão canônico do design system (tokens brand-*/base-*). Espelha o Button do TMS.
 export type ButtonVariant =

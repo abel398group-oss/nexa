@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api } from '@/lib/api';
-import { displayPhone } from '@/lib/phone';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { api } from '@/shared/lib/api';
+import { displayPhone } from '@/shared/lib/phone';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Input, PageContainer, PageHeader, Breadcrumb, Icon, Badge, SkeletonList, EmptyState } from '@/shared/ui';
 
 // E8 — fatia 2: validação de formulário por schema (RHF + Zod), como referência.

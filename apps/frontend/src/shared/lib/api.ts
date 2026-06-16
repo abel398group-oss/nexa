@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { getActingTenantId, setActingTenantId } from '@/lib/actingTenant';
-import { confirmDestructive } from '@/lib/destructiveConfirm';
+import { getActingTenantId, setActingTenantId } from '@/shared/lib/actingTenant';
+import { confirmDestructive } from '@/shared/lib/destructiveConfirm';
 
 // withCredentials -> envia o cookie HttpOnly (auth) automaticamente
 export const api = axios.create({

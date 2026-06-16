@@ -4,7 +4,7 @@ import { DayPicker, type DateRange, type DayPickerProps } from 'react-day-picker
 import { ptBR } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { Popover } from './Popover';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 export type { DateRange };
 

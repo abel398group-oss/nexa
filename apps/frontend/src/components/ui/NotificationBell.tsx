@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
+import { api } from '@/shared/lib/api';
 import { Icon } from '@/components/ui/icons';
 
 interface Notif { id: string; type: string; title: string; body: string; link?: string | null; read: boolean; createdAt: string }

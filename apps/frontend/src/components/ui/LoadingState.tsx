@@ -1,4 +1,4 @@
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Estado de carregamento centralizado (spinner + rótulo).
 export function LoadingState({ label = 'Carregando…', className }: { label?: string; className?: string }) {

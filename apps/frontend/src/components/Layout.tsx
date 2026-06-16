@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/shared/lib/api';
+import { useAuth } from '@/app/providers/AuthContext';
 import { HelpDrawer, HELP } from '@/components/HelpDrawer';
 import { GuidedTour, TourStep } from '@/components/GuidedTour';
 import { CommandPalette, Command } from '@/components/ui/CommandPalette';
-import { DateRangeProvider } from '@/contexts/DateRangeContext';
+import { DateRangeProvider } from '@/app/providers/DateRangeContext';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { Icon, type IconName } from '@/components/ui/icons';
-import { TenantSelector } from '@/contexts/TenantContext';
+import { TenantSelector } from '@/app/providers/TenantContext';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa!', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },

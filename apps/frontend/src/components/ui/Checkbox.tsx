@@ -1,5 +1,5 @@
 import { InputHTMLAttributes, forwardRef } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Checkbox nativo estilizado na cor da marca.
 export const Checkbox = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(

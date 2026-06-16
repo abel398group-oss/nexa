@@ -1,5 +1,5 @@
 import { TextareaHTMLAttributes, forwardRef } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Área de texto canônica (mesma linguagem do Input).
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(

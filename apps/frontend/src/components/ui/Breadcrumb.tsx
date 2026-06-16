@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 export interface Crumb {
   label: string;

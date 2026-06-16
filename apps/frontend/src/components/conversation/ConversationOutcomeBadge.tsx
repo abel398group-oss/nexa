@@ -1,4 +1,4 @@
-import { getOutcomeConfig } from '@/lib/conversation-status';
+import { getOutcomeConfig } from '@/shared/lib/conversation-status';
 
 interface Props {
   outcome: string;

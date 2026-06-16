@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useLocation } from 'react-router-dom';
-import { api } from '@/lib/api';
-import { displayPhone, toBrPhone } from '@/lib/phone';
+import { api } from '@/shared/lib/api';
+import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { listContacts, listTags, type TagCount, type Contact } from '@/features/contact';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon, Badge, statusVariant } from '@/shared/ui';
 
 interface Campaign {
@@ -1286,6 +1286,11 @@ export function CampaignsPage() {
                          className="input w-20 disabled:opacity-40" />
                 </label>
               </div>
+              {limitMode === 'limit' && audience === 'manual' && manualTotal > sendLimit && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  Você selecionou {manualTotal} destinatário(s), mas o limite é {sendLimit} — só os primeiros {sendLimit} serão enviados nesta rodada.
+                </p>
+              )}
             </div>
 
             {/* Agendamento (opcional) — dia + hora dentro do horário permitido */}

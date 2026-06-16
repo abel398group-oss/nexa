@@ -1,5 +1,5 @@
 import { ReactNode, useEffect } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Shell de diálogo reutilizável: overlay + painel centralizado, fecha no Esc / clique fora.
 export type ModalSize = 'sm' | 'md' | 'lg';

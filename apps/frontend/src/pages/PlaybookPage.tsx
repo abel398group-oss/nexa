@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { api } from '@/shared/lib/api';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { Button, Input, Textarea, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCategoryConfig, getPriorityConfig } from '@/lib/ticket-category';
+import { getCategoryConfig, getPriorityConfig } from '@/shared/lib/ticket-category';
 
 interface Props {
   category?: string | null;

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { api } from '@/shared/lib/api';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Card, Input, Textarea, Breadcrumb, Icon } from '@/shared/ui';
 
 interface Version { id: string; version: number; approved: boolean; reviewer?: string; }

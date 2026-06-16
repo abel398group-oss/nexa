@@ -52,4 +52,4 @@ export * from '@/components/ui/Popover';
 export * from '@/components/ui/Modal';
 
 // Confirmação (hook imperativo) — modal de confirmar/cancelar
-export { useConfirm, ConfirmProvider } from '@/contexts/ConfirmContext';
+export { useConfirm, ConfirmProvider } from '@/app/providers/ConfirmContext';

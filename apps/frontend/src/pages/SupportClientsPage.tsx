@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { api } from '@/lib/api';
-import { displayPhone } from '@/lib/phone';
-import { isSupportTicket } from '@/lib/conversation';
+import { api } from '@/shared/lib/api';
+import { displayPhone } from '@/shared/lib/phone';
+import { isSupportTicket } from '@/shared/lib/conversation';
 import { Card, PageContainer, PageHeader, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
 
 interface Conv {

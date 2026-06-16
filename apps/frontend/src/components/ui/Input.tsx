@@ -1,5 +1,5 @@
 import { InputHTMLAttributes, forwardRef } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Input de texto canônico. O dark mode é resolvido pelos overrides `input` em index.css.
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(

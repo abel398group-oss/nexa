@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal, Input, Textarea, Label, Select, StatusBadge, Badge, Breadcrumb, Icon, SkeletonList, EmptyState } from '@/shared/ui';
-import { displayPhone } from '@/lib/phone';
+import { displayPhone } from '@/shared/lib/phone';
 import {
   type Contact,
   type ImportContactInput,
@@ -25,8 +25,8 @@ import {
   importContacts,
   getContactCampaigns,
 } from '@/features/contact';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 
 const empty = { phone: '', name: '', company: '', email: '', notes: '' };
 
@@ -59,6 +59,12 @@ export function ContactsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'optout'>('todos');
   const [page, setPage] = useState(0);
+  const [sortKey, setSortKey] = useState<'name' | 'company' | 'leadStatus' | 'source' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  function toggleSort(k: 'name' | 'company' | 'leadStatus' | 'source') {
+    if (sortKey === k) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(k); setSortDir('asc'); }
+  }
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   // gerenciador de tags
   const [showTagMgr, setShowTagMgr] = useState(false);
@@ -345,7 +351,16 @@ export function ContactsPage() {
       active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/70 hover:bg-base-300'
     }`;
 
-  const shown = items; // filtro de situação já aplicado no backend
+  const base = items; // filtro de situação já aplicado no backend
+  // ordenação client-side da página atual (sort por coluna)
+  const shown = sortKey
+    ? [...base].sort((a, b) => {
+        const av = ((a as any)[sortKey] ?? '').toString().toLowerCase();
+        const bv = ((b as any)[sortKey] ?? '').toString().toLowerCase();
+        const cmp = av.localeCompare(bv, 'pt-BR');
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : base;
 
   return (
     <div className="flex h-full flex-col bg-base-100">
@@ -459,12 +474,12 @@ export function ContactsPage() {
                   title="Selecionar todos"
                 />
               </th>
-              <th className="px-4 py-3">Nome</th>
+              <th className="px-4 py-3 cursor-pointer select-none hover:text-base-content" onClick={() => toggleSort('name')}>Nome{sortKey === 'name' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</th>
               <th className="px-4 py-3">Telefone</th>
-              <th className="px-4 py-3">Empresa</th>
+              <th className="px-4 py-3 cursor-pointer select-none hover:text-base-content" onClick={() => toggleSort('company')}>Empresa{sortKey === 'company' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</th>
               <th className="px-4 py-3">Tags</th>
-              <th className="px-4 py-3">Lead</th>
-              <th className="px-4 py-3">Origem</th>
+              <th className="px-4 py-3 cursor-pointer select-none hover:text-base-content" onClick={() => toggleSort('leadStatus')}>Lead{sortKey === 'leadStatus' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+              <th className="px-4 py-3 cursor-pointer select-none hover:text-base-content" onClick={() => toggleSort('source')}>Origem{sortKey === 'source' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</th>
               <th className="px-4 py-3 text-right">Ações</th>
             </tr>
           </thead>

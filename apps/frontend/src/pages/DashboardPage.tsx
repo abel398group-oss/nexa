@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { useDateRange } from '@/contexts/DateRangeContext';
+import { api } from '@/shared/lib/api';
+import { useDateRange } from '@/app/providers/DateRangeContext';
 import { ConversationMetricsCard } from '@/components/conversation/ConversationMetricsCard';
 import {
   Button,

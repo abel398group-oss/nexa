@@ -1,4 +1,4 @@
-import { INBOX_FILTERS } from '@/lib/conversation-status';
+import { INBOX_FILTERS } from '@/shared/lib/conversation-status';
 
 interface Props {
   active: string;

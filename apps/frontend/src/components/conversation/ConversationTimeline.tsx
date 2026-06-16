@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
-import { getStatusConfig, getOutcomeConfig } from '@/lib/conversation-status';
+import { api } from '@/shared/lib/api';
+import { getStatusConfig, getOutcomeConfig } from '@/shared/lib/conversation-status';
 import { Icon } from '@/components/ui/icons';
 
 interface TimelineEntry {

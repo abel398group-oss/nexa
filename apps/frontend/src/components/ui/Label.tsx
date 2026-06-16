@@ -1,5 +1,5 @@
 import { LabelHTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Rótulo de formulário.
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { displayPhone } from '@/lib/phone';
+import { api } from '@/shared/lib/api';
+import { displayPhone } from '@/shared/lib/phone';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 
 interface SenderNumber {

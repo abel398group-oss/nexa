@@ -1,7 +1,7 @@
 // Funções puras de acesso à API de contatos (FSD — sem React).
 // Única camada que conhece os endpoints `/contacts`. As páginas/hooks
 // consomem estas funções via barrel `@/features/contact`.
-import { api } from '@/lib/api';
+import { api } from '@/shared/lib/api';
 import type {
   Contact,
   ContactInput,

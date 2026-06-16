@@ -4,7 +4,7 @@ import {
   type PortalMe,
   type PortalTicketSummary,
   type PortalTicketDetail,
-} from '@/lib/portalApi';
+} from '@/shared/lib/portalApi';
 import { Button, Card, Input, Select, Textarea, Icon } from '@/shared/ui';
 
 // Áreas/módulos do HiperTMS — o cliente escolhe onde está o problema.

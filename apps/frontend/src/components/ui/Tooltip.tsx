@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { cn } from '@/lib/cn';
+import { cn } from '@/shared/lib/cn';
 
 // Tooltip leve por hover/focus, sem dependências.
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';

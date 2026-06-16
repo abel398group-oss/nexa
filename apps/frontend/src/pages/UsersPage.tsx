@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api } from '@/lib/api';
+import { api } from '@/shared/lib/api';
 import { Button, Card, Modal, Input, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
-import { useToast } from '@/contexts/ToastContext';
-import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 
 interface User {
   id: string; email: string; name?: string; role: string;

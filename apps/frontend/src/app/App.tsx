@@ -1,11 +1,11 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from '@/lib/queryClient';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { TenantProvider, TenantGate } from '@/contexts/TenantContext';
-import { ToastProvider } from '@/contexts/ToastContext';
-import { ConfirmProvider } from '@/contexts/ConfirmContext';
+import { queryClient } from '@/shared/lib/queryClient';
+import { AuthProvider } from '@/app/providers/AuthContext';
+import { TenantProvider, TenantGate } from '@/app/providers/TenantContext';
+import { ToastProvider } from '@/app/providers/ToastContext';
+import { ConfirmProvider } from '@/app/providers/ConfirmContext';
 import { Layout } from '@/components/Layout';
 import { ProtectedRoute, PermissionRoute, RootRedirect } from '@/components/RouteGuards';
 import { LandingPage } from '@/pages/LandingPage';
