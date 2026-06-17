@@ -180,7 +180,7 @@ Retorna `null` se o connector do TMS estiver indisponível (degradação gracios
 > **Auth:** sessão do portal
 
 ```http
-GET /api/portal/tickets?limit=20&offset=0&status=open&category=frete
+GET /api/portal/tickets?limit=10&offset=0&status=open&category=cte
 Authorization: Bearer <jwt>
 ```
 
@@ -364,48 +364,54 @@ Limpa o cookie `portal_session`. Chamar mesmo sem sessão ativa não gera erro.
 
 ## 4. Fluxo de Uso
 
-Sequência completa de chamadas que o TMS deve executar:
+Sequência completa de chamadas que o TMS deve executar.
+
+> **Arquitetura TMS nativa:** o suporte é acessado via ícone `?` no header do TMS que abre
+> um drawer lateral. Os passos 1 e 2 abaixo ocorrem de forma **lazy** — apenas quando o
+> usuário abre o drawer pela primeira vez, não no carregamento da página.
 
 ```
-1. [Backend TMS]
+1. [Backend TMS — ao abrir o drawer pela 1ª vez]
    POST /api/handoff/token
    → recebe { token, expiresIn }
-   → passa o token para o frontend (ex.: embedded no HTML ou via API interna)
+   → retorna o token ao frontend via endpoint interno (/internal/support-token)
+   → NÃO expor o TMS_SERVICE_TOKEN ao browser
 
-2. [Frontend TMS — inicialização do embed]
+2. [Frontend TMS — inicialização da sessão]
    POST /api/portal/session  { token }
    → recebe { ok, name, session }
-   → armazena o JWT em memória (para Bearer nas próximas chamadas)
+   → armazena o JWT em memória (Bearer para todas as chamadas seguintes)
+   → NÃO usar localStorage
 
-3. [Frontend TMS — carregamento do perfil]
-   GET /api/portal/me
-   → exibe nome do cliente e dados de contrato
+3. [Frontend TMS — exibir histórico na aba "Meus chamados"]
+   GET /api/portal/tickets?limit=10&offset=0
+   → renderiza lista de chamados do cliente
 
-4. [Frontend TMS — exibir histórico]
-   GET /api/portal/tickets?limit=20&offset=0
-   → renderiza lista de chamados anteriores
+   Nota: GET /api/portal/me é opcional para implementações nativas do TMS —
+   o TMS já possui os dados do usuário (nome, telefone) em seu próprio store.
+   Útil apenas para obter dados de contrato via connector.
 
-5. [Frontend TMS — abrir chamado]
-   POST /api/portal/tickets  { message, subject?, category?, phone? }
+4. [Frontend TMS — abrir chamado]
+   POST /api/portal/tickets  { message, subject, category, phone }
    → exibe chamado criado com as mensagens iniciais (cliente + Lia)
 
-6. [Frontend TMS — ver chamado existente]
+5. [Frontend TMS — ver chamado existente]
    GET /api/portal/tickets/:id
    → exibe thread completa de mensagens
 
-7. [Frontend TMS — responder]
+6. [Frontend TMS — responder]
    POST /api/portal/tickets/:id/messages  { message }
    → exibe thread atualizada
 
-8. [Frontend TMS — ao sair]
+7. [Frontend TMS — ao fechar o drawer]
    POST /api/portal/session/logout
 ```
 
 ### Polling de mensagens
 
 O Nexa não implementa WebSocket no portal. Para exibir respostas da Lia em tempo real,
-o TMS deve fazer polling em `GET /portal/tickets/:id` a cada 3–5 segundos enquanto o
-chamado estiver `open` e o cliente estiver com a janela ativa.
+o TMS deve fazer polling em `GET /portal/tickets/:id` a cada 4 segundos enquanto o
+chamado estiver aberto (`open` ou `escalated`) e o drawer estiver visível.
 
 ---
 

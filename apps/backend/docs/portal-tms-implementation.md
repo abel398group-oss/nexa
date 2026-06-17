@@ -139,6 +139,9 @@ O frontend envia o header `X-Current-Page` com a rota atual ao chamar este endpo
 ```ts
 // hooks/usePortalSession.ts
 let _jwt: string | null = null;
+let _name: string | null = null;
+
+export function getPortalName(): string | null { return _name; }
 
 export async function getPortalJwt(currentPage: string): Promise<string> {
   if (_jwt) return _jwt;
@@ -159,10 +162,11 @@ export async function getPortalJwt(currentPage: string): Promise<string> {
   const { session, name } = await sessionRes.json();
 
   _jwt = session;
+  _name = name ?? null;  // nome do usuário para exibir no header do drawer
   return _jwt;
 }
 
-export function clearPortalJwt() { _jwt = null; }
+export function clearPortalJwt() { _jwt = null; _name = null; }
 ```
 
 ### 3.3 Renovação de Sessão
@@ -222,6 +226,15 @@ export function getCategoryFromRoute(pathname: string): string {
   }
   return 'outro';
 }
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  cte:        'CT-e',
+  mdfe:       'MDF-e',
+  fiscal:     'Fiscal',
+  financeiro: 'Financeiro',
+  sistema:    'Sistema',
+  outro:      'Outro',
+};
 ```
 
 
@@ -498,7 +511,7 @@ Carregar ao ativar a aba. Recarregar ao voltar para a lista após fechar um deta
 
 | Ação do usuário / evento | Método | Endpoint | Payload |
 |---|---|---|---|
-| Clica [? Suporte] pela 1ª vez (backend TMS) | `POST` | `/handoff/token` | `{ externalId, tenantId, name, page }` |
+| Abre drawer pela 1ª vez → frontend chama `/internal/support-token` (backend TMS) | `POST` | `/handoff/token` | `{ externalId, tenantId, name, page }` |
 | Frontend troca token por sessão | `POST` | `/portal/session` | `{ token }` |
 | Clica [Enviar] no formulário | `POST` | `/portal/tickets` | `{ subject, category, phone, message }` |
 | Polling de mensagens (chat aberto) | `GET` | `/portal/tickets/:id` | — |

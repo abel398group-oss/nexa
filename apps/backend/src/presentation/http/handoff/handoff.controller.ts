@@ -3,9 +3,11 @@ import { IsString, IsOptional } from 'class-validator';
 import { HandoffService } from '@/application/handoff/handoff.service';
 
 class CreateHandoffDto {
-  @IsString() externalId!: string;
+  // TMS envia 'userId'; mantemos 'externalId' como alias para compatibilidade interna.
+  @IsOptional() @IsString() userId?: string;
+  @IsOptional() @IsString() externalId?: string;
   @IsString() tenantId!: string;
-  @IsOptional() @IsString() name?: string; // nome do usuário logado no TMS (identidade segura)
+  @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() page?: string;
   @IsOptional() @IsString() errorCode?: string;
 }
@@ -22,9 +24,11 @@ export class HandoffController {
     @Body() body: CreateHandoffDto,
     @Headers('authorization') auth: string,
   ) {
+    // Aceita 'userId' (campo do TMS) ou 'externalId' (campo interno do Nexa).
+    const externalId = body.userId ?? body.externalId ?? '';
     const serviceToken = auth?.replace(/^Bearer\s+/i, '');
     const result = await this.handoff.create({
-      externalId: body.externalId,
+      externalId,
       tenantId: body.tenantId,
       name: body.name,
       page: body.page,
