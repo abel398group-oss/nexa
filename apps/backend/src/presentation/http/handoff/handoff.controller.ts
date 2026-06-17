@@ -1,12 +1,13 @@
 import { Controller, Post, Body, Headers, HttpCode } from '@nestjs/common';
+import { IsString, IsOptional } from 'class-validator';
 import { HandoffService } from '@/application/handoff/handoff.service';
 
 class CreateHandoffDto {
-  externalId!: string;
-  tenantId!: string;
-  name?: string; // nome do usuário logado no TMS (identidade segura)
-  page?: string;
-  errorCode?: string;
+  @IsString() externalId!: string;
+  @IsString() tenantId!: string;
+  @IsOptional() @IsString() name?: string; // nome do usuário logado no TMS (identidade segura)
+  @IsOptional() @IsString() page?: string;
+  @IsOptional() @IsString() errorCode?: string;
 }
 
 // POST /api/handoff/token — gerado pelo TMS (server-to-server)
