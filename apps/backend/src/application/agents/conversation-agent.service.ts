@@ -421,6 +421,22 @@ export class ConversationAgentService {
       });
     }
 
+    // SUPORTE: a Lia tentou e NÃO resolveu (needsHuman) → marca o chamado p/ humano e avisa
+    // o time. O humano assume no inbox e liga pro cliente (modelo de callback do suporte).
+    // Dedup: só escala uma vez por conversa (não renotifica a cada mensagem).
+    if (conv && needsHuman && route.agent === 'support' && (conv.status as string) !== 'escalated') {
+      await this.prisma.aiConversation
+        .update({ where: { id: conv.id }, data: { status: 'escalated' as any } })
+        .catch(() => null);
+      await this.notifications.create(tenantId, {
+        type: 'info',
+        title: '🆘 Chamado precisa de atendente',
+        body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
+        link: '/inbox',
+      });
+      this.logger.log(`Suporte escalado p/ humano: conv=${conv.id} tel=${conv.phone}`);
+    }
+
     return {
       route,
       draft,
