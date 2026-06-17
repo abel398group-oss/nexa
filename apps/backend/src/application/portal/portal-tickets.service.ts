@@ -140,6 +140,21 @@ export class PortalTicketsService {
       }
       return existing;
     }
+    // Se informou telefone real, verifica se ja existe um contato com esse phone no tenant
+    // (evita unique constraint em (tenant_id, phone) quando o mesmo telefone aparece em
+    // sessoes diferentes — ex: cliente abre novo chamado gerando novo externalId).
+    if (realPhone) {
+      const byPhone = await this.prisma.contact.findFirst({
+        where: { tenantId: customer.tenantId, phone: realPhone },
+      });
+      if (byPhone) {
+        // Associa o externalContactId desta sessao ao contato existente (best-effort)
+        await this.prisma.contact
+          .update({ where: { id: byPhone.id }, data: { externalContactId: customer.externalId } })
+          .catch(() => {}); // ignora se externalContactId ja estiver em uso por outro
+        return byPhone;
+      }
+    }
     return this.prisma.contact.create({
       data: {
         tenantId: customer.tenantId,
