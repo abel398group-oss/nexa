@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
+import { MANUAIS_KB } from './hipertms-manuais.data';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
@@ -591,6 +592,8 @@ export class HiperTmsConnector implements Connector {
           'Com esses dados o suporte consegue investigar pelos logs. Para tema fiscal/financeiro com bloqueio, o atendimento é priorizado.',
         tags: ['erro', 'travou', 'bug', 'tela', 'inesperado', 'sistema', 'suporte'],
       },
+      // Manuais tecnicos (suporte) — gerados de docs/manuais tecnicos
+      ...MANUAIS_KB,
     ];
   }
 

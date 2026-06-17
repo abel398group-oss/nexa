@@ -18,6 +18,13 @@ class TicketMessageDto {
   @IsString() @MinLength(1) message!: string;
 }
 
+class OpenTicketDto {
+  @IsString() @MinLength(1) message!: string;
+  @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() phone?: string;
+}
+
 class TicketsQueryDto {
   @IsOptional() @Type(() => Number) limit?: number;
   @IsOptional() @Type(() => Number) offset?: number;
@@ -95,8 +102,13 @@ export class PortalController {
   // Abre um novo chamado (entra no pipeline da Lia).
   @UseGuards(PortalSessionGuard)
   @Post('tickets')
-  openTicket(@Req() req: any, @Body() dto: TicketMessageDto) {
-    return this.tickets.open(req.portalCustomer, { message: dto.message });
+  openTicket(@Req() req: any, @Body() dto: OpenTicketDto) {
+    return this.tickets.open(req.portalCustomer, {
+      message: dto.message,
+      subject: dto.subject,
+      category: dto.category,
+      phone: dto.phone,
+    });
   }
 
   // Cliente responde num chamado existente.
