@@ -323,8 +323,12 @@ export class ConversationAgentService {
     const supervisorOk = scripted || supervisor?.approved === true;
     // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
     // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
-    const SAFE_FALLBACK =
+    // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
+    const SAFE_FALLBACK_SALES =
       'Posso te explicar como o HiperTMS organiza documentos, emissão de CT-e/MDF-e, precificação e financeiro — e te indicar o plano ideal pro seu porte. O que você quer ver primeiro? 🙂';
+    const SAFE_FALLBACK_SUPPORT =
+      'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente da nossa equipe, que vai entrar em contato com você em breve. 🙏';
+    const SAFE_FALLBACK = route.agent === 'support' ? SAFE_FALLBACK_SUPPORT : SAFE_FALLBACK_SALES;
 
     if (input.conversationId) {
       if (!this.autonomy.isEnabled()) {
@@ -333,9 +337,11 @@ export class ConversationAgentService {
         let outbound = draft;
         if (!supervisorOk) {
           outbound = SAFE_FALLBACK;
+          if (route.agent === 'support') needsHuman = true;
           blockedReason = `rascunho reprovado pela supervisora (enviado aceno seguro): ${supervisor?.issues.join(', ') || 'reprovado'}`;
         } else if (confidence !== 'high') {
           outbound = SAFE_FALLBACK;
+          if (route.agent === 'support') needsHuman = true;
           blockedReason = 'confiança baixa (enviado aceno seguro)';
         }
         // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
