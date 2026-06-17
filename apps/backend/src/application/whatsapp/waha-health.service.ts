@@ -147,6 +147,26 @@ export class WahaHealthService {
     await this.healthCheck();
   }
 
+  /** Status atual da sessão p/ o painel (GET /api/whatsapp/status). */
+  async getHealth(): Promise<{
+    configured: boolean;
+    status: string;
+    connected: boolean;
+    downSince: string | null;
+    downMinutes: number | null;
+    checkedAt: string;
+  }> {
+    const status = await this.getStatus();
+    return {
+      configured: this.configured,
+      status,
+      connected: status === 'WORKING',
+      downSince: this.downSince ? new Date(this.downSince).toISOString() : null,
+      downMinutes: this.downSince ? Math.round((Date.now() - this.downSince) / 60000) : null,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
   /** Dispara o alerta nos canais configurados (best-effort, nunca derruba o fluxo). */
   private async alert(title: string, body: string): Promise<void> {
     await Promise.allSettled([
