@@ -1,21 +1,28 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Icon, type IconName } from '@/components/ui/icons';
 
-type ToastType = 'success' | 'error' | 'info';
+type ToastType = 'success' | 'error' | 'info' | 'warning';
 interface Toast { id: number; type: ToastType; message: string }
 
 interface ToastApi {
   success: (msg: string) => void;
-  error: (msg: string) => void;
-  info: (msg: string) => void;
+  error:   (msg: string) => void;
+  info:    (msg: string) => void;
+  warning: (msg: string) => void;
 }
-const ToastCtx = createContext<ToastApi>({ success: () => {}, error: () => {}, info: () => {} });
+const ToastCtx = createContext<ToastApi>({
+  success: () => {},
+  error:   () => {},
+  info:    () => {},
+  warning: () => {},
+});
 
 let counter = 0;
 const STYLE: Record<ToastType, { bg: string; icon: IconName }> = {
   success: { bg: 'border-emerald-500 bg-emerald-50 text-emerald-800', icon: 'check' },
-  error: { bg: 'border-red-500 bg-red-50 text-red-800', icon: 'close' },
-  info: { bg: 'border-sky-500 bg-sky-50 text-sky-800', icon: 'help' },
+  error:   { bg: 'border-red-500 bg-red-50 text-red-800',             icon: 'close' },
+  info:    { bg: 'border-sky-500 bg-sky-50 text-sky-800',             icon: 'help'  },
+  warning: { bg: 'border-amber-500 bg-amber-50 text-amber-800',       icon: 'alert' },
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -33,14 +40,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const api: ToastApi = {
     success: (m) => push('success', m),
-    error: (m) => push('error', m),
-    info: (m) => push('info', m),
+    error:   (m) => push('error', m),
+    info:    (m) => push('info', m),
+    warning: (m) => push('warning', m),
   };
 
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      {/* container */}
       <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-80 max-w-[90vw] flex-col gap-2">
         {toasts.map((t) => (
           <div

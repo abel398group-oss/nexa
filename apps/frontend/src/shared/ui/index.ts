@@ -18,14 +18,20 @@ export * from '@/components/ui/Breadcrumb';
 
 // Primitivos base
 export * from '@/components/ui/Button';
+export * from '@/components/ui/IconButton';
 export * from '@/components/ui/Input';
 export * from '@/components/ui/Textarea';
 export * from '@/components/ui/Select';
+export * from '@/components/ui/SelectField';
+export * from '@/components/ui/FilterSelect';
 export * from '@/components/ui/Label';
 export * from '@/components/ui/Card';
 export * from '@/components/ui/Checkbox';
 export * from '@/components/ui/Switch';
 export * from '@/components/ui/Separator';
+
+// Avatar
+export * from '@/components/ui/Avatar';
 
 // Dados / navegação
 export * from '@/components/ui/Table';
@@ -35,6 +41,9 @@ export * from '@/components/ui/Pagination';
 // carregado sob demanda (ver pages/DashboardCampaignChart.tsx + React.lazy).
 // Importe de '@/components/ui/Chart' direto dentro de um componente lazy.
 export * from '@/components/ui/Calendar';
+
+// KPI / métricas (dashboards)
+export * from '@/components/ui/KpiCard';
 
 // Feedback / status
 export * from '@/components/ui/StatusBadge';
@@ -50,6 +59,7 @@ export * from '@/components/ui/Sheet';
 // Overlays
 export * from '@/components/ui/Popover';
 export * from '@/components/ui/Modal';
+export * from '@/components/ui/DropdownMenu';
 
 // Confirmação (hook imperativo) — modal de confirmar/cancelar
 export { useConfirm, ConfirmProvider } from '@/app/providers/ConfirmContext';
