@@ -2,7 +2,7 @@
  * EmailChannelService — CRUD do canal de e-mail por tenant.
  * Usado pelo painel de configurações.
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 export interface UpsertEmailChannelDto {
@@ -12,12 +12,12 @@ export interface UpsertEmailChannelDto {
   smtpHost?: string;
   smtpPort?: number;
   smtpUser: string;
-  smtpPass: string;
+  smtpPass?: string;
   smtpSecure?: boolean;
   imapHost?: string;
   imapPort?: number;
   imapUser: string;
-  imapPass: string;
+  imapPass?: string;
   imapMailbox?: string;
   isActive?: boolean;
 }
@@ -57,27 +57,49 @@ export class EmailChannelService {
   }
 
   async upsert(tenantId: string, dto: UpsertEmailChannelDto) {
-    const data = {
+    const existing = await this.prisma.emailChannel.findUnique({ where: { tenantId } });
+
+    // Senha vazia/ausente = "manter a senha atual" (só faz sentido no update).
+    const smtpPass = dto.smtpPass && dto.smtpPass.length > 0 ? dto.smtpPass : undefined;
+    const imapPass = dto.imapPass && dto.imapPass.length > 0 ? dto.imapPass : undefined;
+
+    // Na PRIMEIRA configuração as senhas são obrigatórias — avisa em vez de quebrar (500).
+    if (!existing && (!smtpPass || !imapPass)) {
+      throw new BadRequestException(
+        'Na primeira configuração do canal, informe a senha SMTP e a senha IMAP.',
+      );
+    }
+
+    const base = {
       fromEmail: dto.fromEmail,
       fromName: dto.fromName ?? 'Lia HiperTMS',
       replyTo: dto.replyTo ?? null,
       smtpHost: dto.smtpHost ?? 'mail.hipertms.com.br',
       smtpPort: dto.smtpPort ?? 465,
       smtpUser: dto.smtpUser,
-      smtpPass: dto.smtpPass,
       smtpSecure: dto.smtpSecure ?? true,
       imapHost: dto.imapHost ?? 'mail.hipertms.com.br',
       imapPort: dto.imapPort ?? 993,
       imapUser: dto.imapUser,
-      imapPass: dto.imapPass,
       imapMailbox: dto.imapMailbox ?? 'INBOX',
       isActive: dto.isActive ?? true,
     };
 
     const result = await this.prisma.emailChannel.upsert({
       where: { tenantId },
-      update: data,
-      create: { tenantId, provider: 'smtp', ...data },
+      // update: só troca a senha se uma nova foi enviada (vazio mantém a atual)
+      update: {
+        ...base,
+        ...(smtpPass ? { smtpPass } : {}),
+        ...(imapPass ? { imapPass } : {}),
+      },
+      create: {
+        tenantId,
+        provider: 'smtp',
+        ...base,
+        smtpPass: smtpPass as string,
+        imapPass: imapPass as string,
+      },
       select: SAFE_SELECT,
     });
 

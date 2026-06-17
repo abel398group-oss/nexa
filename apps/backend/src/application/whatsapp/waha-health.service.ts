@@ -206,8 +206,10 @@ export class WahaHealthService {
     let secure = true;
     let fromName = 'Nexa Monitor';
 
+    // Usa o canal salvo mesmo se desativado (prefere o ativo). Assim dá p/ ter
+    // alerta por e-mail sem ligar a leitura automática de e-mails da Lia.
     const ch = await this.prisma.emailChannel
-      .findFirst({ where: { isActive: true } })
+      .findFirst({ orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }] })
       .catch(() => null);
     if (ch?.smtpHost && ch.smtpUser && ch.smtpPass) {
       host = ch.smtpHost;
