@@ -66,38 +66,108 @@ const titles: Record<string, string> = {
   '/settings/email-channel': 'Canal de E-mail',
 };
 
+type AutonomyState = { master: boolean; whatsapp: boolean; email: boolean };
+
+// Linha de toggle (interruptor) usada no painel de controle da Lia.
+function ToggleRow({
+  label, hint, on, disabled, busy, onClick,
+}: { label: string; hint?: string; on: boolean; disabled?: boolean; busy?: boolean; onClick: () => void }) {
+  const active = on && !disabled;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || busy}
+      className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-base-100 disabled:opacity-50"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm text-base-content">{label}</span>
+        {hint && <span className="block text-[10px] text-base-content/45">{hint}</span>}
+      </span>
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${active ? 'bg-brand-600' : 'bg-base-300'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+      </span>
+    </button>
+  );
+}
+
+// Controle da Lia: master (botão de pânico) + por canal (WhatsApp / E-mail). ADR 012.
 function KillSwitch() {
-  const [on, setOn] = useState<boolean | null>(null);
+  const [st, setSt] = useState<AutonomyState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.get('/admin/autonomy').then((r) => setOn(r.data.autonomyEnabled)).catch(() => setOn(null));
+    api.get('/admin/autonomy')
+      .then((r) => setSt({ master: r.data.master, whatsapp: r.data.whatsapp, email: r.data.email }))
+      .catch(() => setSt(null));
   }, []);
 
-  async function toggle() {
-    if (on === null) return;
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  async function patch(p: Partial<AutonomyState>) {
+    if (!st || busy) return;
     setBusy(true);
     try {
-      const r = await api.post('/admin/autonomy', { enabled: !on });
-      setOn(r.data.autonomyEnabled);
+      const r = await api.post('/admin/autonomy', p);
+      setSt({ master: r.data.master, whatsapp: r.data.whatsapp, email: r.data.email });
     } finally {
       setBusy(false);
     }
   }
 
+  const masterOn = st?.master ?? false;
+
   return (
-    <button
-      onClick={toggle}
-      disabled={busy || on === null}
-      data-tour="killswitch"
-      title="Kill switch — autonomia da IA (auto-resposta)"
-      className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors ${
-        on ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-base-300 bg-white text-base-content hover:bg-base-100'
-      }`}
-    >
-      <Icon name="bot" className="h-4 w-4" />
-      IA {on === null ? '...' : on ? 'ON' : 'OFF'}
-    </button>
+    <div ref={ref} className="relative" data-tour="killswitch">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={st === null}
+        title="Controle da Lia (autonomia por canal)"
+        className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors ${
+          masterOn ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-base-300 bg-white text-base-content hover:bg-base-100'
+        }`}
+      >
+        <Icon name="bot" className="h-4 w-4" />
+        IA {st === null ? '...' : masterOn ? 'ON' : 'OFF'}
+      </button>
+      {open && st && (
+        <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-base-200 bg-white p-1.5 shadow-elevated dark:bg-sidebar">
+          <ToggleRow
+            label="Autonomia da Lia"
+            hint="Botão de pânico — desliga tudo"
+            on={st.master}
+            busy={busy}
+            onClick={() => patch({ master: !st.master })}
+          />
+          <div className="my-1 border-t border-base-200" />
+          <ToggleRow
+            label="Lia no WhatsApp"
+            on={st.whatsapp}
+            disabled={!st.master}
+            busy={busy}
+            onClick={() => patch({ whatsapp: !st.whatsapp })}
+          />
+          <ToggleRow
+            label="Lia no E-mail"
+            on={st.email}
+            disabled={!st.master}
+            busy={busy}
+            onClick={() => patch({ email: !st.email })}
+          />
+          {!st.master && (
+            <p className="px-2.5 py-1 text-[10px] text-base-content/40">
+              Autonomia geral desligada — nenhum canal responde até religar.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

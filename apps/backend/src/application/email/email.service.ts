@@ -18,6 +18,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { EmailReplyService } from './email-reply.service';
+import { AutonomyService } from '@/shared/governance/autonomy.service';
 
 // E-mail normalizado extraído do webhook Mailgun
 export interface NormalizedEmail {
@@ -64,6 +65,7 @@ export class EmailService {
     private readonly agent: ConversationAgentService,
     private readonly notifications: NotificationsService,
     private readonly emailReply: EmailReplyService,
+    private readonly autonomy: AutonomyService,
   ) {}
 
   /** Normaliza o payload Mailgun (form-encoded) para uma estrutura limpa. */
@@ -183,13 +185,21 @@ export class EmailService {
       metadata: { channel: 'email', subject: n.subject, from: n.from },
     });
 
-    // 5) Processa com a Lia (mesmo pipeline do WhatsApp)
+    // 5) Autonomia por canal (ADR 012): só responde sozinha se a Lia do E-MAIL
+    //    estiver ligada (master AND email). Com ela OFF, a mensagem fica salva
+    //    no inbox para um humano responder — não dispara resposta automática.
+    if (!this.autonomy.isEnabled('email')) {
+      this.logger.log(`Autonomia de e-mail OFF — mensagem de ${n.fromAddress} salva, SEM resposta automática.`);
+      return { ok: true, email: n.fromAddress, autonomy: 'email_off' as const };
+    }
+
+    // 6) Processa com a Lia (mesmo pipeline do WhatsApp)
     const agentResult = await this.agent.handle(tenantId, {
       message: n.bodyText,
       conversationId: conv.id,
     });
 
-    // 6) Envia resposta por e-mail
+    // 7) Envia resposta por e-mail
     // O ConversationAgentService salva a mensagem outbound no banco;
     // aqui enviamos fisicamente o e-mail (o autoSent=true já gravou no histórico).
     const draft = agentResult.draft;

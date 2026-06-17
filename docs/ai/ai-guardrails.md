@@ -33,10 +33,21 @@ rejeitada por padrão (allowlist, não denylist).
 
 ## 2. Kill switch de autonomia
 
-`AutonomyService` (`shared/governance/`) é um botão de pânico em runtime. O
-default vem de `AI_AUTONOMY_ENABLED` (env) e pode ser ligado/desligado por um
-admin a qualquer momento — desligado, a IA não age autonomamente e tudo cai para
-o humano. Toda mudança é logada (`KILL SWITCH: ... por <quem>`).
+`AutonomyService` (`shared/governance/`) é o controle de autonomia em runtime,
+com **três flags**: um `master` (botão de pânico) e um por canal — `whatsapp` e
+`email`. A autonomia efetiva de um canal é `master AND canal`; com o `master`
+desligado, **nenhum** canal responde. Assim dá pra, por exemplo, manter a Lia
+respondendo no WhatsApp e só rascunhando/aguardando humano no e-mail.
+
+O estado é **persistido** na tabela singleton `autonomy_setting` (id `global`),
+então sobrevive a restart — não religa a Lia sozinho. O default inicial só vem de
+`AI_AUTONOMY_ENABLED` (env) quando a linha ainda não existe. Toda mudança é logada
+(`KILL SWITCH: master=… whatsapp=… email=… por <quem>`) e auditada.
+
+Pontos de aplicação: `whatsapp.service` consulta `isEnabled('whatsapp')`;
+`email.service` consulta `isEnabled('email')` antes de auto-responder (com a flag
+de e-mail OFF a mensagem fica salva no inbox para um humano, sem resposta
+automática). O toggle fica no topo do painel (admin / permissão `ai_control`).
 
 ## 3. Validação de entrada (prompt injection)
 

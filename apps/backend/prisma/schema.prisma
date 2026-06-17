@@ -717,3 +717,18 @@ model OpportunityStageHistory {
   @@index([opportunityId])
   @@map("opportunity_stage_history")
 }
+
+// Kill switch da autonomia da IA (ADR 012) — GLOBAL/singleton (uma linha id="global").
+// `master` é o botão de pânico (desliga tudo). `whatsapp`/`email` ligam/desligam a Lia
+// por canal. Autonomia efetiva de um canal = master AND canal. Persistido para
+// sobreviver a restart (não religa a Lia sozinho).
+model AutonomySetting {
+  id        String   @id @default("global")
+  master    Boolean  @default(true)
+  whatsapp  Boolean  @default(true)
+  email     Boolean  @default(true)
+  changedBy String?  @map("changed_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("autonomy_setting")
+}

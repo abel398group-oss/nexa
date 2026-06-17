@@ -403,7 +403,7 @@ export class WhatsappService {
     let agentResult: any = null;
     const last = this.lastProcessed.get(n.phone) ?? 0;
     const rateLimited = Date.now() - last < RATE_LIMIT_MS;
-    if (this.autonomy.isEnabled() && !rateLimited) {
+    if (this.autonomy.isEnabled('whatsapp') && !rateLimited) {
       this.lastProcessed.set(n.phone, Date.now());
       agentResult = await this.agent.handle(tenantId, { message: n.text, conversationId: conv.id });
       // diagnóstico: por que respondeu ou não (visível no log)
@@ -413,7 +413,7 @@ export class WhatsappService {
       );
     } else if (rateLimited) {
       this.logger.warn(`Rate-limit: ${n.phone} (msg guardada, SEM resposta da IA — última há <${RATE_LIMIT_MS / 1000}s)`);
-    } else if (!this.autonomy.isEnabled()) {
+    } else if (!this.autonomy.isEnabled('whatsapp')) {
       // IA-3 (complemento): a Lia não responde com a autonomia OFF, mas ainda escala leads
       // quentes / pedidos de humano pro vendedor. Marca lastProcessed p/ aplicar o rate-limit.
       this.lastProcessed.set(n.phone, Date.now());
