@@ -18,7 +18,11 @@ function wsCorsOrigin(
   origin: string | undefined,
   callback: (err: Error | null, allow?: boolean) => void,
 ): void {
-  const allowed = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+  // Em desenvolvimento libera qualquer origem (evita fricção com portas locais,
+  // ex.: frontend em :5174 atrás do proxy do Vite). Em produção, exige a allowlist
+  // do CORS_ORIGINS (mesma do HTTP). Sem Origin (same-origin/server) é aceito.
+  if (process.env.NODE_ENV !== 'production') return callback(null, true);
+  const allowed = (process.env.CORS_ORIGINS ?? '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);

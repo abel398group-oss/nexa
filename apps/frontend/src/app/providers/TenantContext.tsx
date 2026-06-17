@@ -91,7 +91,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       {children}
       {isPlatformAdmin && actingTenantId && (
         <div
-          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg"
+          className="fixed top-2 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg"
           title="Voce esta operando na conta de um cliente. Alteracoes afetam este cliente."
         >
           <Icon name="alert" className="h-3.5 w-3.5" />

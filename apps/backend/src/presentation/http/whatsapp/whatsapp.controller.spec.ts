@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WhatsappController } from './whatsapp.controller';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
+import { WahaHealthService } from '@/application/whatsapp/waha-health.service';
 import { ForbiddenException } from '@nestjs/common';
 
 // Instancia o controller diretamente com mock — mais simples e rápido que TestingModule
@@ -9,9 +10,13 @@ const mockWhatsappService = {
   handleAck: vi.fn().mockResolvedValue({ ok: true }),
 } as unknown as WhatsappService;
 
+const mockHealth = {
+  handleStatusEvent: vi.fn().mockResolvedValue(undefined),
+} as unknown as WahaHealthService;
+
 const VALID_TOKEN = 'test_webhook_token_123';
 
-const makeController = () => new WhatsappController(mockWhatsappService);
+const makeController = () => new WhatsappController(mockWhatsappService, mockHealth);
 
 describe('WhatsappController', () => {
   beforeEach(() => {
@@ -44,9 +49,19 @@ describe('WhatsappController', () => {
   });
 
   describe('Roteamento de eventos', () => {
-    it('ignora eventos que não são message ou message.ack', async () => {
-      const result = await makeController().waha({ event: 'session.status' }, VALID_TOKEN);
-      expect(result).toEqual({ ignored: true, reason: 'evento session.status' });
+    it('ignora eventos que não são message, message.ack ou session.status', async () => {
+      const result = await makeController().waha({ event: 'group.join' }, VALID_TOKEN);
+      expect(result).toEqual({ ignored: true, reason: 'evento group.join' });
+      expect(mockWhatsappService.process).not.toHaveBeenCalled();
+    });
+
+    it('encaminha session.status para o monitor de saúde', async () => {
+      const result = await makeController().waha(
+        { event: 'session.status', payload: { status: 'STOPPED' } },
+        VALID_TOKEN,
+      );
+      expect(mockHealth.handleStatusEvent).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ ok: true });
       expect(mockWhatsappService.process).not.toHaveBeenCalled();
     });
 
