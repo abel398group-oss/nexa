@@ -633,13 +633,56 @@ export class HiperTmsConnector implements Connector {
   // ── Diagnóstico de suporte — stubs (ADR 015 D3) ─────────────────────────
   // TODO(real): integrar com API do TMS antes do deploy DigitalOcean
 
-  async getDocumentStatus(_externalId: string, _type: 'cte' | 'mdfe'): Promise<DocumentStatus | null> {
+  async getDocumentStatus(tenantId: string, type: 'cte' | 'mdfe', key: string): Promise<DocumentStatus | null> {
     if (!this.configured) return null;
-    // Endpoint PRONTO no TMS: GET ${TMS_API_BASE_URL}/nexa/fiscal/document?tenantId=&type=&key=
-    // Falta a assinatura carregar tenantId + key (número/chave) até aqui — ajustar a interface
-    // Connector e o DiagnosticAgent quando formos usar o status de documento ao vivo.
-    this.logger.warn('getDocumentStatus STUB — endpoint /nexa/fiscal/document pronto; falta passar tenantId+key');
-    return null;
+    try {
+      const url =
+        `${process.env.TMS_API_BASE_URL}/nexa/fiscal/document` +
+        `?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`;
+
+      const res = await fetch(url, {
+        headers: { 'x-internal-token': this.internalToken },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) {
+        this.logger.warn(`getDocumentStatus TMS ${res.status} — tenantId=${tenantId} type=${type}`);
+        return null;
+      }
+
+      // Response: { found: boolean, document?: { documentId, type, status, issuedAt, rejectionCode, rejectionMessage } }
+      const data = await res.json() as {
+        found: boolean;
+        document?: {
+          documentId: string;
+          type: 'cte' | 'mdfe';
+          status: string;
+          issuedAt?: string;
+          rejectionCode?: string;
+          rejectionMessage?: string;
+        };
+      };
+
+      if (!data.found || !data.document) return null;
+
+      const d = data.document;
+      const validStatuses = ['authorized', 'cancelled', 'rejected', 'pending'] as const;
+      const status = validStatuses.includes(d.status as any)
+        ? (d.status as DocumentStatus['status'])
+        : 'unknown';
+
+      return {
+        documentId: d.documentId,
+        type: d.type,
+        status,
+        issuedAt: d.issuedAt,
+        rejectionCode: d.rejectionCode,
+        rejectionMessage: d.rejectionMessage,
+      };
+    } catch (err: any) {
+      this.logger.warn(`getDocumentStatus erro — ${err?.message}`);
+      return null;
+    }
   }
 
   async getRejectionInfo(code: string): Promise<RejectionInfo | null> {

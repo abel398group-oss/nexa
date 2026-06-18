@@ -96,8 +96,8 @@ export interface Connector {
 
   // ── Diagnóstico de suporte (ADR 015 D3) — leitura read-only ──────────────
 
-  // Status de um documento fiscal (CT-e ou MDF-e) pelo número/chave
-  getDocumentStatus(externalId: string, type: 'cte' | 'mdfe'): Promise<DocumentStatus | null>;
+  // Status de um documento fiscal (CT-e ou MDF-e) pelo tenantId + chave de acesso (44 dígitos) ou número
+  getDocumentStatus(tenantId: string, type: 'cte' | 'mdfe', key: string): Promise<DocumentStatus | null>;
 
   // Detalhes de uma rejeição SEFAZ pelo código
   getRejectionInfo(code: string): Promise<RejectionInfo | null>;

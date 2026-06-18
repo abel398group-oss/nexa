@@ -103,7 +103,7 @@ Uelder. Este adendo registra o contrato acordado.
 > **Endpoints (TMS):**
 > - `GET /nexa/customers/by-phone?phone=` → `{ found, customer: { externalId, name, email?, plan?, status, registeredAt? } }` — consumido por `lookupCustomer()`.
 > - `GET /nexa/contract?tenantId=` → `{ found, contract: { externalId, plan, status, expiresAt?, documentsUsed?, documentsLimit? } }` — consumido por `getContractStatus()` (`externalId` = `tenantId`).
-> - `GET /nexa/fiscal/document?tenantId=&type=cte|mdfe&key=` → `{ found, document: { documentId, type, status, issuedAt?, rejectionCode?, rejectionMessage? } }` — **pronto no TMS, ainda não ligado** no conector (a assinatura `getDocumentStatus(externalId, type)` precisa passar `tenantId` + `key`).
+> - `GET /nexa/fiscal/document?tenantId=&type=cte|mdfe&key=` → `{ found, document: { documentId, type, status, issuedAt?, rejectionCode?, rejectionMessage? } }` — consumido por `getDocumentStatus(tenantId, type, key)`. O DiagnosticAgent extrai chave de acesso (44 dígitos) ou número do documento da mensagem e chama este endpoint.
 >
 > **Auth:** header `x-internal-token`. Valor: TMS `NEXA_INTERNAL_TOKEN` = Nexa `TMS_INTERNAL_TOKEN` (fallback `TMS_SERVICE_TOKEN`). Read-only (somente SELECT, sempre filtrado por tenant).
 >

@@ -25,7 +25,7 @@ Connector {
   lookupCustomer(phone): Promise<TmsCustomer | null>
 
   // diagnóstico de suporte — read-only (ADR 015 D3)
-  getDocumentStatus(externalId, type): Promise<DocumentStatus | null>
+  getDocumentStatus(tenantId, type, key): Promise<DocumentStatus | null>
   getRejectionInfo(code): Promise<RejectionInfo | null>
   getContractStatus(externalId): Promise<ContractStatus | null>
 }
@@ -46,8 +46,8 @@ Produto: sistema de gestão de transporte para transportadoras.
 | `provisionAccess()` | ⏳ stub | Aguarda integração real |
 | `suspendAccess()` | ⏳ stub | Aguarda integração real |
 | `getRejectionInfo()` | ✅ real | Tabela local de rejeições SEFAZ comuns (diagnóstico offline) |
-| `getDocumentStatus()` | ⏳ stub | Aguarda API fiscal real do TMS |
-| `getContractStatus()` | ⏳ stub | Aguarda API real do TMS |
+| `getDocumentStatus()` | ✅ real | Chama `GET /nexa/fiscal/document?tenantId&type&key` no TMS; extrai chave 44 dígitos ou número do documento |
+| `getContractStatus()` | ✅ real | Chama `GET /nexa/contract?tenantId=` no TMS |
 
 ## Acesso direto ao banco TMS (TmsLookupService)
 

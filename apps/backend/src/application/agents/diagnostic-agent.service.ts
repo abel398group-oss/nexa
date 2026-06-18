@@ -39,8 +39,25 @@ export class DiagnosticAgentService {
         if (contract) diagnosticData.contract = contract;
       }
 
-      // Para CT-e/MDF-e: tenta extrair código de rejeição da mensagem
+      // Para CT-e/MDF-e: tenta extrair chave de acesso (44 dígitos) ou número do documento,
+      // e código de rejeição SEFAZ (3-4 dígitos), da mensagem do cliente.
       if (input.category === 'cte' || input.category === 'mdfe' || input.category === 'fiscal') {
+        // 1) Chave de acesso (44 dígitos exatos) ou número de documento (7-15 dígitos)
+        const docType: 'cte' | 'mdfe' = input.category === 'mdfe' ? 'mdfe' : 'cte';
+        const accessKeyMatch = input.message.match(/\b(\d{44})\b/);
+        const docNumberMatch = !accessKeyMatch && input.message.match(/\b(\d{7,15})\b/);
+        const docKey = accessKeyMatch?.[1] ?? docNumberMatch?.[1] ?? null;
+
+        if (docKey && input.tmsCustomer) {
+          const docStatus = await this.connector.getDocumentStatus(
+            input.tmsCustomer.externalId,
+            docType,
+            docKey,
+          );
+          if (docStatus) diagnosticData.documentStatus = docStatus;
+        }
+
+        // 2) Código de rejeição SEFAZ (3-4 dígitos — evita sobreposição com chave/número acima)
         const rejCodeMatch = input.message.match(/\b([0-9]{3,4})\b/);
         if (rejCodeMatch) {
           const rejInfo = await this.connector.getRejectionInfo(rejCodeMatch[1]);
