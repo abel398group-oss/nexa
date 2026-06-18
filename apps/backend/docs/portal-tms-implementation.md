@@ -159,9 +159,9 @@ export async function getPortalJwt(currentPage: string): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   });
-  const { session, name } = await sessionRes.json();
+  const { jwt, name } = await sessionRes.json(); // response: { jwt, expiresAt, name }
 
-  _jwt = session;
+  _jwt = jwt;
   _name = name ?? null;  // nome do usuário para exibir no header do drawer
   return _jwt;
 }
@@ -397,9 +397,9 @@ do chamado recém-criado, dentro da mesma aba "Abrir chamado".
 
 ### 6.2 Regras de Exibição das Mensagens
 
-- `direction: "inbound"` → alinhado à direita, fundo azul. Rótulo: "você".
-- `direction: "outbound"` → alinhado à esquerda, fundo cinza. Rótulo: "Lia" ou "Atendente".
-- Usar "Atendente" no rótulo das outbounds quando `status === "escalated"`.
+- `author: "customer"` (`isAgent: false`) → alinhado à direita, fundo azul. Rótulo: "você".
+- `author: "agent"` (`isAgent: true`) → alinhado à esquerda, fundo cinza. Rótulo: "Lia" ou "Atendente".
+- Usar "Atendente" no rótulo das mensagens `author: "agent"` quando `status === "escalated"`.
 - Rolar automaticamente para a última mensagem após cada atualização do polling.
 
 ### 6.3 Indicador "Digitando"
@@ -438,15 +438,16 @@ Campo de resposta habilitado (cliente pode complementar).
 ### 6.6 Chamada de API — Responder Chamado
 
 ```
-POST /api/portal/tickets/:id/messages
+POST /api/portal/tickets/:id/replies
 Authorization: Bearer <jwt>
 Content-Type: application/json
 
-{ "message": "Texto da resposta do usuário" }
+{ "body": "Texto da resposta do usuário" }
 ```
 
-Resposta: objeto completo do chamado atualizado. Substituir estado local com a resposta
-(não fazer merge manual — confiar no servidor como fonte de verdade).
+Resposta: objeto da mensagem criada `{ id, author, body, isAgent, createdAt }`.
+Após o envio, recarregar o chamado via `GET /portal/tickets/:id` para obter a thread
+completa atualizada (incluindo resposta da Lia quando chegar no polling).
 
 ---
 
@@ -515,10 +516,10 @@ Carregar ao ativar a aba. Recarregar ao voltar para a lista após fechar um deta
 | Frontend troca token por sessão | `POST` | `/portal/session` | `{ token }` |
 | Clica [Enviar] no formulário | `POST` | `/portal/tickets` | `{ subject, category, phone, message }` |
 | Polling de mensagens (chat aberto) | `GET` | `/portal/tickets/:id` | — |
-| Responde no chat | `POST` | `/portal/tickets/:id/messages` | `{ message }` |
+| Responde no chat | `POST` | `/portal/tickets/:id/replies` | `{ body }` |
 | Ativa aba "Meus chamados" | `GET` | `/portal/tickets` | `?limit=10&offset=N` |
 | Clica em chamado na lista | `GET` | `/portal/tickets/:id` | — |
-| Fecha o drawer (cleanup) | `POST` | `/portal/session/logout` | — |
+| Fecha o drawer (cleanup) | `DELETE` | `/portal/session` | — |
 
 
 ---

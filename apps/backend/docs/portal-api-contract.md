@@ -1,6 +1,6 @@
 # Portal de Suporte — Contrato de API
 
-> **Versão:** 1.0 · **Audiência:** Squad TMS · **Última atualização:** 2026-06-17
+> **Versão:** 1.1 · **Audiência:** Squad TMS · **Última atualização:** 2026-06-18
 
 O Nexa expõe uma API REST que o HiperTMS consome para renderizar o portal de suporte ao cliente.
 A Lia (IA) tenta resolver o chamado automaticamente; se não conseguir, escala para atendimento humano.
@@ -127,14 +127,14 @@ Content-Type: application/json
 
 ```json
 {
-  "ok":      true,
-  "name":    "João Silva",
-  "session": "<jwt>"
+  "jwt":       "<token>",
+  "expiresAt": "2026-06-18T11:30:00.000Z",
+  "name":      "João Silva"
 }
 ```
 
 Além do body, o Nexa seta o cookie `portal_session` (httpOnly, path `/api/portal`).
-O campo `session` retorna o mesmo JWT para uso como Bearer em embeds nativos.
+O campo `jwt` é o mesmo token — use como Bearer em embeds nativos ou guarde em memória.
 
 **Erros**
 
@@ -191,27 +191,27 @@ Authorization: Bearer <jwt>
 | `status` | string | — | Filtro por status (`open`, `resolved`, etc.). |
 | `category` | string | — | Filtro por categoria do chamado. |
 
-**Response `200`**
+**Response `200`** — array plano de chamados mapeados.
 
 ```json
-{
-  "items": [
-    {
-      "id":              "conv_abc123",
-      "status":          "open",
-      "ticketCategory":  "frete",
-      "ticketPriority":  "high",
-      "rootCause":       "Frete atrasado",
-      "sourceChannel":   "portal",
-      "createdAt":       "2026-06-17T10:00:00.000Z",
-      "lastActivityAt":  "2026-06-17T10:05:00.000Z",
-      "resolvedAt":      null,
-      "outcome":         null
-    }
-  ],
-  "total": 1
-}
+[
+  {
+    "id":        "conv_abc123",
+    "subject":   "Frete atrasado",
+    "status":    "open",
+    "createdAt": "2026-06-17T10:00:00.000Z",
+    "updatedAt": "2026-06-17T10:05:00.000Z"
+  }
+]
 ```
+
+| Campo | Origem interna | Descrição |
+|---|---|---|
+| `id` | `id` | ID da conversa/chamado. |
+| `subject` | `rootCause` | Causa-raiz classificada pela Lia (pode ser `null` antes da triagem). |
+| `status` | `status` | Estado do chamado (`open`, `escalated`, `resolved`, `closed`). |
+| `createdAt` | `createdAt` | Data de criação. |
+| `updatedAt` | `lastActivityAt` | Última atividade (mensagem ou mudança de status). |
 
 **Erros**
 
@@ -234,39 +234,35 @@ Authorization: Bearer <jwt>
 
 ```json
 {
-  "id":             "conv_abc123",
-  "status":         "open",
-  "ticketCategory": "frete",
-  "ticketPriority": "high",
-  "rootCause":      "Frete atrasado",
-  "sourceChannel":  "portal",
-  "createdAt":      "2026-06-17T10:00:00.000Z",
-  "lastActivityAt": "2026-06-17T10:05:00.000Z",
-  "resolvedAt":     null,
-  "outcome":        null,
-  "autoCloseAt":    "2026-06-20T10:00:00.000Z",
+  "id":        "conv_abc123",
+  "subject":   "Frete atrasado",
+  "status":    "open",
+  "createdAt": "2026-06-17T10:00:00.000Z",
+  "updatedAt": "2026-06-17T10:05:00.000Z",
   "messages": [
     {
       "id":        "msg_001",
-      "direction": "inbound",
-      "content":   "Meu frete está atrasado.",
-      "intent":    null,
-      "ack":       true,
+      "author":    "customer",
+      "body":      "Meu frete está atrasado.",
+      "isAgent":   false,
       "createdAt": "2026-06-17T10:00:00.000Z"
     },
     {
       "id":        "msg_002",
-      "direction": "outbound",
-      "content":   "Olá! Vou verificar o status do seu frete agora.",
-      "intent":    "support",
-      "ack":       true,
+      "author":    "agent",
+      "body":      "Olá! Vou verificar o status do seu frete agora.",
+      "isAgent":   true,
       "createdAt": "2026-06-17T10:00:05.000Z"
     }
   ]
 }
 ```
 
-`direction: "inbound"` = mensagem do cliente · `"outbound"` = resposta da Lia ou do agente humano.
+| Campo de mensagem | Descrição |
+|---|---|
+| `author` | `"customer"` = mensagem do cliente · `"agent"` = resposta da Lia ou atendente humano. |
+| `body` | Conteúdo textual da mensagem. |
+| `isAgent` | `true` quando `author === "agent"` (convenience field para condicional de UI). |
 
 **Erros**
 
@@ -313,27 +309,39 @@ O chamado entra imediatamente no pipeline da Lia. Se a Lia não resolver, escala
 
 ---
 
-### 3.7 `POST /portal/tickets/:id/messages` — Responder chamado
+### 3.7 `POST /portal/tickets/:id/replies` — Responder chamado
 
 > **Auth:** sessão do portal
 
 ```http
-POST /api/portal/tickets/conv_abc123/messages
+POST /api/portal/tickets/conv_abc123/replies
 Authorization: Bearer <jwt>
 Content-Type: application/json
 
 {
-  "message": "O rastreamento ainda não atualizou."
+  "body": "O rastreamento ainda não atualizou."
 }
 ```
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
-| `message` | string | ✅ | Mensagem do cliente (mínimo 1 caractere). |
+| `body` | string | ✅ | Mensagem do cliente (mínimo 1 caractere). |
 
-A mensagem entra no mesmo pipeline da Lia.
+A mensagem entra no mesmo pipeline da Lia. Retorna a mensagem recém-criada no formato de mensagem mapeada.
 
-**Response `200`** — mesmo formato do `GET /portal/tickets/:id`.
+**Response `200`**
+
+```json
+{
+  "id":        "msg_003",
+  "author":    "customer",
+  "body":      "O rastreamento ainda não atualizou.",
+  "isAgent":   false,
+  "createdAt": "2026-06-17T10:10:00.000Z"
+}
+```
+
+> **Nota de compatibilidade:** o alias `POST /portal/tickets/:id/messages` com campo `message` ainda é aceito (legado).
 
 **Erros**
 
@@ -344,21 +352,20 @@ A mensagem entra no mesmo pipeline da Lia.
 
 ---
 
-### 3.8 `POST /portal/session/logout` — Encerrar sessão
+### 3.8 `DELETE /portal/session` — Encerrar sessão
 
-> **Auth:** nenhuma
+> **Auth:** sessão do portal (cookie ou Bearer)
 
 ```http
-POST /api/portal/session/logout
+DELETE /api/portal/session
+Authorization: Bearer <jwt>
 ```
 
 Limpa o cookie `portal_session`. Chamar mesmo sem sessão ativa não gera erro.
 
-**Response `200`**
+**Response `204 No Content`** — sem body.
 
-```json
-{ "ok": true }
-```
+> **Nota de compatibilidade:** `POST /portal/session/logout` ainda é aceito e retorna `{ ok: true }` (legado).
 
 ---
 
@@ -379,7 +386,7 @@ Sequência completa de chamadas que o TMS deve executar.
 
 2. [Frontend TMS — inicialização da sessão]
    POST /api/portal/session  { token }
-   → recebe { ok, name, session }
+   → recebe { jwt, expiresAt, name }
    → armazena o JWT em memória (Bearer para todas as chamadas seguintes)
    → NÃO usar localStorage
 
@@ -400,11 +407,11 @@ Sequência completa de chamadas que o TMS deve executar.
    → exibe thread completa de mensagens
 
 6. [Frontend TMS — responder]
-   POST /api/portal/tickets/:id/messages  { message }
-   → exibe thread atualizada
+   POST /api/portal/tickets/:id/replies  { body }
+   → exibe mensagem criada; recarregar GET /portal/tickets/:id para thread completa
 
 7. [Frontend TMS — ao fechar o drawer]
-   POST /api/portal/session/logout
+   DELETE /api/portal/session
 ```
 
 ### Polling de mensagens

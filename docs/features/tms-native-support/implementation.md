@@ -41,8 +41,8 @@ cliente só vê os **próprios** chamados.
 | `GET` | `/api/portal/tickets` | lista os chamados do cliente (filtros/paginação) |
 | `GET` | `/api/portal/tickets/:id` | detalhe + mensagens (404 se não for do cliente) |
 | `POST` | `/api/portal/tickets` | `{ message }` → abre chamado (entra no pipeline da Lia) |
-| `POST` | `/api/portal/tickets/:id/messages` | `{ message }` → responde no chamado |
-| `POST` | `/api/portal/session/logout` | encerra a sessão |
+| `POST` | `/api/portal/tickets/:id/replies` | `{ body }` → responde no chamado |
+| `DELETE` | `/api/portal/session` | encerra a sessão (204) |
 
 > Identidade vem **sempre** do token/sessão, nunca do que o cliente digita (LGPD).
 > Detalhes do backend: `docs/features/support-portal/implementation.md`.
@@ -66,10 +66,10 @@ duas formas de carregar a sessão:
   quebra se um dia os domínios **não** forem same-site.
 
 ### Opção B — Bearer token (alternativa de robustez) — **recomendada para o embed**
-- `POST /api/portal/session` passa a **também** retornar o **JWT da sessão no corpo**
-  (`{ session: "<jwt>", customer }`). A tela nativa guarda o JWT **em memória** (não
-  em `localStorage`) e envia `Authorization: Bearer <jwt>` em cada chamada.
-- O `PortalSessionGuard` passa a **aceitar os dois**: o cookie `portal_session` **ou**
+- `POST /api/portal/session` retorna o **JWT da sessão no corpo**:
+  `{ jwt: "<token>", expiresAt: "<iso>", name: "<nome>" }`. A tela nativa guarda o JWT
+  **em memória** (não em `localStorage`) e envia `Authorization: Bearer <jwt>` em cada chamada.
+- O `PortalSessionGuard` aceita os dois: o cookie `portal_session` **ou**
   o header `Authorization: Bearer` (mesma verificação, `aud:portal`).
 - **Prós:** imune a quirks de cookie cross-site/ITP; funciona mesmo se os domínios
   deixarem de ser same-site; explícito e previsível para um embed.
@@ -78,9 +78,7 @@ duas formas de carregar a sessão:
 ### Recomendação
 Para a **tela nativa embutida**, usar **Bearer (Opção B)** como caminho principal —
 mais robusto e independente de política de cookies. Manter o **cookie (Opção A)** para
-o **portal standalone** (`/portal`, ADR 027/portal). Ou seja: o guard aceita ambos; o
-embed usa Bearer, o portal-página usa cookie. Mudança no Nexa: (1) `session` também
-devolve o JWT no body; (2) guard lê `Authorization` além do cookie.
+o **portal standalone** (`/portal`, ADR 027/portal). O guard já aceita ambos.
 
 ## 5. Ajuste no TMS backend (`LiaSupportService`)
 
