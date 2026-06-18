@@ -50,7 +50,8 @@ export type IconName =
   | 'mute'
   | 'alert'
   | 'archive'
-  | 'pulse';
+  | 'pulse'
+  | 'menu';
 
 const PATHS: Record<IconName, ReactNode> = {
   dashboard: (
@@ -289,6 +290,9 @@ const PATHS: Record<IconName, ReactNode> = {
       <rect x="5" y="8" width="14" height="10" rx="3" />
       <path d="M12 4v4M8 13h.01M16 13h.01" />
     </>
+  ),
+  menu: (
+    <path d="M4 6h16M4 12h16M4 18h16" />
   ),
 };
 

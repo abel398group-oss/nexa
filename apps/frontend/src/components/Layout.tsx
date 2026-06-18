@@ -269,14 +269,8 @@ export function Layout() {
   const hasHelp = !!HELP[location.pathname];
   const [tourOpen, setTourOpen] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
-  // menu lateral: fixar/recolher (empurra o conteúdo, não sobrepõe). Persistido.
-  const [navOpen, setNavOpen] = useState(() => localStorage.getItem('nexa_nav_open') === '1');
-  function toggleNav() {
-    setNavOpen((o) => {
-      localStorage.setItem('nexa_nav_open', o ? '0' : '1');
-      return !o;
-    });
-  }
+  // menu mobile off-canvas (desktop: sempre rail+hover, sem botão de fixar)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // command palette (Ctrl+K)
   const [cmdOpen, setCmdOpen] = useState(false);
 
@@ -329,23 +323,60 @@ export function Layout() {
   return (
     <DateRangeProvider>
     <div className="h-full">
-      {/* ===== SIDEBAR (midnight) — fixada (empurra) OU expande no hover (sobreposto) ===== */}
+      {/* overlay mobile — fecha ao clicar fora */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/50 sm:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      {/* ===== SIDEBAR — rail+hover no desktop / off-canvas no mobile ===== */}
       <aside
-        className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-[width] duration-200 ease-layout ${
-          navOpen ? 'w-60' : 'w-16 hover:w-60 hover:shadow-elevated'
-        }`}
+        className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-all duration-200 ease-layout ${
+          mobileNavOpen ? 'translate-x-0 w-60 shadow-elevated' : '-translate-x-full'
+        } sm:translate-x-0 sm:w-16 sm:hover:w-60 sm:hover:shadow-elevated`}
       >
         {/* marca: símbolo no rail, wordmark quando expandido (fixado ou hover) */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${navOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>Nexa</span>
+          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>Nexa</span>
+        </div>
+
+        {/* atalhos rápidos — sempre visíveis, ícone no rail / label no hover */}
+        <div className="shrink-0 border-b border-white/10 px-2 py-2">
+          {[
+            { to: '/inbox', label: 'Inbox', ic: 'inbox' as IconName },
+            { to: '/campaigns', label: 'Disparo', ic: 'campaigns' as IconName },
+            { to: '/contacts', label: 'Contatos', ic: 'contacts' as IconName },
+          ].map((s) => (
+            <NavLink
+              key={s.to}
+              to={s.to}
+              title={s.label}
+              onClick={() => setMobileNavOpen(false)}
+              className={({ isActive }) =>
+                `relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors justify-center group-hover/sb:justify-start ${
+                  isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />}
+                  <Icon name={s.ic} className={`h-4 w-4 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
+                  <span className={`truncate whitespace-nowrap text-xs ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{s.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
         </div>
 
         <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
           {visibleGroups.map((g, gi) => (
             <div key={gi} className={gi > 0 ? 'pt-3' : ''}>
               {g.label && (
-                <div className={`px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${navOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
+                <div className={`px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${mobileNavOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
                   {g.label}
                 </div>
               )}
@@ -354,9 +385,10 @@ export function Layout() {
                   key={it.to}
                   to={it.to}
                   title={it.label}
+                  onClick={() => setMobileNavOpen(false)}
                   className={({ isActive }) =>
                     `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      navOpen ? 'justify-start' : 'justify-center group-hover/sb:justify-start'
+                      mobileNavOpen ? 'justify-start' : 'justify-center group-hover/sb:justify-start'
                     } ${
                       isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
                     }`
@@ -368,7 +400,7 @@ export function Layout() {
                         <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
                       )}
                       <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                      <span className={`truncate whitespace-nowrap ${navOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{it.label}</span>
+                      <span className={`truncate whitespace-nowrap ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{it.label}</span>
                     </>
                   )}
                 </NavLink>
@@ -377,25 +409,26 @@ export function Layout() {
           ))}
         </nav>
 
-        {/* rodapé — só quando expandido (fixado ou hover) */}
-        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${navOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
+        {/* rodapé — só quando expandido (hover ou mobile) */}
+        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${mobileNavOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
           <div className="truncate">{user?.email}</div>
           <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
         </div>
       </aside>
 
-      {/* ===== COLUNA PRINCIPAL — empurrada só quando a sidebar está FIXADA (hover é sobreposto) ===== */}
-      <div className={`flex h-full min-w-0 flex-col transition-[padding] duration-200 ${navOpen ? 'pl-60' : 'pl-16'}`}>
+      {/* ===== COLUNA PRINCIPAL — sempre deslocada 4rem no desktop (sidebar é rail sobreposto) ===== */}
+      <div className="flex h-full min-w-0 flex-col pl-0 sm:pl-16">
         {/* topbar */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-6" style={{ background: 'var(--surface)' }}>
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-4 sm:px-6" style={{ background: 'var(--surface)' }}>
           <div className="flex min-w-0 items-center gap-3">
+            {/* hamburger — só no mobile */}
             <button
-              onClick={toggleNav}
-              title={navOpen ? 'Desafixar menu (volta a abrir no hover)' : 'Fixar menu aberto'}
-              aria-label={navOpen ? 'Desafixar menu' : 'Fixar menu'}
-              className="-ml-1 shrink-0 rounded-md p-1.5 text-base-content/60 outline-none transition-colors hover:bg-base-200 hover:text-base-content focus-visible:ring-2 focus-visible:ring-brand-500/30"
+              onClick={() => setMobileNavOpen((o) => !o)}
+              title="Menu"
+              aria-label="Abrir menu"
+              className="sm:hidden -ml-1 shrink-0 rounded-md p-1.5 text-base-content/60 transition-colors hover:bg-base-200"
             >
-              <Icon name={navOpen ? 'chevronLeft' : 'chevronRight'} className="h-5 w-5" />
+              <Icon name="menu" className="h-5 w-5" />
             </button>
             <h1 className="truncate text-base font-semibold text-base-content">{pageTitle}</h1>
             {/* seletor de cliente/tenant — só aparece para o admin da plataforma */}
