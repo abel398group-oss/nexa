@@ -18,6 +18,7 @@ const PUBLIC_BASE = process.env.WAHA_REACHABLE_BASE ?? 'http://host.docker.inter
 class CreateCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(3) template!: string;
+  @IsOptional() @IsString() type?: string; // "message" (padrão) | "status" (ADR-026)
   @IsOptional() @IsArray() phones?: { phone: string; name?: string }[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
   @IsOptional() @IsString() link?: string;

@@ -77,11 +77,31 @@ export class SenderService {
   async createCampaign(
     tenantId: string,
     dto: {
-      name: string; template: string; phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
+      name: string; template: string; type?: string;
+      phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
       link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
     },
   ) {
+    const campaignType = dto.type === 'status' ? 'status' : 'message';
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+
+    // ── Campanha de Status WhatsApp: sem targets, cria direto e retorna ────────
+    if (campaignType === 'status') {
+      const camp = await this.prisma.campaign.create({
+        data: {
+          tenantId,
+          name: dto.name,
+          type: 'status',
+          template: dto.template,
+          mediaUrl: dto.mediaUrl || null,
+          mediaName: dto.mediaName || null,
+          scheduledAt,
+          ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
+        },
+      });
+      return { ...camp, included: 0, skippedOptOut: 0, skippedTms: 0 };
+    }
+
     let targets = dto.phones ?? [];
     if (dto.fromContacts) {
       const contacts = await this.prisma.contact.findMany({
@@ -143,6 +163,7 @@ export class SenderService {
       data: {
         tenantId,
         name: dto.name,
+        type: campaignType,
         template: dto.template,
         link: dto.link || null,
         mediaUrl: dto.mediaUrl || null,
@@ -396,11 +417,47 @@ export class SenderService {
         data: { status: 'queued' },
       });
 
-      // fecha campanhas 'running' que já não têm alvo na fila (terminaram)
+      // fecha campanhas 'message' running que já não têm alvo na fila (terminaram)
+      // (type:'status' não tem targets — não deve ser fechado aqui; o tick do status cuida disso)
       await this.prisma.campaign.updateMany({
-        where: { status: 'running', targets: { none: { status: 'queued' } } },
+        where: { status: 'running', type: 'message', targets: { none: { status: 'queued' } } },
         data: { status: 'done' },
       });
+
+      // ── Canal Status WhatsApp (ADR-026) ─────────────────────────────────────
+      // Campanhas type:'status' não têm targets — um único broadcast p/ todos os
+      // contatos salvos no WhatsApp. Executa uma por tick e retorna em seguida.
+      const statusCampaign = await this.prisma.campaign.findFirst({
+        where: {
+          status: 'running',
+          type: 'status',
+          statusPostedAt: null,
+          OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (statusCampaign) {
+        if (!(await this.withinWaWindow(statusCampaign.tenantId))) return;
+        try {
+          const result = statusCampaign.mediaUrl
+            ? await this.waha.sendStatusImage(statusCampaign.mediaUrl, statusCampaign.template || undefined)
+            : await this.waha.sendStatusText(statusCampaign.template);
+          if (result.sent) {
+            await this.prisma.campaign.update({
+              where: { id: statusCampaign.id },
+              data: { statusPostId: result.postId ?? null, statusPostedAt: new Date(), status: 'done' },
+            });
+            this.logger.log(`Status WhatsApp publicado (campanha "${statusCampaign.name}", postId=${result.postId})`);
+          } else {
+            // WAHA recusou: pausa para não ficar em loop de erro
+            await this.prisma.campaign.update({ where: { id: statusCampaign.id }, data: { status: 'paused' } });
+            this.logger.error(`Falha ao publicar status (campanha "${statusCampaign.name}"): ${result.reason}`);
+          }
+        } catch (e: any) {
+          this.logger.error(`tick status falhou: ${e?.message}`);
+        }
+        return; // não processa targets neste tick
+      }
 
       // pega uma campanha rodando com alvo na fila — respeitando agendamento (scheduledAt no futuro = espera)
       const campaign = await this.prisma.campaign.findFirst({

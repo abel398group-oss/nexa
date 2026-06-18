@@ -1,9 +1,58 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { SenderService } from './sender.service';
 
 // As regras puras nao usam as dependencias — instancia com mocks vazios.
 function makeSvc(): SenderService {
   return new SenderService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+}
+
+// ── helpers para testes de status WhatsApp (ADR-026) ────────────────────────
+// Monta um SenderService com prisma e waha mockados para testar o tick() de status.
+function makeStatusSvc(overrides: {
+  statusCampaign?: Partial<any> | null;
+  wahaResult?: { sent: boolean; postId?: string; reason?: string };
+}) {
+  const campaign = overrides.statusCampaign !== undefined
+    ? overrides.statusCampaign
+      ? { id: 'c1', tenantId: 't1', name: 'Test Status', type: 'status', template: 'Texto do status', mediaUrl: null, scheduledAt: null, statusPostedAt: null, ...overrides.statusCampaign }
+      : null
+    : null;
+
+  const wahaResult = overrides.wahaResult ?? { sent: true, postId: 'pid123' };
+
+  const prisma = {
+    campaignTarget: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    campaign: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findFirst: vi.fn().mockImplementation(({ where }: any) => {
+        // 1ª chamada: findFirst do status campaign (type:'status') → retorna o mock
+        // 2ª chamada (se chegou): findFirst de campanha message → null
+        if (where?.type === 'status') return Promise.resolve(campaign);
+        return Promise.resolve(null);
+      }),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    senderSettings: { findUnique: vi.fn().mockResolvedValue(null) },
+    senderNumber: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'n1', tenantId: 't1', phone: '551199', active: true,
+        dailyLimit: 30, sentToday: 0, dayStamp: null,
+        hourlyLimit: 8, sentThisHour: 0, hourStamp: null, warmupStage: 3,
+      }),
+      update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({}),
+    },
+  };
+
+  const waha = {
+    sendStatusText: vi.fn().mockResolvedValue(wahaResult),
+    sendStatusImage: vi.fn().mockResolvedValue(wahaResult),
+  };
+
+  const svc = new SenderService(prisma as any, {} as any, {} as any, {} as any, waha as any, {} as any);
+  return { svc, prisma, waha };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -93,5 +142,71 @@ describe('SenderService — regras de negocio', () => {
       setUtc(13); // Bom dia
       expect(render('{{saudacao}}, {{nome}}', 'Ana')).toContain('Bom dia, Ana');
     });
+  });
+});
+
+// ============================================================================
+// Canal Status WhatsApp — ADR-026
+// ============================================================================
+describe('SenderService — Canal Status WhatsApp (ADR-026)', () => {
+  beforeEach(() => {
+    // garante horario dentro da janela comercial (10h BRT = 13h UTC)
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 5, 18, 13, 0, 0)));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('envia texto de status sem targets e grava statusPostedAt + status done', async () => {
+    const { svc, prisma, waha } = makeStatusSvc({ statusCampaign: {}, wahaResult: { sent: true, postId: 'pid1' } });
+    await svc.tick();
+    expect(waha.sendStatusText).toHaveBeenCalledOnce();
+    expect(waha.sendStatusImage).not.toHaveBeenCalled();
+    expect(prisma.campaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'done', statusPostId: 'pid1' }),
+      }),
+    );
+  });
+
+  it('envia imagem de status quando mediaUrl esta preenchida', async () => {
+    const { svc, waha } = makeStatusSvc({
+      statusCampaign: { mediaUrl: 'https://cdn.example.com/banner.jpg' },
+      wahaResult: { sent: true, postId: 'pid2' },
+    });
+    await svc.tick();
+    expect(waha.sendStatusImage).toHaveBeenCalledWith('https://cdn.example.com/banner.jpg', expect.anything());
+    expect(waha.sendStatusText).not.toHaveBeenCalled();
+  });
+
+  it('pausa a campanha se o WAHA rejeitar o envio', async () => {
+    const { svc, prisma } = makeStatusSvc({ statusCampaign: {}, wahaResult: { sent: false, reason: 'waha_500' } });
+    await svc.tick();
+    expect(prisma.campaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'paused' }) }),
+    );
+  });
+
+  it('nao processa targets em um tick que ja executou campanha de status', async () => {
+    const { svc, prisma } = makeStatusSvc({ statusCampaign: {}, wahaResult: { sent: true, postId: 'pid3' } });
+    await svc.tick();
+    // findFirst de campanha message (tipo 'running' com targets) nao deve ser chamado
+    const callsForMessageCampaign = (prisma.campaign.findFirst as any).mock.calls.filter(
+      (c: any[]) => !c[0]?.where?.type,
+    );
+    expect(callsForMessageCampaign).toHaveLength(0);
+  });
+
+  it('nao dispara campanha de status fora da janela comercial (antes das 7h BRT)', async () => {
+    vi.setSystemTime(new Date(Date.UTC(2026, 5, 18, 9, 0, 0))); // 6h BRT
+    const { svc, waha } = makeStatusSvc({ statusCampaign: {} });
+    await svc.tick();
+    expect(waha.sendStatusText).not.toHaveBeenCalled();
+    expect(waha.sendStatusImage).not.toHaveBeenCalled();
+  });
+
+  it('nao dispara quando nao ha campanha de status pendente', async () => {
+    const { svc, waha } = makeStatusSvc({ statusCampaign: null });
+    await svc.tick();
+    expect(waha.sendStatusText).not.toHaveBeenCalled();
   });
 });
