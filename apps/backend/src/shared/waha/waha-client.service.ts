@@ -6,6 +6,12 @@ export interface SendResult {
   externalId?: string;
 }
 
+export interface StatusPostResult {
+  sent: boolean;
+  reason?: string;
+  postId?: string; // id do post no Status do WhatsApp
+}
+
 // Cliente do WAHA — envia mensagens de saída pro WhatsApp (Nexa → WAHA → cliente).
 @Injectable()
 export class WahaClientService {
@@ -54,6 +60,50 @@ export class WahaClientService {
       return { sent: true };
     } catch (e: any) {
       this.logger.error(`WAHA sendFile falhou: ${e?.message}`);
+      return { sent: false, reason: 'erro_rede' };
+    }
+  }
+
+  // ── Canal Status WhatsApp (ADR-026) ──────────────────────────────────────────
+  // Publica um texto no Status (Story) do WhatsApp — visível a todos os contatos
+  // salvos, sem destinatário individual. Não usa allowlist (broadcast interno).
+  async sendStatusText(text: string, backgroundColor = '#075E54', font = 0): Promise<StatusPostResult> {
+    if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
+    try {
+      const res = await fetch(`${this.baseUrl}/api/${this.session}/status/text`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        body: JSON.stringify({ text, backgroundColor, font }),
+      });
+      if (!res.ok) {
+        this.logger.error(`WAHA sendStatusText ${res.status}: ${(await res.text()).slice(0, 160)}`);
+        return { sent: false, reason: `waha_${res.status}` };
+      }
+      const data: any = await res.json().catch(() => ({}));
+      return { sent: true, postId: data?.id?._serialized ?? data?.id ?? data?.key?.id ?? undefined };
+    } catch (e: any) {
+      this.logger.error(`WAHA sendStatusText falhou: ${e?.message}`);
+      return { sent: false, reason: 'erro_rede' };
+    }
+  }
+
+  // Publica uma imagem (ou vídeo) no Status do WhatsApp com legenda opcional.
+  async sendStatusImage(fileUrl: string, caption?: string): Promise<StatusPostResult> {
+    if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
+    try {
+      const res = await fetch(`${this.baseUrl}/api/${this.session}/status/image`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        body: JSON.stringify({ file: { url: fileUrl }, caption }),
+      });
+      if (!res.ok) {
+        this.logger.error(`WAHA sendStatusImage ${res.status}: ${(await res.text()).slice(0, 160)}`);
+        return { sent: false, reason: `waha_${res.status}` };
+      }
+      const data: any = await res.json().catch(() => ({}));
+      return { sent: true, postId: data?.id?._serialized ?? data?.id ?? data?.key?.id ?? undefined };
+    } catch (e: any) {
+      this.logger.error(`WAHA sendStatusImage falhou: ${e?.message}`);
       return { sent: false, reason: 'erro_rede' };
     }
   }

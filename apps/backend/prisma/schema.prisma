@@ -495,6 +495,10 @@ model Campaign {
   mediaUrl  String?   @map("media_url")
   mediaName String?   @map("media_name")
   sendLimit Int?      @map("send_limit")
+  // Canal Status WhatsApp (ADR-026) — aditivo; default "message" preserva campanhas existentes
+  type           String    @default("message") // "message" | "status"
+  statusPostId   String?   @map("status_post_id")    // id do post retornado pelo WAHA
+  statusPostedAt DateTime? @map("status_posted_at")  // quando o status foi publicado
   createdAt DateTime  @default(now()) @map("created_at")
   startedAt DateTime? @map("started_at")
   archivedAt DateTime? @map("archived_at") // arquivada (guardada) — escondida da lista padrão
