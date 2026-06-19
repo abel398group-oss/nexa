@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 
 // Modelo de embeddings local (roda no próprio backend, sem vendor/API key).
 // multilingual-e5-small: 384 dims, multilíngue (bom PT-BR), ~120MB.
@@ -11,9 +11,16 @@ const ENABLED = (process.env.EMBEDDINGS_ENABLED ?? 'true').toLowerCase() !== 'fa
  * Gera embeddings de texto localmente para a busca semântica da KB (RAG).
  * Carrega o modelo sob demanda (lazy) e é à prova de falha: se o modelo não
  * carregar (sem rede, etc.), `enabled` vira false e o retrieval cai no textual.
+ *
+ * VISIBILIDADE (fix pós-auditoria do módulo de suporte): antes, o carregamento
+ * só era disparado pela primeira mensagem real de um cliente — se falhasse, a
+ * degradação para busca textual era silenciosa (só um log warn), e ninguém
+ * saberia até notar respostas piores. `onModuleInit` agora dispara o load no
+ * boot (sem bloquear o startup) para a falha aparecer nos logs de deploy, e
+ * `getStatus()` expõe o estado para um endpoint de verificação.
  */
 @Injectable()
-export class EmbeddingsService {
+export class EmbeddingsService implements OnModuleInit {
   private readonly logger = new Logger('Embeddings');
   private extractor: any | null = null;
   private loading: Promise<any | null> | null = null;
@@ -21,6 +28,26 @@ export class EmbeddingsService {
 
   get enabled(): boolean {
     return ENABLED && !this.failed;
+  }
+
+  onModuleInit() {
+    if (!ENABLED) {
+      this.logger.warn('Embeddings desabilitado por env (EMBEDDINGS_ENABLED=false) — retrieval usará busca textual');
+      return;
+    }
+    // Fire-and-forget: aquece o modelo no boot sem atrasar o startup do Nest.
+    this.getExtractor().catch(() => {});
+  }
+
+  // Estado atual p/ endpoints de verificação (não dispara carregamento).
+  getStatus() {
+    return {
+      configuredEnabled: ENABLED,
+      modelLoaded: this.extractor !== null,
+      failed: this.failed,
+      model: EMBEDDING_MODEL,
+      dim: EMBEDDING_DIM,
+    };
   }
 
   private async getExtractor(): Promise<any | null> {

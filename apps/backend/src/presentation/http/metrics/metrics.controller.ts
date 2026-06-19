@@ -34,4 +34,13 @@ export class MetricsController {
   sellersKpi(@CurrentTenant() tenantId: string) {
     return this.metrics.sellersKpi(tenantId);
   }
+
+  @Get('support')
+  supportOverview(
+    @CurrentTenant() tenantId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.metrics.supportOverview(tenantId, { from, to });
+  }
 }

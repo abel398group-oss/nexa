@@ -181,6 +181,89 @@ export class MetricsService {
     return { from: this.isoDay(fromDate), to: this.isoDay(toDate), series: days.map((k) => buckets.get(k)!) };
   }
 
+  // ── Métricas do módulo de SUPORTE (ADR 015/016) ──────────────────────────
+  // % resolvido sem escalonamento, tempo médio de resolução, volume por
+  // categoria/prioridade e taxa de escalonamento por categoria.
+  //
+  // "Escalonado" considera tanto o status atual ('escalated') quanto o
+  // histórico de stage (conversationStageHistory toStatus='escalated'),
+  // porque um chamado escalado pode ser fechado depois por um humano
+  // (setResolved também grava resolvedAt) — sem isso, "resolvido sem
+  // escalonamento" ficaria inflado.
+  async supportOverview(tenantId: string, range?: { from?: string; to?: string }) {
+    const dw: any =
+      range?.from || range?.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: new Date(range.from) } : {}),
+              ...(range.to ? { lte: new Date(`${range.to}T23:59:59.999`) } : {}),
+            },
+          }
+        : {};
+
+    const tickets = await this.prisma.aiConversation.findMany({
+      where: { tenantId, agentType: 'support' as any, ...dw },
+      select: {
+        id: true,
+        status: true,
+        ticketCategory: true,
+        ticketPriority: true,
+        createdAt: true,
+        resolvedAt: true,
+        stageHistory: { where: { toStatus: 'escalated' }, select: { id: true }, take: 1 },
+      },
+    });
+
+    const total = tickets.length;
+    const wasEscalated = (t: (typeof tickets)[number]) =>
+      (t.status as string) === 'escalated' || t.stageHistory.length > 0;
+
+    const escalatedTickets = tickets.filter(wasEscalated);
+    const resolvedWithoutEscalation = tickets.filter((t) => t.resolvedAt && !wasEscalated(t));
+    const resolvedTickets = tickets.filter((t) => t.resolvedAt);
+
+    const avgTimeToResolutionHours =
+      resolvedTickets.length > 0
+        ? Math.round(
+            (resolvedTickets.reduce((sum, t) => sum + (t.resolvedAt!.getTime() - t.createdAt.getTime()), 0) /
+              resolvedTickets.length /
+              (60 * 60 * 1000)) *
+              10,
+          ) / 10
+        : null;
+
+    const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+
+    const countBy = (key: 'ticketCategory' | 'ticketPriority') =>
+      tickets.reduce((acc: Record<string, number>, t) => {
+        const k = t[key] ?? 'null';
+        acc[k] = (acc[k] ?? 0) + 1;
+        return acc;
+      }, {});
+
+    const byCategory = countBy('ticketCategory');
+    const escalationRateByCategory = Object.fromEntries(
+      Object.keys(byCategory).map((cat) => {
+        const inCat = tickets.filter((t) => (t.ticketCategory ?? 'null') === cat);
+        const escalatedInCat = inCat.filter(wasEscalated).length;
+        return [cat, pct(escalatedInCat, inCat.length)];
+      }),
+    );
+
+    return {
+      total,
+      resolvedWithoutEscalation: {
+        count: resolvedWithoutEscalation.length,
+        pct: pct(resolvedWithoutEscalation.length, total),
+      },
+      escalated: { count: escalatedTickets.length, pct: pct(escalatedTickets.length, total) },
+      avgTimeToResolutionHours,
+      volumeByCategory: byCategory,
+      volumeByPriority: countBy('ticketPriority'),
+      escalationRateByCategory,
+    };
+  }
+
   // YYYY-MM-DD no fuso local (chave de bucket diária).
   private isoDay(d: Date): string {
     const y = d.getFullYear();

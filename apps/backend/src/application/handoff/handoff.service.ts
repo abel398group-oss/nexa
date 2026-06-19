@@ -10,14 +10,30 @@ function genToken(): string {
 const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
 // Token TMS_SERVICE_TOKEN — server-to-server, nunca exposto ao browser
+//
+// SEGURANÇA (fix pós-auditoria do módulo de suporte): sem TMS_SERVICE_TOKEN
+// configurado, o handoff aceitava QUALQUER token — risco real de produção,
+// pois um atacante poderia forjar identidade de cliente (ADR 022). Em
+// produção isso agora é fail-closed: aborta a criação do handoff em vez de
+// aceitar sem autenticação. Em dev/test, mantém o comportamento permissivo
+// (com warning) para não travar o ambiente local antes do token existir.
 function validateServiceToken(provided: string | undefined): void {
   const expected = process.env.TMS_SERVICE_TOKEN;
+  const isProd = process.env.NODE_ENV === 'production';
+
   if (!expected) {
-    // Não configurado: aceita qualquer token em dev (avisa no log)
+    if (isProd) {
+      Logger.error(
+        'TMS_SERVICE_TOKEN não configurado em produção — handoff bloqueado (fail-closed)',
+        'HandoffService',
+      );
+      throw new UnauthorizedException('Handoff indisponível: autenticação de serviço não configurada');
+    }
+    // Não configurado fora de produção: aceita qualquer token (avisa no log)
     Logger.warn('TMS_SERVICE_TOKEN não configurado — handoff sem autenticação (dev only)', 'HandoffService');
     return;
   }
-  if (provided !== expected) {
+  if (!provided || provided !== expected) {
     throw new UnauthorizedException('TMS_SERVICE_TOKEN inválido');
   }
 }

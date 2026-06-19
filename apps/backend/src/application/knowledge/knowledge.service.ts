@@ -325,6 +325,41 @@ export class KnowledgeService {
       .catch((e: any) => this.logger.warn(`storeEmbedding(${id}) falhou: ${e?.message}`));
   }
 
+  // Status de visibilidade do RAG (embeddings + pgvector) p/ o painel/diagnóstico.
+  // "indexed" usa embeddingModel (coluna Prisma-friendly) como proxy de "tem vetor",
+  // já que storeEmbedding() só grava embeddingModel junto com o vetor gravado via SQL
+  // bruto (embedding é Unsupported("vector") — não filtrável pelo client normal).
+  async getEmbeddingsStatus(tenantId: string) {
+    const embeddingsStatus = this.embeddings.getStatus();
+
+    const pgvectorRows = await this.prisma
+      .$queryRawUnsafe(`SELECT 1 FROM pg_extension WHERE extname = 'vector'`)
+      .catch((e: any) => {
+        this.logger.warn(`Verificação da extensão pgvector falhou: ${e?.message}`);
+        return null;
+      });
+    const pgvectorAvailable = Array.isArray(pgvectorRows) ? pgvectorRows.length > 0 : null;
+
+    const [total, indexed] = await Promise.all([
+      this.prisma.aiKnowledgeBase.count({ where: { tenantId } }),
+      this.prisma.aiKnowledgeBase.count({ where: { tenantId, embeddingModel: { not: null } } }),
+    ]);
+
+    return {
+      embeddings: embeddingsStatus,
+      pgvectorAvailable, // null = não foi possível verificar (sem permissão na conexão, etc.)
+      knowledgeBase: {
+        total,
+        indexed,
+        notIndexed: total - indexed,
+        indexedPct: total > 0 ? Math.round((indexed / total) * 1000) / 10 : 0,
+      },
+      // Caminho efetivamente usado pelo retrieve(): semântico só se embeddings.enabled
+      // E houver pelo menos 1 item indexado; senão cai sempre no textual.
+      effectiveRetrievalMode: embeddingsStatus.modelLoaded && !embeddingsStatus.failed && indexed > 0 ? 'semantic' : 'textual',
+    };
+  }
+
   // Backfill: (re)gera os vetores da KB do tenant. Rodar após a migração do pgvector
   // ou quando trocar de modelo. force=true reindexa tudo; senão só o que não tem vetor.
   async reindex(tenantId: string, force = false) {

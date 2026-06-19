@@ -43,6 +43,14 @@ export class KnowledgeController {
     return this.knowledge.reindex(tenantId, force === 'true');
   }
 
+  // Visibilidade do RAG: modelo de embeddings carregado, extensão pgvector
+  // disponível e % da KB do tenant já vetorizada. Usar para diagnosticar
+  // silenciosamente por que o retrieval está caindo no fallback textual.
+  @Get('embeddings-status')
+  embeddingsStatus(@CurrentTenant() tenantId: string) {
+    return this.knowledge.getEmbeddingsStatus(tenantId);
+  }
+
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.knowledge.findOne(tenantId, id);
