@@ -187,7 +187,7 @@ export class WahaHealthService {
           where: { status: 'active' },
           select: { id: true },
         });
-        tenantIds = tenants.map((t) => t.id);
+        tenantIds = tenants.map((t: { id: string }) => t.id);
       }
       for (const tenantId of tenantIds) {
         await this.notifications.create(tenantId, { type: 'info', title, body, link: '/settings' });
