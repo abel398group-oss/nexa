@@ -8,20 +8,26 @@
 
 ---
 
-## ⚠️ Status atual — DOIS sistemas coexistindo
+## ⚠️ Status atual — DOIS sistemas coexistindo (e este README está desatualizado)
 
 Hoje existem **dois sistemas Nexa em paralelo** — não confundir:
 
 1. **MVP em produção (n8n + WAHA + Claude Haiku)** — é o que está rodando de verdade,
    atendendo leads via WhatsApp agora. Descrito em `docs/overview/system-overview.md`.
    Status: pré-produção, com pendências de hardening (ver seção 9 daquele documento).
-2. **Nova plataforma (este repo: NestJS + React + Prisma)** — está em construção,
-   atualmente no Sprint 1 (fundação de dados), conforme `docs/SPRINT_PLAN.md`. Ainda **não
-   tem `apps/backend` nem `apps/frontend` funcionais.**
+2. **Nova plataforma (este repo: NestJS + React + Prisma)** — `apps/backend` e
+   `apps/frontend` **já existem e têm implementação substancial** (auth, agents, connectors,
+   contacts, conversations, email, whatsapp, opportunities, portal, admin, etc. em
+   `apps/backend/src/`) — **muito além do "Sprint 1 (fundação de dados)" declarado abaixo
+   e em `docs/SPRINT_PLAN.md`.** Esse rótulo de estágio está desatualizado; a referência
+   mais confiável do estado real do código é `CLAUDE.md` (raiz), que já descreve dev
+   servers rodando (`:3001`/`:5174`), migrations e convenções em uso.
 
-**Regra:** o MVP n8n continua rodando e não deve ser desligado até a nova plataforma
-assumir as funções equivalentes (ver `docs/SPRINT_PLAN.md`, premissas). Este README descreve
-a *nova plataforma* (item 2); para o sistema em produção hoje, ver `docs/overview/system-overview.md`.
+**Recomendação:** revisar/atualizar `Estágio` (linha abaixo), `docs/SPRINT_PLAN.md` e
+`docs/overview/roadmap.md` para refletir o progresso real antes de usá-los para planejamento.
+**Regra que segue válida:** o MVP n8n continua rodando e não deve ser desligado até a nova
+plataforma assumir as funções equivalentes; para o sistema em produção hoje, ver
+`docs/overview/system-overview.md`.
 
 ---
 
