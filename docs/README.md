@@ -10,19 +10,20 @@ Primeiro conector: HiperTMS.
 | Pasta | Conteúdo |
 |---|---|
 | `_templates/` | Modelos de ADR, PRD e nota |
-| `product/` | Visão, roadmap e estratégia de produto (`product/strategy/` para sumário executivo e monetização) |
+| `product/` | Visão, roadmap, estratégia e SLA (`product/strategy/`, `product/sla.md`) |
 | `overview/` | Visão de sistema, roadmap e schema (alto nível) |
-| `domain/` | Glossário e linguagem ubíqua |
 | `features/` | PRDs de cada módulo do sistema |
 | `prd/` | Regras de negócio, IA autônoma, workflows, modelo de dados |
-| `architecture/` | Estrutura de código, frontend, diagramas C4 e decisões |
-| `adr/` | Architecture Decision Records (árvore canônica) |
+| `architecture/` | Estrutura de código, frontend, diagramas C4, ERD e decisões |
+| `adr/` | Architecture Decision Records (árvore canônica — 27 ADRs) |
 | `ai/` | Camada de IA: agentes, guardrails, RAG, contexto, memória, revisão |
-| `api/` | Padrões de API, erros, nomenclatura e contrato |
-| `security/` | Visão de segurança, segredos e referências |
-| `infra/` | Deploy, CI/CD e migrations |
+| `api/` | Padrões de API, Swagger, guia de integração para parceiros |
+| `security/` | Visão de segurança, LGPD, política de secrets |
+| `infra/` | Deploy, CI/CD, runbook de incidentes, backup e DR |
+| `quality/` | Plano de testes, cobertura mínima, E2E |
+| `manuais/` | Guias operacionais para usuários do painel |
 | `schema/` | Schema Prisma, estratégia de migração e runtime |
-| `reviews/` | Revisões e auditorias datadas |
+| `reviews/` | Revisões, auditorias e postmortems datados |
 
 ## Como navegar
 
@@ -76,6 +77,50 @@ Pontos de partida:
 Guias operacionais para quem usa o painel:
 
 - [01 — Primeiros Passos](manuais/01-primeiros-passos.md) — acesso, dashboard, conectar WhatsApp, ativar Lia
+- [02 — Operação Diária](manuais/02-operacao-diaria.md) — inbox, atendimento, base de conhecimento, kill switch
+- [03 — Campanhas de Disparo](manuais/03-campanhas.md) — criar, monitorar, WhatsApp e e-mail
+
+## Segurança e Conformidade
+
+- [Visão de Segurança](security/security-overview.md) — pilares de segurança do sistema
+- [LGPD](security/lgpd.md) — dados tratados, base legal, opt-out, retenção, DPO
+- [Política de Secrets](security/politica-secrets.md) — rotação de credenciais, cofre, inventário
+
+## Infra e Operações
+
+- [Deploy](infra/deploy.md) — deploy no DigitalOcean, checklist de produção
+- [CI/CD](infra/ci-cd.md) — GitHub Actions, pipelines
+- [Runbook de Incidentes](infra/runbook-incidentes.md) — backend down, WAHA, banco, rollback
+- [Backup e DR](infra/backup-dr.md) — estratégia de backup, restauração, plano de recuperação
+- [Escalabilidade](infra/escalabilidade-nexa.md) — gargalos, roadmap de escala, Redis adapter
+
+## Arquitetura
+
+- [Estrutura do Código](architecture/codebase-structure.md)
+- [Arquitetura Frontend](architecture/frontend-architecture.md)
+- [Diagrama C4](architecture/c4-context.md)
+- [ERD — Banco de Dados](architecture/erd.md) — diagrama de entidades e relacionamentos
+
+## API e Integrações
+
+- [Padrões de API](api/api-standards.md)
+- [Swagger / OpenAPI](api/swagger-guide.md) — como ativar e usar (⚠️ ativação pendente)
+- [Guia de Integração](api/guia-integracao.md) — webhooks, handoff, parceiros
+
+## Produto
+
+- [Visão de Produto](product/vision.md)
+- [Sumário Executivo](product/strategy/sumario-executivo.md)
+- [SLA por Plano](product/sla.md) — uptime, limites, créditos, suporte
+
+## Qualidade
+
+- [Plano de Testes](quality/plano-testes.md) — cobertura mínima, E2E, critérios de PR
+
+## Referência
+
+- [Glossário](glossario.md) — definições de todos os termos do sistema
+- [CHANGELOG](../CHANGELOG.md) — histórico de versões
 
 ## Gap documental e análise comparativa
 

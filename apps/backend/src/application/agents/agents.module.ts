@@ -9,6 +9,7 @@ import { DiagnosticAgentService } from './diagnostic-agent.service';
 import { ResolutionAgentService } from './resolution-agent.service';
 import { EscalationAgentService } from './escalation-agent.service';
 import { TicketIntelligenceService } from './ticket-intelligence.service';
+import { WebChatService } from './web-chat.service';
 import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { SellersModule } from '@/application/sellers/sellers.module';
@@ -31,6 +32,8 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
     EscalationAgentService,
     // Intelligence loop — ADR 019
     TicketIntelligenceService,
+    // Web chat (ADR 027) — escuta web_chat.inbound e roteia ao ConversationAgent
+    WebChatService,
     // Agentes principais
     SupportAgentService,
     RouterAgentService,

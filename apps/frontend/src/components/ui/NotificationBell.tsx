@@ -7,11 +7,15 @@ interface Notif { id: string; type: string; title: string; body: string; link?: 
 
 function notifIcon(type: string): string {
   switch (type) {
-    case 'escalation': return '🔴';
-    case 'hot_lead':   return '🔥';
-    case 'complaint':  return '⚠️';
-    case 'opt_out':    return '🚫';
-    default:           return '•';
+    case 'escalation':   return '🔴';
+    case 'hot_lead':     return '🔥';
+    case 'complaint':    return '⚠️';
+    case 'opt_out':      return '🚫';
+    // Intelligence loop (ADR 019)
+    case 'recurrence':   return '🔁';
+    case 'bug_probable': return '🐛';
+    case 'kb_candidate': return '📝';
+    default:             return '•';
   }
 }
 

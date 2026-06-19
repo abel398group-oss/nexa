@@ -25,6 +25,7 @@ const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) 
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
 const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
+const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m) => ({ default: m.OpportunitiesPage })));
 const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
 // Portal do cliente — área pública e independente (auth própria, fora do Layout interno).
 const PortalPage = lazy(() => import('@/pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
@@ -71,6 +72,7 @@ export default function App() {
                     <Route path="/support/clients" element={<Perm perm="inbox"><SupportClientsPage /></Perm>} />
                     <Route path="/contacts" element={<Perm perm="contacts"><ContactsPage /></Perm>} />
                     <Route path="/knowledge" element={<Perm perm="knowledge"><KnowledgePage /></Perm>} />
+                    <Route path="/opportunities" element={<Perm perm="opportunities"><OpportunitiesPage /></Perm>} />
                     <Route path="/sellers" element={<Perm perm="sellers"><SellersPage /></Perm>} />
                     <Route path="/campaigns" element={<Perm perm="campaigns"><CampaignsPage /></Perm>} />
                     <Route path="/sender/health" element={<Perm perm="campaigns"><NumberHealthPage /></Perm>} />

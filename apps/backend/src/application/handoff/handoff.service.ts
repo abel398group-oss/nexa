@@ -72,10 +72,15 @@ export class HandoffService {
     const token = genToken();
     const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
+    // Usa o tenant do Nexa configurado no env, não o tenantId que o TMS envia
+    // (o TMS manda o próprio UUID de tenant, diferente do tenant do Nexa).
+    // NEXA_DEFAULT_TENANT_ID deve ser o tenantId do operador no Nexa (ex: 'default').
+    const nexaTenantId = process.env.NEXA_DEFAULT_TENANT_ID ?? input.tenantId;
+
     await this.prisma.handoffToken.create({
       data: {
         token,
-        tenantId: input.tenantId,
+        tenantId: nexaTenantId,
         externalId: input.externalId,
         name: input.name ?? null,
         page: input.page ?? null,

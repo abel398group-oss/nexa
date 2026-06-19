@@ -13,6 +13,7 @@ export function isSupportTicket(c: TicketLike): boolean {
     !!c.ticketCategory ||
     c.customerStage === 'cliente_ativo' ||
     c.status === 'escalated' ||
-    c.sourceChannel === 'portal'
+    c.sourceChannel === 'portal' ||
+    c.sourceChannel === 'web_chat'
   );
 }

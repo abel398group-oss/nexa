@@ -22,6 +22,7 @@ enum SourceChannel {
   facebook
   email
   portal
+  web_chat // ADR 027: chat embutido no HiperTMS (widget ao lado do chat interno)
 }
 
 enum AgentType {

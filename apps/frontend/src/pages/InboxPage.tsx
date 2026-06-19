@@ -43,6 +43,20 @@ function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
       </span>
     );
   }
+  if (sourceChannel === 'web_chat') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700 font-medium" title="Canal: Web Chat (TMS)">
+        <Icon name="bot" className="h-3 w-3" /> web chat
+      </span>
+    );
+  }
+  if (sourceChannel === 'portal') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 font-medium" title="Canal: Portal do Cliente">
+        <Icon name="building" className="h-3 w-3" /> portal
+      </span>
+    );
+  }
   return null;
 }
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }

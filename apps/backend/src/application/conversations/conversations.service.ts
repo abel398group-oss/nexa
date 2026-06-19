@@ -213,6 +213,52 @@ export class ConversationsService {
     });
   }
 
+  // ADR 027: acha ou cria uma conversa web_chat para o usuário TMS identificado.
+  // Reutiliza uma conversa aberta existente (não fecha + reabre a cada sessão).
+  // Chamado pelo ConversationsGateway no handshake do socket.
+  async findOrCreateWebChat(
+    tenantId: string,
+    externalId: string,
+    name: string | null,
+  ): Promise<{ conversationId: string; isNew: boolean }> {
+    // Reutiliza conversa aberta se existir
+    const existing = await this.prisma.aiConversation.findFirst({
+      where: {
+        tenantId,
+        externalId,
+        sourceChannel: 'web_chat' as any,
+        status: { notIn: ['closed', 'opt_out'] as any },
+      },
+      select: { id: true },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (existing) return { conversationId: existing.id, isNew: false };
+
+    // Garante contato (upsert por tenantId+phone, onde phone = externalId do TMS)
+    const contact = await this.prisma.contact.upsert({
+      where: { tenantId_phone: { tenantId, phone: externalId } },
+      create: { tenantId, phone: externalId, name: name ?? 'Cliente TMS', leadStatus: 'cliente_ativo', nameSource: 'tms' },
+      update: { name: name ?? undefined, nameSource: 'tms' },
+    });
+
+    const conv = await this.prisma.aiConversation.create({
+      data: {
+        tenantId,
+        correlationId: uuidv4(),
+        contactId: contact.id,
+        phone: externalId,
+        sourceChannel: 'web_chat' as any,
+        agentType: 'support' as any,
+        customerStage: 'cliente_ativo' as any,
+        externalId,
+        lastActivityAt: new Date(),
+      },
+    });
+
+    this.logger.log(`web_chat: nova conversa criada ext=${externalId} conv=${conv.id.slice(0, 8)}`);
+    return { conversationId: conv.id, isNew: true };
+  }
+
   // Cria conversa (correlationId nasce aqui — rastreio ponta a ponta)
   async create(
     tenantId: string,
@@ -267,8 +313,9 @@ export class ConversationsService {
     // tempo real: empurra para a sala da conversa (WebSocket)
     this.events.emit('message.created', { conversationId: conv.id, message });
 
-    // saída → entrega no WhatsApp via WAHA (allowlist protege números de teste)
-    if (dto.direction === 'outbound') {
+    // saída → entrega no WhatsApp via WAHA.
+    // web_chat e portal: resposta já vai pelo WebSocket (message.created); WAHA não é chamado.
+    if (dto.direction === 'outbound' && (conv.sourceChannel as string) !== 'web_chat' && (conv.sourceChannel as string) !== 'portal') {
       const r = await this.waha.sendText(conv.phone, dto.content);
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);
