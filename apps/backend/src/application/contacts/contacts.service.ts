@@ -96,7 +96,7 @@ export class ContactsService {
       include: { campaign: { select: { id: true, name: true, channel: true, createdAt: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    return targets.map((t) => ({
+    return targets.map((t: any) => ({
       campaignId: t.campaignId,
       name: t.campaign?.name ?? '—',
       channel: t.campaign?.channel ?? 'whatsapp',

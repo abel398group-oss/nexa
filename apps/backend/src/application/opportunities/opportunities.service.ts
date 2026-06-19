@@ -33,7 +33,7 @@ export class OpportunitiesService {
       _count: true,
       _sum: { value: true },
     });
-    return rows.map((r) => ({ stage: r.stage, count: r._count as number, value: Number(r._sum.value ?? 0) }));
+    return rows.map((r: any) => ({ stage: r.stage, count: r._count as number, value: Number(r._sum.value ?? 0) }));
   }
 
   async findOne(tenantId: string, id: string) {

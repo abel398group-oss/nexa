@@ -63,14 +63,14 @@ export class ConversationJanitorService {
 
     if (!resolved.length) return;
 
-    const ids = resolved.map((c) => c.id);
+    const ids = resolved.map((c: any) => c.id);
     await this.prisma.$transaction([
       this.prisma.aiConversation.updateMany({
         where: { id: { in: ids } },
         data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, endedAt: now },
       }),
       this.prisma.conversationStageHistory.createMany({
-        data: ids.map((id) => ({
+        data: ids.map((id: any) => ({
           conversationId: id,
           fromStatus: 'open',
           toStatus: 'closed',
@@ -107,7 +107,7 @@ export class ConversationJanitorService {
 
     if (!candidates.length) return;
 
-    const ids = candidates.map((c) => c.id);
+    const ids = candidates.map((c: any) => c.id);
     const now = new Date();
 
     await this.prisma.$transaction([
@@ -118,7 +118,7 @@ export class ConversationJanitorService {
       }),
       // Grava histórico de stage para cada conversa fechada
       this.prisma.conversationStageHistory.createMany({
-        data: ids.map((id) => ({
+        data: ids.map((id: any) => ({
           conversationId: id,
           fromStatus: 'open', // pode ser open ou waiting_customer — histórico aproximado
           toStatus: 'closed',

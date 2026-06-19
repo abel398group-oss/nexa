@@ -67,8 +67,8 @@ export class EmailImapService implements OnModuleInit {
       .catch(() => []);
 
     const fromDb: ImapConfig[] = channels
-      .filter((c) => c.imapUser && c.imapPass)
-      .map((c) => ({
+      .filter((c: any) => c.imapUser && c.imapPass)
+      .map((c: any) => ({
         host: c.imapHost,
         port: c.imapPort,
         user: c.imapUser,

@@ -55,7 +55,7 @@ export class SupportAgentService {
     const history = input.conversationId
       ? (await this.conversations.getMessages(tenantId, input.conversationId))
           .slice(-6)
-          .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
+          .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
           .join('\n')
       : '';
 

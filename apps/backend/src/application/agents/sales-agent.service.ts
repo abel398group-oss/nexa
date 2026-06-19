@@ -56,7 +56,7 @@ export class SalesAgentService {
     const planTxt = plans
       .map((p) => `- ${p.name} (${p.code}): R$${p.price}${p.maxUsers ? `, até ${p.maxUsers} usuários` : ''}${p.features?.length ? ` — ${p.features.join(', ')}` : ''}`)
       .join('\n');
-    const kbTxt = kb.map((k) => `[${k.title}]\n${k.content}`).join('\n\n');
+    const kbTxt = kb.map((k: any) => `[${k.title}]\n${k.content}`).join('\n\n');
     // tudo que a vendedora tinha permissão de usar (planos + KB) → vai p/ a supervisora auditar
     const allowedFacts =
       (planTxt ? `PLANOS:\n${planTxt}` : '') + (kbTxt ? `\n\nCONHECIMENTO:\n${kbTxt}` : '');
@@ -133,7 +133,7 @@ export class SalesAgentService {
       return {
         draft,
         suggestedAction: action,
-        usedKnowledge: kb.map((k) => ({ id: k.id, title: k.title })),
+        usedKnowledge: kb.map((k: any) => ({ id: k.id, title: k.title })),
         allowedFacts,
         confidence: 'high',
         model: AI_MODEL,

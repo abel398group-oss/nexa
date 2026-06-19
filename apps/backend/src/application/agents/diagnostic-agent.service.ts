@@ -46,7 +46,7 @@ export class DiagnosticAgentService {
         const docType: 'cte' | 'mdfe' = input.category === 'mdfe' ? 'mdfe' : 'cte';
         const accessKeyMatch = input.message.match(/\b(\d{44})\b/);
         const docNumberMatch = !accessKeyMatch && input.message.match(/\b(\d{7,15})\b/);
-        const docKey = accessKeyMatch?.[1] ?? docNumberMatch?.[1] ?? null;
+        const docKey = accessKeyMatch?.[1] ?? (docNumberMatch ? docNumberMatch[1] : null) ?? null;
 
         if (docKey && input.tmsCustomer) {
           const docStatus = await this.connector.getDocumentStatus(

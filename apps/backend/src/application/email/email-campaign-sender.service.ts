@@ -128,8 +128,8 @@ export class EmailCampaignSenderService {
         select: { email: true, name: true },
       });
       targets = contacts
-        .filter((c) => c.email)
-        .map((c) => ({ email: c.email!, name: c.name ?? undefined }));
+        .filter((c: any) => c.email)
+        .map((c: any) => ({ email: c.email!, name: c.name ?? undefined }));
     }
 
     // Dedup por e-mail
@@ -144,7 +144,7 @@ export class EmailCampaignSenderService {
       where: { tenantId, status: 'opted_out', email: { in: targets.map((t) => t.email) } },
       select: { email: true },
     });
-    const blocked = new Set(optedEmails.map((o) => o.email!.toLowerCase()));
+    const blocked = new Set(optedEmails.map((o: any) => o.email!.toLowerCase()));
     const skippedOptOut = targets.filter((t) => blocked.has(t.email.toLowerCase())).length;
     targets = targets.filter((t) => !blocked.has(t.email.toLowerCase()));
 

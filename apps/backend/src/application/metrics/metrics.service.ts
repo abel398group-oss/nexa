@@ -68,8 +68,8 @@ export class MetricsService {
       }),
     ]);
     const ackAtLeast = (min: number) =>
-      ackRows.filter((r) => (r.ack ?? 0) >= min).reduce((a, r) => a + (r._count as number), 0);
-    const campMsgTotal = ackRows.reduce((a, r) => a + (r._count as number), 0);
+      ackRows.filter((r: any) => (r.ack ?? 0) >= min).reduce((a: number, r: any) => a + (r._count as number), 0);
+    const campMsgTotal = ackRows.reduce((a: number, r: any) => a + (r._count as number), 0);
     const delivered = ackAtLeast(2);
     const read = ackAtLeast(3);
     // respostas: conversas que receberam campanha E responderam (inbound)
@@ -78,7 +78,7 @@ export class MetricsService {
       select: { conversationId: true },
       distinct: ['conversationId'],
     });
-    const campConvIds = campConvRows.map((r) => r.conversationId);
+    const campConvIds = campConvRows.map((r: any) => r.conversationId);
     const repliedRows = campConvIds.length
       ? await this.prisma.aiMessage.groupBy({
           by: ['conversationId'],
@@ -92,7 +92,7 @@ export class MetricsService {
     const asMap = (rows: any[], key: string) =>
       rows.reduce((acc, r) => ({ ...acc, [r[key] ?? 'null']: r._count }), {} as Record<string, number>);
 
-    const outboundTotal = msgByDirection.find((m) => m.direction === 'outbound')?._count ?? 0;
+    const outboundTotal = msgByDirection.find((m: any) => m.direction === 'outbound')?._count ?? 0;
     const aiShare = outboundTotal > 0 ? Math.round((aiMessages / outboundTotal) * 100) : 0;
 
     return {
@@ -107,7 +107,7 @@ export class MetricsService {
         byOutcome: asMap(convByOutcome, 'outcome'),
       },
       messages: {
-        inbound: msgByDirection.find((m) => m.direction === 'inbound')?._count ?? 0,
+        inbound: msgByDirection.find((m: any) => m.direction === 'inbound')?._count ?? 0,
         outbound: outboundTotal,
         aiGenerated: aiMessages,
         aiSharePct: aiShare, // % das respostas que a IA enviou sozinha
@@ -152,7 +152,7 @@ export class MetricsService {
           where: { tenantId, assignedSellerId: sellerId },
           select: { id: true },
         })
-      ).map((c) => c.id);
+      ).map((c: any) => c.id);
       convWhere = { tenantId, assignedSellerId: sellerId, createdAt: window };
       msgWhere = { conversationId: { in: convIds.length ? convIds : ['__none__'] }, createdAt: window };
     }
@@ -196,11 +196,11 @@ export class MetricsService {
       where: { tenantId, assignedSellerId: { not: null } },
       select: { assignedSellerId: true, outcome: true, status: true },
     });
-    return sellers.map((s) => {
-      const mine = convs.filter((c) => c.assignedSellerId === s.id);
-      const ganhos = mine.filter((c) => c.outcome === 'won').length;
-      const perdidos = mine.filter((c) => c.outcome === 'lost').length;
-      const emAndamento = mine.filter((c) => !c.outcome).length;
+    return sellers.map((s: any) => {
+      const mine = convs.filter((c: any) => c.assignedSellerId === s.id);
+      const ganhos = mine.filter((c: any) => c.outcome === 'won').length;
+      const perdidos = mine.filter((c: any) => c.outcome === 'lost').length;
+      const emAndamento = mine.filter((c: any) => !c.outcome).length;
       const fechados = ganhos + perdidos;
       return {
         id: s.id,
@@ -221,7 +221,7 @@ export class MetricsService {
       where: { tenantId, assignedSellerId: sellerId },
       select: { id: true, status: true, contactId: true },
     });
-    const convIds = convs.map((c) => c.id);
+    const convIds = convs.map((c: any) => c.id);
     const asMap = (rows: any[], key: string) =>
       rows.reduce((acc, r) => ({ ...acc, [r[key] ?? 'null']: r._count }), {} as Record<string, number>);
 
@@ -234,10 +234,10 @@ export class MetricsService {
     const inbound = (msgByDirection as any[]).find((m) => m.direction === 'inbound')?._count ?? 0;
 
     return {
-      contacts: { total: new Set(convs.map((c) => c.contactId)).size, optedOut: 0, byLeadStatus: {} },
+      contacts: { total: new Set(convs.map((c: any) => c.contactId)).size, optedOut: 0, byLeadStatus: {} },
       conversations: {
         total: convs.length,
-        byStatus: convs.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] ?? 0) + 1 }), {} as Record<string, number>),
+        byStatus: convs.reduce((a: Record<string, number>, c: any) => ({ ...a, [c.status]: (a[c.status] ?? 0) + 1 }), {} as Record<string, number>),
       },
       messages: { inbound, outbound, aiGenerated: aiMessages, aiSharePct: outbound > 0 ? Math.round((aiMessages / outbound) * 100) : 0 },
       ai: { tokensIn: 0, tokensOut: 0, estimatedCostUsd: 0 },

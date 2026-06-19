@@ -29,18 +29,18 @@ export class ConversationsService {
         include: {
           assignedSeller: { select: { name: true } },
         },
-      }).then(async (convs) => {
+      }).then(async (convs: any[]) => {
         // Enriquece com dados do contato (nome, tags) via phone+tenantId
         if (!convs.length) return convs;
-        const phones = [...new Set(convs.map((c) => c.phone))];
+        const phones = [...new Set(convs.map((c: any) => c.phone))];
         const contacts = await this.prisma.contact.findMany({
           where: { tenantId, phone: { in: phones } },
           select: { id: true, phone: true, name: true, nameSource: true, tags: true },
         });
-        const contactMap = new Map(contacts.map((c) => [c.phone, c]));
+        const contactMap = new Map(contacts.map((c: any) => [c.phone, c]));
 
         // Atribuição de campanha: a campanha mais recente que tocou cada conversa
-        const convIds = convs.map((c) => c.id);
+        const convIds = convs.map((c: any) => c.id);
         const campMsgs = await this.prisma.aiMessage.findMany({
           where: { conversationId: { in: convIds }, direction: 'outbound', intent: 'outbound_campaign' },
           select: { conversationId: true, metadata: true },
@@ -56,9 +56,9 @@ export class ConversationsService {
         const camps = campIds.length
           ? await this.prisma.campaign.findMany({ where: { id: { in: campIds } }, select: { id: true, name: true } })
           : [];
-        const campNameById = new Map(camps.map((c) => [c.id, c.name]));
+        const campNameById = new Map(camps.map((c: any) => [c.id, c.name]));
 
-        return convs.map((c) => {
+        return convs.map((c: any) => {
           const cid = campIdByConv.get(c.id);
           return {
             ...c,

@@ -22,12 +22,12 @@ export class SellersService {
       ];
     }
     const sellers = await this.prisma.seller.findMany({ where, orderBy: { createdAt: 'asc' } });
-    const ids = sellers.map((s) => s.id);
+    const ids = sellers.map((s: any) => s.id);
     const users = ids.length
       ? await this.prisma.user.findMany({ where: { sellerId: { in: ids } }, select: { sellerId: true, email: true } })
       : [];
-    const map = new Map(users.map((u) => [u.sellerId, u.email]));
-    return sellers.map((s) => ({ ...s, loginEmail: map.get(s.id) ?? null })); // mostra se tem login
+    const map = new Map(users.map((u: any) => [u.sellerId, u.email]));
+    return sellers.map((s: any) => ({ ...s, loginEmail: map.get(s.id) ?? null })); // mostra se tem login
   }
 
   // cria vendedor; se vier email+senha, cria também o LOGIN (role=vendedor) vinculado
@@ -118,7 +118,7 @@ export class SellersService {
   async deleteMany(tenantId: string, ids: string[]) {
     if (!ids?.length) return { deleted: 0 };
     const owned = await this.prisma.seller.findMany({ where: { id: { in: ids }, tenantId }, select: { id: true } });
-    const ownedIds = owned.map((o) => o.id);
+    const ownedIds = owned.map((o: any) => o.id);
     if (!ownedIds.length) return { deleted: 0 };
     await this.prisma.aiConversation.updateMany({ where: { assignedSellerId: { in: ownedIds } }, data: { assignedSellerId: null } });
     await this.prisma.user.updateMany({ where: { sellerId: { in: ownedIds } }, data: { sellerId: null } });

@@ -67,7 +67,7 @@ export class SenderService {
   async listNumbers(tenantId: string) {
     const numbers = await this.prisma.senderNumber.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
-    return numbers.map((n) => ({
+    return numbers.map((n: any) => ({
       ...n,
       effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
     }));
@@ -108,7 +108,7 @@ export class SenderService {
         where: { tenantId, status: 'active' }, // nunca dispara p/ opted_out (LGPD)
         select: { phone: true, name: true },
       });
-      targets = contacts.map((c) => ({ phone: c.phone, name: c.name ?? undefined }));
+      targets = contacts.map((c: any) => ({ phone: c.phone, name: c.name ?? undefined }));
     }
     // dedup por telefone
     const seen = new Set<string>();
@@ -127,7 +127,7 @@ export class SenderService {
         where: { tenantId, status: 'opted_out', phone: { in: targets.map((t) => t.phone) } },
         select: { phone: true },
       });
-      const blocked = new Set(optedOut.map((o) => o.phone));
+      const blocked = new Set(optedOut.map((o: any) => o.phone));
       targets = targets.filter((t) => !blocked.has(t.phone));
     }
 
@@ -192,13 +192,13 @@ export class SenderService {
       orderBy: { createdAt: 'desc' },
     });
     const withCounts = await Promise.all(
-      camps.map(async (c) => {
+      camps.map(async (c: any) => {
         const grouped = await this.prisma.campaignTarget.groupBy({
           by: ['status'],
           where: { campaignId: c.id },
           _count: true,
         });
-        const counts = grouped.reduce((a, g) => ({ ...a, [g.status]: g._count }), {} as Record<string, number>);
+        const counts = grouped.reduce((a: Record<string, number>, g: any) => ({ ...a, [g.status]: g._count }), {} as Record<string, number>);
         return { ...c, counts };
       }),
     );
@@ -217,15 +217,15 @@ export class SenderService {
     // Engajamento DESTA campanha: só conta quem foi REALMENTE enviado nesta campanha,
     // ack das mensagens carimbadas com este campaignId, e resposta só APÓS o envio dela.
     // (evita marcar "respondeu/lido" por conversas antigas — ex.: campanha agendada/não enviada)
-    const sentPhones = [...new Set(targets.filter((t) => t.status === 'sent' && t.sentAt).map((t) => t.phone).filter(Boolean))];
+    const sentPhones = [...new Set(targets.filter((t: any) => t.status === 'sent' && t.sentAt).map((t: any) => t.phone).filter(Boolean))];
     const engByPhone = new Map<string, { ack: number; replied: boolean }>();
     if (sentPhones.length) {
       const convs = await this.prisma.aiConversation.findMany({
         where: { tenantId, phone: { in: sentPhones } },
         select: { id: true, phone: true },
       });
-      const convIds = convs.map((c) => c.id);
-      const phoneByConv = new Map(convs.map((c) => [c.id, c.phone]));
+      const convIds = convs.map((c: any) => c.id);
+      const phoneByConv = new Map<string, string>(convs.map((c: any) => [c.id, c.phone]));
       if (convIds.length) {
         // mensagens DESTA campanha (carimbadas com campaignId): ack + horário de envio por telefone
         const outMsgs = await this.prisma.aiMessage.findMany({
@@ -267,22 +267,22 @@ export class SenderService {
       }
     }
 
-    const enriched = targets.map((t) => {
+    const enriched = targets.map((t: any) => {
       const e = engByPhone.get(t.phone);
       return { ...t, ack: e?.ack ?? 0, replied: e?.replied ?? false };
     });
 
     const counts = enriched.reduce(
-      (a, t) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
+      (a: Record<string, number>, t: any) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
       {} as Record<string, number>,
     );
     // resumo de engajamento. Quem RESPONDEU conta como entregue+lido (responder prova
     // recebimento e leitura) — evita o funil incoerente "3 responderam, 0 entregues"
     // quando o WAHA não manda os recibos de ack.
     const engagement = {
-      delivered: enriched.filter((t) => t.ack >= 2 || t.replied).length,
-      read: enriched.filter((t) => t.ack >= 3 || t.replied).length,
-      replied: enriched.filter((t) => t.replied).length,
+      delivered: enriched.filter((t: any) => t.ack >= 2 || t.replied).length,
+      read: enriched.filter((t: any) => t.ack >= 3 || t.replied).length,
+      replied: enriched.filter((t: any) => t.replied).length,
     };
 
     // CAMP-1: conversão — conversas originadas por ESTA campanha (msg carimbada com campaignId) + outcome
@@ -291,12 +291,12 @@ export class SenderService {
       select: { conversationId: true },
       distinct: ['conversationId'],
     });
-    const convIds = campMsgs.map((m) => m.conversationId);
+    const convIds = campMsgs.map((m: any) => m.conversationId);
     const convs = convIds.length
       ? await this.prisma.aiConversation.findMany({ where: { id: { in: convIds } }, select: { outcome: true } })
       : [];
     const byOutcome = convs.reduce(
-      (a, c) => ({ ...a, [c.outcome ?? 'em_aberto']: (a[c.outcome ?? 'em_aberto'] ?? 0) + 1 }),
+      (a: Record<string, number>, c: any) => ({ ...a, [c.outcome ?? 'em_aberto']: (a[c.outcome ?? 'em_aberto'] ?? 0) + 1 }),
       {} as Record<string, number>,
     );
     const conversion = { conversations: convIds.length, byOutcome };

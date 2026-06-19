@@ -61,16 +61,16 @@ export class KnowledgeService {
           const lit = EmbeddingsService.toVectorLiteral(vec);
           const exClause = ex.length ? ' AND NOT (category = ANY($4::text[]))' : '';
           const params: any[] = ex.length ? [lit, tenantId, topN, ex] : [lit, tenantId, topN];
-          const rows = await this.prisma.$queryRawUnsafe<any[]>(
+          const rows = (await this.prisma.$queryRawUnsafe(
             `SELECT id, title, content, category, 1 - (embedding <=> $1::vector) AS score
                FROM ai_knowledge_base
               WHERE tenant_id = $2 AND embedding IS NOT NULL${exClause}
               ORDER BY embedding <=> $1::vector
               LIMIT $3`,
             ...params,
-          );
+          )) as any[];
           if (rows && rows.length > 0) {
-            return rows.map((r) => ({
+            return rows.map((r: any) => ({
               id: r.id,
               title: r.title,
               content: r.content,
@@ -212,7 +212,7 @@ export class KnowledgeService {
       where: { id: { in: ids }, tenantId },
       select: { id: true },
     });
-    const ownedIds = owned.map((o) => o.id);
+    const ownedIds = owned.map((o: any) => o.id);
     if (!ownedIds.length) return { deleted: 0 };
     await this.prisma.aiKnowledgeVersion.deleteMany({ where: { knowledgeId: { in: ownedIds } } });
     const r = await this.prisma.aiKnowledgeBase.deleteMany({ where: { id: { in: ownedIds }, tenantId } });
@@ -231,7 +231,7 @@ export class KnowledgeService {
       where: { tenantId, title: { in: items.map((i) => i.title) } },
       select: { id: true, title: true, content: true },
     });
-    const existingMap = new Map(existingList.map((e) => [e.title, e]));
+    const existingMap = new Map(existingList.map((e: any) => [e.title, e]));
 
     let created = 0;
     let updated = 0;
@@ -332,10 +332,10 @@ export class KnowledgeService {
       return { ok: false, reason: 'embeddings desabilitado ou modelo indisponível', indexed: 0 };
     }
     const where = force ? `tenant_id = $1` : `tenant_id = $1 AND embedding IS NULL`;
-    const rows = await this.prisma.$queryRawUnsafe<any[]>(
+    const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT id, title, content FROM ai_knowledge_base WHERE ${where}`,
       tenantId,
-    );
+    )) as any[];
     let indexed = 0;
     for (const r of rows) {
       await this.storeEmbedding(r.id, r.title, r.content);

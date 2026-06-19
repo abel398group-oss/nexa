@@ -34,8 +34,8 @@ export class ResolutionAgentService {
     tmsCustomer: { name: string } | null;
   }): Promise<ResolutionResult> {
     const kb = await this.knowledge.retrieve(input.tenantId, input.message, 3, { excludeCategories: ['comercial'] });
-    const usedKnowledge = kb.map((k) => ({ id: k.id, title: k.title, score: k.score }));
-    const kbCtx = kb.map((k, i) => `[KB ${i + 1}: ${k.title}]\n${k.content}`).join('\n\n');
+    const usedKnowledge = kb.map((k: any) => ({ id: k.id, title: k.title, score: k.score }));
+    const kbCtx = kb.map((k: any, i: number) => `[KB ${i + 1}: ${k.title}]\n${k.content}`).join('\n\n');
 
     const diagCtx = input.diagnostic.rootCause
       ? `Causa-raiz identificada: ${input.diagnostic.rootCause}`
