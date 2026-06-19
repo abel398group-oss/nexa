@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
@@ -62,8 +62,40 @@ function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
 interface TmsCustomer { externalId: string; name: string; email?: string; plan?: string; status: string; }
 interface TmsLookup { found: boolean; customer: TmsCustomer | null; }
 
-function hora(iso: string) {
-  try { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+// Retorna chave de dia para comparar se duas mensagens são do mesmo dia
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Texto do separador de data (Hoje / Ontem / dia da semana / dd/MM/YYYY)
+function fmtDateSeparator(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor(
+    (now.setHours(0, 0, 0, 0) - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000,
+  );
+  if (diffDays === 0) return 'Hoje';
+  if (diffDays === 1) return 'Ontem';
+  if (diffDays < 7) return d.toLocaleDateString('pt-BR', { weekday: 'long' });
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Timestamp dentro do balão: só hora se hoje, data+hora se outro dia
+function fmtMsgTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    return isToday
+      ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
 }
 
 function Recibo({ ack }: { ack?: number }) {
@@ -564,26 +596,41 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 ref={threadRef}
                 className={`flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4 ${showTimeline ? 'max-w-[calc(100%-260px)]' : ''}`}
               >
-                {[...messages].reverse().map((m) => (
-                  <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${
-                      m.direction === 'outbound'
-                        ? 'rounded-tr-sm bg-brand-500 text-white'
-                        : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
-                    }`}>
-                      {(m.metadata as any)?.audioUrl && (
-                        <audio controls src={(m.metadata as any).audioUrl} className="mb-1 h-10 w-[320px] max-w-full rounded-lg" />
-                      )}
-                      <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
-                      <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                        m.direction === 'outbound' ? 'text-white/70' : 'text-base-content/40'
-                      }`}>
-                        <span>{hora(m.createdAt)}</span>
-                        {m.direction === 'outbound' && <Recibo ack={m.ack} />}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {(() => {
+                  const reversed = [...messages].reverse();
+                  return reversed.map((m, i) => {
+                    const showSeparator = i === 0 || dayKey(m.createdAt) !== dayKey(reversed[i - 1].createdAt);
+                    return (
+                      <Fragment key={m.id}>
+                        {showSeparator && (
+                          <div className="flex justify-center my-3">
+                            <span className="rounded-full border border-base-200 bg-base-200 px-3 py-0.5 text-[10px] text-base-content/50">
+                              {fmtDateSeparator(m.createdAt)}
+                            </span>
+                          </div>
+                        )}
+                        <div className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${
+                            m.direction === 'outbound'
+                              ? 'rounded-tr-sm bg-brand-500 text-white'
+                              : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
+                          }`}>
+                            {(m.metadata as any)?.audioUrl && (
+                              <audio controls src={(m.metadata as any).audioUrl} className="mb-1 h-10 w-[320px] max-w-full rounded-lg" />
+                            )}
+                            <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
+                            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                              m.direction === 'outbound' ? 'text-white/60' : 'text-base-content/40'
+                            }`}>
+                              <span>{fmtMsgTime(m.createdAt)}</span>
+                              {m.direction === 'outbound' && <Recibo ack={m.ack} />}
+                            </div>
+                          </div>
+                        </div>
+                      </Fragment>
+                    );
+                  });
+                })()}
               </div>
 
               {/* painel timeline */}
