@@ -60,11 +60,19 @@ Para os SQLs idempotentes avulsos em `apps/backend/prisma/*.sql` (ex.:
 `add_support_persona.sql`), rodar via
 `npx prisma db execute --file prisma/<arquivo>.sql --schema prisma/schema.prisma`.
 
-## Deploy DigitalOcean (pendente)
+## Deploy DigitalOcean
 
-- Rodar em App Platform ou Droplet
-- Rotacionar `ANTHROPIC_API_KEY` no deploy
-- Gerar `PORTAL_JWT_SECRET` forte (≥ 32 chars), distinto do `JWT_SECRET`
-- Configurar `NEXA_PUBLIC_URL` com domínio definitivo
-- `TMS_DB_URL` já aponta para DigitalOcean (produção)
-- Rodar `prisma migrate deploy` + `db:generate` antes de subir (ver seção Migrations)
+> ⏳ Em andamento — ver `docs/infra/deploy-runbook.md` para o passo a passo completo.
+
+Checklist pré-deploy:
+
+- [ ] Gerar `PORTAL_JWT_SECRET` forte (≥ 32 chars), distinto do `JWT_SECRET`
+- [ ] Configurar `NEXA_PUBLIC_URL` com domínio definitivo
+- [ ] Rotacionar `ANTHROPIC_API_KEY` no deploy (não reusar a de dev)
+- [ ] Confirmar `TMS_DB_URL` apontando para produção (DigitalOcean)
+- [ ] Rodar `prisma migrate deploy` + `db:generate` antes de subir
+- [ ] Configurar WAHA webhook para o domínio de produção
+- [ ] Desativar `AI_AUTONOMY_ENABLED=false` inicialmente e validar antes de ligar
+- [ ] Confirmar `CORS_ORIGINS` com o domínio de produção
+
+Ver detalhes em `docs/infra/deploy-runbook.md` e `docs/security/secrets-management.md`.

@@ -51,6 +51,7 @@ export type IconName =
   | 'alert'
   | 'archive'
   | 'pulse'
+  | 'clock'
   | 'menu';
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -289,6 +290,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="5" y="8" width="14" height="10" rx="3" />
       <path d="M12 4v4M8 13h.01M16 13h.01" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
     </>
   ),
   menu: (

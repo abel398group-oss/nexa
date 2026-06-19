@@ -1,38 +1,35 @@
 /**
  * ConversationJanitorService
  *
- * Aplica as regras automáticas de fechamento do módulo COMERCIAL:
+ * Regras automáticas de fechamento — roda a cada hora (@Interval).
  *
- *   Regra 1 — opt_out   → fechamento imediato (feito em whatsapp.service.ts)
- *   Regra 3 — WON       → fechamento imediato (feito em conversations.service.ts setOutcome)
- *   Regra 4 — LOST      → fechamento imediato (feito em conversations.service.ts setOutcome)
- *   Regra 2 — Inatividade → 7 dias sem mensagem → CLOSED com outcome=no_response  ← aqui
+ * ── Módulo Comercial (leads) ────────────────────────────────────────────────
+ *   Regra 1 — opt_out      → fechamento imediato (whatsapp.service.ts)
+ *   Regra 3 — WON          → fechamento imediato (conversations.service.ts)
+ *   Regra 4 — LOST         → fechamento imediato (conversations.service.ts)
+ *   Regra 2 — Inatividade  → 7 dias sem mensagem → CLOSED (no_response)  ← closeInactiveLeads
  *
- * Roda a cada hora.
+ * ── Módulo Suporte (ADR 015 D5) ────────────────────────────────────────────
+ *   Regra S1 — Resolvido pela IA + 48h sem retorno → CLOSED (resolved)    ← closeResolvedSupport
+ *   Regra S2 — Ticket aberto + 48h sem resposta    → CLOSED (no_response) ← closeNoResponseSupport
+ *   (Escalado a humano → humano fecha manualmente — fora do escopo do janitor)
  *
- * Ajuste 1: não fechar waiting_internal nem escalated.
- *   waiting_internal = aguardando AÇÃO DA EQUIPE, não inércia do lead.
- *   escalated        = em tratamento humano ativo.
- *   Fechamento nesses casos é responsabilidade da equipe/vendedor.
- *   Janitor age apenas sobre: open | waiting_customer.
+ * Filtros aplicados em todos os branches:
+ *   • Nunca fecha waiting_internal nem escalated (responsabilidade da equipe)
+ *   • Branch comercial: só customerStage='lead'
+ *   • Branch suporte:   só customerStage in ['cliente_ativo', 'cliente_novo']
+ *                       E ticketCategory NOT NULL (ticket classificado)
  *
- * Ajuste 3: não fechar clientes ativos com no_response.
- *   cliente_ativo/cliente_novo usam lógica de suporte (RESOLVED→48h→CLOSED).
- *   Janitor filtra apenas conversas de leads/prospects (customerStage = lead).
- *
- * TODO (débito técnico): substituir check de customerStage por
- *   HiperTmsConnector.getCustomerStatus() quando subir para DigitalOcean.
- *   Hoje usa o campo local customerStage para não bater no banco do TMS em loop.
- *
- * NOTA FUTURA — Módulo de Suporte (quando for iniciar):
- *   Suporte usa fluxo diferente: RESOLVED → aguarda 48h → AUTO CLOSED.
- *   Adicionar branch aqui usando status 'resolved' (a criar no enum).
+ * TODO: substituir check de customerStage por HiperTmsConnector.getCustomerStatus()
+ *   quando subir para DigitalOcean — hoje usa campo local para evitar loop no TMS DB.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
+// Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
+const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
 
 @Injectable()
 export class ConversationJanitorService {
@@ -44,6 +41,8 @@ export class ConversationJanitorService {
   async closeInactiveConversations() {
     // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
     await this.closeResolvedSupport();
+    // ── Suporte: ticket aberto sem resposta do cliente → 48h → CLOSED ────
+    await this.closeNoResponseSupport();
     // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
     await this.closeInactiveLeads();
   }
@@ -83,6 +82,51 @@ export class ConversationJanitorService {
     ]);
 
     this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved)`);
+  }
+
+  // Branch de suporte: fecha tickets com clienteStage ativo que ficaram abertos sem
+  // resposta do cliente por mais de SUPPORT_INACTIVITY_HOURS horas (ADR 015 D5 — 3ª regra).
+  // Diferente do branch "resolved" (que usa autoCloseAt), aqui o cliente NÃO respondeu
+  // às perguntas da Lia — o ticket fica parado em open/waiting_customer.
+  private async closeNoResponseSupport() {
+    const cutoff = new Date(Date.now() - SUPPORT_INACTIVITY_HOURS * 60 * 60 * 1000);
+    const now = new Date();
+
+    const candidates = await this.prisma.aiConversation.findMany({
+      where: {
+        customerStage: { in: ['cliente_ativo', 'cliente_novo'] as any },
+        status: { in: ['open', 'waiting_customer'] as any },
+        ticketCategory: { not: null },   // tem que ser um ticket de suporte classificado
+        lastActivityAt: { lt: cutoff },
+        resolvedAt: null,                // não fechar tickets que já foram resolvidos (usam autoCloseAt)
+      } as any,
+      select: { id: true },
+    });
+
+    if (!candidates.length) return;
+
+    const ids = candidates.map((c: any) => c.id);
+
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'closed' as any, outcome: 'no_response', outcomeAt: now, endedAt: now },
+      }),
+      this.prisma.conversationStageHistory.createMany({
+        data: ids.map((id: any) => ({
+          conversationId: id,
+          fromStatus: 'open',
+          toStatus: 'closed',
+          toOutcome: 'no_response',
+          reason: `suporte_sem_resposta_${SUPPORT_INACTIVITY_HOURS}h`,
+          changedAt: now,
+        })),
+      }),
+    ]);
+
+    this.logger.log(
+      `Suporte: ${candidates.length} ticket(s) sem resposta >${SUPPORT_INACTIVITY_HOURS}h → CLOSED (outcome=no_response)`,
+    );
   }
 
   // Branch comercial original (leads)

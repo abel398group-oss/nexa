@@ -46,10 +46,11 @@ staging    → staging.leads.hipervias.com
 production → leads.hipervias.com
 ```
 
-## Pendências (ADR 013)
+## Pendências
 
-- Formalizar os jobs de deploy (hoje a CI cobre build/test/validate).
-- Estratégia de migração de secrets e convivência com o MVP n8n na transição.
+- [ ] Adicionar job de deploy automático (main → production) no GitHub Actions
+- [ ] Configurar secrets do repositório (ANTHROPIC_API_KEY, TMS_DB_URL, etc.) no GitHub → Settings → Secrets
+- [ ] Estratégia de desligamento do MVP n8n após validar paridade na nova plataforma
 
 ## Relacionados
 

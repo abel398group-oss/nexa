@@ -10,7 +10,7 @@ Primeiro conector: HiperTMS.
 | Pasta | Conteúdo |
 |---|---|
 | `_templates/` | Modelos de ADR, PRD e nota |
-| `product/` | Visão, roadmap e estratégia de produto |
+| `product/` | Visão, roadmap e estratégia de produto (`product/strategy/` para sumário executivo e monetização) |
 | `overview/` | Visão de sistema, roadmap e schema (alto nível) |
 | `domain/` | Glossário e linguagem ubíqua |
 | `features/` | PRDs de cada módulo do sistema |
@@ -71,7 +71,13 @@ Pontos de partida:
 - `security/security-overview.md`
 - `api/api-standards.md`
 
-## Gap documental
+## Manuais do usuário
 
-Comparação do padrão documental com o HiperTMS e roadmap de docs em
-[`GAP_DOCUMENTACAO.md`](GAP_DOCUMENTACAO.md).
+Guias operacionais para quem usa o painel:
+
+- [01 — Primeiros Passos](manuais/01-primeiros-passos.md) — acesso, dashboard, conectar WhatsApp, ativar Lia
+
+## Gap documental e análise comparativa
+
+- [`GAP_DOCUMENTACAO.md`](GAP_DOCUMENTACAO.md) — comparação com padrão HiperTMS (atualizado 2026-06-19)
+- [`ANALISE_HIPERTMS_GAPS.md`](ANALISE_HIPERTMS_GAPS.md) — features do TMS adaptáveis ao Nexa (2026-06-18)

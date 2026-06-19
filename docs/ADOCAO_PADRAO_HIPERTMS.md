@@ -85,8 +85,14 @@ alcançar o interior de uma feature.
 
 ## Status
 
-- [x] Passo 1 — Estrutura FSD + feature `contact` ✅ (typecheck limpo)  ← **concluído 2026-06-11**
-- [ ] Passo 2 — TanStack Query
+**Última atualização:** 2026-06-19
+
+- [x] Passo 1 — Estrutura FSD + feature `contact` ✅ (typecheck limpo) — **concluído 2026-06-11**
+- [ ] Passo 2 — TanStack Query ← **próximo a executar**
 - [ ] Passo 3 — react-hook-form + Zod
-- [ ] Passo 4 — Replicar para demais features
-- [ ] Passo 5 — Storybook + e2e + convenções
+- [ ] Passo 4 — Replicar para demais features (`campaign`, `seller`, `knowledge`, `conversation`, `playbook`, `user`, `metrics`)
+- [ ] Passo 5 — Storybook + e2e (Playwright) + convenções
+
+> **Nota (2026-06-19):** o Storybook já está parcialmente implementado (`apps/frontend/.storybook/`)
+> com stories para Button, Input, Alert, StatusBadge, Tabs e tokens. O Passo 5 contempla
+> expandir o catálogo e adicionar os testes E2E — o setup de Playwright está pendente.

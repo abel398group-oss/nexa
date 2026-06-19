@@ -1,190 +1,261 @@
-# System Overview — Hipervias Leads (Automação Comercial via WhatsApp)
+# System Overview — Nexa
 
-> Documento de visão geral do sistema. Descreve o propósito, arquitetura, componentes,
-> fluxos principais e integrações. Segue o padrão de documentação do HiperTMS v12.
+> Visão geral da plataforma. Para o contexto externo (quem usa e com o que integra) ver
+> `docs/architecture/c4-context.md`; para o detalhamento interno ver `c4-container.md`
+> e `docs/architecture/codebase-structure.md`.
 
-> **⚠️ Este documento descreve o MVP n8n em produção (sistema 1 de 2).** Há uma nova
-> plataforma (NestJS + React + Prisma) em construção em paralelo, ainda no Sprint 1 —
-> ver `README.md` (raiz) e `docs/SPRINT_PLAN.md`. **Não desligar este MVP** até a nova
-> plataforma cobrir as mesmas funções (conversas, IA, distribuição de leads).
-
-**Status:** MVP funcional (pré-produção)
+**Status:** Fase 4 — Produção (plataforma completa em operação local; deploy DigitalOcean em curso)
 **Última atualização:** 2026-06
 
 ---
 
 ## 1. Propósito
 
-Plataforma de **automação de vendas e atendimento B2B via WhatsApp** para a Hipervias.
-O sistema capta leads, classifica intenção com IA, responde automaticamente, distribui
-leads quentes para vendedores, faz follow-up automático e monitora a qualidade do próprio
-atendimento.
+**Nexa** é uma plataforma SaaS multi-tenant de automação comercial e suporte B2B com IA. O núcleo é
+a **Lia** — assistente de IA que opera sobre WhatsApp (e e-mail) para:
 
-O objetivo é **escalar a prospecção comercial** mantendo um atendimento humano, cordial e
-contextualizado, sem depender de um time grande de SDRs.
+1. **Vender** o HiperTMS: qualificar leads, recomendar plano, conduzir até o cadastro.
+2. **Suportar** clientes TMS: responder dúvidas (CT-e, MDF-e, precificação) via WhatsApp e portal web.
 
----
-
-## 2. Visão geral
-
-O sistema é construído sobre uma **camada de orquestração (n8n)** que conecta:
-
-- **WhatsApp** (via WAHA) — canal de entrada e saída
-- **IA (Claude Haiku)** — classificação de intenção e geração de respostas
-- **PostgreSQL** — persistência de leads, conversas, campanhas e métricas
-
-Não é "um robô de WhatsApp" — é uma **plataforma de automação comercial** com:
-qualificação por score, distribuição de leads, follow-up, observabilidade de qualidade
-e controle de saúde dos números de envio.
+Princípio inviolável: **a IA conversa e recomenda; o backend decide e executa.**
 
 ---
 
-## 3. Componentes principais
-
-### Orquestração (n8n)
-
-- **n8n 1.123.49** em **modo fila** (main + worker + Redis)
-- 4 workflows independentes (ver `docs/prd/workflows.md`)
-- Persistência de workflows e execuções no PostgreSQL
-
-### Gateway WhatsApp (WAHA)
-
-- WAHA self-hosted (`http://waha:3000`)
-- Engine GOWS
-- Webhook de entrada → n8n
-- API de envio (`POST /api/sendText`)
-
-### IA (Anthropic Claude)
-
-- Modelo: `claude-haiku-4-5-20251001`
-- Usos:
-  1. **Classificação + resposta** ao lead (workflow Inbound)
-  2. **Auditoria de qualidade** das conversas (workflow Supervisor)
-- Base de conhecimento dinâmica injetada no prompt (tabela `ai_knowledge_base`)
-
-### Banco de dados (PostgreSQL 16)
-
-- Banco principal do projeto
-- Compartilhado com o n8n (tabelas próprias separadas das tabelas internas do n8n)
-
-### Cache / Fila (Redis)
-
-- Suporta o modo fila do n8n (execução distribuída via worker)
-
----
-
-## 4. Arquitetura em alto nível
+## 2. Arquitetura de alto nível
 
 ```
-                  ┌──────────────┐
-   Lead WhatsApp  │     WAHA     │  envio/recebimento
-        ⇅         └──────┬───────┘
-                         │ webhook / API
-                  ┌──────┴───────┐
-                  │     n8n      │  orquestração (4 workflows)
-                  │  main+worker │
-                  └──┬────────┬──┘
-            ┌────────┘        └────────┐
-     ┌──────┴──────┐          ┌────────┴────────┐
-     │ Claude API  │          │   PostgreSQL    │
-     │ (Anthropic) │          │ (leads, convos, │
-     └─────────────┘          │  métricas)      │
-                              └─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                      NEXA PLATFORM                           │
+│                                                              │
+│  ┌────────────────────┐    ┌──────────────────────────────┐ │
+│  │   Frontend (React) │    │       Backend (NestJS)        │ │
+│  │   :5174 / web      │◄──►│       :3001 / /api            │ │
+│  │   Painel operador  │    │   application + presentation  │ │
+│  └────────────────────┘    │   + infra + shared            │ │
+│                            └──────────┬───────────────────┘ │
+│                                       │                      │
+│                  ┌────────────────────┼─────────────┐       │
+│                  │                    │             │        │
+│           ┌──────▼──────┐   ┌────────▼──────┐ ┌───▼──────┐ │
+│           │ PostgreSQL  │   │    Redis       │ │  Prisma  │ │
+│           │ 16 (pgvec.) │   │    :6380       │ │  ORM     │ │
+│           │ :5433       │   └────────────────┘ └──────────┘ │
+│           └─────────────┘                                    │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ integrações externas
+         ┌────────────────┼─────────────────────┐
+         │                │                     │
+  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────────▼──────────┐
+  │    WAHA     │  │  Anthropic  │  │      HiperTMS        │
+  │ WhatsApp GW │  │ (Claude AI) │  │  (Connector read +   │
+  │  :3018      │  │  Haiku API  │  │   ações via backend) │
+  └─────────────┘  └─────────────┘  └─────────────────────┘
 ```
 
 ---
 
-## 5. Workflows (resumo)
+## 3. Componentes
 
-| Workflow | Gatilho | Função |
-|---|---|---|
-| **WA Leads - Inbound** | Webhook (ativo 24h) | Recebe, classifica e responde mensagens com IA |
-| **WA Leads - Sender** | Manual | Dispara campanhas com personalização e limites |
-| **WA Leads - Follow Up** | Manual (agendamento futuro) | Recontata leads sem resposta (24h/72h) |
-| **WA Supervisor - IA** | Manual (agendamento futuro) | Audita qualidade das conversas com 2ª IA |
+### 3.1 Backend — NestJS (`apps/backend`)
 
-Detalhe completo em `docs/prd/workflows.md`.
+Arquitetura em camadas (DDD-influenciada):
+
+- **`application/<feature>/`** — serviços e regras de negócio:
+  - `agents/` — Router, Sales, Support, Diagnostic, Resolution, Escalation,
+    CaseClassifier, Conversation, Supervisor
+  - `actions/` — action-policy (IA solicita; backend executa)
+  - `connectors/` — interface plugável + HiperTMSConnector
+  - `contacts/`, `conversations/`, `events/`, `knowledge/`, `playbook/`
+  - `handoff/`, `followup/`, `sellers/`, `sender/` (campanhas), `email/`, `whatsapp/`
+  - `metrics/`, `notifications/`, `opportunities/` (pipeline de vendas)
+  - `portal/` — sessão + chamados do Portal de Suporte
+  - `auth/`, `users/`, `admin/`
+- **`presentation/http/<feature>/`** — controllers + DTOs (prefixo `/api`)
+- **`presentation/ws/`** — WebSocket (inbox em tempo real, socket.io)
+- **`infra/prisma/`** — PrismaService; **`infra/tms/`** — leitura do HiperTMS
+- **`shared/`** — transversais: ai (Anthropic client), governance (kill switch),
+  auth (JWT + RBAC + PlatformAdminGuard), tenant (EffectiveTenantInterceptor),
+  config (validateEnv), audit, middleware (correlationId), dto, waha, decorators
+
+### 3.2 Frontend — React (`apps/frontend`)
+
+React 18 + Vite 5 + TypeScript + Tailwind 3. Páginas: Login, Landing, Dashboard (KPIs),
+Inbox (conversas em tempo real + socket.io), Suporte + Config de Suporte + Clientes,
+Contatos (CRM + import CSV), Campanhas, Knowledge Base, Vendedores, Saúde dos Números,
+Usuários & Acessos, Playbook, Tokens Dev, Portal do Cliente.
+
+Design system próprio em `components/ui/` (~30 componentes) documentado no **Storybook**.
+Dark mode via `html.dark`. Auth via cookie HttpOnly.
+
+### 3.3 Banco de dados — PostgreSQL 16
+
+Prisma ORM + pgvector. Schema e migrações em `apps/backend/prisma/`
+(espelhados em `docs/schema/`). Entidades principais: `User`, `Session`, `AuditLog`,
+`Tenant`, `Contact`, `AiConversation`, `AiMessage`, `AiKnowledgeBase`, `Seller`,
+`Campaign`, `CampaignTarget`, `SenderNumber`, `FollowUp`, `DomainEvent`, `Product`,
+`Credential`, `AiBillingRequest`, `Playbook`, `Portal*`.
+
+### 3.4 Cache — Redis `:6380`
+
+Rate limiting, sessões, filas.
+
+### 3.5 WhatsApp Gateway — WAHA `:3018`
+
+Container self-hosted. Webhook de entrada → backend. API de envio (texto + arquivo).
+Dois webhooks paralelos (WAHA → Nexa; legado n8n ainda ativo enquanto MVP não for desligado).
+
+### 3.6 IA — Anthropic Claude
+
+Modelo: `claude-haiku-4-5-20251001` (configurável via `AI_MODEL`). Temperatura baixa (0–0.4).
+Rastreio de tokens e custo por chamada. RAG textual sobre `AiKnowledgeBase` aprovada.
+Kill switch de autonomia persistido em `autonomy_setting`.
 
 ---
 
-## 6. Fluxos core de negócio
+## 4. A Lia — Arquitetura de Agentes
 
-### 6.1 Inbound (lead manda mensagem)
+Múltiplos agentes especializados coordenados pelo **Router**. Nenhum agente chama
+outro diretamente; todas as ações externas passam pelo backend.
 
-```
-Webhook → Normaliza (extrai telefone, detecta mídia/opt-out)
-  → Se mídia → pede texto
-  → Se válido → rate limit (anti-spam)
-  → registra interação → busca conhecimento + histórico
-  → Claude classifica intenção + gera resposta
-  → salva classificação
-  → Se opt-out → registra e bloqueia
-  → Senão → qualifica lead → delay humano → responde
-            → se score >= 70 → cria oportunidade
-            → distribui vendedor (round robin) → notifica
-```
-
-### 6.2 Outbound (campanha)
-
-```
-Trigger manual → horário comercial (7h-19h)
-  → reset contador diário → busca contatos (respeitando cota do number_pool)
-  → loop: log → personaliza msg (nome + saudação por horário)
-          → delay randômico → envia → incrementa contador
-```
-
-### 6.3 Follow-up
-
-```
-Trigger → busca quem recebeu mas não respondeu (24h / 72h)
-  → envia mensagem de recontato → registra
-```
-
-### 6.4 Supervisor (auditoria)
-
-```
-Trigger → busca conversas do dia
-  → Claude analisa cada conversa (nota, repetição, confusão, sugestão)
-  → salva auditoria em ai_quality_audits
-```
-
----
-
-## 7. Integrações externas
-
-| Sistema | Propósito |
+| Agente | Papel |
 |---|---|
-| **WAHA** | Gateway WhatsApp (envio/recebimento) |
-| **Anthropic Claude API** | Classificação de intenção, geração de resposta, auditoria |
+| **Router** | Classifica intenção, detecta risco jurídico, roteia |
+| **Conversation** | Conduz o diálogo geral |
+| **Sales** | Qualifica leads, trata objeções, solicita link de pagamento |
+| **Support** | Responde dúvidas de produto via RAG da KB |
+| **Diagnostic** | Diagnóstico guiado de chamados (playbooks) |
+| **Resolution** | Propõe/aplica solução conhecida |
+| **CaseClassifier** | Classifica o chamado de suporte |
+| **Escalation** | Formaliza escalada para humano |
+| **Supervisor** | Valida entrada (injection) e saída (alucinação/LGPD/tom) |
+
+Guardrails: action policy (ações irreversíveis exigem humano), kill switch em runtime,
+confiança mínima 0.60, anti-loop conversacional (máx 3 perguntas seguidas).
+
+Ver detalhes em `docs/ai/ai-agents.md` e `docs/ai/ai-guardrails.md`.
 
 ---
 
-## 8. Diferenciais do sistema
+## 5. Fluxos principais
 
-- **IA Supervisora**: uma 2ª IA audita o atendimento da 1ª (qualidade automática)
-- **Monitoramento interno de reclamações**: detecta e categoriza reclamações sem o cliente saber
-- **Controle de saúde dos números** (`number_pool`): limite diário/horário, aquecimento, proteção contra bloqueio
-- **Tratamento de casos reais**: mídia (áudio/foto), formato `@lid` do WhatsApp novo, ofensas, saudação por horário
-- **Follow-up automático** em 2 níveis
-- **Round robin** de vendedores com dedup de notificação
+### 5.1 Inbound (lead manda mensagem no WhatsApp)
+
+```
+WAHA webhook → normaliza (telefone, detecta mídia/opt-out)
+  → rate limit + anti-spam
+  → registra/atualiza contato
+  → Router classifica intenção + risco jurídico
+  → Supervisor valida entrada
+  → agente especializado (Sales/Support/Escalation)
+  → KB RAG + contexto do cliente (via TMS Connector se cliente ativo)
+  → Supervisor valida saída
+  → se autonomia ON + confiança alta → auto-envio
+  → se lead score ≥ 70 → abre oportunidade + notifica vendedor (round robin)
+```
+
+### 5.2 Portal de suporte (cliente acessa via web)
+
+```
+Cliente → PortalPage (JWT de sessão próprio)
+  → abre chamado ou consulta histórico
+  → Lia responde automaticamente ou escala para humano
+  → operador vê no Inbox (SupportPage)
+```
+
+### 5.3 Campanha (disparo em lote)
+
+```
+Operador configura campanha (template, link/mídia, segmento)
+  → SenderService.tick() (cron) → horário comercial (7h–19h)
+  → respeita limit diário/hora (SenderNumber anti-ban)
+  → pula opt-out e quem já respondeu
+  → delay randômico entre envios
+  → registra CampaignTarget com status
+```
+
+### 5.4 Follow-up automático
+
+```
+Cron → busca contatos sem resposta (24h / 72h, máx 2 tentativas)
+  → envia mensagem de recontato → registra FollowUp
+```
+
+### 5.5 Escalada para humano
+
+```
+Router detecta: risco jurídico | confiança < 0.60 | anti-loop | Escalation agent
+  → cria `ai_conversations.status = 'escalated'`
+  → emite evento → notifica operador (in-app + WhatsApp do vendedor)
+  → operador assume a conversa no Inbox
+```
 
 ---
 
-## 9. Pendências conhecidas (pré-produção)
+## 6. Multi-tenancy e Platform Admin
 
-- API keys ainda hardcoded → migrar para variáveis de ambiente
-- HTTPS + autenticação do n8n
-- Firewall / hardening do servidor (Digital Ocean)
-- Backup automático do PostgreSQL
-- Agendamento automático de Follow-up e Supervisor (criar via UI do n8n)
-- Reconhecimento de áudio (Whisper) — planejado
-- Frontend / dashboard — planejado (queries prontas)
+Cada cliente (transportadora) é um **Tenant** isolado. `tenantId` deriva sempre do
+contexto autenticado — nunca do body ou da fala do lead.
+
+O **Platform Admin** (sem tenant) pode atuar como qualquer cliente via
+`x-acting-tenant-id` (validado pelo `EffectiveTenantInterceptor`). Ações irreversíveis
+exigem `x-acting-override` ("quebra de vidro") e são auditadas. Ver ADR 025 e
+`docs/features/platform-admin/`.
+
+---
+
+## 7. Integração com HiperTMS
+
+O Nexa não reimplementa o TMS: consome-o via **Connector** (ADR 008/010).
+
+- **Leitura**: `tms-lookup.service` acessa o banco do HiperTMS via `TMS_DB_URL`
+  (read-only) — planos, contratos, dados do cliente.
+- **Ações**: solicitadas ao backend do TMS via API autenticada (`TMS_API_BASE_URL`
+  + `TMS_SERVICE_TOKEN`) — ex.: criar cobrança.
+- O HiperTMS é a fonte de verdade de billing/contrato; o Nexa não duplica esses dados
+  (ADR 011).
+
+---
+
+## 8. Observabilidade
+
+- **Logs**: pino estruturado + `correlationId` por request.
+- **Health**: `/health`, `/health/live`, `/health/ready` (503 se DB cair).
+- **Swagger**: `/api/docs` (dev/staging; desativado em produção).
+- **Dashboard**: contatos, conversas, % IA autônoma, tokens + custo (US$), DLQ.
+- **Auditoria**: `AuditLog` para toda ação de platform admin; `ai_actions` para
+  cada chamada de agente.
+
+---
+
+## 9. Estado atual (Fase 4 — Produção)
+
+| Módulo | Estado |
+|---|---|
+| Backend NestJS (todos os módulos) | ✅ Implementado |
+| Frontend (todas as telas) | ✅ Implementado + Storybook |
+| Multi-agent Lia (9 agentes) | ✅ Implementado |
+| RAG textual (KB aprovada) | ✅ Implementado |
+| Platform Admin (acting-as + break-glass) | ✅ Implementado |
+| Portal de Suporte (web) | ✅ Implementado |
+| Campanhas + anti-ban + follow-up | ✅ Implementado |
+| Kill switch de autonomia | ✅ Implementado |
+| Deploy DigitalOcean | ⏳ Em andamento |
+| Testes automatizados | 🔴 Parcial (70 testes; e2e ausente) |
+| Canal e-mail (além do SMTP) | ❌ Planejado (ADR 021 + ver ANALISE_HIPERTMS_GAPS) |
+| Motor proativo (Lia age sem trigger) | ❌ Planejado |
+| Analytics / Relatórios | ❌ Planejado |
 
 ---
 
 ## 10. Documentos relacionados
 
-- `docs/adr/` — decisões técnicas (arquitetura, banco, frontend)
-- `docs/prd/` — especificação das features
-- `docs/prd/workflows.md` — detalhe dos 4 workflows
-- `docs/overview/database-schema.md` — modelo de dados
+- **Código**: `CLAUDE.md` (raiz) — guia operacional para agentes de IA
+- **Decisões**: `docs/adr/` — 27 ADRs por domínio
+- **IA**: `docs/ai/` — agentes, guardrails, RAG, contexto, memória, revisão
+- **Arquitetura**: `docs/architecture/` — codebase, frontend, C4
+- **API**: `docs/api/` — padrões, erros, nomenclatura
+- **Segurança**: `docs/security/` — visão geral, segredos
+- **Infra**: `docs/infra/` — deploy, CI/CD, migrations
+- **Schema**: `docs/schema/` — Prisma, migrations, runtime
+- **Features**: `docs/features/` e `docs/prd/` — PRDs por módulo
+- **Gaps & roadmap**: `docs/ANALISE_HIPERTMS_GAPS.md` (2026-06-18)

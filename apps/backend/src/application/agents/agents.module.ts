@@ -8,6 +8,7 @@ import { CaseClassifierAgentService } from './case-classifier-agent.service';
 import { DiagnosticAgentService } from './diagnostic-agent.service';
 import { ResolutionAgentService } from './resolution-agent.service';
 import { EscalationAgentService } from './escalation-agent.service';
+import { TicketIntelligenceService } from './ticket-intelligence.service';
 import { KnowledgeModule } from '@/application/knowledge/knowledge.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { SellersModule } from '@/application/sellers/sellers.module';
@@ -28,6 +29,8 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
     DiagnosticAgentService,
     ResolutionAgentService,
     EscalationAgentService,
+    // Intelligence loop — ADR 019
+    TicketIntelligenceService,
     // Agentes principais
     SupportAgentService,
     RouterAgentService,
@@ -35,6 +38,6 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
     SupervisorAgentService,
     ConversationAgentService,
   ],
-  exports: [SupportAgentService, ConversationAgentService],
+  exports: [SupportAgentService, ConversationAgentService, TicketIntelligenceService],
 })
 export class AgentsModule {}

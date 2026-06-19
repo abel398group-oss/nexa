@@ -44,10 +44,9 @@ export class HiperTmsConnector implements Connector {
       return this.defaultPlans(); // TMS não configurado — usa catálogo conhecido
     }
     try {
-      const tenantId = process.env.TMS_TENANT_ID ?? 'default';
-      const url =
-        `${process.env.TMS_API_BASE_URL}/api/plans` +
-        `?tenantId=${encodeURIComponent(tenantId)}`;
+      // /nexa/plans retorna shape compatível com o Connector: { plans: [{code, name, price, maxUsers, features}] }
+      // /api/plans retorna a shape interna do ORM (id/slug/tier) — não usar aqui.
+      const url = `${process.env.TMS_API_BASE_URL}/nexa/plans`;
 
       const res = await fetch(url, {
         headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },

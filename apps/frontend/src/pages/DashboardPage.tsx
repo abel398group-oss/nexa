@@ -24,6 +24,16 @@ interface ActivityPoint {
   conversations: number;
 }
 
+interface SupportOverview {
+  total: number;
+  resolvedWithoutEscalation: { count: number; pct: number };
+  escalated: { count: number; pct: number };
+  avgTimeToResolutionHours: number | null;
+  volumeByCategory: Record<string, number>;
+  volumeByPriority: Record<string, number>;
+  escalationRateByCategory: Record<string, number>;
+}
+
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
   conversations: { total: number; byStatus: Record<string, number>; byOutcome: Record<string, number> };
@@ -91,12 +101,19 @@ export function DashboardPage() {
     queryFn: async () => (await api.get<{ series: ActivityPoint[] }>('/metrics/timeseries', { params: params() })).data,
     refetchInterval: 10_000,
   });
+  const supportQ = useQuery({
+    queryKey: ['metrics-support', range.from, range.to],
+    queryFn: async () => (await api.get<SupportOverview>('/metrics/support', { params: params() })).data,
+    refetchInterval: 30_000,
+  });
 
   const m = overviewQ.data;
   const series = seriesQ.data?.series ?? null;
+  const sup = supportQ.data;
   const refresh = () => {
     overviewQ.refetch();
     seriesQ.refetch();
+    supportQ.refetch();
   };
 
   if (!m) return (
@@ -317,6 +334,55 @@ export function DashboardPage() {
           hint="eventos com falha"
         />
       </div>
+
+      {/* ── Suporte (ADR 015/016) ─────────────────────────────────── */}
+      {sup && sup.total > 0 && (
+        <>
+          <SectionTitle>Suporte — Tickets</SectionTitle>
+          <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <ConversationMetricsCard
+              label="Total de Tickets"
+              value={sup.total}
+              icon="inbox"
+              accent="brand"
+              hint="no período selecionado"
+            />
+            <ConversationMetricsCard
+              label="Resolvido s/ Escalonamento"
+              value={`${sup.resolvedWithoutEscalation.pct}%`}
+              icon="check"
+              accent="green"
+              highlight={sup.resolvedWithoutEscalation.pct >= 70}
+              hint={`${sup.resolvedWithoutEscalation.count} ticket(s)`}
+            />
+            <ConversationMetricsCard
+              label="Escalados"
+              value={sup.escalated.count}
+              icon="alert"
+              accent={sup.escalated.pct > 30 ? 'red' : 'orange'}
+              highlight={sup.escalated.count > 0}
+              hint={`${sup.escalated.pct}% do total`}
+            />
+            <ConversationMetricsCard
+              label="Tempo Médio (h)"
+              value={sup.avgTimeToResolutionHours != null ? `${sup.avgTimeToResolutionHours}h` : '—'}
+              icon="clock"
+              accent="blue"
+              hint="tempo até resolução"
+            />
+          </div>
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="card p-4">
+              <div className="mb-2 text-sm font-semibold text-base-content/70">Volume por categoria</div>
+              {chips(sup.volumeByCategory)}
+            </div>
+            <div className="card p-4">
+              <div className="mb-2 text-sm font-semibold text-base-content/70">Volume por prioridade</div>
+              {chips(sup.volumeByPriority)}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Detalhes ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
