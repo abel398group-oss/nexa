@@ -8,6 +8,23 @@
 
 ---
 
+## ⚠️ Status atual — DOIS sistemas coexistindo
+
+Hoje existem **dois sistemas Nexa em paralelo** — não confundir:
+
+1. **MVP em produção (n8n + WAHA + Claude Haiku)** — é o que está rodando de verdade,
+   atendendo leads via WhatsApp agora. Descrito em `docs/overview/system-overview.md`.
+   Status: pré-produção, com pendências de hardening (ver seção 9 daquele documento).
+2. **Nova plataforma (este repo: NestJS + React + Prisma)** — está em construção,
+   atualmente no Sprint 1 (fundação de dados), conforme `docs/SPRINT_PLAN.md`. Ainda **não
+   tem `apps/backend` nem `apps/frontend` funcionais.**
+
+**Regra:** o MVP n8n continua rodando e não deve ser desligado até a nova plataforma
+assumir as funções equivalentes (ver `docs/SPRINT_PLAN.md`, premissas). Este README descreve
+a *nova plataforma* (item 2); para o sistema em produção hoje, ver `docs/overview/system-overview.md`.
+
+---
+
 ## Documentação
 A arquitetura completa (ADRs, PRDs, schema, roadmap, sprint plan) está em:
 `./docs/` — começar por `docs/README.md` → `docs/ANALISE_CONSOLIDADA.md`.

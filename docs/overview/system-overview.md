@@ -3,6 +3,11 @@
 > Documento de visão geral do sistema. Descreve o propósito, arquitetura, componentes,
 > fluxos principais e integrações. Segue o padrão de documentação do HiperTMS v12.
 
+> **⚠️ Este documento descreve o MVP n8n em produção (sistema 1 de 2).** Há uma nova
+> plataforma (NestJS + React + Prisma) em construção em paralelo, ainda no Sprint 1 —
+> ver `README.md` (raiz) e `docs/SPRINT_PLAN.md`. **Não desligar este MVP** até a nova
+> plataforma cobrir as mesmas funções (conversas, IA, distribuição de leads).
+
 **Status:** MVP funcional (pré-produção)
 **Última atualização:** 2026-06
 
