@@ -39,6 +39,7 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: 'Suporte', items: [
     { to: '/support', label: 'Inbox de Suporte', ic: 'support', perm: 'inbox' },
+    { to: '/support/dashboard', label: 'Dashboard', ic: 'dashboard', perm: 'dashboard' },
     { to: '/support/clients', label: 'Clientes', ic: 'contacts', perm: 'inbox' },
     { to: '/support/config', label: 'Config de Suporte', ic: 'bot', perm: 'ai_control' },
   ] },
@@ -55,6 +56,7 @@ const titles: Record<string, string> = {
   '/dashboard': 'Painel',
   '/inbox': 'Inbox de Vendas',
   '/support': 'Inbox de Suporte',
+  '/support/dashboard': 'Dashboard de Suporte',
   '/support/clients': 'Clientes',
   '/support/config': 'Config de Suporte',
   '/contacts': 'Contatos',

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { HiperTmsConnector } from '@/application/connectors/hipertms.connector';
 import { TicketCategory } from './case-classifier-agent.service';
+import { getPlaybook } from './support-playbooks.const';
 
 export interface DiagnosticResult {
   rootCause: string | null;           // causa-raiz identificada (ou null se inconclusivo)
@@ -76,11 +77,18 @@ export class DiagnosticAgentService {
       ? `\nDados do TMS:\n${JSON.stringify(diagnosticData, null, 2)}`
       : '\nNenhum dado adicional disponível no TMS.';
 
+    // Carrega playbook determinístico para a categoria (ADR 017).
+    // Se existir, injeta os passos no prompt → diagnóstico previsível e auditável.
+    const pb = getPlaybook(input.category);
+    const playbookCtx = pb
+      ? `\nPLAYBOOK DETERMINÍSTICO — siga esta sequência (não improvise):\nNome: ${pb.name}\n${pb.steps.join('\n')}\n${pb.escalate?.length ? `Escalar imediatamente se detectar: ${pb.escalate.join(' | ')}` : ''}`
+      : '';
+
     const system = `Você é um agente diagnóstico do suporte HiperTMS.
 Seu papel: identificar a causa-raiz do problema com base na mensagem, histórico e dados do TMS.
 Regra: NUNCA invente dados. Se não tiver dados suficientes, liste as perguntas necessárias.
 Regra: NÃO resolva — apenas diagnostique. A resolução é do ResolutionAgent.
-
+${playbookCtx}
 SEGURANÇA E PRIVACIDADE (obrigatório):
 - NUNCA peça dados pessoais ou de identificação ao cliente: nome, CNPJ, CPF, e-mail, telefone, senha.
   A identidade vem do login/contexto do sistema, NUNCA do que a pessoa digita no WhatsApp (LGPD + anti-fraude).
@@ -95,7 +103,7 @@ PERGUNTAS (questionsToAsk):
 Responda APENAS com JSON (sem markdown):
 {
   "rootCause": "<causa-raiz ou null>",
-  "playbook": "<nome do playbook ou null>",
+  "playbook": "${pb?.name ?? '<nome do playbook ou null>'}",
   "suggestedAction": "<orientação ou null>",
   "needsMoreInfo": false,
   "questionsToAsk": [],

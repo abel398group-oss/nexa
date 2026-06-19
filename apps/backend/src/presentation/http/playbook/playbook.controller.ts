@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
 import { IsArray, IsOptional, IsString } from 'class-validator';
 import { PlaybookService } from '@/application/playbook/playbook.service';
+import { SUPPORT_PLAYBOOKS } from '@/application/agents/support-playbooks.const';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
@@ -34,5 +35,16 @@ export class PlaybookController {
   @Post('reset')
   reset(@CurrentTenant() tenantId: string) {
     return this.playbook.reset(tenantId);
+  }
+
+  /** Retorna os playbooks determinísticos de suporte (read-only, definidos em código). */
+  @Get('support-playbooks')
+  getSupportPlaybooks() {
+    return Object.entries(SUPPORT_PLAYBOOKS).map(([category, pb]) => ({
+      category,
+      name: pb.name,
+      steps: pb.steps,
+      escalate: pb.escalate ?? [],
+    }));
   }
 }

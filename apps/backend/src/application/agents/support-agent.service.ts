@@ -5,6 +5,7 @@ import { CaseClassifierAgentService } from './case-classifier-agent.service';
 import { DiagnosticAgentService } from './diagnostic-agent.service';
 import { ResolutionAgentService } from './resolution-agent.service';
 import { EscalationAgentService } from './escalation-agent.service';
+import { TicketIntelligenceService } from './ticket-intelligence.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 
@@ -38,6 +39,7 @@ export class SupportAgentService {
     private readonly diagnostic: DiagnosticAgentService,
     private readonly resolution: ResolutionAgentService,
     private readonly escalation: EscalationAgentService,
+    private readonly intelligence: TicketIntelligenceService,
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -117,8 +119,22 @@ export class SupportAgentService {
     }
 
     // Se IA resolveu → marca resolvedAt e agenda autoCloseAt (+48h)
+    // Dispara Lúcio (TicketIntelligence) imediatamente — sem esperar o @Interval de 30min
     if (!needsHuman && resol.resolved) {
       await this.markResolved(input.conversationId);
+      if (input.conversationId) {
+        const conv = await this.prisma.aiConversation
+          .findUnique({
+            where: { id: input.conversationId },
+            select: { id: true, tenantId: true, ticketCategory: true, ticketPriority: true, rootCause: true, outcome: true, resolvedAt: true, stageHistory: { where: { toStatus: 'escalated' }, select: { id: true }, take: 1 } },
+          })
+          .catch(() => null);
+        if (conv) {
+          this.intelligence.analyze(conv as any).catch((e: any) =>
+            this.logger.warn(`TicketIntelligence.analyze falhou: ${e?.message}`),
+          );
+        }
+      }
     }
 
     // Persistir campos de ticket na conversa
