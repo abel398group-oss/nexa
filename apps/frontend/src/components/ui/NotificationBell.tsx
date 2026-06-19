@@ -5,6 +5,16 @@ import { Icon } from '@/components/ui/icons';
 
 interface Notif { id: string; type: string; title: string; body: string; link?: string | null; read: boolean; createdAt: string }
 
+function notifIcon(type: string): string {
+  switch (type) {
+    case 'escalation': return '🔴';
+    case 'hot_lead':   return '🔥';
+    case 'complaint':  return '⚠️';
+    case 'opt_out':    return '🚫';
+    default:           return '•';
+  }
+}
+
 function ago(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return 'agora';
@@ -92,7 +102,9 @@ export function NotificationBell() {
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-base-content">{n.title}</span>
+                  <span className="text-sm font-medium text-base-content">
+                    <span className="mr-1">{notifIcon(n.type)}</span>{n.title}
+                  </span>
                   <span className="shrink-0 text-[10px] text-base-content/40">{ago(n.createdAt)}</span>
                 </div>
                 {n.body && <span className="text-xs text-base-content/60">{n.body}</span>}

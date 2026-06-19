@@ -1,6 +1,7 @@
 import {
   Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { Response } from 'express';
@@ -60,6 +61,8 @@ function mapMessage(m: any) {
 }
 
 // Rotas voltadas ao CLIENTE final (portal de suporte). Auth própria (sessão do portal).
+// Limite mais restritivo que o global (30 req/min vs 100) — canal externo/não-operador.
+@Throttle({ default: { limit: 30, ttl: 60000 } })
 @Controller('portal')
 export class PortalController {
   constructor(

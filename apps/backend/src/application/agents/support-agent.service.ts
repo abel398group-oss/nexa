@@ -6,6 +6,7 @@ import { DiagnosticAgentService } from './diagnostic-agent.service';
 import { ResolutionAgentService } from './resolution-agent.service';
 import { EscalationAgentService } from './escalation-agent.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 
 const MODEL = AI_MODEL;
 
@@ -38,6 +39,7 @@ export class SupportAgentService {
     private readonly resolution: ResolutionAgentService,
     private readonly escalation: EscalationAgentService,
     private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async ask(
@@ -102,6 +104,17 @@ export class SupportAgentService {
 
     let draft = escalationDecision.escalate ? escalationDecision.message : resol.draft;
     const needsHuman = escalationDecision.escalate;
+
+    // Notifica a equipe quando há escalonamento (ADR 015 D6 + docs/features/escalation-notifications)
+    if (needsHuman) {
+      const link = input.conversationId ? `/inbox/${input.conversationId}` : undefined;
+      await this.notifications.create(tenantId, {
+        type: 'escalation',
+        title: '🔴 Escalonamento — atendimento humano necessário',
+        body: `Categoria: ${classification.category} · Prioridade: ${classification.priority} · Motivo: ${escalationDecision.reason ?? 'não especificado'}`,
+        link,
+      });
+    }
 
     // Se IA resolveu → marca resolvedAt e agenda autoCloseAt (+48h)
     if (!needsHuman && resol.resolved) {

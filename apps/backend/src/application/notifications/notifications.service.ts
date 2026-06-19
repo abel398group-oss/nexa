@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 export interface CreateNotification {
-  type: 'hot_lead' | 'complaint' | 'opt_out' | 'info';
+  type: 'hot_lead' | 'complaint' | 'opt_out' | 'info' | 'escalation';
   title: string;
   body?: string;
   link?: string;
