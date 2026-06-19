@@ -5,8 +5,14 @@ export interface TicketLike {
   status?: string | null;
   customerStage?: string | null;
   ticketCategory?: string | null;
+  sourceChannel?: string | null;
 }
 
 export function isSupportTicket(c: TicketLike): boolean {
-  return !!c.ticketCategory || c.customerStage === 'cliente_ativo' || c.status === 'escalated';
+  return (
+    !!c.ticketCategory ||
+    c.customerStage === 'cliente_ativo' ||
+    c.status === 'escalated' ||
+    c.sourceChannel === 'portal'
+  );
 }

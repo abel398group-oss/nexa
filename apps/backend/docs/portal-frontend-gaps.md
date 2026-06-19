@@ -30,9 +30,14 @@ ser reconstruído (ver seção 1).
 
 ## 2. Gaps — tarefas para o squad
 
-### Gap 1 — CRÍTICO: tickets portal nunca aparecem no Inbox de Suporte
+### Gap 1 — ✅ RESOLVIDO (2026-06-19) — CRÍTICO: tickets portal nunca aparecem no Inbox de Suporte
 
 **Arquivo:** `apps/frontend/src/shared/lib/conversation.ts`
+
+> Fix aplicado: `sourceChannel` adicionado à interface `TicketLike` e à condição de
+> `isSupportTicket()` exatamente como especificado abaixo. Validado contra o bug real
+> reportado (cliente "Vale Cargopress" / Fabio Ogawa, chamado aberto via portal não
+> aparecia no Inbox de Suporte). `portal-tickets.service.spec.ts` (5/5) segue passando.
 
 
 `isSupportTicket()` classifica uma conversa como suporte com base em `ticketCategory`,

@@ -217,9 +217,13 @@ export class ConversationAgentService {
 
     // ── GATE DE CONFIANÇA (ADR 003 / guardrails §5): em 1º contato ambíguo (router com
     // baixa confiança), pedir esclarecimento em vez de assumir a intenção e despejar pitch.
+    // Identidade já resolvida (handoff/portal/TMS lookup) → pula o gate: não faz sentido
+    // perguntar "é cliente ou prospect?" pra quem já chegou autenticado/identificado (ADR 026).
+    const identityKnown = !!handoffContext || !!input.portalIdentity || !!tmsCustomer;
     const clarify =
       route.needsClarification === true &&
       !liaAlreadyTalked &&
+      !identityKnown &&
       (route.agent === 'sales' || route.agent === 'support');
 
     if (clarify) {
