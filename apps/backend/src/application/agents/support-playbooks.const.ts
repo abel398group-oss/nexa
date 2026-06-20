@@ -140,7 +140,20 @@ export const SUPPORT_PLAYBOOKS: Record<string, SupportPlaybook> = {
   },
 };
 
-/** Retorna o playbook para a categoria, ou undefined se não houver. */
+/**
+ * Aliases: CaseClassifier usa nomes diferentes dos playbooks em alguns casos.
+ * Este mapa normaliza antes de buscar, evitando playbooks mortos.
+ * Ex.: classifier emite "frete" → playbook está em "precificacao".
+ */
+const CATEGORY_ALIASES: Record<string, string> = {
+  frete:        'precificacao',   // CaseClassifier: frete → Playbook: precificacao
+  usuarios:     'acesso',         // CaseClassifier: usuarios → Playbook: acesso
+  erro_sistema: 'bug',            // CaseClassifier: erro_sistema → Playbook: bug
+  cadastro:     'treinamento',    // CaseClassifier: cadastro → sem playbook específico, usa treinamento
+};
+
+/** Retorna o playbook para a categoria (com alias automático), ou undefined se não houver. */
 export function getPlaybook(category: string): SupportPlaybook | undefined {
-  return SUPPORT_PLAYBOOKS[category];
+  const resolved = CATEGORY_ALIASES[category] ?? category;
+  return SUPPORT_PLAYBOOKS[resolved];
 }

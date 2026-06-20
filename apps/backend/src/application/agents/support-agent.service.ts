@@ -56,7 +56,7 @@ export class SupportAgentService {
     // Histórico recente
     const history = input.conversationId
       ? (await this.conversations.getMessages(tenantId, input.conversationId))
-          .slice(-6)
+          .slice(-10)  // suporte precisa de mais contexto que vendas (conversas mais longas)
           .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
           .join('\n')
       : '';
@@ -148,7 +148,7 @@ export class SupportAgentService {
     return this.buildReply(
       draft,
       resol.usedKnowledge,
-      '',
+      resol.allowedFacts,   // KB usado → Supervisora pode auditar alucinações
       resol.confidence,
       needsHuman,
       classification,
