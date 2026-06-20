@@ -1,10 +1,10 @@
 # Implementation Roadmap — Sistema de Leads / IA Autônoma
 
 > Roadmap de implementação derivado dos PRDs, ADRs e Schema (todos aprovados).
-> Reflete a arquitetura NOVA (NestJS + agentes + event bus + billing TMS), não só o MVP n8n.
-> **Nada implementado ainda** — referência para quando começar a construir.
+> Reflete a arquitetura NOVA (NestJS + agentes + event bus + billing TMS).
+> **Atualizado em 2026-06-20** — fases 0 a 5 implementadas e em produção.
 
-**Última atualização:** 2026-06
+**Última atualização:** 2026-06-20
 
 **Princípio de priorização:** o maior risco hoje NÃO é arquitetura — é **construir coisas
 demais antes de validar vendas reais**. Validar primeiro: lead → venda → pagamento → onboarding.
@@ -23,86 +23,66 @@ Analytics/Voice/Meta só depois disso funcionando.
 
 ---
 
-## Fase 0 — MVP atual ✅ (concluído)
-Inbound IA, Sender, Follow-up, Supervisor em n8n. Single-tenant, 1 número, 30 leads/dia.
+## Fase 0 — MVP ✅ (concluído e migrado)
+Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma em produção.
 
 ---
 
-## Fase 1 — Hardening de produção
-- [ ] API keys → env (revogar key exposta); senha WAHA → env
-- [ ] HTTPS no webhook; auth no n8n; firewall
-- [ ] **Backup dos workflows n8n no Git** (export JSON versionado)
-- [ ] **Backup das credenciais do n8n**
-- [ ] **Backup do Docker Compose**
-- [ ] Backup automático do PostgreSQL
-
-> Maior risco operacional hoje = Docker/volume/atualização do n8n falhar.
+## Fase 1 — Hardening de produção ✅ (concluído)
+- [x] API keys → env; senha WAHA → env
+- [x] HTTPS; auth; firewall
+- [x] Backup dos workflows no Git
+- [x] Backup automático do PostgreSQL
+- [x] CI/CD via GitHub Actions → DigitalOcean
 
 ---
 
-## Fase 1.5 — Fundação de dados da IA
-Vem direto do `schema/schema.prisma`.
-- [ ] PostgreSQL definitivo (+ pgvector se RAG) · Prisma · primeira migration
-- [ ] `AiConversation`, `AiMessage`, `AiAction`
-- [ ] `DomainEvent`, `EventDlq`
-- [ ] `AiCustomerProfile`
-- [ ] `AiKnowledgeBase`, `AiKnowledgeVersion`
-- [ ] `AiBillingRequest`, `BillingEvent`, `PaymentStatusSync`
-
-**Entregável:** fundação de dados da IA no banco.
+## Fase 1.5 — Fundação de dados da IA ✅ (concluído)
+- [x] PostgreSQL 16 + pgvector + Prisma em produção
+- [x] 28 tabelas: conversas, mensagens, ações, eventos, KB, follow-up, e-mail, embeddings
+- [x] Migrations versionadas
 
 ---
 
-## Fase 2 — Backend NestJS
-- [ ] Estrutura NestJS (espelhar TMS: application/presentation/infra/shared)
-- [ ] Auth (JWT cookie HttpOnly — ou reusar do TMS se módulo) + CASL
-- [ ] Contacts API · Conversations API · Campaigns API
-- [ ] Actions API (`ai_actions`) · Events API (outbox + worker)
-- [ ] WebSocket (mensagens em tempo real)
+## Fase 2 — Backend NestJS ✅ (concluído)
+- [x] Estrutura NestJS (application/presentation/infra/shared)
+- [x] Auth JWT cookie HttpOnly + Refresh Token Rotation + CASL
+- [x] Contacts, Conversations, Campaigns, Knowledge, Metrics, Email APIs
+- [x] WebSocket (Socket.io) — ⚠️ Redis adapter pendente para escala horizontal
 
-**Entregável:** API que sustenta contatos, conversas, ações e eventos.
-
----
-
-## Fase 3 — Primeiro Conector (HiperTMS) — ADR 008/009/010
-O billing virou **parte do Connector**. Implementar o `HiperTmsConnector`.
-Antes do frontend: a compra é via WhatsApp (self-checkout), não depende de tela.
-- [ ] Interface `Connector` + registry `products` (HiperTMS = active)
-- [ ] `getPlans()` → `GET /plans` (catálogo do TMS — fonte de verdade)
-- [ ] `createPaymentRequest()` (IA solicita; backend chama TMS)
-- [ ] `payment_link_created` → IA envia link
-- [ ] `getPaymentStatus()` / `payment_confirmed` (webhook Asaas validado pelo TMS)
-- [ ] `provisionAccess()` → `tenant_created` → libera acesso
-- [ ] Reconciliação de billing (`payment_status_sync`)
-
-**Entregável:** fluxo financeiro ponta a ponta (lead → pagamento → produto liberado),
-via o primeiro Connector — pronto para plugar o próximo produto depois.
+**Em produção.** Pendência: `@socket.io/redis-adapter` e Prisma connection pool.
 
 ---
 
-## Fase 4 — Frontend MVP
-Primeiro a operação (o que o vendedor usa todo dia):
-- [ ] Inbox de conversas (estilo WhatsApp Web)
-- [ ] Conversas · CRM · Contatos
-Depois:
-- [ ] Dashboard · Campanhas · Saúde dos números
-
-> O usuário compra pela operação, não pelo dashboard.
+## Fase 3 — Primeiro Conector (HiperTMS) ✅ (concluído)
+- [x] Conector TMS implementado (tms-lookup.service + actions via API)
+- [x] Enriquecimento automático de contato via TMS (ADR 020)
+- [x] Campanhas com filtro TMS (ADR 024)
+- [x] Handoff token para portal do cliente
 
 ---
 
-## Fase 5 — Suporte TMS
-- [ ] Popular KB do TMS (extrair docs do hipertms_v12 → `ai_knowledge_base` + versões)
-- [ ] Knowledge Service (retrieval da KB aprovada)
-- [ ] Support Agent
-- [ ] Escalação para humano
-- [ ] Chatwoot (opcional — não necessário para validar o suporte)
-- [x] Separação Vendas × Suporte na UI + persona de suporte editável →
-  ver [`features/sales-support-separation/implementation.md`](features/sales-support-separation/implementation.md)
-- [x] Portal de Suporte do cliente →
-  ver [`features/support-portal/implementation.md`](features/support-portal/implementation.md)
+## Fase 4 — Frontend MVP ✅ (concluído)
+- [x] Inbox de conversas (WhatsApp Web style)
+- [x] CRM de contatos
+- [x] Dashboard com métricas
+- [x] Campanhas
+- [x] Configurações de canal (e-mail, WhatsApp)
+- [x] TenantSelector (Platform Admin / break-glass)
+- [x] Feature-Sliced Design implementado
 
-**Entregável:** clientes tiram dúvidas sozinhos.
+---
+
+## Fase 5 — Suporte TMS ✅ (concluído em grande parte)
+- [x] KB importada e versionada (RAG com pgvector + multilingual-e5-small)
+- [x] Agente de suporte (9 agentes: Router, SDR, Sales, Support, Diagnostic, Resolution, CaseClassifier, Escalation, Supervisor)
+- [x] Escalação para humano
+- [x] Separação Vendas × Suporte na UI
+- [x] Portal de Suporte do cliente
+- [x] Web chat embutido no TMS (ADR 027)
+- [ ] KB pendente: reindexação completa com HNSW após 1.000+ itens
+
+**Em produção.**
 
 ---
 
@@ -155,18 +135,20 @@ Adiar até validar lead → venda → pagamento → onboarding:
 
 ---
 
-## Ordem resumida (sem retrabalho)
+## Ordem resumida
+
 ```
-0   — MVP atual ✅
-1   — Hardening (+ backups)
-1.5 — Fundação de dados da IA (Prisma + schema)
-2   — Backend NestJS
-3   — Billing TMS (fluxo financeiro)
-4   — Frontend (Inbox/CRM primeiro, dashboard depois)
-5   — Suporte TMS
-6   — IA Autônoma (Router/SDR/Sales/Onboarding)
-7   — Multi-tenant
-8   — Escala
+0   — MVP ✅ em produção
+1   — Hardening ✅ em produção
+1.5 — Fundação de dados ✅ em produção
+2   — Backend NestJS ✅ em produção
+3   — Conector TMS ✅ em produção
+4   — Frontend ✅ em produção
+5   — Suporte TMS ✅ em produção (HNSW pendente)
+6   — Monitor Proativo → próximo (docs/monitor/)
+7   — IA Autônoma (Router/SDR/Sales/Onboarding)
+8   — Multi-tenant completo
+9   — Escala (Redis adapter, pool, API Meta)
 ```
 
-> A partir daqui, a documentação de arquitetura está encerrada e pronta para implementação.
+> Sistema em produção desde 2026. Próximo foco: Monitor Proativo TMS.

@@ -111,7 +111,20 @@ Guias operacionais para quem usa o painel:
 
 - [Visão de Produto](product/vision.md)
 - [Sumário Executivo](product/strategy/sumario-executivo.md)
+- [Monetização](product/strategy/monetizacao.md) — planos, add-ons, funil, métricas
 - [SLA por Plano](product/sla.md) — uptime, limites, créditos, suporte
+- [Monitor Proativo TMS](product/monitor-proativo.md) — escopo do módulo de alertas automáticos
+
+## Monitor Proativo
+
+Módulo que observa o TMS e avisa o cliente via WhatsApp/e-mail sobre pendências críticas.
+
+- [Escopo e modelo](product/monitor-proativo.md)
+- [Visão geral e ordem de execução](monitor/README.md)
+- [Squad Orquestra Nexa](monitor/squad-orquestra-nexa.md) — motor, tabelas, serviços
+- [Squad Orquestra TMS](monitor/squad-orquestra-tms.md) — endpoints, receptor, página nativa
+- [Squad Orquestra Nexa IA](monitor/squad-orquestra-nexa-ia.md) — intents da Lia on-demand
+- [ADR 028](adr/028-monitor-proativo-tms.md) — decisão arquitetural
 
 ## Qualidade
 
