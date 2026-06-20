@@ -10,23 +10,31 @@ export class HiperTmsConnector implements Connector {
   readonly productCode = 'hipertms';
   private readonly logger = new Logger('HiperTmsConnector');
 
+  // Base URL da API do TMS — suporta TMS_BASE_URL (canônico) e TMS_API_BASE_URL (legado).
+  // Valor esperado: http://localhost:3000/api (local) ou URL pública em produção.
+  private get baseUrl(): string {
+    return (process.env.TMS_BASE_URL ?? process.env.TMS_API_BASE_URL ?? '').replace(/\/$/, '');
+  }
+
   private get configured(): boolean {
-    return !!process.env.TMS_API_BASE_URL && !!(process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN);
+    return !!this.baseUrl && !!(process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN);
   }
 
   // Token enviado no header x-internal-token para a API interna do TMS (/nexa/*).
   // Deve ser IGUAL ao NEXA_INTERNAL_TOKEN configurado no TMS.
+  // NUNCA logar ou expor este valor.
   private get internalToken(): string {
     return process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN ?? '';
   }
 
   async healthCheck() {
     if (!this.configured) {
-      return { ok: false, detail: 'TMS_API_BASE_URL/TOKEN não configurados (aguardando Uelder)' };
+      return { ok: false, detail: 'TMS_BASE_URL/TOKEN não configurados' };
     }
     try {
-      const res = await fetch(`${process.env.TMS_API_BASE_URL}/api/health`, {
-        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+      // baseUrl já inclui /api (ex.: http://localhost:3000/api), então health fica em /api/health.
+      const res = await fetch(`${this.baseUrl}/health`, {
+        headers: { 'x-internal-token': this.internalToken },
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return { ok: false, detail: `TMS retornou ${res.status}` };
@@ -45,11 +53,10 @@ export class HiperTmsConnector implements Connector {
     }
     try {
       // /nexa/plans retorna shape compatível com o Connector: { plans: [{code, name, price, maxUsers, features}] }
-      // /api/plans retorna a shape interna do ORM (id/slug/tier) — não usar aqui.
-      const url = `${process.env.TMS_API_BASE_URL}/nexa/plans`;
+      const url = `${this.baseUrl}/nexa/plans`;
 
       const res = await fetch(url, {
-        headers: { 'x-internal-token': process.env.TMS_SERVICE_TOKEN! },
+        headers: { 'x-internal-token': this.internalToken },
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
@@ -81,10 +88,12 @@ export class HiperTmsConnector implements Connector {
   // Catálogo conhecido do HiperTMS — fallback e fonte enquanto a API do TMS não expõe /api/plans.
   // Manter sincronizado com o site/TMS até a integração real estar ligada.
   private defaultPlans(): Plan[] {
+    // Fallback offline — atualizar sempre que a API /nexa/plans mudar.
+    // Validado em 2026-06-19 contra GET /api/nexa/plans do TMS local.
     return [
-      { code: 'basico', name: 'Básico', price: 89, maxUsers: 1, features: ['CT-e', 'precificação', '500 docs/mês'] },
-      { code: 'essencial', name: 'Essencial', price: 299, maxUsers: 5, features: ['tudo do Básico', '5 filiais', '1.000 docs/mês'] },
-      { code: 'profissional', name: 'Profissional', price: 599, maxUsers: 15, features: ['tudo do Essencial', 'suporte prioritário', '5.000 docs/mês'] },
+      { code: 'basic',         name: 'Básico',        price: 89,  maxUsers: 5,  features: ['CT-e', 'MDF-e', 'precificação', 'frota', 'financeiro'] },
+      { code: 'essencial',     name: 'Essencial',     price: 199, maxUsers: 8,  features: ['tudo do Básico', 'multi-filial', 'suporte e-mail'] },
+      { code: 'profissional',  name: 'Profissional',  price: 299, maxUsers: 15, features: ['tudo do Essencial', 'suporte prioritário', 'API REST'] },
     ];
   }
 
@@ -636,7 +645,7 @@ export class HiperTmsConnector implements Connector {
     if (!this.configured) return null;
     try {
       const url =
-        `${process.env.TMS_API_BASE_URL}/nexa/fiscal/document` +
+        `${this.baseUrl}/nexa/fiscal/document` +
         `?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`;
 
       const res = await fetch(url, {
@@ -699,7 +708,7 @@ export class HiperTmsConnector implements Connector {
   async getContractStatus(externalId: string): Promise<ContractStatus | null> {
     if (!this.configured || !externalId) return null;
     try {
-      const url = `${process.env.TMS_API_BASE_URL}/nexa/contract?tenantId=${encodeURIComponent(externalId)}`;
+      const url = `${this.baseUrl}/nexa/contract?tenantId=${encodeURIComponent(externalId)}`;
       const res = await fetch(url, {
         headers: { 'x-internal-token': this.internalToken },
         signal: AbortSignal.timeout(5000),
@@ -736,7 +745,7 @@ export class HiperTmsConnector implements Connector {
     }
     try {
       const url =
-        `${process.env.TMS_API_BASE_URL}/nexa/customers/by-phone` +
+        `${this.baseUrl}/nexa/customers/by-phone` +
         `?phone=${encodeURIComponent(phone)}`;
 
       const res = await fetch(url, {
