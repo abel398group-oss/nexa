@@ -129,15 +129,23 @@ export function DashboardPage() {
     refetchInterval: 30_000,
   });
 
+  const sellersQ = useQuery({
+    queryKey: ['metrics-sellers'],
+    queryFn: async () => (await api.get<SellerKpi[]>('/metrics/sellers')).data,
+    refetchInterval: 60_000,
+  });
+
   const m = overviewQ.data;
   const series = seriesQ.data?.series ?? null;
   const sup = supportQ.data;
   const opp = oppQ.data ?? [];
+  const sellers = sellersQ.data ?? [];
   const refresh = () => {
     overviewQ.refetch();
     seriesQ.refetch();
     supportQ.refetch();
     oppQ.refetch();
+    sellersQ.refetch();
   };
 
   if (!m) return (
@@ -467,10 +475,96 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Nota de métricas futuras ──────────────────────────────── */}
-      <div className="mt-6 rounded-lg border border-dashed border-base-300 p-4 text-xs text-base-content/40">
-        <strong className="text-base-content/50">Métricas futuras planejadas:</strong> tempo médio até 1ª resposta · tempo médio até fechamento · conversas por vendedor · taxa de conversão · taxa de no_response · taxa de opt_out
-      </div>
+      {/* ── Performance de Atendimento ───────────────────────────── */}
+      {m.performance && (
+        <>
+          <SectionTitle>Performance de Atendimento</SectionTitle>
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <ConversationMetricsCard
+              label="1ª Resposta (min)"
+              value={m.performance.avgTimeToFirstResponseMinutes != null
+                ? `${m.performance.avgTimeToFirstResponseMinutes}min`
+                : '—'}
+              icon="clock"
+              accent="blue"
+              hint="tempo médio até 1ª resposta da IA"
+            />
+            {(() => {
+              const total = n(byOutcome, 'won') + n(byOutcome, 'lost') + n(byOutcome, 'no_response');
+              const noRespPct = total > 0 ? Math.round((n(byOutcome, 'no_response') / total) * 100) : 0;
+              const convPct = total > 0 ? Math.round((n(byOutcome, 'won') / total) * 100) : 0;
+              const optOutPct = m.contacts.total > 0 ? Math.round((m.contacts.optedOut / m.contacts.total) * 100) : 0;
+              return (
+                <>
+                  <ConversationMetricsCard
+                    label="Taxa de Conversão"
+                    value={`${convPct}%`}
+                    icon="trophy"
+                    accent={convPct >= 20 ? 'green' : undefined}
+                    hint={`${n(byOutcome, 'won')} ganhos de ${total} fechadas`}
+                  />
+                  <ConversationMetricsCard
+                    label="Taxa de No-Response"
+                    value={`${noRespPct}%`}
+                    icon="mute"
+                    accent={noRespPct > 40 ? 'red' : 'zinc'}
+                    hint={`${n(byOutcome, 'no_response')} sem resposta`}
+                  />
+                  <ConversationMetricsCard
+                    label="Taxa de Opt-out"
+                    value={`${optOutPct}%`}
+                    icon="ban"
+                    accent={optOutPct > 5 ? 'red' : 'zinc'}
+                    hint={`${m.contacts.optedOut} descadastrados`}
+                  />
+                </>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* ── Resultados por Vendedor ───────────────────────────────── */}
+      {sellers.length > 0 && (
+        <>
+          <SectionTitle>Resultados por Vendedor</SectionTitle>
+          <Card className="mb-6 overflow-x-auto p-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-base-200 text-left text-xs font-semibold uppercase tracking-wider text-base-content/40">
+                  <th className="px-4 py-3">Vendedor</th>
+                  <th className="px-4 py-3 text-right">Leads</th>
+                  <th className="px-4 py-3 text-right">Em andamento</th>
+                  <th className="px-4 py-3 text-right">Ganhos</th>
+                  <th className="px-4 py-3 text-right">Perdidos</th>
+                  <th className="px-4 py-3 text-right">Conversão</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sellers.map((s) => (
+                  <tr key={s.id} className="border-b border-base-200/50 last:border-0 hover:bg-base-200/30">
+                    <td className="px-4 py-3 font-medium">
+                      {s.name}
+                      {!s.active && (
+                        <span className="ml-2 rounded-full bg-base-200 px-1.5 py-0.5 text-xs text-base-content/40">inativo</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">{s.leads}</td>
+                    <td className="px-4 py-3 text-right">{s.emAndamento}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-green-600 dark:text-green-400">{s.ganhos}</td>
+                    <td className="px-4 py-3 text-right text-red-500">{s.perdidos}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`font-semibold ${s.taxaConversao >= 20 ? 'text-green-600 dark:text-green-400' : s.taxaConversao >= 10 ? 'text-amber-500' : 'text-base-content/60'}`}>
+                        {s.taxaConversao}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
     </PageContainer>
   );
 }
