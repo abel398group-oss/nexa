@@ -262,7 +262,7 @@ export class ConversationsService {
   // Cria conversa (correlationId nasce aqui — rastreio ponta a ponta)
   async create(
     tenantId: string,
-    dto: { contactId: string; phone: string; productCode?: string; sourceChannel?: string },
+    dto: { contactId: string; phone: string; productCode?: string; sourceChannel?: string; agentType?: string },
   ) {
     return this.prisma.aiConversation.create({
       data: {
@@ -272,7 +272,7 @@ export class ConversationsService {
         phone: dto.phone,
         productCode: dto.productCode,
         sourceChannel: (dto.sourceChannel as any) ?? 'whatsapp',
-        agentType: 'router',
+        agentType: (dto.agentType as any) ?? 'router',
         customerStage: 'lead',
       },
     });

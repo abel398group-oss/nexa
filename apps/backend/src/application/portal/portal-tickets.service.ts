@@ -80,6 +80,7 @@ export class PortalTicketsService {
       contactId: contact.id,
       phone: real || contact.phone, // telefone de contato p/ o suporte humano
       sourceChannel: 'portal',
+      agentType: 'support',
     });
     // marca a conversa como do cliente (externalId), cliente ativo, + assunto/area
     await this.prisma.aiConversation.update({
