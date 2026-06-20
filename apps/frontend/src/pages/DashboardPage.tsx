@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useDateRange } from '@/app/providers/DateRangeContext';
@@ -11,6 +12,7 @@ import {
   PageHeader,
   Breadcrumb,
   Card,
+  KpiCard,
 } from '@/shared/ui';
 
 // Gráficos carregados sob demanda (recharts num chunk async).
@@ -33,6 +35,8 @@ interface SupportOverview {
   volumeByPriority: Record<string, number>;
   escalationRateByCategory: Record<string, number>;
 }
+
+interface OppSummaryRow { stage: string; count: number; value: number }
 
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
@@ -107,13 +111,21 @@ export function DashboardPage() {
     refetchInterval: 30_000,
   });
 
+  const oppQ = useQuery({
+    queryKey: ['opportunities-summary'],
+    queryFn: async () => (await api.get<OppSummaryRow[]>('/opportunities/summary')).data,
+    refetchInterval: 30_000,
+  });
+
   const m = overviewQ.data;
   const series = seriesQ.data?.series ?? null;
   const sup = supportQ.data;
+  const opp = oppQ.data ?? [];
   const refresh = () => {
     overviewQ.refetch();
     seriesQ.refetch();
     supportQ.refetch();
+    oppQ.refetch();
   };
 
   if (!m) return (
@@ -265,6 +277,46 @@ export function DashboardPage() {
           accent="zinc"
         />
       </div>
+
+      {/* ── Pipeline de Vendas ────────────────────────────────────── */}
+      {opp.length > 0 && (() => {
+        const byStage = Object.fromEntries(opp.map((r) => [r.stage, r]));
+        const totalCount = opp.reduce((s, r) => s + r.count, 0);
+        const totalValue = opp.reduce((s, r) => s + r.value, 0);
+        const fmtBrl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+        const stages: { key: string; label: string; tone?: 'pos' | 'neg' | 'muted' }[] = [
+          { key: 'new',       label: 'Novos',        tone: 'muted' },
+          { key: 'qualified', label: 'Qualificados', tone: 'muted' },
+          { key: 'proposal',  label: 'Proposta',     tone: 'muted' },
+          { key: 'won',       label: 'Ganhos',       tone: 'pos'   },
+          { key: 'lost',      label: 'Perdidos',     tone: 'neg'   },
+        ];
+        return (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-base-content/40">Pipeline de Vendas</h2>
+              <Link to="/opportunities" className="text-xs text-primary hover:underline flex items-center gap-1">
+                Ver todas <Icon name="chevronRight" className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <KpiCard label="Total" value={String(totalCount)} sub={fmtBrl(totalValue)} tone="muted" />
+              {stages.map((s) => {
+                const row = byStage[s.key];
+                return (
+                  <KpiCard
+                    key={s.key}
+                    label={s.label}
+                    value={String(row?.count ?? 0)}
+                    sub={row?.value ? fmtBrl(row.value) : '—'}
+                    tone={s.tone}
+                  />
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Resultados Comerciais ─────────────────────────────────── */}
       <SectionTitle>Resultados Comerciais — Outcome</SectionTitle>
