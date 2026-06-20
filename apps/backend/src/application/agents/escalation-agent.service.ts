@@ -51,18 +51,26 @@ export class EscalationAgentService {
       return { escalate: false, reason: 'aguardando_dados_cliente', message: '' };
     }
 
-    // Resolução com baixa confiança → escala
-    if (input.resolution.confidence === 'low' || !input.resolution.resolved) {
-      // Alta prioridade sem resolução → escala
-      if (input.priority === 'high') {
-        return {
-          escalate: true,
-          reason: 'high_priority_unresolved',
-          message:
-            'Não consegui resolver sua questão de alta prioridade automaticamente. ' +
-            'Estou acionando um especialista para te ajudar.',
-        };
-      }
+    // Resolução não concluída → escala SEMPRE (independente de prioridade).
+    // A mensagem ao cliente já vem do ResolutionAgent ("vou encaminhar para um especialista"),
+    // mas o SupportAgent só notifica a equipe quando escalate=true.
+    if (!input.resolution.resolved) {
+      return {
+        escalate: true,
+        reason: 'unresolved_no_kb_match',
+        message: '', // draft do ResolutionAgent já diz que vai encaminhar — não sobrescreve
+      };
+    }
+
+    // Baixa confiança na resolução: alta prioridade → escala
+    if (input.resolution.confidence === 'low' && input.priority === 'high') {
+      return {
+        escalate: true,
+        reason: 'high_priority_low_confidence',
+        message:
+          'Não consegui resolver sua questão de alta prioridade automaticamente. ' +
+          'Estou acionando um especialista para te ajudar.',
+      };
     }
 
     // Classificador pediu humano

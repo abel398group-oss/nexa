@@ -314,6 +314,7 @@ export class ConversationAgentService {
         draft,
         allowedFacts,
         history,
+        context: route.agent === 'support' ? 'support' : 'sales',
       });
     }
 

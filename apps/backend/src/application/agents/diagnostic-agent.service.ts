@@ -119,7 +119,7 @@ ${input.history || '(sem histórico)'}
 Mensagem atual: ${input.message}`;
 
     try {
-      const text = await this.ai.complete(system, userMsg, { maxTokens: 300 });
+      const text = await this.ai.complete(system, userMsg, { maxTokens: 450 });
       const clean = text.replace(/```(?:json)?/g, '').trim();
       const parsed = JSON.parse(clean) as Omit<DiagnosticResult, 'diagnosticData'>;
       return { ...parsed, diagnosticData };

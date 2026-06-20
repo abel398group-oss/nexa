@@ -38,6 +38,17 @@ interface SupportOverview {
 
 interface OppSummaryRow { stage: string; count: number; value: number }
 
+interface SellerKpi {
+  id: string;
+  name: string;
+  active: boolean;
+  leads: number;
+  emAndamento: number;
+  ganhos: number;
+  perdidos: number;
+  taxaConversao: number;
+}
+
 interface Overview {
   contacts: { total: number; optedOut: number; byLeadStatus: Record<string, number> };
   conversations: { total: number; byStatus: Record<string, number>; byOutcome: Record<string, number> };
@@ -46,6 +57,7 @@ interface Overview {
   knowledge: { total: number };
   events: { byStatus: Record<string, number>; dlq: number };
   complaints: { total: number; byTopic: Record<string, number> };
+  performance?: { avgTimeToFirstResponseMinutes: number | null };
   campaigns?: {
     total: number;
     sent: number;

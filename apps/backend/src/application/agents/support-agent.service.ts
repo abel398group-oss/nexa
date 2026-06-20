@@ -104,7 +104,11 @@ export class SupportAgentService {
       requiresHumanFromClassifier: classification.requiresHuman,
     });
 
-    let draft = escalationDecision.escalate ? escalationDecision.message : resol.draft;
+    // Se escalate=true mas message='' (ex.: unresolved_no_kb_match), usa o draft do ResolutionAgent
+    // que já explica ao cliente que vai encaminhar para um especialista.
+    let draft = escalationDecision.escalate && escalationDecision.message
+      ? escalationDecision.message
+      : resol.draft;
     const needsHuman = escalationDecision.escalate;
 
     // Notifica a equipe quando há escalonamento (ADR 015 D6 + docs/features/escalation-notifications)

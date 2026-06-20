@@ -9,6 +9,7 @@ export type TicketCategory =
   | 'frete'
   | 'financeiro'
   | 'cadastro'
+  | 'frota'
   | 'usuarios'
   | 'integracoes'
   | 'api'
@@ -41,7 +42,8 @@ Categorias disponíveis:
 - mdfe: manifesto, encerramento, eventos MDF-e
 - frete: cálculo, tabela, contrato de frete
 - financeiro: fatura, cobrança, repasse financeiro
-- cadastro: clientes, motoristas, veículos
+- cadastro: clientes, remetentes, destinatários
+- frota: veículos, motoristas, CNH, manutenção, abastecimento
 - usuarios: acesso, permissão, senha
 - integracoes: ERP, parceiros, webhooks
 - api: uso da API, tokens, erros HTTP

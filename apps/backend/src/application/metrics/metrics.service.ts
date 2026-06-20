@@ -57,6 +57,50 @@ export class MetricsService {
       this.prisma.complaint.groupBy({ by: ['topic'], where: { tenantId, ...dw }, _count: true }),
     ]);
 
+    // ── Tempo médio até 1ª resposta da IA (minutos) ──────────────────────────
+    // Para cada conversa do período, pega a 1ª mensagem inbound e a 1ª outbound
+    // DEPOIS dela. A diferença é o tempo de resposta. Calculado em JS para
+    // compatibilidade sem SQL bruto (igual ao time-to-resolution do suporte).
+    let avgTimeToFirstResponseMinutes: number | null = null;
+    try {
+      const convIds = (
+        await this.prisma.aiConversation.findMany({
+          where: { tenantId, ...dw },
+          select: { id: true },
+          take: 500, // limita p/ não estourar memória em tenants grandes
+        })
+      ).map((c: any) => c.id);
+
+      if (convIds.length > 0) {
+        const msgs = await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds } },
+          select: { conversationId: true, direction: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        // agrupa por conversa
+        const byConv = new Map<string, { inbound?: Date; outbound?: Date }>();
+        for (const m of msgs) {
+          const entry = byConv.get(m.conversationId) ?? {};
+          if (m.direction === 'inbound' && !entry.inbound) entry.inbound = m.createdAt;
+          if (m.direction === 'outbound' && entry.inbound && !entry.outbound) entry.outbound = m.createdAt;
+          byConv.set(m.conversationId, entry);
+        }
+
+        const deltas: number[] = [];
+        for (const { inbound, outbound } of byConv.values()) {
+          if (inbound && outbound && outbound > inbound) {
+            deltas.push((outbound.getTime() - inbound.getTime()) / 60_000);
+          }
+        }
+        if (deltas.length > 0) {
+          avgTimeToFirstResponseMinutes = Math.round(
+            (deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10,
+          ) / 10;
+        }
+      }
+    } catch { /* fail-open: não bloqueia o dashboard */ }
+
     // ── Engajamento de campanhas (CAMP-2) ───────────────────────────────────
     const [campaignsTotal, sentTotal, ackRows] = await Promise.all([
       this.prisma.campaign.count({ where: { tenantId, ...dw } }),
@@ -120,6 +164,9 @@ export class MetricsService {
       knowledge: { total: knowledgeTotal },
       events: { byStatus: asMap(eventsByStatus, 'status'), dlq: dlqTotal },
       complaints: { total: complaintsTotal, byTopic: asMap(complaintsByTopic, 'topic') },
+      performance: {
+        avgTimeToFirstResponseMinutes,
+      },
       campaigns: {
         total: campaignsTotal,
         sent: sentTotal,
