@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
 import { MANUAIS_KB } from './hipertms-manuais.data';
+import { SUPORTE_KB } from './hipertms-suporte-kb.data';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
@@ -602,6 +603,8 @@ export class HiperTmsConnector implements Connector {
       },
       // Manuais tecnicos (suporte) — gerados de docs/manuais tecnicos
       ...MANUAIS_KB,
+      // KB de suporte: troubleshooting, FAQ, erros comuns por módulo
+      ...SUPORTE_KB,
     ];
   }
 
@@ -694,13 +697,47 @@ export class HiperTmsConnector implements Connector {
   }
 
   async getRejectionInfo(code: string): Promise<RejectionInfo | null> {
-    // Tabela local de rejeições comuns SEFAZ — base para diagnóstico offline
+    // Tabela local de rejeições comuns SEFAZ CT-e/MDF-e — base para diagnóstico offline.
+    // Atualizada com os principais códigos para suporte de primeiro nível.
     const known: Record<string, RejectionInfo> = {
-      '562': { code: '562', message: 'Rejeição: CT-e já cancelado', category: 'operacional', suggestedAction: 'Emitir novo CT-e' },
-      '539': { code: '539', message: 'Rejeição: CFOP inválido para a UF', category: 'fiscal', suggestedAction: 'Verificar CFOP no cadastro da operação' },
-      '204': { code: '204', message: 'Rejeição: Duplicidade de CT-e', category: 'operacional', suggestedAction: 'Verificar se CT-e já foi emitido com o mesmo número' },
-      '581': { code: '581', message: 'Rejeição: Certificado digital inválido/expirado', category: 'cadastro', suggestedAction: 'Renovar certificado digital PFX em Configurações → Fiscal → Certificados' },
-      '999': { code: '999', message: 'Rejeição genérica do sistema', category: 'sistema', suggestedAction: 'Acionar suporte técnico com o XML do CT-e' },
+      // ── Acesso / Serviço ────────────────────────────────────────────────────
+      '108': { code: '108', message: 'Serviço SEFAZ paralisado temporariamente', category: 'sistema', suggestedAction: 'Aguardar retorno do serviço e tentar novamente. Consulte cte.fazenda.gov.br.' },
+      '109': { code: '109', message: 'Serviço SEFAZ paralisado sem previsão de retorno', category: 'sistema', suggestedAction: 'Aguardar e monitorar cte.fazenda.gov.br. Em prolongada indisponibilidade, acionar suporte para orientação sobre contingência.' },
+      '214': { code: '214', message: 'Tamanho da mensagem excedeu o limite estabelecido', category: 'sistema', suggestedAction: 'Verificar se o XML está correto e dentro dos limites. Acionar suporte técnico.' },
+
+      // ── Certificado ─────────────────────────────────────────────────────────
+      '280': { code: '280', message: 'Certificado digital transmissor diferente do emitente', category: 'cadastro', suggestedAction: 'Verificar se o certificado configurado pertence ao CNPJ emitente. Administração → Fiscal → Certificados.' },
+      '301': { code: '301', message: 'Uso de algoritmo de hash não permitido', category: 'sistema', suggestedAction: 'Certificado com algoritmo incompatível. Adquirir novo certificado A1 compatível com o padrão ICP-Brasil.' },
+      '302': { code: '302', message: 'Assinatura digital inválida', category: 'sistema', suggestedAction: 'Problema na assinatura do XML. Remover o certificado e fazer upload novamente. Se persistir, acionar suporte técnico.' },
+      '581': { code: '581', message: 'Certificado digital inválido ou expirado', category: 'cadastro', suggestedAction: 'Renovar o certificado digital PFX junto à Autoridade Certificadora. Depois, acessar Administração → Fiscal → Certificados e fazer novo upload.' },
+
+      // ── Emitente / Empresa ──────────────────────────────────────────────────
+      '401': { code: '401', message: 'IE do emitente inválida', category: 'cadastro', suggestedAction: 'Verificar Inscrição Estadual em Administração → Dados da Empresa. Confirmar IE ativa junto à SEFAZ estadual.' },
+      '564': { code: '564', message: 'CNPJ do emitente inválido', category: 'cadastro', suggestedAction: 'Verificar CNPJ em Administração → Dados da Empresa. CNPJ deve estar ativo na Receita Federal.' },
+      '565': { code: '565', message: 'Emitente não habilitado para emitir CT-e', category: 'cadastro', suggestedAction: 'Empresa não está habilitada para emissão de CT-e nesta SEFAZ. Verificar credenciamento junto ao SEFAZ estadual.' },
+
+      // ── Duplicidade / Numeração ──────────────────────────────────────────────
+      '204': { code: '204', message: 'Duplicidade de CT-e', category: 'operacional', suggestedAction: 'CT-e com o mesmo número já está autorizado. Verificar em Operação → CT-e. Se precisar corrigir, cancele o existente e emita novo.' },
+      '205': { code: '205', message: 'CT-e já está cancelado na base da SEFAZ', category: 'operacional', suggestedAction: 'O cancelamento já foi processado. Não há ação necessária. Para nova carga, emitir um novo CT-e.' },
+
+      // ── CFOP / Fiscal ───────────────────────────────────────────────────────
+      '539': { code: '539', message: 'CFOP inválido para a UF de operação', category: 'fiscal', suggestedAction: 'Verificar UF de origem e destino no embarque. O HiperTMS usa 5352 (interna) e 6352 (interestadual). Corrigir endereço do remetente/destinatário em Cadastros.' },
+
+      // ── RNTRC / ANTT ────────────────────────────────────────────────────────
+      '524': { code: '524', message: 'RNTRC do emitente não informado ou inválido', category: 'cadastro', suggestedAction: 'Informar o RNTRC (Registro Nacional de Transportadores Rodoviários de Cargas) em Administração → Dados da Empresa. RNTRC deve ter 8 dígitos.' },
+      '525': { code: '525', message: 'RNTRC do veículo inválido', category: 'cadastro', suggestedAction: 'Verificar o RNTRC do veículo em Frota → Veículos → aba Documentos. Deve ser o número do RNTRC do proprietário ou arrendatário do veículo.' },
+
+      // ── Cancelamento ────────────────────────────────────────────────────────
+      '562': { code: '562', message: 'CT-e já cancelado anteriormente', category: 'operacional', suggestedAction: 'O CT-e já está cancelado — não é necessária nova ação. Emitir novo CT-e se necessário.' },
+      '580': { code: '580', message: 'Prazo de cancelamento esgotado (mais de 24h)', category: 'operacional', suggestedAction: 'Não é possível cancelar após 24h da autorização. Usar Carta de Correção (CC-e) para campos permitidos, ou emitir CT-e Complementar/Substituto.' },
+
+      // ── Dados da operação ───────────────────────────────────────────────────
+      '217': { code: '217', message: 'CT-e não encontrado na base da SEFAZ', category: 'operacional', suggestedAction: 'O CT-e não existe na SEFAZ. Verificar número e chave de acesso. Pode ser necessário reemitir.' },
+      '228': { code: '228', message: 'Data de emissão muito anterior à data atual', category: 'operacional', suggestedAction: 'A data de emissão não pode ser muito anterior à data atual (limite varia por UF). Emitir com a data correta.' },
+      '573': { code: '573', message: 'Duplicidade de evento para a chave do CT-e', category: 'operacional', suggestedAction: 'Evento já registrado para este CT-e (cancelamento ou CC-e). Verificar histórico em Operação → CT-e.' },
+
+      // ── Genérico ────────────────────────────────────────────────────────────
+      '999': { code: '999', message: 'Erro não catalogado na SEFAZ', category: 'sistema', suggestedAction: 'Erro genérico SEFAZ. Acionar suporte técnico enviando o XML completo do CT-e e o horário da tentativa.' },
     };
     return known[code] ?? null;
   }

@@ -65,4 +65,6 @@ RUN mkdir -p uploads .cache
 
 EXPOSE 3001
 
-CMD ["node", "dist/main.js"]
+# Entrypoint: roda migrations antes de subir o app.
+# npx prisma@5 já está cacheado pelo RUN acima — sem download extra no boot.
+CMD ["sh", "-c", "npx --yes prisma@5 migrate deploy && node dist/main.js"]
