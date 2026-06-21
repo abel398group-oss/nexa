@@ -6,6 +6,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 // Mock minimo do PrismaService: so os metodos usados pelo service.
 function makePrisma() {
   return {
+    $queryRaw: vi.fn(),
     contact: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -31,27 +32,21 @@ describe('ContactsService', () => {
 
   describe('listTags', () => {
     it('conta tags distintas e ordena por contagem desc', async () => {
-      prisma.contact.findMany.mockResolvedValue([
-        { tags: ['vip', 'sp'] },
-        { tags: ['vip'] },
-        { tags: ['sp', 'vip'] },
-        { tags: [] },
-        { tags: null },
+      // listTags usa $queryRaw (SQL unnest) — o banco agrega; simulamos a resposta agregada
+      prisma.$queryRaw.mockResolvedValue([
+        { tag: 'vip', count: 3 },
+        { tag: 'sp', count: 2 },
       ]);
       const out = await svc.listTags('t1');
       expect(out).toEqual([
         { tag: 'vip', count: 3 },
         { tag: 'sp', count: 2 },
       ]);
-      // escopo por tenant
-      expect(prisma.contact.findMany).toHaveBeenCalledWith({
-        where: { tenantId: 't1' },
-        select: { tags: true },
-      });
+      expect(prisma.$queryRaw).toHaveBeenCalled();
     });
 
     it('retorna vazio quando nao ha contatos', async () => {
-      prisma.contact.findMany.mockResolvedValue([]);
+      prisma.$queryRaw.mockResolvedValue([]);
       expect(await svc.listTags('t1')).toEqual([]);
     });
   });

@@ -19,7 +19,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { createHmac } from 'crypto';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
