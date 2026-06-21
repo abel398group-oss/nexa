@@ -128,7 +128,7 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
   async retryPending(): Promise<void> {
     // Acquire distributed lock — só uma instância roda por vez
     if (this.redis) {
-      const locked = await this.redis.set(RETRY_LOCK_KEY, '1', 'NX', 'EX', RETRY_LOCK_TTL_S);
+      const locked = await this.redis.set(RETRY_LOCK_KEY, '1', 'EX', RETRY_LOCK_TTL_S, 'NX');
       if (!locked) return; // outra instância já está processando
     }
 
