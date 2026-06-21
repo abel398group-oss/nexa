@@ -74,20 +74,21 @@ export class ConversationAgentService {
         .findUnique({ where: { id: input.conversationId }, select: { phone: true } })
         .catch(() => null);
       if (convPhone?.phone) {
-        // Busca conversas anteriores com mensagens suficientes (descarta testes/conversas vazias)
+        // Busca conversas anteriores com mensagens em uma única query (evita N+1)
         const priorConvs = await this.prisma.aiConversation.findMany({
           where: { tenantId, phone: convPhone.phone, id: { not: input.conversationId } },
           orderBy: { startedAt: 'desc' },
           take: 5,
-          select: { id: true },
+          include: {
+            messages: {
+              orderBy: { createdAt: 'asc' },
+              select: { direction: true, content: true },
+            },
+          },
         }).catch(() => []);
 
         for (const pc of priorConvs) {
-          const pcMsgs = await this.prisma.aiMessage.findMany({
-            where: { conversationId: pc.id },
-            orderBy: { createdAt: 'asc' },
-            select: { direction: true, content: true },
-          }).catch(() => []);
+          const pcMsgs = pc.messages ?? [];
 
           // Só aproveita conversa com ≥2 inbound com conteúdo real (>10 chars, sem palavrão/teste)
           const realInbound = pcMsgs.filter((m: any) =>

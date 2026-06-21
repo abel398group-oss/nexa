@@ -39,33 +39,32 @@ export class ConversationsService {
         });
         const contactMap = new Map(contacts.map((c: any) => [c.phone, c]));
 
-        // Atribuição de campanha: a campanha mais recente que tocou cada conversa
+        // Atribuição de campanha: uma única query com DISTINCT ON + JOIN em vez de 2 queries separadas
         const convIds = convs.map((c: any) => c.id);
-        const campMsgs = await this.prisma.aiMessage.findMany({
-          where: { conversationId: { in: convIds }, direction: 'outbound', intent: 'outbound_campaign' },
-          select: { conversationId: true, metadata: true },
-          orderBy: { createdAt: 'desc' },
-        });
-        const campIdByConv = new Map<string, string>();
-        for (const m of campMsgs) {
-          if (campIdByConv.has(m.conversationId)) continue; // mantém só a mais recente
-          const cid = (m.metadata as any)?.campaignId;
-          if (cid) campIdByConv.set(m.conversationId, cid);
-        }
-        const campIds = [...new Set(campIdByConv.values())];
-        const camps = campIds.length
-          ? await this.prisma.campaign.findMany({ where: { id: { in: campIds } }, select: { id: true, name: true } })
-          : [];
-        const campNameById = new Map(camps.map((c: any) => [c.id, c.name]));
+        type CampRow = { conversation_id: string; campaign_id: string | null; campaign_name: string | null };
+        const campRows = await this.prisma.$queryRaw<CampRow[]>`
+          SELECT DISTINCT ON (am.conversation_id)
+            am.conversation_id,
+            am.metadata->>'campaignId' AS campaign_id,
+            ca.name                    AS campaign_name
+          FROM ai_messages am
+          LEFT JOIN campaigns ca ON ca.id = (am.metadata->>'campaignId')
+          WHERE am.conversation_id = ANY(${convIds}::uuid[])
+            AND am.direction = 'outbound'
+            AND am.intent   = 'outbound_campaign'
+          ORDER BY am.conversation_id, am.created_at DESC
+        `;
+        const campByConv = new Map(
+          campRows
+            .filter((r) => r.campaign_id)
+            .map((r) => [r.conversation_id, { id: r.campaign_id!, name: r.campaign_name ?? '—' }]),
+        );
 
-        return convs.map((c: any) => {
-          const cid = campIdByConv.get(c.id);
-          return {
-            ...c,
-            contact: contactMap.get(c.phone) ?? null,
-            campaign: cid ? { id: cid, name: campNameById.get(cid) ?? '—' } : null,
-          };
-        });
+        return convs.map((c: any) => ({
+          ...c,
+          contact: contactMap.get(c.phone) ?? null,
+          campaign: campByConv.get(c.id) ?? null,
+        }));
       }),
       this.prisma.aiConversation.count({ where }),
     ]);

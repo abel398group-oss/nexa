@@ -10,8 +10,8 @@
  * Se TMS_DB_URL não estiver configurado, todos os métodos retornam vazio/null
  * sem erro — o fluxo de campanha continua normalmente.
  */
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { Client } from 'pg';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Pool } from 'pg';
 
 export interface TmsCustomerInfo {
   phone: string;           // telefone normalizado (só dígitos, sem 55)
@@ -24,10 +24,11 @@ export interface TmsCustomerInfo {
 }
 
 @Injectable()
-export class TmsLookupService implements OnModuleDestroy {
+export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('TmsLookup');
-  private client: Client | null = null;
-  private connected = false;
+  // Pool em vez de Client: gerencia reconexão automática e concorrência sem estado manual.
+  // max:2 — read-only, baixa concorrência; idleTimeoutMillis: 30s — libera conexões ociosas.
+  private pool: Pool | null = null;
 
   // Normaliza para dígitos sem código de país (55)
   static normalize(phone: string): string {
@@ -36,23 +37,24 @@ export class TmsLookupService implements OnModuleDestroy {
     return digits;
   }
 
-  private async getClient(): Promise<Client | null> {
+  onModuleInit() {
     const url = process.env.TMS_DB_URL;
-    if (!url) return null;
+    if (!url) return;
+    this.pool = new Pool({
+      connectionString: url,
+      ssl: { rejectUnauthorized: false },
+      max: 2,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+    });
+    this.pool.on('error', (err) => {
+      this.logger.warn(`TMS pool error: ${err.message}`);
+    });
+    this.logger.log('Pool TMS inicializado (read-only, max:2)');
+  }
 
-    if (this.connected && this.client) return this.client;
-
-    try {
-      this.client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
-      await this.client.connect();
-      this.connected = true;
-      this.logger.log('Conectado ao banco TMS (read-only)');
-    } catch (e: any) {
-      this.logger.warn(`TMS DB indisponível: ${e?.message}`);
-      this.client = null;
-      this.connected = false;
-    }
-    return this.client;
+  private getPool(): Pool | null {
+    return this.pool;
   }
 
   /**
@@ -66,11 +68,17 @@ export class TmsLookupService implements OnModuleDestroy {
     const result = new Map<string, TmsCustomerInfo>();
     if (!phones.length) return result;
 
-    const client = await this.getClient();
-    if (!client) return result; // TMS não configurado — retorna vazio sem erro
+    const pool = this.getPool();
+    if (!pool) return result; // TMS não configurado — retorna vazio sem erro
 
     // Normaliza todos os telefones de entrada
     const normalized = phones.map(TmsLookupService.normalize);
+
+    const client = await pool.connect().catch((e: any) => {
+      this.logger.warn(`TMS DB indisponível: ${e?.message}`);
+      return null;
+    });
+    if (!client) return result;
 
     try {
       // ── Query 1: usuários (tenant_core_user) ──────────────────────────────
@@ -143,14 +151,16 @@ export class TmsLookupService implements OnModuleDestroy {
     } catch (e: any) {
       this.logger.warn(`batchLookup falhou: ${e?.message} — campanha prossegue sem filtro TMS`);
       // fail-open: se der erro, não bloqueia a campanha
+    } finally {
+      client.release();
     }
 
     return result;
   }
 
   async onModuleDestroy() {
-    if (this.client && this.connected) {
-      await this.client.end().catch(() => null);
+    if (this.pool) {
+      await this.pool.end().catch(() => null);
     }
   }
 }

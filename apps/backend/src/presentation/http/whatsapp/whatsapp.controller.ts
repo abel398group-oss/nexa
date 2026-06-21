@@ -1,8 +1,10 @@
-import { Body, Controller, ForbiddenException, Logger, Post, Query } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Headers, Logger, Post, Query } from '@nestjs/common';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
 import { WahaHealthService } from '@/application/whatsapp/waha-health.service';
 
 // Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token OBRIGATÓRIO.
+// Aceita token no header X-Waha-Token (preferido) OU query string ?token= (legacy).
+// Migração: configurar WAHA para enviar X-Waha-Token e remover o fallback de query string.
 @Controller('webhooks')
 export class WhatsappController {
   private readonly logger = new Logger('WahaWebhook');
@@ -12,7 +14,13 @@ export class WhatsappController {
   ) {}
 
   @Post('waha')
-  async waha(@Body() body: any, @Query('token') token?: string) {
+  async waha(
+    @Body() body: any,
+    @Headers('x-waha-token') headerToken?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    // Header tem prioridade; query string mantida como fallback durante migração
+    const token = headerToken ?? queryToken;
     // WAHA_WEBHOOK_TOKEN é OBRIGATÓRIO — rejeita se não configurado ou se token não bate
     const expected = process.env.WAHA_WEBHOOK_TOKEN;
     if (!expected) {

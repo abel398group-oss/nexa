@@ -102,7 +102,7 @@ export class ConversationJanitorService {
         status: { notIn: ['closed', 'opt_out'] as any },
         autoCloseAt: { lte: now },
       } as any,
-      select: { id: true },
+      select: { id: true, status: true }, // status real para o fromStatus do histórico
     });
 
     if (!resolved.length) return;
@@ -114,9 +114,9 @@ export class ConversationJanitorService {
         data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, endedAt: now },
       }),
       this.prisma.conversationStageHistory.createMany({
-        data: ids.map((id: any) => ({
-          conversationId: id,
-          fromStatus: 'open',
+        data: resolved.map((c: any) => ({
+          conversationId: c.id,
+          fromStatus: c.status,   // status real, não hardcoded 'open'
           toStatus: 'closed',
           fromOutcome: null,
           toOutcome: 'resolved',
