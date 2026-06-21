@@ -1,9 +1,160 @@
 # Guia de Correções — Auditoria 2026-06-21
 
+> **Revisão pós-implementação — 2026-06-21**
+> Squad implementou 7 dos 8 fixes ALTOS. Resultado da revisão adversarial:
+>
+> | Finding | Status |
+> |---------|--------|
+> | SEC-002 JWT fallback | ✅ Correto |
+> | SEC-003 Portal JWT audience | ✅ Correto |
+> | BUG-002 Webhook lock Redis | ✅ Correto |
+> | BUG-006 WAHA timeouts | ✅ Correto |
+> | PERF-001 N+1 campanhas | ✅ Correto — ver verificação de campo no frontend abaixo |
+> | PERF-002 listTags SQL | ✅ Correto |
+> | BUG-004 fromStatus janitor | ⚠️ Parcial — ver pendência abaixo |
+> | BUG-001 Sender Redis state | ❌ Não implementado — ver abaixo |
+>
+> **3 itens pendentes documentados no topo deste arquivo.**
+
 > Squad: aplicar as correções na ordem CRÍTICO → ALTO → MÉDIO.
 > Cada item tem: localização exata, o que está errado, e o código correto.
 > **Não é preciso entender toda a auditoria — cada fix é autocontido.**
 > Contexto completo: `docs/reviews/2026-06-21-auditoria-tecnica-completa.md`
+
+---
+
+---
+
+## 🔴 PENDÊNCIAS PÓS-REVISÃO (implementar agora)
+
+---
+
+### BUG-001 — Sender anti-ban: estado ainda em memória de instância
+
+**Arquivo:** `apps/backend/src/application/sender/sender.service.ts` — linhas 24-25
+
+**Situação:** Fix não foi implementado. As linhas abaixo ainda estão presentes:
+```typescript
+private lastSentAt = 0;
+private nextDelayMs = DELAY_MIN_MS;
+```
+O construtor não injeta Redis. O `tick()` ainda lê/escreve `this.lastSentAt` diretamente.
+Com 2 instâncias, os dois processos podem enviar ao mesmo número simultâneo — risco de ban.
+
+**Fix — 3 passos:**
+
+**Passo 1:** Injetar `ioredis` no construtor (já está no projeto via `WebhookService`):
+```typescript
+import { Redis } from 'ioredis';
+
+// Adicionar no construtor:
+private redis: Redis | null = null;
+
+constructor(
+  private readonly prisma: PrismaService,
+  // ...demais injeções existentes
+) {
+  const url = process.env.REDIS_URL;
+  if (url) this.redis = new Redis(url, { lazyConnect: true });
+}
+```
+
+**Passo 2:** Substituir a checagem de delay no `tick()`:
+```typescript
+// ANTES (linha ~370 do tick):
+if (Date.now() - this.lastSentAt < this.nextDelayMs) return;
+
+// DEPOIS:
+const lastSentRaw = this.redis
+  ? await this.redis.get(`sender:lastSentAt:${campaign.tenantId}`)
+  : String(this.lastSentAt);
+if (Date.now() - (Number(lastSentRaw) || 0) < this.nextDelayMs) return;
+```
+
+**Passo 3:** Substituir a gravação após envio bem-sucedido no `tick()`:
+```typescript
+// ANTES (após o envio bem-sucedido, ~linha ~530):
+this.lastSentAt = Date.now();
+this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
+
+// DEPOIS:
+const now = Date.now();
+this.lastSentAt = now; // mantém local como fallback
+if (this.redis) await this.redis.set(`sender:lastSentAt:${campaign.tenantId}`, String(now), 'EX', 300);
+this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
+```
+
+> `nextDelayMs` (o jitter 30-90s) pode continuar local — cada instância sorteia independentemente,
+> o que é aceitável. Apenas o timestamp do último envio precisa ser compartilhado.
+
+**Commit sugerido:** `fix(sender): share lastSentAt anti-ban state via Redis`
+
+---
+
+### BUG-004 (pendência) — `closeNoResponseSupport` ainda com `fromStatus` hardcoded
+
+**Arquivo:** `apps/backend/src/application/conversations/conversation-janitor.service.ts` — método `closeNoResponseSupport()`, ~linha 155
+
+**Situação:** `closeResolvedSupport` foi corrigido (usa `c.status` real). Mas `closeNoResponseSupport` ainda tem:
+```typescript
+data: ids.map((id: any) => ({
+  fromStatus: 'open',  // ← HARDCODED — fecha também waiting_customer, mas registra 'open'
+```
+Esse método fecha conversas com status `'open'` **ou** `'waiting_customer'`. Para as `waiting_customer`, o histórico vai ficar errado.
+
+**Fix — mesmo padrão do `closeResolvedSupport`:**
+
+```typescript
+// 1. Adicionar status ao select:
+select: { id: true, status: true },  // era: select: { id: true }
+
+// 2. Mudar o map para usar o status real:
+// ANTES:
+const ids = candidates.map((c: any) => c.id);
+// ...
+data: ids.map((id: any) => ({
+  conversationId: id,
+  fromStatus: 'open',
+
+// DEPOIS:
+// (manter candidates como está, já tem .status pelo select)
+await this.prisma.$transaction([
+  this.prisma.aiConversation.updateMany({
+    where: { id: { in: candidates.map((c: any) => c.id) } },
+    // ...igual ao atual
+  }),
+  this.prisma.conversationStageHistory.createMany({
+    data: candidates.map((c: any) => ({  // iterar candidates, não ids
+      conversationId: c.id,
+      fromStatus: c.status,  // ← status real
+      toStatus: 'closed',
+      toOutcome: 'no_response',
+      reason: `suporte_sem_resposta_${SUPPORT_INACTIVITY_HOURS}h`,
+      changedAt: now,
+    })),
+  }),
+]);
+```
+
+**Commit sugerido:** `fix(janitor): use real fromStatus in closeNoResponseSupport history`
+
+---
+
+### PERF-001 (verificação) — Campo `counts` vs `stats` no frontend
+
+**Situação:** `listCampaigns()` foi corrigido e retorna `counts` (antes era `stats`). Verificar se o frontend
+que consome esse endpoint já foi atualizado para ler `counts`.
+
+**Onde verificar:**
+```
+apps/frontend/src/
+```
+Buscar por `stats` nos componentes de campanhas (ex.: `CampaignsList`, `CampaignCard`) e substituir por `counts` se necessário. O shape é o mesmo objeto `{ pending, queued, sending, sent, failed, skipped }`.
+
+**Comando para encontrar rapidamente:**
+```bash
+grep -r "\.stats" apps/frontend/src --include="*.tsx" --include="*.ts" -l
+```
 
 ---
 

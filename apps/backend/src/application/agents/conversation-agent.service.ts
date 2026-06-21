@@ -17,6 +17,13 @@ const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
 // Detecta token de handoff (Modalidade B — ADR 022)
 const HANDOFF_TOKEN_RE = /\bHANDOFF:([a-z0-9]{6,12})\b/i;
 
+// QUAL-005: mensagens de fallback seguro extraídas como constantes de módulo
+// (evita string literals duplicadas no meio de método crítico).
+const SAFE_FALLBACK_SALES =
+  'Posso te explicar como o HiperTMS organiza documentos, emissão de CT-e/MDF-e, precificação e financeiro — e te indicar o plano ideal pro seu porte. O que você quer ver primeiro? 🙂';
+const SAFE_FALLBACK_SUPPORT =
+  'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente da nossa equipe, que vai entrar em contato com você em breve. 🙏';
+
 export interface HandleResult {
   route: RouteDecision;
   draft: string;
@@ -330,10 +337,6 @@ export class ConversationAgentService {
     // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
     // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
     // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
-    const SAFE_FALLBACK_SALES =
-      'Posso te explicar como o HiperTMS organiza documentos, emissão de CT-e/MDF-e, precificação e financeiro — e te indicar o plano ideal pro seu porte. O que você quer ver primeiro? 🙂';
-    const SAFE_FALLBACK_SUPPORT =
-      'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente da nossa equipe, que vai entrar em contato com você em breve. 🙏';
     const SAFE_FALLBACK = route.agent === 'support' ? SAFE_FALLBACK_SUPPORT : SAFE_FALLBACK_SALES;
 
     if (input.conversationId) {

@@ -26,6 +26,19 @@ interface ActivityPoint {
   conversations: number;
 }
 
+interface ResolutionMetrics {
+  period: { days: number; from: string; to: string };
+  totals: {
+    conversations: number;
+    resolved: number;
+    resolvedByAI: number;
+    escalated: number;
+    resolvedByAIPct: number;
+    escalatedPct: number;
+  };
+  series: { day: string; total: number; resolvedByAI: number; escalated: number }[];
+}
+
 interface SupportOverview {
   total: number;
   resolvedWithoutEscalation: { count: number; pct: number };
@@ -135,6 +148,12 @@ export function DashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const resolutionQ = useQuery({
+    queryKey: ['metrics-resolution'],
+    queryFn: async () => (await api.get<ResolutionMetrics>('/metrics/resolution?days=7')).data,
+    refetchInterval: 60_000,
+  });
+
   const m = overviewQ.data;
   const series = seriesQ.data?.series ?? null;
   const sup = supportQ.data;
@@ -146,6 +165,7 @@ export function DashboardPage() {
     supportQ.refetch();
     oppQ.refetch();
     sellersQ.refetch();
+    resolutionQ.refetch();
   };
 
   if (!m) return (
@@ -406,6 +426,81 @@ export function DashboardPage() {
           hint="eventos com falha"
         />
       </div>
+
+      {/* ── IA vs Humano — Resoluções (A1) ──────────────────────── */}
+      {resolutionQ.data && resolutionQ.data.totals.conversations > 0 && (() => {
+        const r = resolutionQ.data;
+        const t = r.totals;
+        const humanPct = t.resolved > 0
+          ? Math.round(((t.resolved - t.resolvedByAI) / t.resolved) * 1000) / 10
+          : 0;
+        return (
+          <>
+            <SectionTitle>IA vs Humano — Resoluções (últimos 7 dias)</SectionTitle>
+            <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+              <ConversationMetricsCard
+                label="Conversas no período"
+                value={t.conversations}
+                icon="inbox"
+                accent="brand"
+                hint={`${t.resolved} resolvidas`}
+              />
+              <ConversationMetricsCard
+                label="Resolvido pela IA"
+                value={`${t.resolvedByAIPct}%`}
+                icon="bot"
+                accent="green"
+                highlight={t.resolvedByAIPct >= 60}
+                hint={`${t.resolvedByAI} conversas`}
+              />
+              <ConversationMetricsCard
+                label="Resolvido por Humano"
+                value={`${humanPct}%`}
+                icon="users"
+                accent="blue"
+                hint={`${t.resolved - t.resolvedByAI} conversas`}
+              />
+              <ConversationMetricsCard
+                label="Escaladas"
+                value={`${t.escalatedPct}%`}
+                icon="alert"
+                accent={t.escalatedPct > 30 ? 'red' : 'orange'}
+                highlight={t.escalated > 0}
+                hint={`${t.escalated} conversas`}
+              />
+            </div>
+            {/* mini sparkline: barras empilhadas por dia */}
+            <Card className="mb-6 p-5">
+              <div className="mb-3 text-sm font-semibold text-base-content/70">
+                Distribuição diária — IA vs Escalada
+              </div>
+              <div className="flex items-end gap-1 h-20">
+                {r.series.map((s) => {
+                  const total = s.total || 1;
+                  const aiH = Math.round((s.resolvedByAI / total) * 80);
+                  const escH = Math.round((s.escalated / total) * 80);
+                  const humanH = Math.max(0, 80 - aiH - escH);
+                  return (
+                    <div key={s.day} className="flex flex-1 flex-col items-center gap-0.5" title={`${s.day}: ${s.resolvedByAI} IA / ${s.escalated} escal. / ${s.total} total`}>
+                      <div className="w-full rounded-sm bg-orange-400/70" style={{ height: escH }} />
+                      <div className="w-full rounded-sm bg-blue-400/50" style={{ height: humanH }} />
+                      <div className="w-full rounded-sm bg-green-500/70" style={{ height: aiH }} />
+                      <span className="mt-1 text-[9px] text-base-content/30 rotate-90 md:rotate-0">
+                        {s.day.slice(5)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex gap-4 text-xs text-base-content/50">
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-green-500/70" /> IA</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-blue-400/50" /> Humano</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-orange-400/70" /> Escalada</span>
+              </div>
+            </Card>
+          </>
+        );
+      })()}
 
       {/* ── Suporte (ADR 015/016) ─────────────────────────────────── */}
       {sup && sup.total > 0 && (

@@ -266,6 +266,7 @@ model AiMessage {
   @@index([conversationId])
   @@index([correlationId])
   @@index([externalId])
+  @@index([tenantId, intent]) // PERF-004: filtros de campanha e analytics
   @@map("ai_messages")
 }
 
@@ -842,4 +843,45 @@ model AutonomySetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("autonomy_setting")
+}
+
+// ── Motor Proativo (ADR 022-024 adaptado) ─────────────────────────────────────
+//
+// PendingConversationEvent: cada evento detectado pelo motor proativo.
+// dedupeKey garante idempotência: mesmo ruleId+subjectId+bucket não cria duplicata.
+// Executor só age em status=OPEN com level L2/L3 (respeitando kill switch).
+
+model PendingConversationEvent {
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  ruleId     String    @map("rule_id")    // conversation.stale_open | conversation.lead_no_reply | ...
+  subjectId  String    @map("subject_id") // conversationId ou campaignTargetId
+  dedupeKey  String    @unique @map("dedupe_key") // tenantId:ruleId:subjectId:bucket
+  level      String    // L1 | L2 | L3
+  severity   String    // INFO | DUE_SOON | OVERDUE | CRITICAL
+  status     String    @default("OPEN") // OPEN | RESOLVED | AUTO_EXECUTED | DISMISSED
+  metadata   Json?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  @@index([tenantId, status])
+  @@index([tenantId, ruleId, status])
+  @@map("pending_conversation_events")
+}
+
+// ProactiveRuleConfig: configuração por tenant de cada regra.
+// Criada no onboarding com defaults globais. Admin pode ajustar threshold/enabled/level.
+model ProactiveRuleConfig {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  ruleId       String   @map("rule_id")
+  enabled      Boolean  @default(true)
+  level        String   @default("L1") // L1 | L2 | L3
+  thresholdMin Int      @default(240)  @map("threshold_min") // minutos — cada regra usa o seu
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt     @map("updated_at")
+
+  @@unique([tenantId, ruleId])
+  @@index([tenantId])
+  @@map("proactive_rule_configs")
 }

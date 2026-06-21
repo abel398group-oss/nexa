@@ -319,6 +319,148 @@ export class MetricsService {
     return `${y}-${m}-${day}`;
   }
 
+  // Efetividade de uma campanha individual (A2).
+  // Retorna: enviados, entregues (ack≥2), lidos (ack≥3), respondidos, convertidos (won), opt-outs.
+  async campaignMetrics(tenantId: string, campaignId: string) {
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: { id: true, name: true, channel: true, status: true, createdAt: true, startedAt: true },
+    });
+    if (!campaign) return null;
+
+    const [targets, ackRows] = await Promise.all([
+      this.prisma.campaignTarget.groupBy({
+        by: ['status'],
+        where: { campaignId, tenantId },
+        _count: { _all: true },
+      }),
+      this.prisma.aiMessage.groupBy({
+        by: ['ack'],
+        where: { tenantId, direction: 'outbound', intent: 'outbound_campaign',
+          metadata: { path: ['campaignId'], equals: campaignId } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const targetMap = targets.reduce((a, r) => ({ ...a, [r.status]: r._count._all }), {} as Record<string, number>);
+    const sent      = (targetMap['sent']    ?? 0) + (targetMap['failed'] ?? 0) + (targetMap['sending'] ?? 0);
+    const failed    = targetMap['failed']   ?? 0;
+    const pct       = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+
+    const ackAtLeast = (min: number) =>
+      ackRows.filter(r => (r.ack ?? 0) >= min).reduce((a, r) => a + r._count._all, 0);
+    const msgTotal  = ackRows.reduce((a, r) => a + r._count._all, 0);
+    const delivered = ackAtLeast(2);
+    const read      = ackAtLeast(3);
+
+    // Conversas que receberam esta campanha
+    const campConvRows = await this.prisma.aiMessage.findMany({
+      where: { tenantId, direction: 'outbound', intent: 'outbound_campaign',
+        metadata: { path: ['campaignId'], equals: campaignId } },
+      select: { conversationId: true },
+      distinct: ['conversationId'],
+    });
+    const convIds = campConvRows.map(r => r.conversationId);
+
+    // Respondidos: conversas com campanha que tiveram inbound posterior
+    const repliedRows = convIds.length
+      ? await this.prisma.aiMessage.groupBy({
+          by: ['conversationId'],
+          where: { conversationId: { in: convIds }, direction: 'inbound' },
+          _count: { _all: true },
+        })
+      : [];
+
+    // Convertidos: conversas marcadas como won
+    const convertedCount = convIds.length
+      ? await this.prisma.aiConversation.count({ where: { id: { in: convIds }, outcome: 'won' } })
+      : 0;
+
+    // Opt-outs gerados por esta campanha (conversa da campanha com opt_out)
+    const optOutCount = convIds.length
+      ? await this.prisma.aiConversation.count({ where: { id: { in: convIds }, status: 'opt_out' as any } })
+      : 0;
+
+    const replied = repliedRows.length;
+
+    return {
+      campaign,
+      targets: {
+        total: Object.values(targetMap).reduce((a, b) => a + b, 0),
+        sent,
+        failed,
+        byStatus: targetMap,
+      },
+      messages: {
+        total: msgTotal,
+        delivered,
+        read,
+        deliveredPct: pct(delivered, msgTotal),
+        readPct: pct(read, msgTotal),
+      },
+      engagement: {
+        replied,
+        repliedPct: pct(replied, convIds.length),
+        converted: convertedCount,
+        convertedPct: pct(convertedCount, convIds.length),
+        optOut: optOutCount,
+        optOutPct: pct(optOutCount, convIds.length),
+      },
+    };
+  }
+
+  // Taxa IA vs Humano (A1): percentual de resoluções sem escalonamento + série dos últimos N dias.
+  async resolutionMetrics(tenantId: string, days = 7) {
+    const from = new Date(Date.now() - (days - 1) * 86_400_000);
+    from.setHours(0, 0, 0, 0);
+
+    const convs = await this.prisma.aiConversation.findMany({
+      where: { tenantId, createdAt: { gte: from } },
+      select: {
+        id: true,
+        status: true,
+        outcome: true,
+        createdAt: true,
+        resolvedAt: true,
+        stageHistory: { where: { toStatus: 'escalated' }, select: { id: true }, take: 1 },
+      },
+    });
+
+    const wasEscalated = (c: (typeof convs)[number]) =>
+      (c.status as string) === 'escalated' || c.stageHistory.length > 0;
+    const total        = convs.length;
+    const resolved     = convs.filter(c => c.resolvedAt).length;
+    const escalated    = convs.filter(wasEscalated).length;
+    const resolvedByAI = convs.filter(c => c.resolvedAt && !wasEscalated(c)).length;
+    const pct          = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+
+    // Série diária
+    const days_ = Array.from({ length: days }, (_, i) => {
+      const d = new Date(from); d.setDate(d.getDate() + i); return this.isoDay(d);
+    });
+    const buckets = new Map(days_.map(k => [k, { day: k, total: 0, resolvedByAI: 0, escalated: 0 }]));
+    for (const c of convs) {
+      const b = buckets.get(this.isoDay(c.createdAt));
+      if (!b) continue;
+      b.total++;
+      if (wasEscalated(c)) b.escalated++;
+      else if (c.resolvedAt) b.resolvedByAI++;
+    }
+
+    return {
+      period: { days, from: this.isoDay(from), to: this.isoDay(new Date()) },
+      totals: {
+        conversations: total,
+        resolved,
+        resolvedByAI,
+        escalated,
+        resolvedByAIPct: pct(resolvedByAI, resolved),
+        escalatedPct: pct(escalated, total),
+      },
+      series: days_.map(k => buckets.get(k)!),
+    };
+  }
+
   // KPIs por vendedor (desempenho de vendas).
   async sellersKpi(tenantId: string) {
     const sellers = await this.prisma.seller.findMany({ where: { tenantId }, orderBy: { name: 'asc' } });

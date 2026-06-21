@@ -34,6 +34,7 @@ import { PlaybookModule } from './application/playbook/playbook.module';
 import { NotificationsModule } from './application/notifications/notifications.module';
 import { HandoffModule } from './application/handoff/handoff.module';
 import { EmailModule } from './application/email/email.module';
+import { ProactiveEngineModule } from './application/proactive-engine/proactive-engine.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -88,6 +89,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     UsersModule,
     WebhookModule,
     MonitorModule,
+    ProactiveEngineModule,
     // Proximos modulos de feature: router, sales, supervisor ...
   ],
   controllers: [HealthController],

@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { Redis } from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
@@ -16,11 +17,65 @@ const DELAY_MAX_MS = Number(process.env.SENDER_DELAY_MAX_MS ?? 90000);
 // limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce
 const WARMUP_DAILY = [10, 15, 20, 30];
 
+// Chaves Redis para estado anti-ban compartilhado entre réplicas (BUG-001 fix)
+const REDIS_KEY_LAST_SENT = 'sender:lastSentAt';
+const REDIS_KEY_NEXT_DELAY = 'sender:nextDelayMs';
+const REDIS_STATE_TTL_S = 3600; // 1h de TTL — se o worker parar, estado expira sozinho
+
 @Injectable()
-export class SenderService {
+export class SenderService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('Sender');
+  // Estado local como fallback quando Redis não está disponível
   private lastSentAt = 0;
-  private nextDelayMs = DELAY_MIN_MS; // sorteado a cada envio
+  private nextDelayMs = DELAY_MIN_MS;
+  private redis: Redis | null = null;
+
+  onModuleInit() {
+    const url = process.env.REDIS_URL;
+    if (url) {
+      this.redis = new Redis(url, { lazyConnect: true });
+      this.logger.log('Sender: estado anti-ban via Redis (multi-instância)');
+    } else {
+      this.logger.warn('Sender: REDIS_URL ausente — estado anti-ban em memória (single-instance)');
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.redis) await this.redis.quit();
+  }
+
+  // Lê lastSentAt e nextDelayMs do Redis (ou do estado local como fallback)
+  private async readAntibanState(): Promise<{ lastSentAt: number; nextDelayMs: number }> {
+    if (this.redis) {
+      try {
+        const [lastStr, delayStr] = await this.redis.mget(REDIS_KEY_LAST_SENT, REDIS_KEY_NEXT_DELAY);
+        return {
+          lastSentAt: lastStr ? parseInt(lastStr, 10) : 0,
+          nextDelayMs: delayStr ? parseInt(delayStr, 10) : DELAY_MIN_MS,
+        };
+      } catch {
+        // Redis temporariamente indisponível — cai no estado local
+      }
+    }
+    return { lastSentAt: this.lastSentAt, nextDelayMs: this.nextDelayMs };
+  }
+
+  // Persiste lastSentAt e nextDelayMs no Redis (e atualiza local como cache)
+  private async writeAntibanState(lastSentAt: number, nextDelayMs: number): Promise<void> {
+    this.lastSentAt = lastSentAt;
+    this.nextDelayMs = nextDelayMs;
+    if (this.redis) {
+      try {
+        await this.redis
+          .multi()
+          .set(REDIS_KEY_LAST_SENT, lastSentAt.toString(), 'EX', REDIS_STATE_TTL_S)
+          .set(REDIS_KEY_NEXT_DELAY, nextDelayMs.toString(), 'EX', REDIS_STATE_TTL_S)
+          .exec();
+      } catch {
+        // Redis indisponível — estado já salvo no local, worker continua funcionando
+      }
+    }
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -488,7 +543,9 @@ export class SenderService {
         }
       }
 
-      if (Date.now() - this.lastSentAt < this.nextDelayMs) return; // respeita delay anti-ban (30-90s)
+      // Lê estado anti-ban do Redis (compartilhado entre réplicas) com fallback local (BUG-001 fix)
+      const antibanState = await this.readAntibanState();
+      if (Date.now() - antibanState.lastSentAt < antibanState.nextDelayMs) return;
 
       const number = await this.ensureNumber(campaign.tenantId);
       const dailyCap = this.effectiveDailyLimit(number);
@@ -580,9 +637,9 @@ export class SenderService {
         ]);
         // agenda follow-up (24h/72h) caso o lead não responda
         await this.followup.schedule(campaign.tenantId, { conversationId: conv.id, phone: target.phone, name: target.name });
-        this.lastSentAt = Date.now();
-        this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS)); // sorteia 30-90s p/ o próximo
-        this.logger.log(`Disparo p/ ${target.phone} (campanha ${campaign.name}) [${number.sentToday + 1}/${number.dailyLimit} hoje; próx em ${Math.round(this.nextDelayMs / 1000)}s]`);
+        const newDelay = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
+        await this.writeAntibanState(Date.now(), newDelay); // persiste no Redis (BUG-001 fix)
+        this.logger.log(`Disparo p/ ${target.phone} (campanha ${campaign.name}) [${number.sentToday + 1}/${number.dailyLimit} hoje; próx em ${Math.round(newDelay / 1000)}s]`);
       } catch (e: any) {
         await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: String(e?.message).slice(0, 200) } });
       }

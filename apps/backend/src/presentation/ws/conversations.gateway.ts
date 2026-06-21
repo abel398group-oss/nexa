@@ -27,6 +27,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
@@ -76,6 +77,7 @@ export class ConversationsGateway
     private readonly handoff: HandoffService,
     private readonly conversations: ConversationsService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly jwt: JwtService,
   ) {}
 
   afterInit(server: Server) {
@@ -97,12 +99,26 @@ export class ConversationsGateway
     }
   }
 
-  // ── Conexão: valida token web_chat ou deixa inbox do Nexa passar livremente ──
+  // ── Conexão: valida token web_chat ou extrai tenantId do cookie para inbox Nexa ──
   async handleConnection(socket: Socket) {
     const token = socket.handshake.auth?.token as string | undefined;
 
-    // Sem token → Nexa inbox (browser do operador). Nenhuma lógica extra.
-    if (!token) return;
+    // Sem token → Nexa inbox (browser do operador).
+    // Extrai tenantId do cookie access_token para validar ownership no 'join' (SEC-005).
+    if (!token) {
+      const cookies = socket.handshake.headers.cookie ?? '';
+      const match = /(?:^|;\s*)access_token=([^;]+)/.exec(cookies);
+      if (match) {
+        try {
+          const payload = this.jwt.verify(match[1]) as { sub: string; tenantId: string };
+          (socket.data as any).tenantId = payload.tenantId;
+        } catch {
+          // Token inválido/expirado: socket conecta sem tenantId; join será rejeitado
+          this.logger.warn(`inbox: cookie JWT inválido — socket ${socket.id} sem tenantId`);
+        }
+      }
+      return;
+    }
 
     // Com token → widget TMS (ADR 027). Valida e consome (uso único — anti-replay).
     const ctx = await this.handoff.consume(token).catch(() => null);
@@ -151,13 +167,25 @@ export class ConversationsGateway
   }
 
   // ── Nexa inbox: entra na sala de uma conversa ────────────────────────────────
+  // SEC-005: valida que a conversa pertence ao tenant do operador autenticado.
   @SubscribeMessage('join')
-  onJoin(@MessageBody() data: { conversationId: string }, @ConnectedSocket() client: Socket) {
-    if (data?.conversationId) {
-      client.join(`conv:${data.conversationId}`);
-      return { joined: data.conversationId };
+  async onJoin(@MessageBody() data: { conversationId: string }, @ConnectedSocket() client: Socket) {
+    if (!data?.conversationId) return { error: 'conversationId obrigatório' };
+
+    const tenantId = (client.data as any)?.tenantId as string | undefined;
+    if (tenantId) {
+      // Garante que o operador só entra em salas do próprio tenant
+      const conv = await this.conversations.findOne(tenantId, data.conversationId).catch(() => null);
+      if (!conv) {
+        this.logger.warn(
+          `join rejeitado: conv=${data.conversationId.slice(0, 8)} tenant=${tenantId} socket=${client.id}`,
+        );
+        return { error: 'Conversa não encontrada ou sem permissão' };
+      }
     }
-    return { error: 'conversationId obrigatório' };
+
+    client.join(`conv:${data.conversationId}`);
+    return { joined: data.conversationId };
   }
 
   // ── ADR 027 D2: cliente TMS envia mensagem via widget ───────────────────────

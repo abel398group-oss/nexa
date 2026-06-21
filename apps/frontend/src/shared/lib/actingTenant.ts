@@ -1,10 +1,11 @@
-// Cliente (tenant) que o platform admin esta "operando". Persistido em localStorage
-// para sobreviver a reloads e lido pelo interceptor do axios em cada request.
+// Cliente (tenant) que o platform admin esta "operando".
+// Persistido em sessionStorage (limpa ao fechar a aba — FE-SEC-001 fix).
+// Lido pelo interceptor do axios em cada request via header x-acting-tenant.
 const KEY = 'nexa_acting_tenant';
 
 export function getActingTenantId(): string | null {
   try {
-    return localStorage.getItem(KEY);
+    return sessionStorage.getItem(KEY);
   } catch {
     return null;
   }
@@ -12,8 +13,8 @@ export function getActingTenantId(): string | null {
 
 export function setActingTenantId(id: string | null): void {
   try {
-    if (id) localStorage.setItem(KEY, id);
-    else localStorage.removeItem(KEY);
+    if (id) sessionStorage.setItem(KEY, id);
+    else sessionStorage.removeItem(KEY);
   } catch {
     /* ignore */
   }

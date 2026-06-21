@@ -65,29 +65,27 @@ export class ConversationJanitorService {
         updatedAt: { lt: cutoff },
         NOT: { name: 'Anonimizado' }, // já anonimizado → pula
       },
-      select: { id: true, phone: true },
+      select: { id: true },
       take: 500, // lote máximo por ciclo
     });
 
     if (!expired.length) return;
 
-    for (const c of expired) {
-      // Substitui dados pessoais por valores neutros — mantém apenas o hash do telefone
-      // para rastrear opt-out e evitar reenvio acidental.
-      const phoneHash = c.phone
-        ? `anon_${Buffer.from(c.phone).toString('base64').slice(0, 8)}`
-        : 'anon';
-      await this.prisma.contact.update({
-        where: { id: c.id },
-        data: {
-          name: 'Anonimizado',
-          phone: phoneHash,
-          email: null,
-          company: null,
-          tags: [],
-        },
-      });
-    }
+    // Single bulk UPDATE — phone replaced with a stable hash (base64 of phone, first 8 chars).
+    // All personal fields (name, email, company, tags) set to neutral values in one statement.
+    const ids = expired.map((c) => c.id);
+    await this.prisma.$queryRaw`
+      UPDATE contacts
+      SET
+        name    = 'Anonimizado',
+        phone   = 'anon_' || left(encode(convert_to(phone, 'UTF8'), 'base64'), 8),
+        email   = NULL,
+        company = NULL,
+        tags    = '{}',
+        updated_at = now()
+      WHERE id = ANY(${ids}::uuid[])
+        AND name <> 'Anonimizado'
+    `;
 
     this.logger.log(`LGPD: ${expired.length} contato(s) anonimizado(s) (retenção >${RETENTION_DAYS} dias)`);
   }
@@ -145,7 +143,7 @@ export class ConversationJanitorService {
         lastActivityAt: { lt: cutoff },
         resolvedAt: null,                // não fechar tickets que já foram resolvidos (usam autoCloseAt)
       } as any,
-      select: { id: true },
+      select: { id: true, status: true }, // status real para fromStatus no histórico (BUG-004 fix)
     });
 
     if (!candidates.length) return;
@@ -158,9 +156,10 @@ export class ConversationJanitorService {
         data: { status: 'closed' as any, outcome: 'no_response', outcomeAt: now, endedAt: now },
       }),
       this.prisma.conversationStageHistory.createMany({
-        data: ids.map((id: any) => ({
-          conversationId: id,
-          fromStatus: 'open',
+        data: candidates.map((c: any) => ({
+          conversationId: c.id,
+          fromStatus: c.status,   // status real, não hardcoded 'open' (BUG-004 fix)
+          fromOutcome: null,
           toStatus: 'closed',
           toOutcome: 'no_response',
           reason: `suporte_sem_resposta_${SUPPORT_INACTIVITY_HOURS}h`,
@@ -191,7 +190,7 @@ export class ConversationJanitorService {
         customerStage: 'lead',
         lastActivityAt: { lt: cutoff },
       },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, status: true }, // status para fromStatus no histórico (BUG-004 fix)
     });
 
     if (!candidates.length) return;
@@ -207,9 +206,9 @@ export class ConversationJanitorService {
       }),
       // Grava histórico de stage para cada conversa fechada
       this.prisma.conversationStageHistory.createMany({
-        data: ids.map((id: any) => ({
-          conversationId: id,
-          fromStatus: 'open', // pode ser open ou waiting_customer — histórico aproximado
+        data: candidates.map((c: any) => ({
+          conversationId: c.id,
+          fromStatus: c.status,   // status real (open ou waiting_customer) — BUG-004 fix
           toStatus: 'closed',
           fromOutcome: null,
           toOutcome: 'no_response',

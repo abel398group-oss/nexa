@@ -80,3 +80,4 @@ docs/reviews/2026-06-21-fixes-auditoria.md
 - `docs/infra/escalabilidade-nexa.md`
 - `docs/quality/plano-testes.md`
 - `docs/reviews/2026-06-21-fixes-auditoria.md` ← guia de correção para o squad
+- `docs/reviews/2026-06-21-seguranca-frontend.md` ← análise de segurança específica do frontend (Bootstrap/jQuery, endpoints, CSP, sockets)
