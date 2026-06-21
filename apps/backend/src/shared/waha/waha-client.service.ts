@@ -52,6 +52,7 @@ export class WahaClientService {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
         body: JSON.stringify({ session: this.session, chatId, file: { url: fileUrl, filename, mimetype }, caption }),
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         this.logger.error(`WAHA sendFile ${res.status}: ${(await res.text()).slice(0, 160)}`);
@@ -74,6 +75,7 @@ export class WahaClientService {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
         body: JSON.stringify({ text, backgroundColor, font }),
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         this.logger.error(`WAHA sendStatusText ${res.status}: ${(await res.text()).slice(0, 160)}`);
@@ -95,6 +97,7 @@ export class WahaClientService {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
         body: JSON.stringify({ file: { url: fileUrl }, caption }),
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         this.logger.error(`WAHA sendStatusImage ${res.status}: ${(await res.text()).slice(0, 160)}`);
@@ -124,6 +127,7 @@ export class WahaClientService {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
         body: JSON.stringify({ session: this.session, chatId, text }),
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         const body = await res.text();

@@ -31,13 +31,15 @@ export class ContactsService {
   }
 
   // Lista as tags distintas do tenant com a contagem de contatos (para filtros e seletor de público).
+  // Usa SQL com unnest() — evita carregar todos os contatos na memória (safe para 50k+ contatos).
   async listTags(tenantId: string): Promise<{ tag: string; count: number }[]> {
-    const rows = await this.prisma.contact.findMany({ where: { tenantId }, select: { tags: true } });
-    const counts = new Map<string, number>();
-    for (const r of rows) for (const t of r.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count);
+    return this.prisma.$queryRaw<{ tag: string; count: number }[]>`
+      SELECT tag, COUNT(*)::int AS count
+      FROM contacts, unnest(tags) AS tag
+      WHERE tenant_id = ${tenantId}
+      GROUP BY tag
+      ORDER BY count DESC
+    `;
   }
 
   // Adiciona ou remove uma tag em vários contatos de uma vez (sem duplicar).

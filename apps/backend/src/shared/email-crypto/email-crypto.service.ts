@@ -51,12 +51,15 @@ export class EmailCryptoService {
    * Decripta uma senha.
    * - Se começar com "ENC:" → decripta com AES-256-GCM.
    * - Se não começar → retorna como plaintext (migração).
+   *
+   * Fail-closed: lança erro em vez de retornar ciphertext corrompido —
+   * o chamador deve tratar a exceção (o email não será enviado, o que é
+   * preferível a tentar autenticar com uma senha inválida/vazar o ciphertext).
    */
   decrypt(stored: string): string {
     if (!stored.startsWith(PREFIX)) return stored; // legacy plaintext
     if (!this.key) {
-      this.logger.warn('EMAIL_ENCRYPTION_KEY ausente mas há senha criptografada — não consegue decriptar');
-      return stored;
+      throw new Error('EMAIL_ENCRYPTION_KEY ausente mas há senha criptografada — configure a chave em produção');
     }
     try {
       const parts = stored.slice(PREFIX.length).split(':');
@@ -70,7 +73,7 @@ export class EmailCryptoService {
       return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
     } catch (e: any) {
       this.logger.error(`EmailCryptoService.decrypt falhou: ${e?.message}`);
-      return stored; // fail-open: melhor retornar algo do que quebrar o envio de e-mail
+      throw new Error(`Falha ao decriptar credencial de email: ${e?.message}`);
     }
   }
 }

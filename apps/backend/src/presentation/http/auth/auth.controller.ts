@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from '@/application/auth/auth.service';
 import { AuditService } from '@/shared/audit/audit.service';
@@ -36,6 +37,8 @@ export class AuthController {
   // Só funciona se NÃO existir nenhum usuário com role=admin no banco.
   // Depois que o admin existir, este endpoint retorna 400 e fica bloqueado.
   // Uso: POST /auth/setup  { "email": "...", "password": "...", "name": "..." }
+  // Rate-limit agressivo: 3 tentativas por hora (evita brute-force pré-setup).
+  @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
   @Post('setup')
   async setup(@Body() body: { email: string; password: string; name?: string }) {
     const adminExists = await this.prisma.user.findFirst({ where: { role: 'admin' } });

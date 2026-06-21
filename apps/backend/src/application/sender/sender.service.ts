@@ -191,18 +191,23 @@ export class SenderService {
       where: { tenantId, archivedAt: archived ? { not: null } : null },
       orderBy: { createdAt: 'desc' },
     });
-    const withCounts = await Promise.all(
-      camps.map(async (c: any) => {
-        const grouped = await this.prisma.campaignTarget.groupBy({
-          by: ['status'],
-          where: { campaignId: c.id },
-          _count: true,
-        });
-        const counts = grouped.reduce((a: Record<string, number>, g: any) => ({ ...a, [g.status]: g._count }), {} as Record<string, number>);
-        return { ...c, counts };
-      }),
-    );
-    return withCounts;
+
+    if (camps.length === 0) return [];
+
+    // Uma única query agregada em vez de N queries (N+1 fix)
+    const allCounts = await this.prisma.campaignTarget.groupBy({
+      by: ['campaignId', 'status'],
+      where: { campaignId: { in: camps.map((c: any) => c.id) } },
+      _count: { _all: true },
+    });
+
+    const countMap = new Map<string, Record<string, number>>();
+    for (const row of allCounts) {
+      if (!countMap.has(row.campaignId)) countMap.set(row.campaignId, {});
+      countMap.get(row.campaignId)![row.status] = row._count._all;
+    }
+
+    return camps.map((c: any) => ({ ...c, counts: countMap.get(c.id) ?? {} }));
   }
 
   // Detalhe de uma campanha: campanha + destinatários (status de envio + engajamento) + contagens.

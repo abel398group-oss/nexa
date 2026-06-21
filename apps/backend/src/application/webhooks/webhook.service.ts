@@ -16,24 +16,39 @@
  * Observação: o retry corre em memória (@Interval). Para produção com múltiplas
  * instâncias, substituir por BullMQ/Redis queue (registrar como TODO).
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { createHmac } from 'crypto';
+import Redis from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 const MAX_ATTEMPTS = 5;
 // Backoff exponencial: [10s, 30s, 2min, 10min, 30min]
 const BACKOFF_SECONDS = [10, 30, 120, 600, 1800];
+const RETRY_LOCK_KEY = 'webhook:retry:lock';
+const RETRY_LOCK_TTL_S = 55; // menor que o interval de 60s
 
 @Injectable()
-export class WebhookService {
+export class WebhookService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('WebhookService');
+  private redis: Redis | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: EmailCryptoService,
   ) {}
+
+  onModuleInit() {
+    const url = process.env.REDIS_URL;
+    if (url) {
+      this.redis = new Redis(url, { lazyConnect: true });
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.redis) await this.redis.quit();
+  }
 
   /** Dispara um evento para todas as subscriptions ativas do tenant que o assinaram. */
   async emit(tenantId: string, event: string, payload: Record<string, unknown>): Promise<void> {
@@ -107,24 +122,35 @@ export class WebhookService {
     }
   }
 
-  /** Retry de deliveries pendentes com nextRetryAt passado. Roda a cada minuto. */
+  /** Retry de deliveries pendentes com nextRetryAt passado. Roda a cada minuto.
+   *  Lock Redis garante que apenas uma instância processe por vez (evita entrega duplicada). */
   @Interval(60_000)
   async retryPending(): Promise<void> {
-    const now = new Date();
-    const pending = await this.prisma.webhookDelivery.findMany({
-      where: { status: 'pending', nextRetryAt: { lte: now }, attempts: { lt: MAX_ATTEMPTS } },
-      include: { subscription: true },
-      take: 50,
-    });
+    // Acquire distributed lock — só uma instância roda por vez
+    if (this.redis) {
+      const locked = await this.redis.set(RETRY_LOCK_KEY, '1', 'NX', 'EX', RETRY_LOCK_TTL_S);
+      if (!locked) return; // outra instância já está processando
+    }
 
-    for (const d of pending) {
-      await this.deliver(
-        d.id,
-        d.subscription.url,
-        this.crypto.decrypt(d.subscription.secret),
-        d.event,
-        d.payload as Record<string, unknown>,
-      );
+    try {
+      const now = new Date();
+      const pending = await this.prisma.webhookDelivery.findMany({
+        where: { status: 'pending', nextRetryAt: { lte: now }, attempts: { lt: MAX_ATTEMPTS } },
+        include: { subscription: true },
+        take: 50,
+      });
+
+      for (const d of pending) {
+        await this.deliver(
+          d.id,
+          d.subscription.url,
+          this.crypto.decrypt(d.subscription.secret),
+          d.event,
+          d.payload as Record<string, unknown>,
+        );
+      }
+    } finally {
+      if (this.redis) await this.redis.del(RETRY_LOCK_KEY);
     }
   }
 }

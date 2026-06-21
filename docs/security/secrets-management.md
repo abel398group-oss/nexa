@@ -27,7 +27,7 @@
 | Variável | Descrição |
 |---|---|
 | `DATABASE_URL` | PostgreSQL do Nexa (por ambiente) |
-| `ANTHROPIC_API_KEY` | Chave Claude (a Lia) — nunca commitar |
+| `ANTHROPIC_API_KEY` | Chave Claude (a Lia) — nunca commitar. ⚠️ **Rotação pendente:** a key presente no `.env` local de dev será trocada ao final do ciclo ativo (responsável: Abel). Ver SEC-001 em `docs/reviews/2026-06-21-fixes-auditoria.md`. |
 | `AI_MODEL` | Modelo da Lia (default `claude-haiku-4-5-20251001`) |
 | `AI_AUTONOMY_ENABLED` | Default do kill switch de autonomia |
 | `TMS_DB_URL` | Banco HiperTMS (read-only, acesso direto p/ campanhas/lookup) |

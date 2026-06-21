@@ -13,7 +13,10 @@ export class PortalSessionService {
   constructor(private readonly jwt: JwtService) {}
 
   async sign(c: PortalCustomer): Promise<string> {
-    return this.jwt.signAsync({ sub: c.externalId, tenantId: c.tenantId, name: c.name });
+    return this.jwt.signAsync(
+      { sub: c.externalId, tenantId: c.tenantId, name: c.name },
+      { audience: 'portal', expiresIn: '24h' },
+    );
   }
 
   async verify(token: string): Promise<PortalCustomer | null> {
