@@ -17,7 +17,7 @@ import {
 import { IsArray, IsBoolean, IsOptional, IsString, IsUrl } from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { CurrentTenant } from '@/shared/decorators/current-tenant.decorator';
+import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 

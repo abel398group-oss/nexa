@@ -50,7 +50,7 @@ export class WebhookService {
         data: {
           subscriptionId: sub.id,
           event,
-          payload,
+          payload: payload as any,
           status: 'pending',
         },
       });

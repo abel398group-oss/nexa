@@ -93,7 +93,7 @@ export class ConsolidationService {
 
     // Agrupa por severidade
     const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
-      acc[s] = alerts.filter((a) => a.severity === s);
+      acc[s] = alerts.filter((a: (typeof alerts)[number]) => a.severity === s);
       return acc;
     }, {});
 

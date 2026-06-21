@@ -47,6 +47,11 @@ jobs:
       - name: Run tests
         run: pnpm --filter backend test
 
+      - name: Generate Prisma client
+        run: pnpm --filter backend exec prisma generate
+        env:
+          DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+
       - name: Build backend
         run: pnpm --filter backend build
 
