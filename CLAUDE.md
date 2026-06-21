@@ -20,6 +20,16 @@ pnpm monorepo:
 - `apps/frontend` — frontend: **React 18 + Vite 5 + TypeScript + Tailwind 3**
 - `packages/shared` · `packages/types` · `packages/sdk` — shared utils, types, API client
 
+## Production environment (droplet hiperTMS)
+
+- **Path**: `/root/nexa/` (compose file: `/root/nexa/docker-compose.production.yml`)
+- **Containers Nexa**: `nexa-backend-1` (serviço: `backend`, porta `3001`) · `nexa-frontend-1` (serviço: `frontend`, porta `8081`) · `nexa-redis-1` · `nexa-waha-1`
+- **Containers HiperTMS**: em `/root/hipertms_v12/docker-compose.production.yml` — **nunca tocar**
+- **Migrations em prod**: `cd /root/nexa && docker compose -f docker-compose.production.yml exec backend npx prisma migrate deploy`
+- **Restart backend**: `cd /root/nexa && docker compose -f docker-compose.production.yml restart backend`
+- **Logs**: `cd /root/nexa && docker compose -f docker-compose.production.yml logs backend --tail=100`
+- **Regra**: nunca usar `/opt/nexa` ou `/home/ueldermartin/hipervias/` para Nexa — não existe. Sempre `/root/nexa/`.
+
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
