@@ -64,7 +64,7 @@ describe('ResolutionAgentService', () => {
     expect(result.usedKnowledge).toEqual([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9 }]);
   });
 
-  it('queries knowledge.retrieve with the tenant, message, topN=3 and excludeCategories=[comercial]', async () => {
+  it('queries knowledge.retrieve with the tenant, message, topN=4 and excludeCategories=[comercial]', async () => {
     const ai = mockAi(aiJson({}));
     const knowledge = mockKnowledge([]);
     const playbook = mockPlaybook('');
@@ -72,7 +72,8 @@ describe('ResolutionAgentService', () => {
 
     await svc.resolve(baseInput);
 
-    expect(knowledge.retrieve).toHaveBeenCalledWith('tenant-1', 'Minha CT-e não emite', 3, {
+    // topN=4: suporte precisa de mais contexto KB do que vendas (atualizado no service)
+    expect(knowledge.retrieve).toHaveBeenCalledWith('tenant-1', 'Minha CT-e não emite', 4, {
       excludeCategories: ['comercial'],
     });
   });
@@ -124,12 +125,14 @@ describe('ResolutionAgentService', () => {
 
     const result = await svc.resolve(baseInput);
 
+    // draft e allowedFacts refletem o texto e o shape atuais do service
     expect(result).toEqual({
-      draft: 'Não consegui processar sua solicitação. Vou te conectar com um especialista.',
+      draft: 'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente especializado que vai entrar em contato em breve.',
       resolved: false,
       action: null,
       usedKnowledge: [{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9 }],
       confidence: 'low',
+      allowedFacts: '[KB 1: Como emitir CT-e]\nconteúdo',
     });
   });
 

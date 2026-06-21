@@ -90,7 +90,9 @@ describe('EscalationAgentService', () => {
   });
 
   // ─── High priority unresolved ─────────────────────────────────────────
-  it('high priority + low confidence resolution → escalate', () => {
+  // resolved=false → service retorna 'unresolved_no_kb_match' antes de checar prioridade.
+  // Para 'high_priority_low_confidence' o resolved precisa ser true mas confidence=low.
+  it('high priority + unresolved → escalate with unresolved_no_kb_match', () => {
     const r = svc.decide({
       category: 'integracoes',
       priority: 'high',
@@ -99,6 +101,18 @@ describe('EscalationAgentService', () => {
       requiresHumanFromClassifier: false,
     });
     expect(r.escalate).toBe(true);
-    expect(r.reason).toBe('high_priority_unresolved');
+    expect(r.reason).toBe('unresolved_no_kb_match');
+  });
+
+  it('high priority + resolved but low confidence → escalate with high_priority_low_confidence', () => {
+    const r = svc.decide({
+      category: 'integracoes',
+      priority: 'high',
+      diagnostic: diag(),
+      resolution: resol({ resolved: true, confidence: 'low' }),
+      requiresHumanFromClassifier: false,
+    });
+    expect(r.escalate).toBe(true);
+    expect(r.reason).toBe('high_priority_low_confidence');
   });
 });

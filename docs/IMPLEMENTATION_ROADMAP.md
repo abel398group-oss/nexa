@@ -53,13 +53,15 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 **Em produção.** Auditoria 2026-06-20 (`docs/reviews/2026-06-20-auditoria-implementacao-nexa.md`):
 - [x] Swagger ativado em `main.ts`
 - [x] Prisma pool: `connection_limit=20` na `DATABASE_URL` (parcial — sem log programático)
-- [ ] `@socket.io/redis-adapter` — bloqueia escala horizontal
-- [ ] Criptografia `smtpPass`/`imapPass` em `email-channel.service.ts`
-- [ ] Supervisor: sanitização de `customerMessage` (prompt injection)
-- [ ] Exportação CSV de contatos — LGPD art. 18
-- [ ] Cron de purge/anonimização por retenção — LGPD
-- [ ] Webhooks outbound para parceiros
-- [ ] Enforcement de limites por plano
+- [x] `@socket.io/redis-adapter` — fail-open via `REDIS_URL`
+- [x] Criptografia `smtpPass`/`imapPass` — AES-256-GCM (`EmailCryptoService`)
+- [x] Supervisor: sanitização de `customerMessage` — injection patterns bloqueados
+- [x] Exportação CSV de contatos — `GET /contacts/:id/export` (LGPD art. 18)
+- [x] Anonimização por retenção — `@Interval(24h)` no `ConversationJanitorService`
+- [x] Webhooks outbound — módulo completo com HMAC-SHA256 + retry backoff
+- [x] `PlanQuotaGuard` — tabela `plan_limits`, HTTP 402, decorator `@UsePlanQuota`
+- [x] Slow query logging — `$on('query')` acima de `PRISMA_SLOW_QUERY_MS`ms
+- [x] Monitor Proativo — módulo completo `src/application/monitor/`
 
 ---
 

@@ -5,14 +5,36 @@ Versões seguem [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.0.0] — 2026-06-20
+
+### Adicionado
+- **Monitor Proativo TMS** — motor de alertas automáticos (`src/application/monitor/`). Consome eventos do módulo `proactivity` do TMS, consolida por severidade (CRITICAL → OVERDUE → DUE_SOON → INFO) e envia via WhatsApp (WAHA) ou e-mail. Feature flag `MONITOR_ENABLED`. Frontend: `MonitorConfigPage` em `/settings/monitor`.
+- **Webhooks outbound** — módulo completo com `webhook_subscriptions`, `webhook_deliveries`, HMAC-SHA256 (`X-Nexa-Signature`), retry backoff exponencial 5 tentativas.
+- **PlanQuotaGuard** — tabela `plan_limits`, decorator `@UsePlanQuota`, HTTP 402 ao atingir cota de contatos/campanhas/mensagens.
+- **Exportação LGPD** — `GET /contacts/:id/export` retorna CSV com dados do contato (portabilidade art. 18).
+- **Anonimização por retenção** — `@Interval(24h)` no `ConversationJanitorService` anonimiza contatos opted-out além do prazo (`DATA_RETENTION_DAYS`, padrão 730 dias).
+
+### Segurança
+- **Criptografia SMTP/IMAP** — `EmailCryptoService` AES-256-GCM. Senhas armazenadas como `ENC:<iv>:<tag>:<cipher>`. Migration-safe para registros legados.
+- **Sanitização de prompt injection** — `customerMessage` truncado em 4.000 chars com bloqueio de padrões ChatML, Llama tags, template injection e markdown header injection.
+
+### Infra
+- **Socket.IO Redis Adapter** — `@socket.io/redis-adapter` via `REDIS_URL`. Fail-open em single-instance.
+- **Slow query logging** — `$on('query')` no `PrismaService` acima de `PRISMA_SLOW_QUERY_MS` ms (padrão 500ms).
+
+### Env vars novas
+`EMAIL_ENCRYPTION_KEY` · `REDIS_URL` · `DATA_RETENTION_DAYS` · `PRISMA_SLOW_QUERY_MS` · `MONITOR_ENABLED`
+
+---
+
 ## [Não lançado]
 
-### Pendente de implementação
-- Swagger / OpenAPI ativado em produção
-- Webhooks outbound para sistemas parceiros
-- Motor proativo de suporte (SLA, stale conversations)
-- Socket.io Redis adapter (escala horizontal)
-- Cron de backup automático PostgreSQL
+### Próximos
+- Índice HNSW pgvector (antes de 1.000 itens na KB)
+- Backup automático PostgreSQL agendado no Droplet
+- Monitor externo (UptimeRobot ou BetterStack)
+- Playwright E2E (`apps/e2e/`)
+- Página de status pública
 - Exportação de dados de contato (portabilidade LGPD)
 - Monitoramento externo (UptimeRobot / BetterStack)
 - Índice HNSW do pgvector para escala da KB

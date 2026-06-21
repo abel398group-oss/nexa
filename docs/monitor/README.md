@@ -1,6 +1,6 @@
 # Monitor Proativo TMS — Índice de Implementação
 
-> **Status:** Arquitetura revisada após auditoria TMS (2026-06-20)  
+> **Status:** ✅ Entregue em 2026-06-20  
 > **Referência:** `docs/product/monitor-proativo.md`
 
 ---

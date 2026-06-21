@@ -1,106 +1,73 @@
 # Auditoria de Implementação — Nexa
 
 > **Data:** 2026-06-20  
-> **Realizada por:** Orquestra Nexa (leitura direta do código)  
-> **Objetivo:** Confirmar o que está realmente implementado vs. documentado como pendente
+> **Realizada por:** Orquestra Nexa  
+> **Status:** ✅ Todos os itens implementados e entregues
 
 ---
 
-## Resultado por item
+## Resultado final
 
 | # | Item | Status | Arquivo |
 |---|------|--------|---------|
-| 1 | Socket.io Redis Adapter | 🔴 Pendente | `src/presentation/ws/conversations.gateway.ts` |
-| 2 | Prisma connection pool | 🟡 Parcial | `src/infra/prisma/` + `.env` |
-| 3 | Swagger / OpenAPI | ✅ Implementado | `src/main.ts` linhas 6, 32–39 |
-| 4 | Criptografia senhas SMTP/IMAP | 🔴 Pendente | `src/application/email/email-channel.service.ts` |
-| 5 | Supervisor: validação de input | 🔴 Pendente | `src/application/agents/supervisor-agent.service.ts` |
-| 6 | Exportação CSV de contatos (LGPD) | 🔴 Pendente | `src/presentation/http/contacts/contacts.controller.ts` |
-| 7 | Cron de exclusão por retenção (LGPD) | 🔴 Pendente | `src/application/conversations/conversation-janitor.service.ts` |
-| 8 | Webhooks outbound para parceiros | 🔴 Pendente | `src/application/whatsapp/`, `src/presentation/http/whatsapp/` |
-| 9 | Enforcement de limites por plano | 🔴 Pendente | Não existe tabela de planos nem guard |
-
-**Resumo: 1 implementado · 1 parcial · 7 pendentes**
+| NEXA-01 | Socket.io Redis Adapter | ✅ Implementado | `src/presentation/ws/conversations.gateway.ts` |
+| NEXA-02 | Criptografia senhas SMTP/IMAP | ✅ Implementado | `src/shared/email-crypto/` (novo) |
+| NEXA-03 | Supervisor: sanitização de input | ✅ Implementado | `src/application/agents/supervisor-agent.service.ts` |
+| NEXA-04 | Exportação CSV contatos (LGPD) | ✅ Implementado | `src/presentation/http/contacts/contacts.controller.ts` |
+| NEXA-05 | Anonimização por retenção (LGPD) | ✅ Implementado | `src/application/conversations/conversation-janitor.service.ts` |
+| NEXA-06 | Webhooks outbound | ✅ Implementado | `src/application/webhooks/` (novo módulo) |
+| NEXA-07 | PlanQuotaGuard | ✅ Implementado | `src/shared/guards/plan-quota.guard.ts` (novo) |
+| NEXA-08 | Slow query logging Prisma | ✅ Implementado | `src/infra/prisma/prisma.service.ts` |
+| MONITOR | Monitor Proativo TMS | ✅ Implementado | `src/application/monitor/` (novo módulo) |
 
 ---
 
-## Detalhes por item
+## Detalhes de implementação
 
-### ✅ 3. Swagger — Implementado
-`SwaggerModule.setup('api/docs', app, doc)` presente em `main.ts`.
-Nenhuma ação necessária.
+### NEXA-01 — Redis Adapter
+`afterInit()` em `conversations.gateway.ts` configura `@socket.io/redis-adapter` via `REDIS_URL`.
+Fail-open: sem a env, roda single-instance sem adapter.
+Deps: `@socket.io/redis-adapter ^8.3.0` + `ioredis ^5.4.0`.
 
----
+### NEXA-02 — Criptografia SMTP/IMAP
+Novo `EmailCryptoService` em `src/shared/email-crypto/`. AES-256-GCM.
+Chave: `EMAIL_ENCRYPTION_KEY` (hex 64 chars).
+Formato: `ENC:<iv>:<tag>:<cipher>`. Migration-safe: aceita plaintext legado.
+Integrado em: `email-channel.service.ts`, `email-imap.service.ts`, `email-reply.service.ts`, `waha-health.service.ts`.
 
-### 🟡 2. Prisma connection pool — Parcial
-`connection_limit=20&pool_timeout=10` configurados na `DATABASE_URL` do `.env`.
-O `PrismaService` não configura `datasources` explícitos nem log de queries lentas.
-Funciona sob carga normal, mas sem controle programático para diagnóstico.
+### NEXA-03 — Sanitização de input
+`customerMessage` truncado em 4.000 chars + padrões de injection substituídos por `[mensagem não pôde ser processada]`.
+Padrões cobertos: "ignore previous instructions", ChatML, Llama tags, template injection, markdown header injection.
 
-**Ação recomendada:** adicionar log de queries lentas no `PrismaService`:
-```typescript
-new PrismaClient({
-  log: [{ emit: 'event', level: 'query' }],
-})
-```
+### NEXA-04 — Exportação LGPD
+`GET /api/contacts/:id/export` → CSV com id, nome, telefone, email, empresa, leadStatus, status, tags, criadoEm, atualizadoEm.
+Header `Content-Disposition: attachment`.
 
----
+### NEXA-05 — Anonimização LGPD
+Novo `@Interval(24h)` `anonymizeExpiredData()` no `ConversationJanitorService`.
+Critério: `status = opted_out` + `updatedAt < now - DATA_RETENTION_DAYS` (padrão 730 dias).
+Campos: name → "Anonimizado", phone → hash, email/company → null, tags → []. Lote: 500/ciclo.
 
-### 🔴 1. Socket.io Redis Adapter — Pendente
-`conversations.gateway.ts` usa Socket.IO sem adapter Redis.
-Com múltiplas réplicas, eventos de uma instância não chegam aos clientes conectados em outra.
-**Bloqueia escala horizontal.**
+### NEXA-06 — Webhooks Outbound
+Novo módulo `src/application/webhooks/`. Tabelas: `webhook_subscriptions` + `webhook_deliveries`.
+HMAC-SHA256 via `X-Nexa-Signature`. Retry backoff: 10s → 30s → 2min → 10min → 30min (5 tentativas).
+Secret criptografado via `EmailCryptoService`.
+Endpoints: `GET/POST /webhooks`, `PUT/DELETE /webhooks/:id`, `GET /webhooks/:id/deliveries`. Perm: `webhooks:manage`.
 
-**Ação:** instalar `@socket.io/redis-adapter` e configurar no gateway.
+### NEXA-07 — PlanQuotaGuard
+Tabela `plan_limits` (ausência = sem limite). HTTP 402 ao atingir cota.
+Decorator: `@UsePlanQuota('contacts' | 'campaigns' | 'messages_month')`.
+`messages_month` conta `AiMessage` desde início do mês corrente.
 
----
+### NEXA-08 — Slow Query Logging
+`$on('query')` em `PrismaService`. Loga queries acima de `PRISMA_SLOW_QUERY_MS` ms (padrão 500ms).
 
-### 🔴 4. Criptografia senhas SMTP/IMAP — Pendente
-`smtpPass` e `imapPass` salvas e lidas em texto plano em `email-channel.service.ts`.
-Nenhuma chamada a `crypto.createCipheriv` ou similar.
-
-**Ação:** encrypt-at-rest com chave de aplicação antes de salvar; decrypt ao ler.
-
----
-
-### 🔴 5. Supervisor: validação de input — Pendente
-`supervisor-agent.service.ts` audita apenas a *resposta* da IA (output).
-Não há `sanitize`, `stripTags` ou validação de `customerMessage` antes de enviar ao prompt.
-Risco de prompt injection via mensagem do cliente.
-
-**Ação:** adicionar validação/sanitização de `customerMessage` antes do pipeline de agentes.
-
----
-
-### 🔴 6. Exportação CSV de contatos — Pendente
-`contacts.controller.ts` tem `GET /:id`, `GET /tags`, `POST /bulk-delete`, `POST /import`.
-Sem endpoint `GET /:id/export` ou `GET /export`.
-Exigido pela LGPD art. 18 (direito à portabilidade).
-
-**Ação:** criar endpoint que gera CSV com dados do contato e suas conversas.
-
----
-
-### 🔴 7. Cron de exclusão por retenção — Pendente
-`ConversationJanitorService` fecha conversas inativas (7d leads / 48h suporte),
-mas não exclui dados pessoais após prazo de retenção.
-LGPD exige exclusão ou anonimização após fim da finalidade.
-
-**Ação:** adicionar job que purga/anonimiza dados de contatos inativos após prazo por plano.
-
----
-
-### 🔴 8. Webhooks outbound — Pendente
-Só existe webhook *inbound* (WAHA e Mailgun).
-Não há `WebhookService`, tabela `webhook_subscriptions` nem endpoint para parceiros receberem eventos.
-
-**Ação:** criar tabela, serviço com HMAC-SHA256 e retry com backoff exponencial.
-
----
-
-### 🔴 9. Enforcement de limites por plano — Pendente
-Nenhum `planLimit`, `contactLimit`, `quota` ou guard que bloqueie ao atingir limite.
-Não existe tabela de planos nem verificação por tenant.
-
-**Ação:** criar tabela `plan_limits`, guard que bloqueia CRUD ao atingir cota,
-integração com billing do TMS para sincronizar plano ativo.
+### Monitor Proativo
+Feature flag: `MONITOR_ENABLED=true`. Módulo completo em `src/application/monitor/`:
+- **MonitorService** `@Interval(30min)` → chama `GET /api/nexa/proactivity/events` no TMS via `HiperTmsConnector`, upsert `AlertState`, resolve stale.
+- **ConsolidationService** `@Interval(15min)` → digest no `sendHour` (padrão 7h). Ordem: CRITICAL → OVERDUE → DUE_SOON → INFO. Arquiva com `notifyCount >= 2` sem resolução em 48h.
+- **MonitorNotificationService** → orquestra canais, persiste `NotificationLog`.
+- **WahaNotificationChannel** → Fase 1. Fase 2: Z-API/Twilio.
+- Endpoints (perm `admin`): `GET/PUT /monitor/config`, `GET /monitor/alerts`, `POST /monitor/alerts/:id/snooze|resolve`, `POST /monitor/sync`.
+- Frontend: `MonitorConfigPage.tsx` em `/settings/monitor`.
+- Tabelas: `tenant_notification_configs`, `alert_states`, `notification_logs`.

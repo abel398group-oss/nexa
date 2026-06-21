@@ -9,6 +9,7 @@
 | Secret | Onde fica | TTL recomendado | Impacto se comprometido |
 |--------|-----------|----------------|------------------------|
 | `JWT_SECRET` | `.env` + GitHub Secret | 90 dias | Todos os tokens ativos ficam inválidos após rotação |
+| `EMAIL_ENCRYPTION_KEY` | `.env` + GitHub Secret | 1 ano | Senhas SMTP/IMAP no banco ficam ilegíveis sem rotação coordenada |
 | `DATABASE_URL` (senha PostgreSQL) | `.env` + GitHub Secret | 180 dias | Acesso total ao banco |
 | `ANTHROPIC_API_KEY` | `.env` + GitHub Secret | 90 dias | Custo inesperado + acesso à IA |
 | `WAHA_API_KEY` | `.env` | 180 dias | Controle total do WhatsApp |
