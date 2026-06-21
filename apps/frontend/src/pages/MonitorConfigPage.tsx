@@ -155,7 +155,7 @@ export function MonitorConfigPage() {
               onClick={() => syncNow.mutate()}
               loading={syncNow.isPending}
             >
-              <Icon name="refresh-cw" className="h-4 w-4" /> Sincronizar agora
+              <Icon name="refresh" className="h-4 w-4" /> Sincronizar agora
             </Button>
             <Button onClick={saveConfig} loading={saving}>
               <Icon name="check" className="h-4 w-4" /> Salvar
