@@ -30,6 +30,24 @@ pnpm monorepo:
 - **Logs**: `cd /root/nexa && docker compose -f docker-compose.production.yml logs backend --tail=100`
 - **Regra**: nunca usar `/opt/nexa` ou `/home/ueldermartin/hipervias/` para Nexa — não existe. Sempre `/root/nexa/`.
 
+### Limitações conhecidas do ambiente de produção
+
+- **`psql` NÃO existe** no host nem nos containers — nunca tentar usar.
+- **`apt-get` com falha de 404** — mirrors DigitalOcean/Ubuntu com pacotes desatualizados; não depender de instalar pacotes no host.
+- **Prisma CLI NÃO está na imagem de produção** (devDependency removida no build). Para rodar prisma no container, instalar temporariamente: `docker exec nexa-backend-1 sh -c "npm install -g prisma@5.22.0 && prisma migrate deploy"`. Usar `migrate deploy` (nunca `migrate dev`) em prod.
+- **SQL direto no banco**: sem psql, usar o módulo `pg` já disponível no container via Node.js. Banco é Postgres gerenciado DigitalOcean (SSL obrigatório). O `DATABASE_URL` usa `sslmode=require` que nas versões novas do pg é tratado como `verify-full` — adicionar `uselibpqcompat=true` na URL para compatibilidade:
+  ```bash
+  docker exec nexa-backend-1 node -e "
+  const {Client}=require('pg');
+  const url=process.env.DATABASE_URL.replace('sslmode=require','sslmode=require&uselibpqcompat=true');
+  const c=new Client({connectionString:url,ssl:{rejectUnauthorized:false}});
+  // ... queries aqui com try/catch por statement
+  "
+  ```
+- **`prisma db push` falha** se algum índice já existir — preferir SQL manual com `IF NOT EXISTS` via node acima.
+- **Banco**: Postgres gerenciado DigitalOcean (`db-postgresql-nyc3-37059-do-user-16747874-0.k.db.ondigitalocean.com:25060`), database `nexa`. Não está no docker-compose — é externo.
+- **`/home/ueldermartin/hipervias/docker-compose.yml`**: arquivo antigo do HiperTMS v1, ignorar completamente.
+
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
