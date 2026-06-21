@@ -26,6 +26,7 @@ const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) 
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
 const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
+const MonitorConfigPage = lazy(() => import('@/pages/MonitorConfigPage').then((m) => ({ default: m.MonitorConfigPage })));
 const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m) => ({ default: m.OpportunitiesPage })));
 const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
 // Portal do cliente — área pública e independente (auth própria, fora do Layout interno).
@@ -81,6 +82,7 @@ export default function App() {
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
+                    <Route path="/settings/monitor" element={<Perm perm="admin"><MonitorConfigPage /></Perm>} />
                     {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
                   </Route>
                 </Route>

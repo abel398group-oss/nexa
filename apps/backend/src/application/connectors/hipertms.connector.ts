@@ -809,4 +809,40 @@ export class HiperTmsConnector implements Connector {
       return null;
     }
   }
+
+  // Monitor proativo — busca eventos classificados pelo TMS para um tenant.
+  // Endpoint: GET /api/nexa/proactivity/events?tenantId=<externalId>
+  // Retorna lista vazia com warn se o TMS não estiver configurado ou falhar.
+  async getProactivityEvents(externalTenantId: string): Promise<TmsProactivityEvent[]> {
+    if (!this.configured) {
+      this.logger.warn('getProactivityEvents: TMS não configurado');
+      return [];
+    }
+    try {
+      const url = `${this.baseUrl}/nexa/proactivity/events?tenantId=${encodeURIComponent(externalTenantId)}`;
+      const res = await fetch(url, {
+        headers: { 'x-internal-token': this.internalToken },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`getProactivityEvents: TMS retornou ${res.status}`);
+        return [];
+      }
+      const data = await res.json() as { events?: TmsProactivityEvent[] } | TmsProactivityEvent[];
+      return Array.isArray(data) ? data : (data?.events ?? []);
+    } catch (err: any) {
+      this.logger.warn(`getProactivityEvents falhou: ${err?.message}`);
+      return [];
+    }
+  }
+}
+
+// Shape do evento de proatividade retornado pelo TMS.
+// Aguarda entrega do endpoint no TMS para validar — shape provisório compatível com o PRD.
+export interface TmsProactivityEvent {
+  id: string;
+  severity: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
+  category: 'fiscal' | 'logistic' | 'frota' | 'finance';
+  title: string;
+  description?: string;
 }

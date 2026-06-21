@@ -20,6 +20,8 @@ import { SellersModule } from './application/sellers/sellers.module';
 import { SenderModule } from './application/sender/sender.module';
 import { FollowUpModule } from './application/followup/followup.module';
 import { UsersModule } from './application/users/users.module';
+import { WebhookModule } from './application/webhooks/webhook.module';
+import { MonitorModule } from './application/monitor/monitor.module';
 import { AuthModule } from './application/auth/auth.module';
 import { ContactsModule } from './application/contacts/contacts.module';
 import { ConversationsModule } from './application/conversations/conversations.module';
@@ -84,6 +86,8 @@ import { HealthController } from './presentation/http/health/health.controller';
     SenderModule,
     FollowUpModule,
     UsersModule,
+    WebhookModule,
+    MonitorModule,
     // Proximos modulos de feature: router, sales, supervisor ...
   ],
   controllers: [HealthController],

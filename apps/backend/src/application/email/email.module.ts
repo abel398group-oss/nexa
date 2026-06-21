@@ -11,9 +11,10 @@ import { AgentsModule } from '@/application/agents/agents.module';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { EmailController } from '@/presentation/http/email/email.controller';
 import { EmailChannelController } from '@/presentation/http/email/email-channel.controller';
+import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
 
 @Module({
-  imports: [ContactsModule, ConversationsModule, AgentsModule, NotificationsModule],
+  imports: [ContactsModule, ConversationsModule, AgentsModule, NotificationsModule, EmailCryptoModule],
   controllers: [EmailController, EmailChannelController],
   providers: [
     EmailService,

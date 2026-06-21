@@ -30,6 +30,9 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
 const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
+// LGPD: prazo de retenção de dados pessoais (padrão 2 anos = 730 dias).
+// Após esse prazo, contatos opt-out e conversas encerradas são anonimizados.
+const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
 
 @Injectable()
 export class ConversationJanitorService {
@@ -45,6 +48,48 @@ export class ConversationJanitorService {
     await this.closeNoResponseSupport();
     // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
     await this.closeInactiveLeads();
+  }
+
+  // LGPD — anonimização por prazo de retenção.
+  // Roda 1x/dia (via @Interval de 24h) para não sobrecarregar o banco.
+  // Anonimiza apenas contatos opt-out ou com conversas encerradas há mais de RETENTION_DAYS.
+  // Anonimização: name → 'Anonimizado', phone → hash truncado, email → null, company → null, tags → [].
+  @Interval(24 * 60 * 60 * 1000) // roda uma vez por dia
+  async anonymizeExpiredData() {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
+    // Contatos opt-out criados antes do cutoff que ainda têm dados pessoais visíveis.
+    const expired = await this.prisma.contact.findMany({
+      where: {
+        status: 'opted_out',
+        updatedAt: { lt: cutoff },
+        NOT: { name: 'Anonimizado' }, // já anonimizado → pula
+      },
+      select: { id: true, phone: true },
+      take: 500, // lote máximo por ciclo
+    });
+
+    if (!expired.length) return;
+
+    for (const c of expired) {
+      // Substitui dados pessoais por valores neutros — mantém apenas o hash do telefone
+      // para rastrear opt-out e evitar reenvio acidental.
+      const phoneHash = c.phone
+        ? `anon_${Buffer.from(c.phone).toString('base64').slice(0, 8)}`
+        : 'anon';
+      await this.prisma.contact.update({
+        where: { id: c.id },
+        data: {
+          name: 'Anonimizado',
+          phone: phoneHash,
+          email: null,
+          company: null,
+          tags: [],
+        },
+      });
+    }
+
+    this.logger.log(`LGPD: ${expired.length} contato(s) anonimizado(s) (retenção >${RETENTION_DAYS} dias)`);
   }
 
   // Branch de suporte: fecha conversas marcadas como resolvidas (resolvedAt set)

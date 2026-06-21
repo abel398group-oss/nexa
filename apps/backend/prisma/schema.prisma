@@ -723,6 +723,112 @@ model OpportunityStageHistory {
   @@map("opportunity_stage_history")
 }
 
+// ===================== WEBHOOKS OUTBOUND =====================
+// Assinaturas de webhook por tenant. O Nexa dispara eventos HTTP para a URL registrada
+// com HMAC-SHA256 (header X-Nexa-Signature). Retry com backoff exponencial até 5x.
+model WebhookSubscription {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  url        String                           // destino dos eventos
+  secret     String                           // segredo HMAC (AES-256-GCM criptografado)
+  events     String[]  @default([])           // ex: ["conversation.created", "ticket.escalated"]
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId])
+  @@map("webhook_subscriptions")
+}
+
+// Histórico de entregas — útil para debug no painel e retry manual.
+model WebhookDelivery {
+  id             String              @id @default(uuid())
+  subscriptionId String              @map("subscription_id")
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  event          String                         // nome do evento
+  payload        Json                           // corpo enviado
+  status         String              @default("pending") // pending | delivered | failed
+  attempts       Int                 @default(0)
+  nextRetryAt    DateTime?           @map("next_retry_at")
+  responseStatus Int?                @map("response_status")
+  error          String?
+  deliveredAt    DateTime?           @map("delivered_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  @@index([subscriptionId, status])
+  @@map("webhook_deliveries")
+}
+
+// ===================== LIMITES DE PLANO (NEXA-07) =====================
+// Define os limites por tenant. Um registro por tenant — sem eles, sem limite aplicado.
+model PlanLimit {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique @map("tenant_id")
+  maxContacts      Int?     @map("max_contacts")       // null = ilimitado
+  maxCampaigns     Int?     @map("max_campaigns")      // null = ilimitado
+  maxMessagesMonth Int?     @map("max_messages_month") // null = ilimitado
+  plan             String   @default("free")           // free | starter | pro | enterprise
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("plan_limits")
+}
+
+// ===================== MONITOR PROATIVO =====================
+// Configuração de notificações proativas por tenant.
+model TenantNotificationConfig {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique @map("tenant_id")
+  sendHour        Int      @default(7) @map("send_hour")
+  sendWeekends    Boolean  @default(false) @map("send_weekends")
+  channel         String   @default("whatsapp") // whatsapp | email | both
+  fiscalEnabled   Boolean  @default(true) @map("fiscal_enabled")
+  logisticEnabled Boolean  @default(true) @map("logistic_enabled")
+  frotaEnabled    Boolean  @default(true) @map("frota_enabled")
+  financeEnabled  Boolean  @default(true) @map("finance_enabled")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_notification_configs")
+}
+
+// Estado dos alertas sincronizados do TMS.
+model AlertState {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  tmsEventId   String    @map("tms_event_id")
+  severity     String    // CRITICAL | OVERDUE | DUE_SOON | INFO
+  category     String    // fiscal | logistic | frota | finance
+  title        String
+  description  String?
+  status       String    @default("open") // open | snoozed | resolved | archived
+  snoozedUntil DateTime? @map("snoozed_until")
+  notifiedAt   DateTime? @map("notified_at")
+  notifyCount  Int       @default(0) @map("notify_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, tmsEventId])
+  @@index([tenantId, status])
+  @@map("alert_states")
+}
+
+// Log de cada disparo de notificação (audit + debug).
+model NotificationLog {
+  id       String   @id @default(cuid())
+  tenantId String   @map("tenant_id")
+  channel  String   // whatsapp | email
+  content  String
+  sentAt   DateTime @default(now()) @map("sent_at")
+  success  Boolean
+  error    String?
+
+  @@index([tenantId])
+  @@map("notification_logs")
+}
+
 // Kill switch da autonomia da IA (ADR 012) — GLOBAL/singleton (uma linha id="global").
 // `master` é o botão de pânico (desliga tudo). `whatsapp`/`email` ligam/desligam a Lia
 // por canal. Autonomia efetiva de um canal = master AND canal. Persistido para

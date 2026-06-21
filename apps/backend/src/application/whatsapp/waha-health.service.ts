@@ -4,6 +4,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 /**
  * WahaHealthService — monitora a sessão do WhatsApp (WAHA).
@@ -33,6 +34,7 @@ export class WahaHealthService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly waha: WahaClientService,
+    private readonly crypto: EmailCryptoService,
   ) {}
 
   private get baseUrl() { return process.env.WAHA_API_URL ?? ''; }
@@ -234,7 +236,7 @@ export class WahaHealthService {
     if (ch?.smtpHost && ch.smtpUser && ch.smtpPass) {
       host = ch.smtpHost;
       user = ch.smtpUser;
-      pass = ch.smtpPass;
+      pass = this.crypto.decrypt(ch.smtpPass); // decripta AES-256-GCM
       port = ch.smtpPort;
       secure = ch.smtpSecure;
       fromName = ch.fromName ?? fromName;

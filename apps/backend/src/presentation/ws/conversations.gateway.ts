@@ -28,6 +28,8 @@ import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Server, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { Redis } from 'ioredis';
 import { HandoffService } from '@/application/handoff/handoff.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 
@@ -76,8 +78,23 @@ export class ConversationsGateway
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  afterInit() {
-    this.logger.log('WebSocket /ws inicializado');
+  afterInit(server: Server) {
+    // Redis adapter: garante que eventos de socket.io sejam compartilhados entre
+    // réplicas do backend. Sem isso, room.emit() só alcança sockets no mesmo processo.
+    // Fail-open: se REDIS_URL não estiver configurado, roda sem adapter (single-instance).
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      try {
+        const pubClient = new Redis(redisUrl, { lazyConnect: true });
+        const subClient = pubClient.duplicate();
+        server.adapter(createAdapter(pubClient, subClient));
+        this.logger.log('WebSocket /ws: Redis adapter configurado');
+      } catch (e: any) {
+        this.logger.warn(`WebSocket /ws: Redis adapter falhou — rodando single-instance (${e?.message})`);
+      }
+    } else {
+      this.logger.log('WebSocket /ws inicializado (single-instance — REDIS_URL ausente)');
+    }
   }
 
   // ── Conexão: valida token web_chat ou deixa inbox do Nexa passar livremente ──

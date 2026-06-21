@@ -1,6 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
 
+// ── Proteção contra prompt injection no input do cliente ─────────────────────
+// Padrões que tentam sequestrar as instruções do sistema ou revelar o prompt.
+// A lista é conservadora: só bloqueia o que é claramente mal-intencionado.
+const INJECTION_PATTERNS: RegExp[] = [
+  /ignore\s+(all\s+)?previous\s+instructions?/i,
+  /disregard\s+(all\s+)?previous/i,
+  /forget\s+(all\s+)?previous\s+instructions?/i,
+  /you\s+are\s+now\s+(a\s+)?(?!the\s+customer)/i,
+  /act\s+as\s+(if\s+you\s+are\s+)?a\s+(?!customer)/i,
+  /system\s*:\s*\[?\s*(prompt|instruction|context)/i,
+  /<\|im_(start|end|sep)\|>/i,         // ChatML injection
+  /\{\{.*\}\}/,                         // template injection
+  /\[INST\]|\[\/INST\]/i,               // Llama instruction tags
+  /###\s*(instruction|system|prompt)/i, // markdown header injection
+];
+
+const MAX_INPUT_LENGTH = 4_000; // ~3k tokens — suficiente para qualquer mensagem real
+
+/**
+ * Sanitiza a mensagem do cliente antes de entrar no prompt.
+ * - Trunca mensagens excessivamente longas.
+ * - Detecta e neutraliza padrões de prompt injection.
+ * Retorna a mensagem sanitizada (nunca lança exceção — fail-open com aviso).
+ */
+function sanitizeCustomerMessage(input: string): { text: string; injectionDetected: boolean } {
+  const truncated = input.slice(0, MAX_INPUT_LENGTH);
+  const injectionDetected = INJECTION_PATTERNS.some((re) => re.test(truncated));
+  if (injectionDetected) {
+    // Substitui por mensagem neutra — não revela o motivo ao atacante.
+    return { text: '[mensagem não pôde ser processada]', injectionDetected: true };
+  }
+  return { text: truncated, injectionDetected: false };
+}
+
 export interface SupervisorVerdict {
   approved: boolean;
   risk: 'low' | 'medium' | 'high';
@@ -29,8 +63,15 @@ export class SupervisorAgentService {
     history?: string; // conversa até aqui (p/ não acusar de "invenção" o que o cliente já disse)
     context?: 'sales' | 'support'; // contexto muda os critérios de auditoria
   }): Promise<SupervisorVerdict> {
+    // 0) sanitiza a mensagem do cliente antes de incluir no prompt (anti-injection)
+    const { text: safeCustomerMessage, injectionDetected } = sanitizeCustomerMessage(input.customerMessage);
+    if (injectionDetected) {
+      this.logger.warn('Supervisor: prompt injection detectado em customerMessage — bloqueado');
+    }
+    const sanitizedInput = { ...input, customerMessage: safeCustomerMessage };
+
     // 1) regras duras
-    const hardIssues = HARD_BLOCKS.filter((b) => b.re.test(input.draft)).map((b) => b.issue);
+    const hardIssues = HARD_BLOCKS.filter((b) => b.re.test(sanitizedInput.draft)).map((b) => b.issue);
     if (hardIssues.length) {
       return { approved: false, risk: 'high', issues: hardIssues, source: 'fallback' };
     }
@@ -74,10 +115,10 @@ export class SupervisorAgentService {
         'Se aprovado e sem problemas, issues = [].';
 
     const user =
-      `Fatos permitidos:\n${input.allowedFacts || '(nenhum fato específico fornecido)'}\n\n` +
-      (input.history ? `Histórico da conversa (o que o cliente já disse conta como contexto válido):\n${input.history}\n\n` : '') +
-      `Mensagem do cliente: ${input.customerMessage}\n\n` +
-      `Resposta a auditar: ${input.draft}`;
+      `Fatos permitidos:\n${sanitizedInput.allowedFacts || '(nenhum fato específico fornecido)'}\n\n` +
+      (sanitizedInput.history ? `Histórico da conversa (o que o cliente já disse conta como contexto válido):\n${sanitizedInput.history}\n\n` : '') +
+      `Mensagem do cliente: ${sanitizedInput.customerMessage}\n\n` +
+      `Resposta a auditar: ${sanitizedInput.draft}`;
 
     try {
       const out = await this.ai.completeJson<{ approved: boolean; risk: any; issues: string[] }>(system, user);

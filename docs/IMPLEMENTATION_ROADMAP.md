@@ -50,7 +50,16 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 - [x] Contacts, Conversations, Campaigns, Knowledge, Metrics, Email APIs
 - [x] WebSocket (Socket.io) — ⚠️ Redis adapter pendente para escala horizontal
 
-**Em produção.** Pendência: `@socket.io/redis-adapter` e Prisma connection pool.
+**Em produção.** Auditoria 2026-06-20 (`docs/reviews/2026-06-20-auditoria-implementacao-nexa.md`):
+- [x] Swagger ativado em `main.ts`
+- [x] Prisma pool: `connection_limit=20` na `DATABASE_URL` (parcial — sem log programático)
+- [ ] `@socket.io/redis-adapter` — bloqueia escala horizontal
+- [ ] Criptografia `smtpPass`/`imapPass` em `email-channel.service.ts`
+- [ ] Supervisor: sanitização de `customerMessage` (prompt injection)
+- [ ] Exportação CSV de contatos — LGPD art. 18
+- [ ] Cron de purge/anonimização por retenção — LGPD
+- [ ] Webhooks outbound para parceiros
+- [ ] Enforcement de limites por plano
 
 ---
 

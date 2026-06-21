@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -67,6 +68,20 @@ export class ContactsController {
   @Get(':id')
   findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.contacts.findOne(tenantId, id);
+  }
+
+  // LGPD — portabilidade: exporta os dados do contato como CSV.
+  // Definir ANTES de rotas mais específicas de :id para evitar conflito.
+  @Get(':id/export')
+  async export(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.contacts.exportCsv(tenantId, id);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="contato-${id}.csv"`);
+    res.send(csv);
   }
 
   // histórico de campanhas que o contato recebeu

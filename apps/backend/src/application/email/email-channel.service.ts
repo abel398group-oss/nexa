@@ -4,6 +4,7 @@
  */
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 export interface UpsertEmailChannelDto {
   fromEmail: string;
@@ -47,7 +48,10 @@ const SAFE_SELECT = {
 
 @Injectable()
 export class EmailChannelService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: EmailCryptoService,
+  ) {}
 
   async get(tenantId: string) {
     return this.prisma.emailChannel.findUnique({
@@ -90,15 +94,15 @@ export class EmailChannelService {
       // update: só troca a senha se uma nova foi enviada (vazio mantém a atual)
       update: {
         ...base,
-        ...(smtpPass ? { smtpPass } : {}),
-        ...(imapPass ? { imapPass } : {}),
+        ...(smtpPass ? { smtpPass: this.crypto.encrypt(smtpPass) } : {}),
+        ...(imapPass ? { imapPass: this.crypto.encrypt(imapPass) } : {}),
       },
       create: {
         tenantId,
         provider: 'smtp',
         ...base,
-        smtpPass: smtpPass as string,
-        imapPass: imapPass as string,
+        smtpPass: this.crypto.encrypt(smtpPass as string),
+        imapPass: this.crypto.encrypt(imapPass as string),
       },
       select: SAFE_SELECT,
     });

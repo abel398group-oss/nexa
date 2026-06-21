@@ -88,6 +88,26 @@ export class ContactsService {
     return contact;
   }
 
+  // Exporta um único contato como CSV (LGPD — portabilidade de dados).
+  // Retorna uma string CSV com cabeçalho; o controller seta os headers HTTP corretos.
+  async exportCsv(tenantId: string, id: string): Promise<string> {
+    const c = await this.findOne(tenantId, id);
+    const row = [
+      c.id,
+      c.name ?? '',
+      c.phone,
+      c.email ?? '',
+      c.company ?? '',
+      c.leadStatus ?? '',
+      c.status ?? '',
+      (c.tags ?? []).join('|'),
+      c.createdAt.toISOString(),
+      c.updatedAt.toISOString(),
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',');
+    const header = '"id","nome","telefone","email","empresa","leadStatus","status","tags","criadoEm","atualizadoEm"';
+    return `${header}\n${row}\n`;
+  }
+
   // Histórico de campanhas que um contato recebeu (via CampaignTarget).
   async campaignsForContact(tenantId: string, id: string) {
     const contact = await this.findOne(tenantId, id);

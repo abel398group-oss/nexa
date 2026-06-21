@@ -2,234 +2,106 @@
 
 > **Para:** Agente Orquestra TMS (backend + frontend)  
 > **Repo:** `github.com/hipervias/hipertms_v12`  
-> **Prioridade:** Entregar os endpoints de leitura primeiro — o Nexa depende deles
+> **Descoberta:** o motor de proatividade já existe — trabalho muito menor que o planejado
 
 ---
 
-## Parte 1 — Endpoints de leitura para o Nexa monitorar
+## Contexto
 
-O Nexa vai chamar esses endpoints a cada 30 minutos, autenticado via token de serviço.  
-Todos são `GET`, somente leitura, sem side effects no TMS.
-
-### Autenticação
-
-Criar um `SERVICE_TOKEN` fixo nas variáveis de ambiente do TMS.  
-O Nexa envia `Authorization: Bearer <SERVICE_TOKEN>` em cada chamada.  
-Criar guard `ServiceTokenGuard` que valida esse token.
+A auditoria revelou que o TMS já tem:
+- Módulo `proactivity` com detecção de eventos por severidade (CRITICAL, OVERDUE, DUE_SOON, INFO)
+- `PendingEventsPanel.tsx` — tela nativa de pendências embutida nos hubs de área
+- 6 cron jobs de digest prontos, todos opt-in desligados por env var
 
 ---
 
-### 1.1 Endpoints Fiscais
+## Parte 1 — Ativar cron jobs em produção (zero código, fazer agora)
 
-```
-GET /monitor/fiscal/cte-pendentes?tenantId=xxx
-```
-Retorna CT-es emitidos há mais de 2h sem retorno do SEFAZ.
+Adicionar ao `.env` de produção no Droplet:
 
-```json
-[
-  { "id": "cte_123", "numero": "4521", "nfNumero": "1234", "emitidoEm": "2024-01-15T10:00:00Z" }
-]
-```
+```env
+# Digest diário — embarques entregues sem fatura (seg-sex 07h10)
+UNINVOICED_CRON_ENABLED=true
 
-```
-GET /monitor/fiscal/cte-rejeitados?tenantId=xxx
-```
-Retorna CT-es com status de rejeição SEFAZ nas últimas 24h.
+# Painel diário de embarques (seg-sex 07h05)
+SHIPMENT_PANEL_CRON_ENABLED=true
 
-```
-GET /monitor/fiscal/mdfe-abertos?tenantId=xxx
-```
-Retorna MDF-es com status aberto cuja viagem foi encerrada há mais de 12h.
+# Cotações próximas do vencimento (seg-sex 07h30)
+EXPIRING_QUOTES_CRON_ENABLED=true
 
----
+# Funil de cotações semanal (seg 08h00)
+QUOTE_FUNNEL_CRON_ENABLED=true
 
-### 1.2 Endpoints Logística
+# Posição financeira semanal (seg 08h10)
+WEEKLY_FINANCE_CRON_ENABLED=true
 
-```
-GET /monitor/logistic/atrasados?tenantId=xxx
-```
-Retorna embarques cuja `dataEntregaPrevista < hoje` e status não é entregue/cancelado.
+# Disponibilidade de frota (seg-sex 07h07)
+FLEET_PANEL_CRON_ENABLED=true
 
-```json
-[
-  { "id": "emb_892", "numero": "EMB-0892", "destino": "Campinas", "dataEntregaPrevista": "2024-01-14", "motorista": "Pedro" }
-]
+# Motor de proatividade — reavalia eventos pendentes de todos os tenants
+PROACTIVITY_CRON_ENABLED=true
 ```
 
-```
-GET /monitor/logistic/sem-motorista?tenantId=xxx
-```
-Retorna embarques com partida em menos de 24h sem motorista ou veículo vinculado.
-
-```
-GET /monitor/logistic/viagens-abertas?tenantId=xxx
-```
-Retorna viagens com status iniciado há mais de 5 dias sem encerramento.
+Reiniciar o container após adicionar. Os jobs começam a rodar imediatamente.
 
 ---
 
-### 1.3 Endpoints Frota
+## Parte 2 — Expor eventos do proactivity para o Nexa (1 endpoint novo)
+
+O Nexa precisa ler os eventos que o módulo `proactivity` já detecta.
+
+### Endpoint a criar
 
 ```
-GET /monitor/frota/cnh-vencendo?tenantId=xxx&dias=30
-```
-Retorna motoristas com CNH vencendo em até `dias` dias.
-
-```json
-[
-  { "id": "mot_45", "nome": "Carlos Ferreira", "cnh": "12345678900", "vencimento": "2024-01-22" }
-]
-```
-
-```
-GET /monitor/frota/crlv-vencendo?tenantId=xxx&dias=30
-```
-Retorna veículos com CRLV/licenciamento vencendo em até `dias` dias.
-
-```
-GET /monitor/frota/manutencao-proxima?tenantId=xxx
-```
-Retorna veículos com manutenção preventiva prevista nos próximos 500km ou 7 dias.
-
-```
-GET /monitor/frota/seguro-vencendo?tenantId=xxx&dias=30
-```
-Retorna veículos com seguro vencendo em até `dias` dias.
-
----
-
-### 1.4 Endpoints Financeiro
-
-```
-GET /monitor/finance/contas-vencendo?tenantId=xxx
-```
-Retorna contas a pagar com vencimento = amanhã.
-
-```json
-[
-  { "id": "cp_201", "descricao": "Fornecedor X", "valor": 1500.00, "vencimento": "2024-01-16" }
-]
-```
-
-```
-GET /monitor/finance/contas-vencidas?tenantId=xxx
-```
-Retorna contas a pagar vencidas e ainda em aberto.
-
-```
-GET /monitor/finance/faturas-vencidas?tenantId=xxx
-```
-Retorna faturas de clientes vencidas e não pagas.
-
----
-
----
-
-## Parte 2 — Receptor de alertas do Nexa
-
-O Nexa vai empurrar alertas consolidados para o TMS exibir na página nativa.
-
-### Endpoint receptor
-
-```
-POST /monitor/alerts
+GET /proactivity/events?tenantId=xxx&status=pending
 Authorization: Bearer <SERVICE_TOKEN>
 ```
 
-Body:
+**Resposta:**
 ```json
-{
-  "tenantId": "tenant_abc",
-  "alerts": [
-    {
-      "id": "alert_nexa_123",
-      "category": "fiscal",
-      "type": "cte_sem_sefaz",
-      "severity": "critical",
-      "externalId": "cte_123",
-      "title": "CT-e sem retorno SEFAZ",
-      "description": "NFs 4.521 e 4.522 emitidas há 4h sem autorização",
-      "detectedAt": "2024-01-15T07:00:00Z",
-      "status": "open"
-    }
-  ]
-}
+[
+  {
+    "id": "evt_123",
+    "tenantId": "tenant_abc",
+    "category": "fiscal",
+    "type": "uninvoiced_shipment",
+    "severity": "CRITICAL",
+    "title": "Embarque entregue sem fatura",
+    "description": "EMB-0892 entregue há 3 dias sem CT-e vinculado",
+    "externalId": "emb_892",
+    "detectedAt": "2024-01-15T07:00:00Z"
+  }
+]
 ```
 
-O TMS deve salvar esses alertas em uma tabela local (`monitor_alerts`) para exibir na página nativa.
+**Implementação:** criar action/endpoint no controller do módulo `proactivity` existente que retorna os eventos ativos por tenant. Autenticar com `ServiceTokenGuard` (mesmo padrão usado em outras integrações).
 
-### Tabela local no TMS (migration)
+### Endpoint de resolução (para o Nexa fechar alertas)
 
-```sql
-CREATE TABLE monitor_alerts (
-  id            VARCHAR PRIMARY KEY,   -- id vindo do Nexa
-  tenant_id     VARCHAR NOT NULL,
-  category      VARCHAR NOT NULL,
-  type          VARCHAR NOT NULL,
-  severity      VARCHAR NOT NULL,      -- critical | urgent | info
-  external_id   VARCHAR,
-  title         VARCHAR NOT NULL,
-  description   TEXT,
-  status        VARCHAR DEFAULT 'open',
-  detected_at   TIMESTAMP,
-  resolved_at   TIMESTAMP,
-  created_at    TIMESTAMP DEFAULT NOW(),
-  updated_at    TIMESTAMP DEFAULT NOW()
-);
+```
+PATCH /proactivity/events/:id/resolve
+Authorization: Bearer <SERVICE_TOKEN>
 ```
 
 ---
 
-## Parte 3 — Página nativa no TMS
+## Parte 3 — Página nativa (já existe, apenas verificar)
 
-Criar página em `apps/web/src/pages/monitor/MonitorPage.tsx` (ou equivalente no FSD do TMS).
+`PendingEventsPanel.tsx` já existe e está embutido nos hubs de área.
 
-**Rota:** `/monitor` no menu lateral  
-**Acesso:** apenas admin e gestores do tenant
+**Verificar apenas:**
+- Se está visível e funcional no hub principal (dashboard)
+- Se exibe as severidades corretamente (CRITICAL primeiro)
+- Se tem ação de "marcar como resolvido"
 
-### Layout da página
-
-**Header:**
-- Título "Pendências e Alertas"
-- Badge com total de alertas abertos
-- Botão "Atualizar"
-
-**Filtros:**
-- Categoria: Todos / Fiscal / Logística / Frota / Financeiro
-- Severidade: Todos / Crítico / Urgente / Informativo
-- Status: Abertos / Resolvidos
-
-**Lista de alertas — card por item:**
-- Ícone da categoria
-- Título + descrição
-- Badge de severidade (vermelho/amarelo/cinza)
-- Data de detecção
-- Botão "Marcar como resolvido" → chama `POST /monitor/alerts/:id/resolve` no Nexa
-
-**Resumo no topo (4 cards):**
-- Total críticos
-- Total urgentes
-- Total informativos
-- Resolvidos hoje
+Não construir nada novo — ajustar apenas se tiver bug visual.
 
 ---
 
 ## Checklist de entrega
 
-**Parte 1 — Endpoints de leitura (entregar primeiro)**
-- [ ] `ServiceTokenGuard` para autenticar chamadas do Nexa
-- [ ] Endpoints fiscais (3 rotas)
-- [ ] Endpoints logística (3 rotas)
-- [ ] Endpoints frota (4 rotas)
-- [ ] Endpoints financeiro (3 rotas)
-- [ ] Variável de ambiente: `NEXA_SERVICE_TOKEN`
-
-**Parte 2 — Receptor de alertas**
-- [ ] Migration `monitor_alerts` no banco do TMS
-- [ ] `POST /monitor/alerts` receptor com upsert por `id`
-
-**Parte 3 — Página nativa**
-- [ ] Página `MonitorPage` com lista, filtros e cards de resumo
-- [ ] Botão "Marcar como resolvido" integrado ao Nexa
-- [ ] Link no menu lateral do TMS
+- [ ] Ativar 7 env vars de cron no `.env` de produção e reiniciar
+- [ ] Criar `GET /proactivity/events` com `ServiceTokenGuard`
+- [ ] Criar `PATCH /proactivity/events/:id/resolve` com `ServiceTokenGuard`
+- [ ] Adicionar `NEXA_SERVICE_TOKEN` ao `.env` de produção
+- [ ] Verificar `PendingEventsPanel` no hub principal — ajustar só se necessário

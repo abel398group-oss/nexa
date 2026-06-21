@@ -16,6 +16,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailOptOutService } from './email-optout.service';
+import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 const SIGNATURE = 'Lia · Assistente HiperTMS | hipertms.com.br';
 
@@ -57,6 +58,7 @@ export class EmailReplyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly optout: EmailOptOutService,
+    private readonly crypto: EmailCryptoService,
   ) {}
 
   /** Resolve configuração SMTP: banco (por tenant) ou fallback .env. */
@@ -72,7 +74,7 @@ export class EmailReplyService {
         port: ch.smtpPort,
         secure: ch.smtpSecure,
         user: ch.smtpUser,
-        pass: ch.smtpPass,
+        pass: this.crypto.decrypt(ch.smtpPass), // decripta AES-256-GCM
         fromEmail: ch.fromEmail,
         fromName: ch.fromName,
         replyTo: ch.replyTo ?? undefined,

@@ -22,6 +22,7 @@ import * as imapSimple from 'imap-simple';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailService } from './email.service';
+import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 const POLL_INTERVAL_SEC = Number(process.env.EMAIL_POLL_INTERVAL_SEC ?? 60);
 
@@ -42,6 +43,7 @@ export class EmailImapService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly crypto: EmailCryptoService,
   ) {}
 
   onModuleInit() {
@@ -72,7 +74,7 @@ export class EmailImapService implements OnModuleInit {
         host: c.imapHost,
         port: c.imapPort,
         user: c.imapUser,
-        pass: c.imapPass,
+        pass: this.crypto.decrypt(c.imapPass), // decripta AES-256-GCM
         mailbox: c.imapMailbox,
         tenantId: c.tenantId,
       }));

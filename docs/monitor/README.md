@@ -1,40 +1,51 @@
 # Monitor Proativo TMS — Índice de Implementação
 
-> **Status:** Pronto para implementar  
+> **Status:** Arquitetura revisada após auditoria TMS (2026-06-20)  
 > **Referência:** `docs/product/monitor-proativo.md`
 
-## O que é
+---
 
-Motor que observa o banco do TMS, detecta situações críticas (CT-e sem SEFAZ, CNH vencendo, embarque atrasado, conta a vencer) e avisa o cliente via WhatsApp e e-mail de forma consolidada — 1 mensagem por dia, sem spam. O cliente também pode consultar a Lia on-demand pelo WhatsApp.
+## Descoberta importante — TMS já tem o motor
 
-## Arquitetura
+A auditoria do TMS revelou que **a detecção de eventos já existe**:
+
+- Módulo `proactivity` com `PendingEventsPanel.tsx` — severidades CRITICAL, OVERDUE, DUE_SOON, INFO
+- 6 cron jobs de digest prontos (`billing-dunning`, `digest`, `proactivity` schedulers)
+- Todos os cron jobs estão **opt-in desligados por padrão** — só precisam de env vars
+
+A página nativa no TMS (`PendingEventsPanel`) já existe. Não precisa ser construída do zero.
+
+---
+
+## Arquitetura real (revisada)
 
 ```
-TMS (fonte de dados)
-  └── expõe endpoints de leitura por categoria
+TMS — proactivity module (já detecta e classifica eventos)
+  └── expõe GET /proactivity/events?tenantId=xxx (novo endpoint simples)
         ↓
-Nexa — MonitorService (cron a cada 30min)
-  └── avalia regras → gera AlertState
-        ↓
-  ConsolidationService → 1 resumo por tenant/dia
+Nexa — MonitorService (consome eventos do TMS)
+  └── ConsolidationService → 1 resumo por tenant/dia
         ↓
   NotificationService → WAHA (WhatsApp) ou SMTP (e-mail)
-        ↓
-TMS — página nativa exibe alertas recebidos via API
 ```
 
-## Squads e arquivos
+**O Nexa NÃO recria a lógica de detecção** — ela já existe no TMS. O Nexa só lê, consolida e envia.
 
-| Squad | Arquivo | Responsabilidade |
-|-------|---------|-----------------|
-| Orquestra Nexa | `squad-orquestra-nexa.md` | Motor de alertas, tabelas, serviços, config UI |
-| Orquestra TMS | `squad-orquestra-tms.md` | Endpoints de dados, receptor de alertas, página nativa |
-| Orquestra Nexa support IA | `squad-orquestra-nexa-ia.md` | Intents on-demand da Lia via WhatsApp |
+---
+
+## O que cada squad faz agora
+
+| Squad | Arquivo | Responsabilidade real |
+|-------|---------|----------------------|
+| Orquestra TMS | `squad-orquestra-tms.md` | 1 endpoint para expor eventos + ativar cron jobs no .env |
+| Orquestra Nexa | `squad-orquestra-nexa.md` | Consumir API do TMS, consolidar e enviar via WhatsApp/e-mail |
+| Orquestra Nexa IA | `squad-orquestra-nexa-ia.md` | Intents on-demand da Lia (sem alteração) |
+
+---
 
 ## Ordem de execução
 
-1. **Orquestra TMS** cria os endpoints de leitura (o Nexa precisa deles para monitorar)
-2. **Orquestra Nexa** implementa o motor, tabelas e serviços
-3. **Orquestra Nexa support IA** adiciona os intents on-demand na Lia
-4. **Orquestra TMS** cria a página nativa que exibe os alertas
-5. Teste integrado com 1 tenant piloto
+1. **Orquestra TMS** ativa os cron jobs no `.env` de produção (imediato, zero código)
+2. **Orquestra TMS** cria o endpoint `GET /proactivity/events`
+3. **Orquestra Nexa** implementa consumo, consolidação e envio
+4. Teste com 1 tenant piloto
