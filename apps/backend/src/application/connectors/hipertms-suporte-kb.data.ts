@@ -727,7 +727,8 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '1. Acesse Operação → CT-e.\n' +
       '2. Abra o CT-e original autorizado.\n' +
       '3. Clique em "Emitir Complementar".\n' +
-      '4. Informe o valor complementar (diferença).\n' +\n      '5. Confirme — o CT-e Complementar referencia o original automaticamente.\n' +
+      '4. Informe o valor complementar (diferença).\n' +
+      '5. Confirme — o CT-e Complementar referencia o original automaticamente.\n' +
       'Obs: o prazo para cancelamento do CT-e original (24h) é independente do prazo para emissão do Complementar.',
     tags: ['cte complementar', 'complementar', 'valor errado', 'diferenca frete', 'corrigir valor'],
   },
