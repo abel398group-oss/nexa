@@ -658,6 +658,197 @@ export const SUPORTE_KB: KnowledgeItem[] = [
   },
 
   // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — VIAGENS (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'Como criar uma viagem e adicionar embarques',
+    content:
+      'Passo a passo para criar uma viagem:\n' +
+      '1. Acesse Operação → Viagens e clique em "Nova Viagem".\n' +
+      '2. Selecione o Veículo e o Motorista.\n' +
+      '3. Adicione os Embarques que farão parte da viagem (somente embarques com status "Aguardando").\n' +
+      '4. Defina a Rota (sequência de coletas e entregas).\n' +
+      '5. Informe a Diária do motorista, se aplicável.\n' +
+      '6. Salve — a viagem fica com status "Planejada".\n' +
+      'Para iniciar a viagem: abra a viagem salva e clique em "Iniciar Viagem" — o status muda para "Em andamento" e os embarques passam a "Em andamento".\n' +
+      'Obs: um embarque só pode estar em uma viagem por vez.',
+    tags: ['viagem', 'criar viagem', 'nova viagem', 'embarque', 'motorista', 'veiculo', 'operacao'],
+  },
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'Viagem está no status "Planejada" — como iniciar',
+    content:
+      'Uma viagem criada fica inicialmente no status "Planejada" — isso significa que não foi iniciada ainda.\n' +
+      'Para iniciar:\n' +
+      '1. Acesse Operação → Viagens e abra a viagem desejada.\n' +
+      '2. Clique em "Iniciar Viagem".\n' +
+      '3. O status muda para "Em andamento" e os embarques vinculados passam de "Aguardando" para "Em andamento".\n' +
+      'Por que isso importa:\n' +
+      '- Embarques em viagem "Planejada" ficam travados em "Aguardando".\n' +
+      '- O CT-e e MDF-e só podem ser emitidos quando a viagem está "Em andamento".\n' +
+      '- O encerramento do MDF-e só é possível após iniciar e concluir a viagem.',
+    tags: ['planejada', 'iniciar viagem', 'em andamento', 'status viagem', 'operacao'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FISCAL — CT-e (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'cte-rejeicao',
+    category: 'suporte',
+    title: 'CT-e em processamento há muito tempo — o que fazer',
+    content:
+      'Status "Em processamento" significa que o CT-e foi transmitido à SEFAZ mas ainda não retornou resposta.\n' +
+      'Causas comuns:\n' +
+      '1. SEFAZ instável: lentidão ou intermitência no serviço da SEFAZ.\n' +
+      '2. Timeout de conexão: a resposta foi perdida antes de chegar ao sistema.\n' +
+      'O que fazer:\n' +
+      '1. Aguarde 5 a 10 minutos e consulte novamente o status em Operação → CT-e.\n' +
+      '2. Se ainda "Em processamento" após 10 minutos, clique em "Consultar SEFAZ" (ou "Verificar status") — o sistema consultará a SEFAZ e atualizará o status.\n' +
+      '3. Se a SEFAZ confirmar autorização: o status muda para "Autorizado".\n' +
+      '4. Se a SEFAZ retornar rejeição: o status muda para "Rejeitado" com o código de erro.\n' +
+      'IMPORTANTE: NÃO emita um novo CT-e enquanto o anterior ainda estiver em processamento — pode gerar duplicidade (rejeição 204).',
+    tags: ['em processamento', 'cte', 'sefaz', 'timeout', 'consultar', 'status', 'aguardando retorno'],
+  },
+  {
+    topic: 'cte-cancelamento',
+    category: 'suporte',
+    title: 'CT-e Complementar — quando usar e como emitir',
+    content:
+      'O CT-e Complementar é usado para corrigir o VALOR de um CT-e já autorizado quando a correção não pode ser feita por Carta de Correção.\n' +
+      'Quando usar:\n' +
+      '- Quando o valor do frete foi emitido a menor e precisa de complementação.\n' +
+      '- Quando há diferença de frete a cobrar após o transporte.\n' +
+      'NÃO use CT-e Complementar para cancelar ou substituir o CT-e original — ele apenas COMPLEMENTA.\n' +
+      'Como emitir:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. Abra o CT-e original autorizado.\n' +
+      '3. Clique em "Emitir Complementar".\n' +
+      '4. Informe o valor complementar (diferença).\n' +\n      '5. Confirme — o CT-e Complementar referencia o original automaticamente.\n' +
+      'Obs: o prazo para cancelamento do CT-e original (24h) é independente do prazo para emissão do Complementar.',
+    tags: ['cte complementar', 'complementar', 'valor errado', 'diferenca frete', 'corrigir valor'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FROTA — ABASTECIMENTO E DIÁRIAS (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Abastecimento não gerou conta a pagar — como resolver',
+    content:
+      'Problema: abastecimento registrado em Frota → Abastecimentos mas não aparece como conta a pagar no Financeiro.\n' +
+      'Causa: o abastecimento precisa ser APROVADO e CONVERTIDO para gerar a conta a pagar automaticamente.\n' +
+      'Fluxo correto:\n' +
+      '1. Registro: o motorista/operador registra o abastecimento em Frota → Abastecimentos.\n' +
+      '2. Aprovação: um usuário com permissão acessa o abastecimento e clica em "Aprovar".\n' +
+      '3. Conversão: após aprovado, clique em "Converter em Conta a Pagar" — o sistema cria automaticamente a conta no Financeiro → Contas a Pagar.\n' +
+      'Se o botão "Aprovar" não aparece: o usuário não tem permissão de aprovação — ajuste em Administração → Usuários → Permissões.\n' +
+      'Se foi aprovado mas não convertido: localize o abastecimento e faça a conversão manualmente.',
+    tags: ['abastecimento', 'conta pagar', 'nao gerou', 'aprovacao', 'conversao', 'frota', 'financeiro'],
+  },
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Como registrar diária ou adiantamento de motorista',
+    content:
+      'Diárias e adiantamentos registram os valores pagos aos motoristas durante as viagens.\n' +
+      'Como registrar:\n' +
+      '1. Acesse Frota → Diárias e clique em "Nova Diária".\n' +
+      '2. Selecione o Motorista e a Viagem correspondente.\n' +
+      '3. Informe o Valor e a Forma de Pagamento.\n' +
+      '4. Salve — o registro é vinculado ao financeiro da viagem.\n' +
+      'Também é possível adicionar a diária diretamente ao criar a viagem (campo "Diária do motorista" no formulário de Nova Viagem).\n' +
+      'O valor da diária aparece no custo da viagem em Operação → Viagens → aba Financeiro.\n' +
+      'Se a diária não aparece no financeiro: verifique se o registro está vinculado à viagem correta.',
+    tags: ['diaria', 'adiantamento', 'motorista', 'viagem', 'pagamento', 'frota', 'financeiro viagem'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FINANCEIRO — PRESTADOR E ORÇAMENTO (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Fatura de prestador — como registrar fatura de transportador terceiro',
+    content:
+      'Faturas de prestador são cobranças recebidas de transportadores parceiros (terceiros).\n' +
+      'Como registrar:\n' +
+      '1. Acesse Financeiro → Faturas (prestador).\n' +
+      '2. Clique em "Nova Fatura de Prestador".\n' +
+      '3. Selecione o Transportador (deve estar cadastrado em Cadastros → Terceiros).\n' +
+      '4. Vincule as Ordens de Serviço de transporte realizadas.\n' +
+      '5. Revise os valores e confirme.\n' +
+      '6. A fatura gera automaticamente uma Conta a Pagar em Financeiro → Contas a Pagar.\n' +
+      'Se o transportador não aparece na lista: cadastre-o primeiro em Cadastros → Terceiros com CNPJ e dados bancários.\n' +
+      'Após registrar o pagamento: abra a fatura e clique em "Registrar Pagamento" para liquidar a conta a pagar.',
+    tags: ['fatura prestador', 'terceiro', 'transportador', 'parceiro', 'conta pagar', 'financeiro', 'ordem servico'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // PRECIFICAÇÃO — CONTRATOS (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Como criar um contrato comercial e vincular a um cliente',
+    content:
+      'Um contrato garante que um cliente específico sempre use uma tabela de frete negociada, com condições especiais.\n' +
+      'Como criar:\n' +
+      '1. Acesse Precificação → Contratos e clique em "Novo Contrato".\n' +
+      '2. Selecione o Cliente (tomador).\n' +
+      '3. Selecione a Tabela de Frete que será aplicada a este cliente.\n' +
+      '4. Defina o período de validade (data início e fim).\n' +
+      '5. Adicione serviços adicionais incluídos no contrato, se houver.\n' +
+      '6. Salve — o contrato fica vinculado ao cliente.\n' +
+      'Nas cotações para esse cliente, o sistema usa automaticamente a tabela contratual.\n' +
+      'Problemas comuns:\n' +
+      '- Contrato vencido: o sistema usa a tabela padrão. Renove o contrato em Precificação → Contratos.\n' +
+      '- Mais de um contrato ativo: o sistema usa o contrato mais recente. Verifique e desative contratos antigos.',
+    tags: ['contrato', 'cliente', 'tabela frete', 'contrato comercial', 'precificacao', 'vigencia'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // ADMINISTRAÇÃO — AMBIENTE FISCAL E USUÁRIOS (gaps)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'administracao-problemas',
+    category: 'suporte',
+    title: 'Ambiente SEFAZ: produção vs. homologação — como configurar',
+    content:
+      'O HiperTMS opera em dois ambientes fiscais: Produção (documentos reais) e Homologação (testes, sem valor fiscal).\n' +
+      'Como verificar e alterar o ambiente:\n' +
+      '1. Acesse Administração → Configurações Fiscais (ou Dados da Empresa → aba Fiscal).\n' +
+      '2. Verifique o campo "Ambiente SEFAZ": deve estar em "Produção" para emitir documentos reais.\n' +
+      '3. Para alterar: selecione "Produção" e salve.\n' +
+      'ATENÇÃO: documentos emitidos em Homologação NÃO têm valor fiscal e NÃO precisam ser cancelados. São apenas para teste.\n' +
+      'Sintomas de ambiente errado:\n' +
+      '- CT-e autorizado mas não aparece na consulta da SEFAZ → está em homologação.\n' +
+      '- Cliente reclama que o CT-e não é válido → verifique o ambiente.\n' +
+      'Após mudar para Produção: emita novos documentos. Os documentos de homologação ficam arquivados apenas localmente.',
+    tags: ['ambiente', 'producao', 'homologacao', 'sefaz', 'fiscal', 'teste', 'configuracao fiscal'],
+  },
+  {
+    topic: 'administracao-problemas',
+    category: 'suporte',
+    title: 'Limite de usuários do plano atingido — o que fazer',
+    content:
+      'Problema: ao tentar cadastrar um novo usuário, o sistema informa que o limite do plano foi atingido.\n' +
+      'Limites por plano:\n' +
+      '- Básico: 5 usuários\n' +
+      '- Essencial: 8 usuários\n' +
+      '- Profissional: 15 usuários\n' +
+      'Opções:\n' +
+      '1. Fazer upgrade do plano: acesse Administração → Assinatura e Cobrança → Alterar Plano.\n' +
+      '2. Desativar usuários inativos: Administração → Usuários → localize usuários que não acessam mais e clique em "Desativar". Usuários inativos não contam para o limite.\n' +
+      '3. Verificar o plano atual: Administração → Assinatura e Cobrança mostra o plano ativo e quantos usuários estão em uso.',
+    tags: ['limite usuarios', 'plano', 'usuario', 'upgrade', 'maximo', 'administracao', 'assinatura'],
+  },
+
+  // ══════════════════════════════════════════════════════════
   // DÚVIDAS GERAIS / FAQ
   // ══════════════════════════════════════════════════════════
   {
