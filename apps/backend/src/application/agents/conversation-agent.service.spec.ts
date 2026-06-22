@@ -221,7 +221,8 @@ describe('ConversationAgentService.handle()', () => {
       ]);
 
       const svc = makeService();
-      const res = await svc.handle('t1', { message: 'só testando' });
+      // conversationId is required so the service actually loads message history
+      const res = await svc.handle('t1', { message: 'só testando', conversationId: 'conv1' });
 
       expect(res.route.agent).toBe('human');
       expect(res.needsHuman).toBe(true);

@@ -96,10 +96,26 @@ describe('ProactiveDetectorService.evaluateAll()', () => {
   });
 });
 
+// Helper: mock the 4 sequential aiConversation.findMany calls inside evaluateTenant
+// Order: stale_open → lead_no_reply → sla_breach → auto_close
+function mockFindManySequence(
+  staleOpenResult: any[],
+  leadNoReplyResult: any[] = [],
+  slaBreachResult: any[] = [],
+  autoCloseResult: any[] = [],
+) {
+  mockPrisma.aiConversation.findMany
+    .mockResolvedValueOnce(staleOpenResult)
+    .mockResolvedValueOnce(leadNoReplyResult)
+    .mockResolvedValueOnce(slaBreachResult)
+    .mockResolvedValueOnce(autoCloseResult);
+}
+
 describe('detectStaleOpen', () => {
   it('creates event when conversation is idle > thresholdMin', async () => {
     const idleConv = { id: 'conv1', lastActivityAt: hoursAgo(3), ticketPriority: null };
-    mockPrisma.aiConversation.findMany.mockResolvedValue([idleConv]);
+    // Only return idle conv for stale_open query; return [] for all others
+    mockFindManySequence([idleConv]);
 
     const svc = makeService();
     await svc.evaluateAll();
@@ -112,8 +128,9 @@ describe('detectStaleOpen', () => {
   });
 
   it('sets severity CRITICAL when idle > 2x threshold', async () => {
+    // threshold = 60min → 2x = 120min → 5h is definitely > 2x
     const veryIdleConv = { id: 'conv2', lastActivityAt: hoursAgo(5), ticketPriority: null };
-    mockPrisma.aiConversation.findMany.mockResolvedValue([veryIdleConv]);
+    mockFindManySequence([veryIdleConv]);
 
     const svc = makeService();
     await svc.evaluateAll();
@@ -208,14 +225,9 @@ describe('detectSlaBreach', () => {
 
 describe('detectAutoClose', () => {
   it('creates INFO event for resolved-but-open conversation past threshold', async () => {
-    mockPrisma.aiConversation.findMany.mockImplementation((args: any) => {
-      if (args?.where?.resolvedAt?.not) {
-        return Promise.resolve([
-          { id: 'conv-res', resolvedAt: hoursAgo(3) },
-        ]);
-      }
-      return Promise.resolve([]);
-    });
+    const resolvedConv = { id: 'conv-res', resolvedAt: hoursAgo(3) };
+    // auto_close is the 4th findMany call in evaluateTenant
+    mockFindManySequence([], [], [], [resolvedConv]);
 
     const svc = makeService();
     await svc.evaluateAll();
