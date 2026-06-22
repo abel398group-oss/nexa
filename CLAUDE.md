@@ -48,6 +48,20 @@ pnpm monorepo:
 - **Banco**: Postgres gerenciado DigitalOcean (`db-postgresql-nyc3-37059-do-user-16747874-0.k.db.ondigitalocean.com:25060`), database `nexa`. Não está no docker-compose — é externo.
 - **`/home/ueldermartin/hipervias/docker-compose.yml`**: arquivo antigo do HiperTMS v1, ignorar completamente.
 
+## Database rule — local only in development
+
+**Never** point `DATABASE_URL`, `TMS_DB_URL`, `MIRROR_*`, `IMPORT_*` or any
+connection variable to the DigitalOcean database in local `.env` files.
+
+In development, all DB connections must target local Docker containers:
+
+- **Nexa** → `postgresql://nexa:nexa_local_dev@127.0.0.1:5433/nexa`
+- **TMS / HiperTMS** → `postgresql://postgres:postgres@localhost:15432/hipervias`
+
+The DigitalOcean DB is production/staging only — changes there affect real
+customer data. If a `.env` with a DigitalOcean URL is received, replace it
+with the local address before running any command.
+
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
