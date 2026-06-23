@@ -79,6 +79,21 @@ The DigitalOcean DB is production/staging only — changes there affect real
 customer data. If a `.env` with a DigitalOcean URL is received, replace it
 with the local address before running any command.
 
+## Ambientes de execução
+
+Dois ambientes distintos — nunca confundir:
+
+| Ambiente | Onde rodar comandos | Como acessar |
+|----------|-------------------|--------------|
+| **Local (dev)** | Terminal do VS Code ou Git Bash na máquina do Abel (`C:\Users\Hipervias - Abel\Documents\GitHub\nexa\`) | Direto no terminal |
+| **Produção (DigitalOcean)** | Console web DO → Droplets → hiperTMS → Console | Sem SSH (sem chave); nunca via terminal local |
+
+- Comandos `pnpm`, `nest`, `Remove-Item dist`, etc. → **local**
+- **Shell local = PowerShell** — não usar `&&` (inválido no PS 5.1); usar `;` ou comandos separados. `rm -rf` vira `Remove-Item -Recurse -Force`.
+- Comandos `docker compose`, `docker exec`, `docker logs` → **produção via DO Console**
+- Erros com caminho `C:\Users\Hipervias - Abel\...` → são **locais**
+- Erros com caminho `/root/nexa/` → são de **produção**
+
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
