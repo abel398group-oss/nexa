@@ -120,37 +120,45 @@ export function DashboardPage() {
 
   // React Query (E8 — fatia 1): substitui o useEffect+setInterval manual.
   // A key inclui o range → troca de período refaz a query; refetchInterval = polling.
+  // staleTime: não refaz a query se o dado ainda está "fresco" (cache do backend é 30s).
+  // refetchInterval: polling de 30s (era 10s) — suficiente para um dashboard operacional.
   const overviewQ = useQuery({
     queryKey: ['metrics-overview', range.from, range.to],
     queryFn: async () => (await api.get<Overview>('/metrics/overview', { params: params() })).data,
-    refetchInterval: 10_000,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
   });
   const seriesQ = useQuery({
     queryKey: ['metrics-timeseries', range.from, range.to],
     queryFn: async () => (await api.get<{ series: ActivityPoint[] }>('/metrics/timeseries', { params: params() })).data,
-    refetchInterval: 10_000,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
   });
   const supportQ = useQuery({
     queryKey: ['metrics-support', range.from, range.to],
     queryFn: async () => (await api.get<SupportOverview>('/metrics/support', { params: params() })).data,
-    refetchInterval: 30_000,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
   });
 
   const oppQ = useQuery({
     queryKey: ['opportunities-summary'],
     queryFn: async () => (await api.get<OppSummaryRow[]>('/opportunities/summary')).data,
-    refetchInterval: 30_000,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
   });
 
   const sellersQ = useQuery({
     queryKey: ['metrics-sellers'],
     queryFn: async () => (await api.get<SellerKpi[]>('/metrics/sellers')).data,
+    staleTime: 55_000,
     refetchInterval: 60_000,
   });
 
   const resolutionQ = useQuery({
     queryKey: ['metrics-resolution'],
     queryFn: async () => (await api.get<ResolutionMetrics>('/metrics/resolution?days=7')).data,
+    staleTime: 55_000,
     refetchInterval: 60_000,
   });
 
@@ -168,14 +176,14 @@ export function DashboardPage() {
     resolutionQ.refetch();
   };
 
-  if (!m) return (
-    <div className="flex h-full items-center justify-center text-base-content/40">
-      Carregando métricas...
-    </div>
+  // Skeleton inline — não bloqueia o render; cada seção mostra loading/dado conforme chega.
+  const loading = overviewQ.isLoading;
+  const SkeletonCard = () => (
+    <div className="animate-pulse rounded-xl bg-base-200 h-[76px]" />
   );
 
-  const byStatus  = m.conversations.byStatus  ?? {};
-  const byOutcome = m.conversations.byOutcome ?? {};
+  const byStatus  = m?.conversations?.byStatus  ?? {};
+  const byOutcome = m?.conversations?.byOutcome ?? {};
 
   // ativo = open + waiting_customer + waiting_internal + escalated
   const activeTotal =
@@ -201,10 +209,12 @@ export function DashboardPage() {
       {/* ── Visão geral ────────────────────────────────────────────── */}
       <SectionTitle>Visão Geral</SectionTitle>
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <ConversationMetricsCard label="Contatos" value={m.contacts.total} icon="contacts" accent="brand" hint={`${m.contacts.optedOut} opt-outs`} />
-        <ConversationMetricsCard label="Conversas" value={m.conversations.total} icon="inbox" accent="blue" hint="total histórico" />
-        <ConversationMetricsCard label="Mensagens" value={m.messages.inbound + m.messages.outbound} icon="mail" accent="green" hint={`${m.messages.inbound} in · ${m.messages.outbound} out`} />
-        <ConversationMetricsCard label="Base (KB)" value={m.knowledge.total} icon="knowledge" accent="amber" hint="itens de conhecimento" />
+        {loading ? (<><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></>) : (<>
+          <ConversationMetricsCard label="Contatos" value={m!.contacts.total} icon="contacts" accent="brand" hint={`${m!.contacts.optedOut} opt-outs`} />
+          <ConversationMetricsCard label="Conversas" value={m!.conversations.total} icon="inbox" accent="blue" hint="total histórico" />
+          <ConversationMetricsCard label="Mensagens" value={m!.messages.inbound + m!.messages.outbound} icon="mail" accent="green" hint={`${m!.messages.inbound} in · ${m!.messages.outbound} out`} />
+          <ConversationMetricsCard label="Base (KB)" value={m!.knowledge.total} icon="knowledge" accent="amber" hint="itens de conhecimento" />
+        </>)}
       </div>
 
       {/* ── Atividade por período (Q5) ─────────────────────────────── */}
@@ -225,7 +235,7 @@ export function DashboardPage() {
       </Card>
 
       {/* ── Engajamento de Campanhas (CAMP-2) ──────────────────────── */}
-      {m.campaigns && (
+      {m?.campaigns && (
         <>
           <SectionTitle>Engajamento de Campanhas</SectionTitle>
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -398,33 +408,35 @@ export function DashboardPage() {
       {/* ── IA e performance ──────────────────────────────────────── */}
       <SectionTitle>IA e Performance</SectionTitle>
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <ConversationMetricsCard
-          label="IA Autônoma"
-          value={`${m.messages.aiSharePct}%`}
-          icon="bot"
-          accent="brand"
-          hint={`${m.messages.aiGenerated} respostas enviadas pela IA`}
-        />
-        <ConversationMetricsCard
-          label="Tokens"
-          value={(m.ai.tokensIn + m.ai.tokensOut).toLocaleString('pt-BR')}
-          icon="zap"
-          hint={`${m.ai.tokensIn} in · ${m.ai.tokensOut} out`}
-        />
-        <ConversationMetricsCard
-          label="Custo IA (est.)"
-          value={`US$ ${m.ai.estimatedCostUsd.toFixed(4)}`}
-          icon="dollar"
-          accent="amber"
-          hint="estimado pelos tokens"
-        />
-        <ConversationMetricsCard
-          label="DLQ (erros)"
-          value={m.events.dlq}
-          icon="alert"
-          accent={m.events.dlq > 0 ? 'red' : undefined}
-          hint="eventos com falha"
-        />
+        {loading ? (<><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></>) : (<>
+          <ConversationMetricsCard
+            label="IA Autônoma"
+            value={`${m!.messages.aiSharePct}%`}
+            icon="bot"
+            accent="brand"
+            hint={`${m!.messages.aiGenerated} respostas enviadas pela IA`}
+          />
+          <ConversationMetricsCard
+            label="Tokens"
+            value={(m!.ai.tokensIn + m!.ai.tokensOut).toLocaleString('pt-BR')}
+            icon="zap"
+            hint={`${m!.ai.tokensIn} in · ${m!.ai.tokensOut} out`}
+          />
+          <ConversationMetricsCard
+            label="Custo IA (est.)"
+            value={`US$ ${m!.ai.estimatedCostUsd.toFixed(4)}`}
+            icon="dollar"
+            accent="amber"
+            hint="estimado pelos tokens"
+          />
+          <ConversationMetricsCard
+            label="DLQ (erros)"
+            value={m!.events.dlq}
+            icon="alert"
+            accent={m!.events.dlq > 0 ? 'red' : undefined}
+            hint="eventos com falha"
+          />
+        </>)}
       </div>
 
       {/* ── IA vs Humano — Resoluções (A1) ──────────────────────── */}
@@ -552,6 +564,7 @@ export function DashboardPage() {
       )}
 
       {/* ── Detalhes ──────────────────────────────────────────────── */}
+      {m && (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="card p-5">
           <div className="mb-2 text-sm font-semibold text-base-content/70">Leads por estágio</div>
@@ -569,9 +582,10 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Performance de Atendimento ───────────────────────────── */}
-      {m.performance && (
+      {m?.performance && (
         <>
           <SectionTitle>Performance de Atendimento</SectionTitle>
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -588,7 +602,7 @@ export function DashboardPage() {
               const total = n(byOutcome, 'won') + n(byOutcome, 'lost') + n(byOutcome, 'no_response');
               const noRespPct = total > 0 ? Math.round((n(byOutcome, 'no_response') / total) * 100) : 0;
               const convPct = total > 0 ? Math.round((n(byOutcome, 'won') / total) * 100) : 0;
-              const optOutPct = m.contacts.total > 0 ? Math.round((m.contacts.optedOut / m.contacts.total) * 100) : 0;
+              const optOutPct = m!.contacts.total > 0 ? Math.round((m!.contacts.optedOut / m!.contacts.total) * 100) : 0;
               return (
                 <>
                   <ConversationMetricsCard
@@ -610,7 +624,7 @@ export function DashboardPage() {
                     value={`${optOutPct}%`}
                     icon="ban"
                     accent={optOutPct > 5 ? 'red' : 'zinc'}
-                    hint={`${m.contacts.optedOut} descadastrados`}
+                    hint={`${m!.contacts.optedOut} descadastrados`}
                   />
                 </>
               );

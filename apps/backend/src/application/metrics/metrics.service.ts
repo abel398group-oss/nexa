@@ -1,14 +1,41 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
+// Simple in-memory TTL cache entry
+interface CacheEntry<T> { data: T; expiresAt: number }
+
 @Injectable()
 export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Per-tenant TTL cache: key → { data, expiresAt }
+  private readonly _cache = new Map<string, CacheEntry<any>>();
+
+  private _cacheGet<T>(key: string): T | undefined {
+    const entry = this._cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) { this._cache.delete(key); return undefined; }
+    return entry.data as T;
+  }
+
+  private _cacheSet<T>(key: string, data: T, ttlMs: number): void {
+    this._cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  }
+
   // Visão geral pro dashboard. Se sellerId vier, escopa à carteira do vendedor.
   // range opcional (from/to ISO) filtra métricas por data de criação.
+  // Cache TTL: 30s por tenant+range para evitar 15+ queries a cada poll de 10s.
   async overview(tenantId: string, sellerId?: string, range?: { from?: string; to?: string }) {
     if (sellerId) return this.sellerOverview(tenantId, sellerId);
+    const cacheKey = `overview:${tenantId}:${range?.from ?? ''}:${range?.to ?? ''}`;
+    const cached = this._cacheGet<any>(cacheKey);
+    if (cached !== undefined) return cached;
+    const result = await this._buildOverview(tenantId, range);
+    this._cacheSet(cacheKey, result, 30_000);
+    return result;
+  }
+
+  private async _buildOverview(tenantId: string, range?: { from?: string; to?: string }) {
     // filtro de período (createdAt) — aplicado só nas métricas de atividade
     const dw: any =
       range?.from || range?.to
@@ -58,48 +85,8 @@ export class MetricsService {
     ]);
 
     // ── Tempo médio até 1ª resposta da IA (minutos) ──────────────────────────
-    // Para cada conversa do período, pega a 1ª mensagem inbound e a 1ª outbound
-    // DEPOIS dela. A diferença é o tempo de resposta. Calculado em JS para
-    // compatibilidade sem SQL bruto (igual ao time-to-resolution do suporte).
-    let avgTimeToFirstResponseMinutes: number | null = null;
-    try {
-      const convIds = (
-        await this.prisma.aiConversation.findMany({
-          where: { tenantId, ...dw },
-          select: { id: true },
-          take: 500, // limita p/ não estourar memória em tenants grandes
-        })
-      ).map((c: any) => c.id);
-
-      if (convIds.length > 0) {
-        const msgs = await this.prisma.aiMessage.findMany({
-          where: { conversationId: { in: convIds } },
-          select: { conversationId: true, direction: true, createdAt: true },
-          orderBy: { createdAt: 'asc' },
-        });
-
-        // agrupa por conversa
-        const byConv = new Map<string, { inbound?: Date; outbound?: Date }>();
-        for (const m of msgs) {
-          const entry = byConv.get(m.conversationId) ?? {};
-          if (m.direction === 'inbound' && !entry.inbound) entry.inbound = m.createdAt;
-          if (m.direction === 'outbound' && entry.inbound && !entry.outbound) entry.outbound = m.createdAt;
-          byConv.set(m.conversationId, entry);
-        }
-
-        const deltas: number[] = [];
-        for (const { inbound, outbound } of byConv.values()) {
-          if (inbound && outbound && outbound > inbound) {
-            deltas.push((outbound.getTime() - inbound.getTime()) / 60_000);
-          }
-        }
-        if (deltas.length > 0) {
-          avgTimeToFirstResponseMinutes = Math.round(
-            (deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10,
-          ) / 10;
-        }
-      }
-    } catch { /* fail-open: não bloqueia o dashboard */ }
+    // Query pesada (2 findMany): cacheada separadamente por 60s para não rodar em cada poll.
+    const avgTimeToFirstResponseMinutes = await this._avgFirstResponse(tenantId, dw);
 
     // ── Engajamento de campanhas (CAMP-2) ───────────────────────────────────
     const [campaignsTotal, sentTotal, ackRows] = await Promise.all([
@@ -180,9 +167,62 @@ export class MetricsService {
     };
   }
 
+  // Calcula tempo médio até 1ª resposta da IA (minutos). Cacheado 60s pois são 2 queries pesadas.
+  private async _avgFirstResponse(tenantId: string, dw: any): Promise<number | null> {
+    const cacheKey = `avgFirstResp:${tenantId}:${JSON.stringify(dw)}`;
+    const cached = this._cacheGet<number | null>(cacheKey);
+    if (cached !== undefined) return cached;
+
+    let result: number | null = null;
+    try {
+      const convIds = (
+        await this.prisma.aiConversation.findMany({
+          where: { tenantId, ...dw },
+          select: { id: true },
+          take: 300, // reduzido de 500 → menos msgs a buscar
+        })
+      ).map((c: any) => c.id);
+
+      if (convIds.length > 0) {
+        const msgs = await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds } },
+          select: { conversationId: true, direction: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+          take: 3000, // cap absoluto de mensagens para não estourar memória
+        });
+
+        const byConv = new Map<string, { inbound?: Date; outbound?: Date }>();
+        for (const m of msgs) {
+          const entry = byConv.get(m.conversationId) ?? {};
+          if (m.direction === 'inbound' && !entry.inbound) entry.inbound = m.createdAt;
+          if (m.direction === 'outbound' && entry.inbound && !entry.outbound) entry.outbound = m.createdAt;
+          byConv.set(m.conversationId, entry);
+        }
+
+        const deltas: number[] = [];
+        for (const { inbound, outbound } of byConv.values()) {
+          if (inbound && outbound && outbound > inbound) {
+            deltas.push((outbound.getTime() - inbound.getTime()) / 60_000);
+          }
+        }
+        if (deltas.length > 0) {
+          result = Math.round((deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10) / 10;
+        }
+      }
+    } catch { /* fail-open */ }
+
+    this._cacheSet(cacheKey, result, 60_000);
+    return result;
+  }
+
   // Série temporal por dia (Q5): mensagens in/out e novas conversas por dia no
   // período. Buckets preenchidos em JS (sem SQL bruto) — robusto e portável.
+  // Cache TTL: 30s — gráfico não precisa ser tempo-real.
   async timeseries(tenantId: string, sellerId?: string, range?: { from?: string; to?: string }) {
+    const cacheKey = `timeseries:${tenantId}:${sellerId ?? ''}:${range?.from ?? ''}:${range?.to ?? ''}`;
+    const cached = this._cacheGet<any>(cacheKey);
+    if (cached !== undefined) return cached;
+
     const toDate = range?.to ? new Date(`${range.to}T23:59:59.999`) : new Date();
     const fromDate = range?.from
       ? new Date(`${range.from}T00:00:00.000`)
@@ -225,7 +265,9 @@ export class MetricsService {
       if (b) b.conversations++;
     }
 
-    return { from: this.isoDay(fromDate), to: this.isoDay(toDate), series: days.map((k) => buckets.get(k)!) };
+    const result = { from: this.isoDay(fromDate), to: this.isoDay(toDate), series: days.map((k) => buckets.get(k)!) };
+    this._cacheSet(cacheKey, result, 30_000);
+    return result;
   }
 
   // ── Métricas do módulo de SUPORTE (ADR 015/016) ──────────────────────────
