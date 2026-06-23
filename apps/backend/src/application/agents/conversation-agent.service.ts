@@ -169,7 +169,11 @@ export class ConversationAgentService {
     if (input.conversationId && !handoffContext && !hasPanel && !input.portalIdentity && (route.agent === 'sales' || route.agent === 'support')) {
       const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
       if (convForPhone?.phone) {
-        const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]);
+        const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]).catch((e: any) => {
+          // BUG-FIX: lookup falhou — mantém rota atual mas loga o erro (não deixa cliente cair em vendas silenciosamente)
+          this.logger.warn(`TMS lookup falhou para ${convForPhone.phone}: ${e?.message} — mantendo rota=${route.agent}`);
+          return new Map();
+        });
         const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
         if (tmsInfo) {
           // É cliente TMS: garante rota suporte + identidade
@@ -181,6 +185,14 @@ export class ConversationAgentService {
             isAdmin: tmsInfo.role?.toUpperCase() === 'ADMIN',
           };
           this.logger.log(`TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — roteado para suporte`);
+
+          // BUG-FIX: atualiza customerStage para 'cliente_ativo' na conversa se ainda for 'lead'.
+          // Isso garante que a conversa apareça no inbox de Suporte (isSupportTicket usa customerStage).
+          if (convForPhone.customerStage !== 'cliente_ativo') {
+            await this.prisma.aiConversation
+              .update({ where: { id: input.conversationId }, data: { customerStage: 'cliente_ativo' as any } })
+              .catch((e: any) => this.logger.warn(`Falha ao atualizar customerStage: ${e?.message}`));
+          }
         }
       }
     }
