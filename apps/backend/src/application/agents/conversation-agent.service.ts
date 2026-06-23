@@ -293,14 +293,17 @@ export class ConversationAgentService {
         // a Lia orienta a se cadastrar em vez de atender. Cliente (tmsCustomer / painel /
         // handoff) segue pro suporte normal. Pré-venda já fica em 'sales' (não cai aqui).
         if (!tmsCustomer && !hasPanel && !handoffContext) {
+          // Prospect (número não cadastrado no TMS) pedindo suporte:
+          // o suporte é exclusivo para clientes HiperTMS registrados no sistema.
+          // Se tiver URL de contato/demo no playbook, oferece; senão orienta via Lia de Vendas.
           const pb = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } }).catch(() => null);
-          const signup = pb?.signupUrl?.trim();
-          draft = signup
-            ? `Pra usar nosso suporte é só ter uma conta — leva 2 minutos: ${signup}\n\nDepois disso você tem o chat de suporte direto por aqui. Quer que eu te ajude a começar agora?`
-            : `Nosso suporte é exclusivo pra clientes. Criar sua conta é rapidinho — quer que eu te ajude a começar agora?`;
+          const contactUrl = pb?.signupUrl?.trim();
+          draft = contactUrl
+            ? `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${contactUrl} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`
+            : `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`;
           suggestedAction = 'none';
           scripted = true;
-          this.logger.log('Prospect pediu suporte sem ser cliente → orientação de cadastro');
+          this.logger.log('Prospect pediu suporte sem cadastro no TMS → orientação direcionada a vendas');
           break;
         }
         // Passa conversationId para que o SupportAgent recupere o histórico da conversa
