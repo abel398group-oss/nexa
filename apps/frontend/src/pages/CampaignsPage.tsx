@@ -1330,36 +1330,6 @@ export function CampaignsPage() {
                   />
                   {formErrors.message && <p className="mt-1 text-xs text-red-500">{formErrors.message}</p>}
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-base-content/60">Imagem (opcional)</label>
-                  {statusMediaUrl ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-base-200 bg-base-100 px-3 py-2 text-xs">
-                      <Icon name="upload" className="h-4 w-4 shrink-0 text-base-content/40" />
-                      <span className="min-w-0 flex-1 truncate text-base-content/70">{statusMediaUrl.split('/').pop()}</span>
-                      <button type="button" onClick={() => setStatusMediaUrl('')} className="shrink-0 text-base-content/30 hover:text-red-500">
-                        <Icon name="close" className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-base-300 px-3 py-2 text-xs text-base-content/50 hover:border-purple-400 hover:text-purple-500">
-                        <Icon name="upload" className="h-4 w-4 shrink-0" />
-                        {uploading ? 'Enviando…' : 'Subir imagem (JPG/PNG)'}
-                        <input type="file" accept="image/*" className="hidden" disabled={uploading}
-                          onChange={async (e) => {
-                            const f = e.target.files?.[0]; if (!f) return;
-                            setUploading(true);
-                            try { const m = await uploadCampaignMedia(f); setStatusMediaUrl(m.url); }
-                            finally { setUploading(false); }
-                          }} />
-                      </label>
-                      <span className="flex items-center text-xs text-base-content/30">ou</span>
-                      <input className="input flex-1" placeholder="https://… URL pública"
-                        onChange={(e) => setStatusMediaUrl(e.target.value)} />
-                    </div>
-                  )}
-                  <p className="mt-1 text-[11px] text-base-content/35">Se preenchido, o texto vira legenda da imagem. Deixe vazio para Status só com texto.</p>
-                </div>
               </>
             )}
 
