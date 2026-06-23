@@ -747,8 +747,11 @@ export function CampaignsPage() {
       const skip = r.skippedOptOut ?? 0;
       toast.success(`Campanha criada! ${inc} contato(s)${skip > 0 ? ` · ${skip} pulado(s) por opt-out` : ''}.`);
       await load();
-    } catch {
-      toast.error('Erro ao criar campanha.');
+    } catch (err: any) {
+      const raw = err?.response?.data?.message;
+      const detail = Array.isArray(raw) ? raw.join(' · ') : (raw ?? err?.message ?? '');
+      console.error('[campaign] create error', err?.response?.data ?? err);
+      toast.error(detail ? `Erro: ${detail}` : 'Erro ao criar campanha.');
     } finally {
       setBusy(false);
     }

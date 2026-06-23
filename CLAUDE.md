@@ -30,6 +30,13 @@ pnpm monorepo:
 - **Logs**: `cd /root/nexa && docker compose -f docker-compose.production.yml logs backend --tail=100`
 - **Regra**: nunca usar `/opt/nexa` ou `/home/ueldermartin/hipervias/` para Nexa — não existe. Sempre `/root/nexa/`.
 
+### Acesso SSH ao servidor de produção
+
+- **NÃO há chave SSH privada** em `~/.ssh/` na máquina do Abel — tentativas de `ssh root@hipertms.com.br` via terminal/Desktop Commander falham com `Permission denied (publickey)`.
+- **NÃO perguntar ao Abel sobre a chave SSH** — ele não sabe / ela não existe localmente.
+- **Alternativa para logs em produção**: usar o **console web do DigitalOcean** → Droplets → hiperTMS → Console (terminal direto no browser, sem chave).
+- **Alternativa para comandos no container**: via painel DO Console, rodar os comandos docker normalmente.
+
 ### Limitações conhecidas do ambiente de produção
 
 - **`psql` NÃO existe** no host nem nos containers — nunca tentar usar.
