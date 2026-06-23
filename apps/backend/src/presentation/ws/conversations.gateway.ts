@@ -235,10 +235,32 @@ export class ConversationsGateway
     return { messages };
   }
 
+  // ── Nexa inbox: subscribe a atualizações da lista (novas conversas / atividade) ─
+  // O frontend emite join_inbox após conectar; o backend coloca o socket na sala tenant:<id>.
+  // Quando qualquer conversa desse tenant receber uma mensagem, 'inbox:update' é emitido.
+  @SubscribeMessage('join_inbox')
+  onJoinInbox(@MessageBody() data: { tenantId?: string }, @ConnectedSocket() client: Socket) {
+    const socketTenantId = (client.data as any)?.tenantId as string | null | undefined;
+    // Operadores normais: tenantId vem do JWT. Platform admin: envia o acting tenant.
+    const effectiveTenantId = socketTenantId ?? data?.tenantId;
+    if (!effectiveTenantId) return { error: 'tenantId obrigatório' };
+    client.join(`tenant:${effectiveTenantId}`);
+    (client.data as any).inboxTenantId = effectiveTenantId;
+    return { joined: `tenant:${effectiveTenantId}` };
+  }
+
   // ── Evento interno: nova mensagem criada → empurra para a sala ───────────────
   @OnEvent('message.created')
   handleMessageCreated(payload: { conversationId: string; message: unknown }) {
     this.server.to(`conv:${payload.conversationId}`).emit('message', payload.message);
+  }
+
+  // ── Evento interno: conversa teve atividade → atualiza lista do inbox ─────────
+  @OnEvent('conversation.updated')
+  handleConversationUpdated(payload: { tenantId: string; conversationId: string }) {
+    this.server
+      .to(`tenant:${payload.tenantId}`)
+      .emit('inbox:update', { conversationId: payload.conversationId });
   }
 
   // Recibo (✓✓) atualizado → avisa a sala da conversa pra atualizar o check ao vivo

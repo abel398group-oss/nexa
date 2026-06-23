@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { Select } from '@/shared/ui';
 import { useAuth } from '@/app/providers/AuthContext';
+import { useTenant } from '@/app/providers/TenantContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
@@ -110,6 +111,7 @@ function Recibo({ ack }: { ack?: number }) {
 // `scope` controla só o filtro: vendas exclui tickets de suporte; suporte só tickets.
 export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'support' }) {
   const { user } = useAuth();
+  const { actingTenantId } = useTenant();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [sellerFilter, setSellerFilter] = useState(''); // '' = todos · '__none__' = sem vendedor
@@ -120,6 +122,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [liaInfo, setLiaInfo] = useState('');
   const [tmsLookup, setTmsLookup] = useState<TmsLookup | null>(null);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [convsError, setConvsError] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [tagInput, setTagInput] = useState('');
 
@@ -160,15 +163,38 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     : null;
   const socketRef = useRef<Socket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  // Ref sempre atualizado com o tenantId efetivo — usado dentro dos handlers do socket.
+  const inboxTenantRef = useRef<string | null | undefined>(null);
+
+  function reloadConvs(signal?: AbortSignal) {
+    setLoadingConvs(true);
+    setConvsError(null);
+    listConversations(signal)
+      .then((r) => { setConvs(r.items); })
+      .catch((e) => {
+        if (e?.code === 'ERR_CANCELED') return;
+        const msg = e?.response?.data?.message ?? e?.message ?? 'Erro ao carregar conversas';
+        console.error('[InboxPage] listConversations falhou:', msg, e);
+        setConvsError(msg);
+      })
+      .finally(() => setLoadingConvs(false));
+  }
 
   useEffect(() => {
     const controller = new AbortController();
-    listConversations(controller.signal)
-      .then((r) => setConvs(r.items))
-      .catch((e) => { if (e?.code !== 'ERR_CANCELED') console.error(e); })
-      .finally(() => setLoadingConvs(false));
+    reloadConvs(controller.signal);
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mantém o ref sincronizado e emite join_inbox se o socket já estiver conectado.
+  useEffect(() => {
+    inboxTenantRef.current = actingTenantId ?? user?.tenantId;
+    const tenantId = inboxTenantRef.current;
+    if (tenantId && socketRef.current?.connected) {
+      socketRef.current.emit('join_inbox', { tenantId });
+    }
+  }, [actingTenantId, user?.tenantId]);
 
   useEffect(() => {
     if (socketRef.current) return;
@@ -178,6 +204,18 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     s.on('message:ack', (d: { id: string; ack: number }) =>
       setMessages((prev) => prev.map((m) => (m.id === d.id ? { ...m, ack: d.ack } : m))),
     );
+    // Atualiza a lista do inbox quando uma conversa do tenant recebe atividade.
+    // Rebusca a lista completa para garantir ordem, dados frescos e novas conversas.
+    s.on('inbox:update', () => {
+      listConversations().then((r) => setConvs(r.items)).catch((e) => {
+        console.error('[InboxPage] inbox:update reload falhou:', e?.response?.data?.message ?? e?.message);
+      });
+    });
+    // Ao (re)conectar: entra na sala tenant para receber inbox:update em tempo real.
+    s.on('connect', () => {
+      const tenantId = inboxTenantRef.current;
+      if (tenantId) s.emit('join_inbox', { tenantId });
+    });
     return () => { s.close(); socketRef.current = null; };
   }, []);
 
@@ -333,7 +371,21 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
         <div className="flex-1 overflow-y-auto">
           {loadingConvs && <div className="p-3"><SkeletonList rows={5} /></div>}
-          {!loadingConvs && convs.length === 0 && (
+          {!loadingConvs && convsError && (
+            <div className="p-3 space-y-2">
+              <div className="rounded bg-error/10 border border-error/20 p-3 text-xs text-error">
+                <p className="font-semibold mb-1">Erro ao carregar conversas</p>
+                <p className="opacity-80">{convsError}</p>
+              </div>
+              <button
+                onClick={() => reloadConvs()}
+                className="w-full rounded border border-base-300 px-3 py-1.5 text-xs hover:bg-base-200 transition-colors"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
+          {!loadingConvs && !convsError && convs.length === 0 && (
             <div className="p-3">
               <EmptyState icon={<Icon name="inbox" className="h-9 w-9" />} title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
             </div>

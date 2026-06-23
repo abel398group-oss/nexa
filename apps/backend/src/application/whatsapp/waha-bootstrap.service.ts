@@ -57,9 +57,10 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
         return;
       }
 
-      // Remove webhooks antigos deste backend (mesmo host, token diferente / URL desatualizada)
-      const nexaBase = nexaPublicUrl.replace(/\/$/, '');
-      const filtered = existingWebhooks.filter((w: any) => !w.url?.startsWith(nexaBase));
+      // Remove TODOS os webhooks do Nexa (qualquer host) — evita duplicação quando
+      // NEXA_PUBLIC_URL muda entre dev (localhost) e produção.
+      // Identifica pelo path /api/webhooks/waha (token pode variar).
+      const filtered = existingWebhooks.filter((w: any) => !String(w.url ?? '').includes('/api/webhooks/waha'));
 
       // Adiciona o webhook atualizado
       filtered.push({

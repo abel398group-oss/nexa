@@ -511,7 +511,9 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         orderBy: { createdAt: 'asc' },
       });
       if (statusCampaign) {
-        if (!(await this.withinWaWindow(statusCampaign.tenantId))) return;
+        const inWindow = await this.withinWaWindow(statusCampaign.tenantId);
+        this.logger.debug(`[status-tick] campanha="${statusCampaign.name}" hora_br=${this.currentHourBR()} inWindow=${inWindow}`);
+        if (!inWindow) return;
         try {
           // Resolve relative mediaUrl (/uploads/...) to absolute URL for WAHA download.
           const mediaBase = (process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL || '').replace(/\/$/, '');

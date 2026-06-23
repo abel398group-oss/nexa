@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
@@ -12,11 +12,15 @@ function sellerScope(user: any): string | undefined {
 @UseGuards(JwtAuthGuard)
 @Controller('conversations')
 export class ConversationsController {
+  private readonly logger = new Logger('ConversationsController');
+
   constructor(private readonly conversations: ConversationsService) {}
 
   @Get()
-  findAll(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query() q: PaginationQueryDto) {
-    return this.conversations.findAll(tenantId, q, sellerScope(user));
+  async findAll(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query() q: PaginationQueryDto) {
+    const result = await this.conversations.findAll(tenantId, q, sellerScope(user));
+    this.logger.log(`[list] tenantId=${tenantId} role=${user?.role} total=${result.total} items=${result.items.length}`);
+    return result;
   }
 
   @Get(':id')

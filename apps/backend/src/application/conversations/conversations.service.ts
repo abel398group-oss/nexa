@@ -39,25 +39,32 @@ export class ConversationsService {
         });
         const contactMap = new Map(contacts.map((c: any) => [c.phone, c]));
 
-        // Atribuição de campanha: uma única query com DISTINCT ON + JOIN em vez de 2 queries separadas
+        // Atribuição de campanha: busca a mensagem de campanha mais recente por conversa via ORM
+        // (substituiu $queryRaw com ANY(::uuid[]) que quebrava no driver do PostgreSQL)
         const convIds = convs.map((c: any) => c.id);
-        type CampRow = { conversation_id: string; campaign_id: string | null; campaign_name: string | null };
-        const campRows = await this.prisma.$queryRaw<CampRow[]>`
-          SELECT DISTINCT ON (am.conversation_id)
-            am.conversation_id,
-            am.metadata->>'campaignId' AS campaign_id,
-            ca.name                    AS campaign_name
-          FROM ai_messages am
-          LEFT JOIN campaigns ca ON ca.id = (am.metadata->>'campaignId')
-          WHERE am.conversation_id = ANY(${convIds}::uuid[])
-            AND am.direction = 'outbound'
-            AND am.intent   = 'outbound_campaign'
-          ORDER BY am.conversation_id, am.created_at DESC
-        `;
+        const campMsgs = await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds }, direction: 'outbound', intent: 'outbound_campaign' },
+          orderBy: { createdAt: 'desc' },
+          select: { conversationId: true, metadata: true },
+        });
+        // DISTINCT ON em JS: primeira ocorrência (mais recente) por conversa
+        const convToCampId = new Map<string, string>();
+        for (const msg of campMsgs) {
+          if (!convToCampId.has(msg.conversationId)) {
+            const cid = (msg.metadata as any)?.campaignId as string | undefined;
+            if (cid) convToCampId.set(msg.conversationId, cid);
+          }
+        }
+        const campaignIds = [...new Set(convToCampId.values())];
+        const campaigns = campaignIds.length
+          ? await this.prisma.campaign.findMany({ where: { id: { in: campaignIds } }, select: { id: true, name: true } })
+          : [];
+        const campaignById = new Map(campaigns.map((c) => [c.id, c.name]));
         const campByConv = new Map(
-          campRows
-            .filter((r) => r.campaign_id)
-            .map((r) => [r.conversation_id, { id: r.campaign_id!, name: r.campaign_name ?? '—' }]),
+          [...convToCampId.entries()].map(([convId, campId]) => [
+            convId,
+            { id: campId, name: campaignById.get(campId) ?? '—' },
+          ]),
         );
 
         return convs.map((c: any) => ({
@@ -311,6 +318,8 @@ export class ConversationsService {
 
     // tempo real: empurra para a sala da conversa (WebSocket)
     this.events.emit('message.created', { conversationId: conv.id, message });
+    // notifica o inbox do tenant (lista de conversas na sidebar)
+    this.events.emit('conversation.updated', { tenantId, conversationId: conv.id });
 
     // saída → entrega no WhatsApp via WAHA.
     // web_chat e portal: resposta já vai pelo WebSocket (message.created); WAHA não é chamado.
