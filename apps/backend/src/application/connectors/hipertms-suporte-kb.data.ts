@@ -956,4 +956,126 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '- Profissional: R$299/mês — 15 usuários + suporte prioritário',
     tags: ['plano', 'assinatura', 'upgrade', 'downgrade', 'cobranca', 'mudar plano'],
   },
+
+  // ─── GAPS DOS MANUAIS ATUALIZADOS (jun/2026) ────────────────────────────────
+
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'Como reorganizar a sequência de paradas de uma viagem',
+    content:
+      'O HiperTMS permite reorganizar a ordem de coletas e entregas de uma viagem em andamento.\n' +
+      'Acesse Operação → Gestão de Paradas.\n' +
+      'A tela exibe a sequência atual de todas as paradas das viagens ativas.\n' +
+      'Para reorganizar: arraste e solte as paradas na nova ordem desejada.\n' +
+      'Também é possível:\n' +
+      '• Registrar confirmação de coleta ou entrega em cada parada.\n' +
+      '• Adicionar observações operacionais por ponto de rota.\n' +
+      'Atenção: reorganizar paradas não altera os documentos fiscais já emitidos (CT-e/MDF-e).',
+    tags: ['paradas', 'sequencia entrega', 'reorganizar', 'coleta', 'entrega', 'rota', 'gestao paradas', 'viagem'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Regimes Tributários — como configurar os impostos do frete',
+    content:
+      'Os Regimes Tributários definem os impostos que incidem sobre cada operação de frete (ISS, PIS, COFINS, IR, CSLL).\n' +
+      'Acesso restrito a administradores: Precificação → Regimes Tributários.\n' +
+      'Problemas comuns:\n' +
+      '• Frete com imposto zerado: verifique se existe um regime tributário ativo.\n' +
+      '• Alíquota errada: abra o regime e atualize as alíquotas conforme legislação vigente.\n' +
+      '• Frete com custo fiscal diferente do esperado: confira se o regime correto está vinculado à tabela de frete usada.\n' +
+      'Dica: mantenha as alíquotas sempre atualizadas — mudanças na legislação exigem atualização manual aqui.',
+    tags: ['regime tributario', 'imposto', 'iss', 'pis', 'cofins', 'ir', 'csll', 'fiscal', 'aliquota', 'precificacao'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Conta a pagar criada mas não aparece para pagamento — fluxo de aprovação',
+    content:
+      'Contas a pagar no HiperTMS passam por um fluxo de aprovação antes de ficarem disponíveis para pagamento.\n' +
+      'Se a conta foi criada mas não aparece na lista de pagamento, verifique:\n' +
+      '1. Status da conta: deve estar "Pendente" (aprovada). Se estiver em rascunho ou aguardando aprovação, um usuário com permissão precisa aprová-la.\n' +
+      '2. Filtros ativos: remova todos os filtros na lista de Contas a Pagar para localizar a conta.\n' +
+      '3. Conta cancelada: verifique se não foi cancelada acidentalmente.\n' +
+      'Para aprovar uma conta: Financeiro → Contas a Pagar → localizar a conta → clique em Aprovar.\n' +
+      'Apenas usuários com permissão de aprovação financeira podem executar esta etapa.',
+    tags: ['conta pagar', 'aprovacao', 'nao aparece', 'financeiro', 'pendente', 'fluxo aprovacao', 'pagamento'],
+  },
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Margem da viagem está errada — como configurar o preço de referência de combustível',
+    content:
+      'O custo de combustível nas viagens é calculado com base no Preço de Referência cadastrado no sistema.\n' +
+      'Se a margem ou o custo da viagem está incorreto, verifique e atualize o preço de referência:\n' +
+      '1. Acesse Frota → Preço de Referência.\n' +
+      '2. Informe o preço atual por litro de cada tipo de combustível (diesel, gasolina, arla, etc.).\n' +
+      '3. Salve — o novo valor será usado nos cálculos de custo das próximas viagens.\n' +
+      'Dica: atualize o preço de referência sempre que houver variação significativa no preço do combustível para manter os cálculos de margem precisos.',
+    tags: ['combustivel', 'preco referencia', 'margem viagem', 'custo viagem', 'diesel', 'frota', 'calculo custo'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Serviço adicional cobrado automaticamente no frete — como revisar',
+    content:
+      'O HiperTMS pode incluir serviços adicionais automaticamente nas cotações (ex: pedágio, seguro, coleta expressa).\n' +
+      'Se o cliente questionar uma cobrança extra no frete:\n' +
+      '1. Abra a cotação ou embarque e clique em "Ver detalhamento do cálculo".\n' +
+      '2. Identifique os serviços adicionais listados e seus valores.\n' +
+      '3. Para remover um serviço de uma cotação específica: edite a cotação e desmarque o serviço.\n' +
+      '4. Para desativar o serviço permanentemente: Precificação → Serviços Adicionais → desativar o serviço.\n' +
+      'Atenção: apenas administradores podem desativar serviços adicionais globalmente.',
+    tags: ['servico adicional', 'cobranca extra', 'frete', 'pedagio', 'seguro', 'cotacao', 'detalhamento calculo'],
+  },
+  {
+    topic: 'acesso-login',
+    category: 'suporte',
+    title: 'Perfis de acesso — referência de permissões por perfil',
+    content:
+      'O HiperTMS possui perfis de acesso pré-definidos que controlam o que cada usuário pode ver e fazer.\n' +
+      'Para consultar os perfis disponíveis: Administração → Perfis de Acesso (referência).\n' +
+      'Perfis típicos:\n' +
+      '• Administrador: acesso total, incluindo configurações fiscais, usuários e assinatura.\n' +
+      '• Operacional: acesso a embarques, viagens, CT-e e MDF-e. Sem acesso financeiro ou administrativo.\n' +
+      '• Comercial: acesso a cotações, clientes e oportunidades. Sem acesso operacional ou financeiro.\n' +
+      '• Financeiro: acesso a contas, faturas e relatórios. Sem acesso a configurações.\n' +
+      'Para ajustar permissões individuais além do perfil padrão: Administração → Usuários → Editar → aba Permissões.\n' +
+      'Apenas administradores podem alterar perfis e permissões.',
+    tags: ['perfil acesso', 'role', 'permissao', 'administrador', 'operacional', 'comercial', 'financeiro', 'usuario'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Fatura com status "Paga Parcialmente" — como registrar o restante',
+    content:
+      'O status "Paga Parcialmente" aparece quando o cliente pagou menos do que o valor total da fatura.\n' +
+      'Para registrar o pagamento restante:\n' +
+      '1. Acesse Financeiro → Faturas (tomador).\n' +
+      '2. Localize a fatura com status "Paga Parcialmente".\n' +
+      '3. Clique em Registrar Recebimento.\n' +
+      '4. Informe o valor recebido (pode ser o saldo restante ou um valor parcial novamente).\n' +
+      '5. Confirme a data e a conta bancária de destino.\n' +
+      'Quando o valor total for registrado, o status muda automaticamente para "Paga".\n' +
+      'Se houve desconto ou juros no recebimento, informe a diferença no campo correspondente.',
+    tags: ['fatura parcialmente paga', 'paga parcialmente', 'recebimento parcial', 'fatura', 'financeiro', 'registrar pagamento'],
+  },
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Como programar revisão preventiva de veículo',
+    content:
+      'O HiperTMS permite programar revisões preventivas por quilometragem ou intervalo de tempo.\n' +
+      'Para configurar:\n' +
+      '1. Acesse Frota → Veículos.\n' +
+      '2. Abra o cadastro do veículo desejado.\n' +
+      '3. Acesse a aba Revisões.\n' +
+      '4. Clique em Nova Revisão Preventiva e defina:\n' +
+      '   • Tipo de revisão (troca de óleo, pneus, revisão geral, etc.)\n' +
+      '   • Critério: por quilometragem (ex: a cada 10.000 km) ou por tempo (ex: a cada 3 meses).\n' +
+      '5. O sistema alertará quando o vencimento se aproximar.\n' +
+      'Para executar a revisão quando chegar o prazo: crie uma Ordem de Manutenção em Frota → Manutenções.',
+    tags: ['revisao preventiva', 'manutencao preventiva', 'quilometragem', 'vencimento', 'frota', 'veiculo', 'alerta manutencao'],
+  },
 ];

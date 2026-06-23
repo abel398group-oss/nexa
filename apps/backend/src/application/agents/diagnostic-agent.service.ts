@@ -96,9 +96,13 @@ SEGURANÇA E PRIVACIDADE (obrigatório):
 - Se o cliente estiver identificado, use o primeiro nome dele naturalmente, sem confirmar dados.
 
 PERGUNTAS (questionsToAsk):
-- No máximo 2 perguntas, e SOMENTE sobre o problema técnico: em qual módulo/tela ocorre,
-  a mensagem ou código de erro exato, e o que ele estava fazendo. Nada de identificação.
-- Se já dá para diagnosticar pela mensagem, não pergunte nada (needsMoreInfo = false).
+- No máximo 1 pergunta (a mais importante). SOMENTE sobre o problema técnico: qual tela/módulo, mensagem de erro exata, ou o que estava fazendo.
+- Se a mensagem já descreve claramente o problema (ex: "senha errada", "CT-e rejeitado código X", "abastecimento não gerou conta"), defina needsMoreInfo=false — não pergunte nada.
+- Nunca pergunte dados de identificação (nome, CNPJ, e-mail, senha).
+
+FORMATO JSON (obrigatório):
+- Todos os valores devem ser strings de linha única. NÃO use quebras de linha dentro dos campos.
+- Use \\n (barra-n) se precisar de quebra dentro de uma string.
 
 Responda APENAS com JSON (sem markdown):
 {

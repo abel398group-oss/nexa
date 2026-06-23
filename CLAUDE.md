@@ -48,6 +48,16 @@ pnpm monorepo:
 - **Banco**: Postgres gerenciado DigitalOcean (`db-postgresql-nyc3-37059-do-user-16747874-0.k.db.ondigitalocean.com:25060`), database `nexa`. Não está no docker-compose — é externo.
 - **`/home/ueldermartin/hipervias/docker-compose.yml`**: arquivo antigo do HiperTMS v1, ignorar completamente.
 
+## Migration rule — production safety
+
+**Never** run `prisma migrate reset`, `prisma db push`, or any destructive
+command against the production database. Always use `prisma migrate deploy`,
+which applies only new migrations without deleting existing data.
+
+New migrations must always be **additive**. If a column or table needs to be
+removed, write a dedicated migration and get approval before running it in
+production.
+
 ## Database rule — local only in development
 
 **Never** point `DATABASE_URL`, `TMS_DB_URL`, `MIRROR_*`, `IMPORT_*` or any

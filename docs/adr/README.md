@@ -40,7 +40,8 @@ e quais alternativas foram rejeitadas.
 | [025](025-platform-admin-acting-as.md) | Platform Admin, Atuação Multi-tenant (acting-as) e Break-glass | Aceito |
 | [026](026-suporte-pos-venda-prospect-cadastro.md) | Suporte é pós-venda: prospect é orientado a se cadastrar | Aceito |
 | [027](027-web-chat-suporte-embutido.md) | Modalidade C — Web Chat de Suporte embutido (widget no HiperTMS) | Proposto |
-| [028](028-monitor-proativo-tms.md) | Monitor Proativo TMS — alertas automáticos de pendências | Proposto |
+| [028](028-monitor-proativo-tms.md) | Monitor Proativo TMS — alertas automáticos de pendências | Aceito (implementado) |
+| [029](029-canal-status-whatsapp.md) | Canal WhatsApp Status — broadcast passivo em campanhas | Aceito (implementado) |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.

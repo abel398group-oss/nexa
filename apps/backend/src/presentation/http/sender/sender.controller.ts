@@ -32,12 +32,14 @@ class CampaignIdsDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
 }
 
-// edição de campanha em rascunho (só campos seguros)
+// edição de campanha (draft ou paused com 0 envios)
 class UpdateCampaignDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
   @IsOptional() @IsString() @MinLength(3) template?: string;
   @IsOptional() @IsString() subject?: string;
   @IsOptional() @IsString() link?: string;
+  @IsOptional() @IsString() mediaUrl?: string;
+  @IsOptional() @IsString() mediaName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
 }
 
@@ -132,7 +134,9 @@ export class SenderController {
   )
   upload(@UploadedFile() file: any) {
     if (!file) return { error: 'nenhum arquivo' };
-    return { url: `${PUBLIC_BASE}/uploads/${file.filename}`, name: file.originalname, size: file.size };
+    // Store relative path so the public URL never depends on the tunnel/base URL.
+    // The sender service rebuilds the full URL at send time using MEDIA_PUBLIC_BASE.
+    return { url: `/uploads/${file.filename}`, name: file.originalname, size: file.size };
   }
 
   @Post('campaigns/:id/start')
@@ -143,6 +147,15 @@ export class SenderController {
   @Post('campaigns/:id/pause')
   pause(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.sender.setStatus(tenantId, id, 'paused');
+  }
+
+  @Delete('campaigns/:id/targets/:targetId')
+  removeTarget(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Param('targetId') targetId: string,
+  ) {
+    return this.sender.removeTarget(tenantId, id, targetId);
   }
 
   @Delete('campaigns/:id')

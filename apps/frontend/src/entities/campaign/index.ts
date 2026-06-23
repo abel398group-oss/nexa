@@ -18,6 +18,7 @@ export {
   startCampaign,
   pauseCampaign,
   deleteCampaign,
+  removeCampaignTarget,
   bulkDeleteCampaigns,
   setCampaignsArchived,
   uploadCampaignMedia,

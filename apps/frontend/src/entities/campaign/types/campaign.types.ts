@@ -3,10 +3,12 @@ export interface Campaign {
   id: string;
   name: string;
   channel?: string;
+  type?: string; // 'message' (padrão) | 'status'
   template: string;
   subject?: string | null;
   status: string;
   scheduledAt?: string | null;
+  statusPostedAt?: string | null;
   counts: Record<string, number>;
 }
 

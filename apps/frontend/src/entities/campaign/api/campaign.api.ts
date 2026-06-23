@@ -39,7 +39,7 @@ export async function createEmailCampaign(
 // Edita uma campanha em rascunho (nome/template).
 export async function updateCampaign(
   id: string,
-  data: { name: string; template: string },
+  data: { name: string; template?: string; link?: string | null; mediaUrl?: string | null; mediaName?: string | null },
 ): Promise<void> {
   await api.patch(`/campaigns/${id}`, data);
 }
@@ -54,6 +54,10 @@ export async function pauseCampaign(id: string): Promise<void> {
 
 export async function deleteCampaign(id: string): Promise<void> {
   await api.delete(`/campaigns/${id}`);
+}
+
+export async function removeCampaignTarget(campaignId: string, targetId: string): Promise<void> {
+  await api.delete(`/campaigns/${campaignId}/targets/${targetId}`);
 }
 
 export async function bulkDeleteCampaigns(ids: string[]): Promise<void> {
@@ -85,6 +89,8 @@ export async function getSenderSettings(): Promise<SenderSettings> {
 }
 
 export async function saveSenderSettings(settings: SenderSettings): Promise<SenderSettings> {
-  const r = await api.put('/sender/settings', settings);
+  // strip tenantId — backend derives it from JWT; forbidNonWhitelisted would reject it
+  const { waStartHour, waEndHour, emailStartHour, emailEndHour } = settings;
+  const r = await api.put('/sender/settings', { waStartHour, waEndHour, emailStartHour, emailEndHour });
   return r.data;
 }

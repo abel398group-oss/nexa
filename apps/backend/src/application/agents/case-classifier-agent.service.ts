@@ -41,14 +41,21 @@ Categorias disponíveis:
 - cte: emissão, complementar, cancelamento, rejeição de CT-e
 - mdfe: manifesto, encerramento, eventos MDF-e
 - frete: cálculo, tabela, contrato de frete
-- financeiro: fatura, cobrança, repasse financeiro
+- financeiro: fatura, cobrança, repasse financeiro entre clientes/prestadores
 - cadastro: clientes, remetentes, destinatários
-- frota: veículos, motoristas, CNH, manutenção, abastecimento
+- frota: veículos, motoristas, CNH, manutenção, abastecimento, combustível, diária de motorista
 - usuarios: acesso, permissão, senha
 - integracoes: ERP, parceiros, webhooks
 - api: uso da API, tokens, erros HTTP
 - erro_sistema: bug, tela travada, comportamento inesperado
 - treinamento: dúvidas operacionais "como faço para..."
+
+DESAMBIGUAÇÃO — use estas regras quando a mensagem misturar domínios:
+- Abastecimento/combustível que não gera conta a pagar → frota (não financeiro)
+- Conta a pagar gerada por abastecimento ou manutenção de veículo → frota
+- Diária ou adiantamento de motorista → frota (não financeiro)
+- Fatura de cliente ou prestador de serviço → financeiro
+- Contrato comercial de frete → frete (não financeiro)
 
 Prioridade:
 - critical: operação parada (não emite CT-e/MDF-e em produção)

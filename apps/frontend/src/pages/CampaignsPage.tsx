@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useLocation } from 'react-router-dom';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
@@ -15,6 +15,7 @@ import {
   startCampaign,
   pauseCampaign,
   deleteCampaign,
+  removeCampaignTarget,
   bulkDeleteCampaigns,
   setCampaignsArchived,
   uploadCampaignMedia,
@@ -93,6 +94,9 @@ export function CampaignsPage() {
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
   const [channel, setChannel] = useState<Channel>('whatsapp');
+  const [campaignType, setCampaignType] = useState<'message' | 'status'>('message');
+  // status-only fields
+  const [statusMediaUrl, setStatusMediaUrl] = useState('');
 
   // WhatsApp fields
   const [name, setName] = useState('');
@@ -116,10 +120,11 @@ export function CampaignsPage() {
   const [avulsoInput, setAvulsoInput] = useState('');
   const [seedPhones, setSeedPhones] = useState<{ phone: string; name?: string }[]>([]);
   const [tags, setTags] = useState<TagCount[]>([]);
-  const [detail, setDetail] = useState<any | null>(null);
-  const [showDetail, setShowDetail] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(false);
+  // expansão inline (estilo Excel): múltiplas campanhas podem estar expandidas ao mesmo tempo
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [expandedDataMap, setExpandedDataMap] = useState<Record<string, any>>({});
+  const [expandedLoadingIds, setExpandedLoadingIds] = useState<Record<string, boolean>>({});
+  const [expandedSearchMap, setExpandedSearchMap] = useState<Record<string, string>>({});
   const location = useLocation();
   // link fixo: memoriza o último link usado (não precisa redigitar a cada campanha)
   const [link, setLink] = useState(() => localStorage.getItem('nexa_campaign_link') ?? '');
@@ -140,14 +145,25 @@ export function CampaignsPage() {
   const [sendLimit, setSendLimit] = useState(30);
   const [busy, setBusy] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  // edição de campanha em rascunho (modal compacto)
+  // edição inline: quando não-null abre o painel "nova campanha" já preenchido
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // edição de campanha (modal compacto — só rename quando já há envios)
   const [editC, setEditC] = useState<any | null>(null);
   const [editName, setEditName] = useState('');
   const [editMsg, setEditMsg] = useState('');
+  const [editLink, setEditLink] = useState('');
+  const [editMedia, setEditMedia] = useState<{ url: string; name: string } | null>(null);
+  const [editUploading, setEditUploading] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
+  // lista de destinatários no modal de edição
+  const [editTargets, setEditTargets] = useState<any[]>([]);
+  const [editTargetsOpen, setEditTargetsOpen] = useState(false);
+  const [editTargetsLoading, setEditTargetsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const confirm = useConfirm();
+  // timer para distinguir single-click (detalhe) de double-click (editar)
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -234,9 +250,11 @@ export function CampaignsPage() {
   }
 
   function resetForm() {
+    setEditingId(null); setEditC(null); setEditTargets([]); setEditTargetsOpen(false);
     setName(''); setLink(localStorage.getItem('nexa_campaign_link') ?? ''); setMedia(null); setLimitMode('all');
     setEmailsText(''); setEmailSubject('');
-    setChannel('whatsapp'); setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
+    setChannel('whatsapp'); setCampaignType('message'); setStatusMediaUrl('');
+    setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
     setAudience('todos'); setAudienceTag('');
     setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null); setSchedMinute(0);
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
@@ -409,36 +427,60 @@ export function CampaignsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // abre o detalhe de uma campanha (destinatários + status)
-  async function openDetail(c: Campaign) {
-    setShowDetail(true);
-    setDetailLoading(true);
-    setDetailError(false);
-    setDetail({ campaign: c, targets: [], counts: c.counts });
+  // expande/colapsa a linha inline (estilo Excel) — cada campanha independente
+  async function toggleExpand(c: Campaign) {
+    if (expandedIds[c.id]) {
+      setExpandedIds((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
+      setExpandedDataMap((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
+      setExpandedSearchMap((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
+      return;
+    }
+    setExpandedIds((prev) => ({ ...prev, [c.id]: true }));
+    setExpandedSearchMap((prev) => ({ ...prev, [c.id]: '' }));
+    setExpandedLoadingIds((prev) => ({ ...prev, [c.id]: true }));
+    setExpandedDataMap((prev) => ({ ...prev, [c.id]: { campaign: c, targets: [], counts: c.counts } }));
     try {
       const d = await getCampaign(c.id);
-      setDetail(d);
+      setExpandedDataMap((prev) => ({ ...prev, [c.id]: d }));
     } catch {
-      setDetailError(true);
+      // mantém o placeholder
     } finally {
-      setDetailLoading(false);
+      setExpandedLoadingIds((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
     }
   }
 
-  // mantém o detalhe atualizado ao vivo enquanto o modal está aberto (sem piscar o loading)
+  // Single click → expandir inline | Double click → editar (só rascunho)
+  function handleCardClick(c: Campaign) {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      const sentOnDblClick = c.counts?.sent ?? 0;
+      const canFullEdit = c.status === 'draft' || (c.status === 'paused' && sentOnDblClick === 0);
+      if (canFullEdit) openFullEdit(c); else openEditCampaign(c);
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      toggleExpand(c);
+    }, 250);
+  }
+
+  // polling ao vivo para cada campanha expandida
+  const expandedIdsCount = Object.keys(expandedIds).length;
   useEffect(() => {
-    if (!showDetail || !detail?.campaign?.id) return;
-    const id = detail.campaign.id;
+    if (expandedIdsCount === 0) return;
+    const ids = Object.keys(expandedIds);
     const t = setInterval(async () => {
-      try {
-        const d = await getCampaign(id);
-        setDetail((cur: any) => (cur?.campaign?.id === id ? d : cur));
-      } catch {
-        /* silencioso — não atrapalha o modal */
+      for (const id of ids) {
+        try {
+          const d = await getCampaign(id);
+          setExpandedDataMap((prev) => prev[id] ? { ...prev, [id]: d } : prev);
+        } catch { /* silencioso */ }
       }
-    }, 6000);
+    }, 8000);
     return () => clearInterval(t);
-  }, [showDetail, detail?.campaign?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedIdsCount]);
 
   const targetTone = (s: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' =>
     s === 'sent' ? 'success'
@@ -458,15 +500,17 @@ export function CampaignsPage() {
     ({ won: 'Ganho', lost: 'Perdido', no_response: 'Sem resposta', opt_out: 'Opt-out', em_aberto: 'Em aberto' } as Record<string, string>)[o] || o;
 
   // pré-preenche o "Nova campanha" só com os que falharam/pularam
-  function resendFailed() {
-    const failed = (detail?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
+  function resendFailed(campaignId: string) {
+    const exData = expandedDataMap[campaignId];
+    const failed = (exData?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
     if (failed.length === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
-    setName(`Reenvio · ${detail.campaign.name}`);
-    setTemplate(detail.campaign.template || template);
+    setName(`Reenvio · ${exData.campaign.name}`);
+    setTemplate(exData.campaign.template || template);
     setSeedPhones(failed.map((t: any) => ({ phone: t.phone })));
     setAudience('manual');
     setChannel('whatsapp');
-    setShowDetail(false);
+    setExpandedIds({});
+    setExpandedDataMap({});
     setShow(true);
   }
 
@@ -478,24 +522,111 @@ export function CampaignsPage() {
       setChannel('email');
       setEmailTemplate(c.template || '');
       if (c.subject) setEmailSubject(c.subject);
+    } else if (c.type === 'status') {
+      setChannel('whatsapp');
+      setCampaignType('status');
+      setTemplate(c.template || '');
+      if (c.mediaUrl) setStatusMediaUrl(c.mediaUrl);
     } else {
       setChannel('whatsapp');
+      setCampaignType('message');
       setTemplate(c.template || '');
     }
     setShow(true);
   }
 
-  // Editar (só rascunho): abre modal compacto com nome + mensagem.
+  // Editar inline: abre o painel "nova campanha" preenchido com dados da campanha existente.
+  function openFullEdit(c: any) {
+    resetForm();
+    setEditingId(c.id);
+    setName(c.name || '');
+    if (c.channel === 'email') {
+      setChannel('email');
+      setEmailTemplate(c.template || '');
+      if (c.subject) setEmailSubject(c.subject);
+      if (c.link) setLink(c.link);
+    } else if (c.type === 'status') {
+      setChannel('whatsapp');
+      setCampaignType('status');
+      setTemplate(c.template || '');
+      if (c.mediaUrl) setStatusMediaUrl(c.mediaUrl);
+    } else {
+      setChannel('whatsapp');
+      setCampaignType('message');
+      setTemplate(c.template || '');
+      if (c.link) setLink(c.link);
+      if (c.mediaUrl) setMedia({ url: c.mediaUrl, name: c.mediaName || c.mediaUrl.split('/').pop() || 'arquivo' });
+    }
+    if (c.scheduledAt) {
+      const d = new Date(c.scheduledAt);
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      setScheduledAt(local.toISOString().slice(0, 16));
+      setSchedEnabled(true);
+    }
+    setShow(true);
+    // carrega destinatários existentes para mostrar a lista com botão de remover
+    loadEditTargets(c.id);
+  }
+
+  // Editar compacto: só rename — para campanhas com envios parciais.
   function openEditCampaign(c: any) {
     setEditC(c);
     setEditName(c.name || '');
     setEditMsg(c.template || '');
+    setEditLink(c.link || '');
+    setEditMedia(c.mediaUrl ? { url: c.mediaUrl, name: c.mediaName || c.mediaUrl.split('/').pop() || 'arquivo' } : null);
+    setEditTargets([]);
+    setEditTargetsOpen(false);
+  }
+
+  async function uploadEditFile(file: File) {
+    setEditUploading(true);
+    try {
+      const m = await uploadCampaignMedia(file);
+      setEditMedia({ url: m.url, name: m.name });
+    } finally {
+      setEditUploading(false);
+    }
+  }
+
+  async function loadEditTargets(campaignId: string) {
+    setEditTargetsLoading(true);
+    try {
+      const d = await getCampaign(campaignId);
+      setEditTargets(d.targets || []);
+      setEditTargetsOpen(true);
+    } catch {
+      toast.error('Erro ao carregar destinatários.');
+    } finally {
+      setEditTargetsLoading(false);
+    }
+  }
+
+  async function removeEditTarget(targetId: string) {
+    const campaignId = editC?.id ?? editingId;
+    if (!campaignId) return;
+    try {
+      await removeCampaignTarget(campaignId, targetId);
+      setEditTargets((prev) => prev.filter((t) => t.id !== targetId));
+      toast.success('Destinatário removido.');
+    } catch {
+      toast.error('Erro ao remover destinatário.');
+    }
   }
   async function saveEditCampaign() {
     if (!editC) return;
     setEditBusy(true);
+    const sentCount = editC.counts?.sent ?? 0;
+    const isFullEdit = editC.status === 'draft' || (editC.status === 'paused' && sentCount === 0);
     try {
-      await updateCampaign(editC.id, { name: editName.trim(), template: editMsg.trim() });
+      const payload: any = { name: editName.trim() };
+      if (isFullEdit) {
+        payload.template = editMsg.trim();
+        payload.link = editLink.trim() || null;
+        payload.mediaUrl = editMedia?.url ?? null;
+        payload.mediaName = editMedia?.name ?? null;
+      }
+      await updateCampaign(editC.id, payload);
       toast.success('Campanha atualizada!');
       setEditC(null);
       await load();
@@ -508,6 +639,55 @@ export function CampaignsPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+
+    // MODO EDIÇÃO: atualiza campos da campanha existente (destinatários gerenciados separadamente)
+    if (editingId) {
+      if (!name.trim()) { setFormErrors({ name: 'Informe o nome da campanha' }); return; }
+      const msgBody = channel === 'email' ? emailTemplate : template;
+      if (!msgBody.trim()) { setFormErrors({ message: 'Escreva a mensagem' }); return; }
+      setFormErrors({});
+      setBusy(true);
+      try {
+        await updateCampaign(editingId, {
+          name: name.trim(),
+          template: msgBody.trim(),
+          link: link.trim() || null,
+          mediaUrl: (campaignType === 'status' ? statusMediaUrl.trim() : media?.url) || null,
+          mediaName: (campaignType === 'status' ? null : media?.name) || null,
+        });
+        setShow(false); resetForm();
+        toast.success('Campanha atualizada!');
+        await load();
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'Erro ao atualizar campanha.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // Status WhatsApp: validação e criação independente
+    if (channel === 'whatsapp' && campaignType === 'status') {
+      if (!name.trim()) { setFormErrors({ name: 'Informe o nome da campanha' }); return; }
+      if (!template.trim()) { setFormErrors({ message: 'Escreva o texto do Status' }); return; }
+      setFormErrors({});
+      setBusy(true);
+      try {
+        const payload: any = { name: name.trim(), template: template.trim(), type: 'status' };
+        if (statusMediaUrl.trim()) payload.mediaUrl = statusMediaUrl.trim();
+        if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
+        await createWhatsappCampaign(payload);
+        setShow(false); resetForm();
+        toast.success('Campanha de Status criada! Inicie para publicar no WhatsApp.');
+        await load();
+      } catch {
+        toast.error('Erro ao criar campanha de Status.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     // validação (Zod) — bloqueia o envio e mostra os erros, sem mexer no resto do fluxo
     const emailCount = channel === 'email' && !fromContacts
       ? emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).length
@@ -583,9 +763,16 @@ export function CampaignsPage() {
       confirmLabel: 'Iniciar disparo',
     });
     if (!ok) return;
-    await startCampaign(c.id);
-    toast.success('Campanha iniciada');
-    await load();
+    try {
+      await startCampaign(c.id);
+      toast.success('Campanha iniciada');
+      await load();
+    } catch (err: any) {
+      // acting_destructive_blocked: o modal de break-glass já apareceu e o usuário cancelou — sem toast de erro
+      if (err?.response?.data?.code !== 'acting_destructive_blocked') {
+        toast.error(err?.response?.data?.message || 'Erro ao iniciar campanha.');
+      }
+    }
   }
   async function pause(id: string) { await pauseCampaign(id); toast.info('Campanha pausada.'); await load(); }
   async function del(c: Campaign) {
@@ -638,22 +825,36 @@ export function CampaignsPage() {
               ['E-mail', 'emailStartHour', 'emailEndHour'],
             ] as const).map(([label, startKey, endKey]) => (
               <div key={label}>
-                <div className="mb-1 text-xs font-medium text-base-content/60">{label}</div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" min={0} max={23}
-                    value={settings[startKey]}
-                    onChange={(e) => setSettings({ ...settings, [startKey]: Number(e.target.value) })}
-                    className="input !w-20 text-center"
-                  />
-                  <span className="text-base-content/40">às</span>
-                  <input
-                    type="number" min={0} max={23}
-                    value={settings[endKey]}
-                    onChange={(e) => setSettings({ ...settings, [endKey]: Number(e.target.value) })}
-                    className="input !w-20 text-center"
-                  />
-                  <span className="text-xs text-base-content/40">h</span>
+                <div className="mb-2 text-xs font-medium text-base-content/60">{label}</div>
+                <div className="flex items-end gap-3">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[11px] text-base-content/40">Início</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min={0} max={23}
+                        value={settings[startKey]}
+                        onChange={(e) => setSettings({ ...settings, [startKey]: Number(e.target.value) })}
+                        className="input !w-20 text-center"
+                      />
+                      <span className="text-xs text-base-content/40">h</span>
+                    </div>
+                  </div>
+                  <span className="mb-2 text-base-content/30">→</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[11px] text-base-content/40">Fim</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min={0} max={23}
+                        value={settings[endKey]}
+                        onChange={(e) => setSettings({ ...settings, [endKey]: Number(e.target.value) })}
+                        className="input !w-20 text-center"
+                      />
+                      <span className="text-xs text-base-content/40">h</span>
+                    </div>
+                  </div>
+                  <span className="mb-2 text-[11px] text-base-content/30">
+                    ({settings[endKey] - settings[startKey]}h de janela)
+                  </span>
                 </div>
               </div>
             ))}
@@ -736,88 +937,328 @@ export function CampaignsPage() {
           const total = Object.values(c.counts).reduce((a, b) => a + b, 0);
           const sent = c.counts.sent ?? 0;
           const pct = total ? Math.round((sent / total) * 100) : 0;
-          const isEmail = c.channel === 'email';
+          const isEmailCh = c.channel === 'email';
+          const isExpanded = !!expandedIds[c.id];
+          const exData = expandedDataMap[c.id] ?? null;
+          const isLoadingExpand = !!expandedLoadingIds[c.id];
+          const expandSearch = expandedSearchMap[c.id] ?? '';
+
+          // filtro de busca nos contatos expandidos
+          const filteredTargets = (exData?.targets || []).filter((t: any) => {
+            const q = expandSearch.trim().toLowerCase();
+            if (!q) return true;
+            return (t.name || '').toLowerCase().includes(q) || (t.phone || '').includes(q);
+          });
+
           return (
-            <Card
-              key={c.id}
-              onClick={() => openDetail(c)}
-              className="cursor-pointer p-5 transition-shadow hover:shadow-card-hover"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(c.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggleSel(c.id)}
-                    className="h-4 w-4 shrink-0 rounded border-base-300 accent-brand-500"
-                    title="Selecionar"
-                  />
-                  <span className="font-semibold text-base-content">{c.name}</span>
-                  <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
-                  {isEmail
-                    ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700"><Icon name="mail" className="h-3 w-3" /> e-mail</span>
-                    : <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700"><Icon name="inbox" className="h-3 w-3" /> WhatsApp</span>
-                  }
-                  {c.scheduledAt && new Date(c.scheduledAt).getTime() > Date.now() && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                      <Icon name="calendar" className="h-3 w-3" /> Agendada {new Date(c.scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
+            <div key={c.id}>
+              <Card
+                onClick={() => handleCardClick(c)}
+                className={`cursor-pointer p-5 transition-shadow hover:shadow-card-hover ${isExpanded ? 'rounded-b-none border-b-0' : ''}`}
+                title={c.status === 'draft' ? 'Clique para expandir · Duplo clique para editar' : 'Clique para expandir contatos'}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(c.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSel(c.id)}
+                      className="h-4 w-4 shrink-0 rounded border-base-300 accent-brand-500"
+                      title="Selecionar"
+                    />
+                    <span className="font-semibold text-base-content">{c.name}</span>
+                    <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
+                    {isEmailCh
+                      ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700 dark:bg-blue-500/15"><Icon name="mail" className="h-3 w-3" /> e-mail</span>
+                      : c.type === 'status'
+                        ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[11px] text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"><Icon name="zap" className="h-3 w-3" /> WA Status</span>
+                        : <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700 dark:bg-green-500/15"><Icon name="inbox" className="h-3 w-3" /> WhatsApp</span>
+                    }
+                    {c.scheduledAt && new Date(c.scheduledAt).getTime() > Date.now() && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                        <Icon name="calendar" className="h-3 w-3" /> Agendada {new Date(c.scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    {!archivedView && c.status !== 'running' && c.status !== 'done' && (
+                      <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm"><Icon name="play" className="h-3.5 w-3.5" /> Iniciar</Button>
+                    )}
+                    {!archivedView && c.status === 'running' && (
+                      <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
+                    )}
+                    {!archivedView && (
+                      <Button onClick={(e) => {
+                        e.stopPropagation();
+                        const sentCnt = c.counts?.sent ?? 0;
+                        const canFull = c.status === 'draft' || (c.status === 'paused' && sentCnt === 0);
+                        if (canFull) openFullEdit(c); else openEditCampaign(c);
+                      }} variant="outline" size="sm" title="Editar campanha"><Icon name="edit" className="h-3.5 w-3.5" /> Editar</Button>
+                    )}
+                    <Button onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }} variant="outline" size="sm" title="Duplicar campanha"><Icon name="campaigns" className="h-3.5 w-3.5" /> Clonar</Button>
+                    <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="icon-sm" className="text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></Button>
+                    {/* seta de expansão */}
+                    <Icon name="chevronDown" className={`h-4 w-4 text-base-content/50 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  {!archivedView && c.status !== 'running' && c.status !== 'done' && (
-                    <Button onClick={(e) => { e.stopPropagation(); start(c); }} size="sm"><Icon name="play" className="h-3.5 w-3.5" /> Iniciar</Button>
-                  )}
-                  {!archivedView && c.status === 'running' && (
-                    <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
-                  )}
-                  {!archivedView && c.status === 'draft' && (
-                    <Button onClick={(e) => { e.stopPropagation(); openEditCampaign(c); }} variant="outline" size="sm" title="Editar campanha"><Icon name="edit" className="h-3.5 w-3.5" /> Editar</Button>
-                  )}
-                  <Button onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }} variant="outline" size="sm" title="Duplicar campanha"><Icon name="campaigns" className="h-3.5 w-3.5" /> Clonar</Button>
-                  <Button onClick={(e) => { e.stopPropagation(); del(c); }} title="Excluir campanha" variant="outline" size="icon-sm" className="text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /></Button>
+                {isEmailCh && c.subject && (
+                  <p className="mt-1 text-xs font-medium text-base-content/60">Assunto: {c.subject}</p>
+                )}
+                <p className="mt-1 text-xs text-base-content/40 line-clamp-1">{c.template}</p>
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-xs text-base-content/40">
+                    <span>{sent}/{total} enviados</span><span>{pct}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-base-200">
+                    <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1 flex gap-2 text-[11px] text-base-content/40">
+                    {Object.entries(c.counts).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
+                  </div>
                 </div>
-              </div>
-              {isEmail && c.subject && (
-                <p className="mt-1 text-xs font-medium text-base-content/60">Assunto: {c.subject}</p>
+              </Card>
+
+              {/* Painel inline de contatos (estilo Excel) */}
+              {isExpanded && (
+                <div className="rounded-b-xl border border-t-0 border-base-200 bg-base-50 dark:bg-base-200/30 px-4 pt-3 pb-4">
+                  {/* cabeçalho: contadores + campo de pesquisa */}
+                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(exData?.counts || c.counts).map(([s, n]) => (
+                        <StatusBadge key={s} tone={targetTone(s)}>{s}: {n as number}</StatusBadge>
+                      ))}
+                    </div>
+                    {((exData?.counts?.failed ?? 0) + (exData?.counts?.skipped ?? 0)) > 0 && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); resendFailed(c.id); }}>
+                        <Icon name="refresh" className="h-4 w-4" /> Reenviar falhas
+                      </Button>
+                    )}
+                    {/* campo de pesquisa */}
+                    <div className="ml-auto flex items-center gap-2 rounded-lg border border-base-300 bg-white dark:bg-base-300 px-2.5 py-1.5 text-sm shadow-sm" onClick={(e) => e.stopPropagation()}>
+                      <Icon name="search" className="h-4 w-4 text-base-content/40 shrink-0" />
+                      <input
+                        className="bg-transparent outline-none text-sm text-base-content placeholder:text-base-content/35 w-40"
+                        placeholder="Pesquisar contato…"
+                        value={expandSearch}
+                        onChange={(e) => setExpandedSearchMap((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                      />
+                      {expandSearch && (
+                        <button type="button" onClick={() => setExpandedSearchMap((prev) => ({ ...prev, [c.id]: '' }))} className="text-base-content/30 hover:text-base-content/60">
+                          <Icon name="close" className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* engagement (se disponível) */}
+                  {exData?.engagement && (
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">Entregue: {exData.engagement.delivered}</span>
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">Lido: {exData.engagement.read}</span>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">Respondeu: {exData.engagement.replied}</span>
+                    </div>
+                  )}
+
+                  {/* Campanha de Status: sem lista de destinatários */}
+                  {c.type === 'status' ? (
+                    <div className="py-4 text-center text-sm text-base-content/50">
+                      {exData?.campaign?.statusPostedAt
+                        ? <span className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><Icon name="check" className="h-4 w-4" /> Publicado em {new Date(exData.campaign.statusPostedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        : <span>Status será publicado no WhatsApp ao iniciar. Sem lista de destinatários — atinge todos os contatos que salvaram o número.</span>
+                      }
+                    </div>
+                  ) : isLoadingExpand ? (
+                    <div className="py-4 text-center text-sm text-base-content/40">Carregando contatos…</div>
+                  ) : filteredTargets.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto space-y-1">
+                      {filteredTargets.map((t: any) => (
+                        <div
+                          key={t.id}
+                          className="flex items-center justify-between rounded-lg border border-base-200 bg-white dark:bg-base-300/50 px-3 py-2 text-sm"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium text-base-content">{t.name || displayPhone(t.phone)}</div>
+                            {t.name && <div className="truncate text-[11px] text-base-content/40">{displayPhone(t.phone)}</div>}
+                            {t.error && <div className="truncate text-[11px] text-red-500">{t.error}</div>}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 ml-3">
+                            {t.sentAt && (
+                              <span className="text-[11px] text-base-content/40 hidden sm:block">
+                                {new Date(t.sentAt).toLocaleString('pt-BR')}
+                              </span>
+                            )}
+                            {engChip(t) && (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${engChip(t)!.cls}`}>
+                                {engChip(t)!.label}
+                              </span>
+                            )}
+                            <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>
+                            {exData?.campaign?.status === 'draft' && (
+                              <button
+                                type="button"
+                                title="Remover destinatário"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    await removeCampaignTarget(c.id, t.id);
+                                    setExpandedDataMap((prev) => {
+                                      const d = prev[c.id];
+                                      if (!d) return prev;
+                                      return { ...prev, [c.id]: { ...d, targets: d.targets.filter((x: any) => x.id !== t.id) } };
+                                    });
+                                    toast.success('Removido.');
+                                  } catch {
+                                    toast.error('Erro ao remover.');
+                                  }
+                                }}
+                                className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Icon name="close" className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : exData && !isLoadingExpand ? (
+                    <div className="py-4 text-center text-sm text-base-content/40">
+                      {expandSearch ? 'Nenhum contato encontrado para essa busca.' : 'Sem destinatários (público automático).'}
+                    </div>
+                  ) : null}
+                </div>
               )}
-              <p className="mt-1 text-xs text-base-content/40 line-clamp-1">{c.template}</p>
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-xs text-base-content/40">
-                  <span>{sent}/{total} enviados</span><span>{pct}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-base-200">
-                  <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
-                </div>
-                <div className="mt-1 flex gap-2 text-[11px] text-base-content/40">
-                  {Object.entries(c.counts).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
-                </div>
-              </div>
-            </Card>
+            </div>
           );
         })}
       </div>
 
-      {editC && (
+      {editC && (() => {
+        const sentCount = editC.counts?.sent ?? 0;
+        const isFullEdit = editC.status === 'draft' || (editC.status === 'paused' && sentCount === 0);
+        const isStatusCamp = editC.type === 'status';
+        return (
         <Modal open onClose={() => setEditC(null)} title="Editar campanha" size="sm">
           <div className="space-y-3">
+            {!isFullEdit && (
+              <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                Campanha em andamento ({sentCount} enviados) — só é possível renomear.
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-medium text-base-content/60">Nome</label>
               <input className="input w-full" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-base-content/60">Mensagem</label>
-              <textarea className="input w-full py-2" style={{ minHeight: '110px', resize: 'vertical' }} value={editMsg} onChange={(e) => setEditMsg(e.target.value)} />
-            </div>
-            <p className="text-[11px] text-base-content/40">Só é possível editar campanha que ainda não foi iniciada.</p>
+
+            {isFullEdit && (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    {isStatusCamp ? 'Texto do Status' : 'Mensagem'}
+                    {isStatusCamp && <span className="ml-2 text-base-content/40">{editMsg.length}/700</span>}
+                  </label>
+                  <textarea className="input w-full py-2" style={{ minHeight: '110px', resize: 'vertical' }} value={editMsg} onChange={(e) => setEditMsg(e.target.value)} />
+                </div>
+
+                {/* Link — só para campanha mensagem */}
+                {!isStatusCamp && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-base-content/60">Link (opcional)</label>
+                    <input className="input w-full" placeholder="https://…" value={editLink} onChange={(e) => setEditLink(e.target.value)} />
+                  </div>
+                )}
+
+                {/* Arquivo / mídia */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">
+                    {isStatusCamp ? 'Imagem (opcional)' : 'Arquivo (PDF, imagem…)'}
+                  </label>
+                  {editMedia ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-base-200 bg-base-100 px-3 py-2 text-xs">
+                      <Icon name="upload" className="h-4 w-4 shrink-0 text-base-content/40" />
+                      <span className="min-w-0 flex-1 truncate text-base-content/70">{editMedia.name}</span>
+                      <button type="button" onClick={() => setEditMedia(null)} className="shrink-0 text-base-content/30 hover:text-red-500">
+                        <Icon name="close" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : isStatusCamp ? (
+                    <input className="input w-full" placeholder="https://…" onChange={(e) => {
+                      const v = e.target.value.trim();
+                      if (v) setEditMedia({ url: v, name: v.split('/').pop() || 'imagem' });
+                    }} />
+                  ) : (
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-base-300 px-3 py-2.5 text-xs text-base-content/50 hover:border-primary hover:text-primary">
+                      <Icon name="upload" className="h-4 w-4" />
+                      {editUploading ? 'Enviando…' : 'Clique para anexar arquivo'}
+                      <input type="file" className="hidden" disabled={editUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadEditFile(f); }} />
+                    </label>
+                  )}
+                </div>
+
+                {/* Editar destinatários — só para campanhas de mensagem */}
+                {!isStatusCamp && (
+                  <div className="rounded-lg border border-base-200">
+                    <button
+                      type="button"
+                      onClick={() => editTargetsOpen ? setEditTargetsOpen(false) : loadEditTargets(editC.id)}
+                      className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-medium text-base-content/70 hover:bg-base-100 rounded-lg"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Icon name="contacts" className="h-4 w-4" />
+                        Editar contatos
+                        {editTargets.length > 0 && (
+                          <span className="rounded-full bg-base-200 px-2 py-0.5 text-[10px] text-base-content/60">{editTargets.length}</span>
+                        )}
+                      </span>
+                      {editTargetsLoading
+                        ? <span className="text-[11px] text-base-content/40">carregando…</span>
+                        : <Icon name="chevronDown" className={`h-4 w-4 transition-transform ${editTargetsOpen ? 'rotate-180' : ''}`} />
+                      }
+                    </button>
+
+                    {editTargetsOpen && (
+                      <div className="border-t border-base-200">
+                        {editTargets.length === 0 ? (
+                          <p className="px-3 py-3 text-xs text-base-content/40">Sem destinatários registrados.</p>
+                        ) : (
+                          <div className="max-h-52 overflow-y-auto">
+                            {editTargets.map((t: any) => (
+                              <div key={t.id} className="flex items-center justify-between border-b border-base-200 px-3 py-2 last:border-0 hover:bg-base-50">
+                                <div className="min-w-0">
+                                  <span className="block truncate text-sm font-medium text-base-content">{t.name || displayPhone(t.phone)}</span>
+                                  {t.name && <span className="block truncate text-[11px] text-base-content/50">{displayPhone(t.phone)}</span>}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeEditTarget(t.id)}
+                                  className="ml-3 shrink-0 rounded p-1 text-base-content/30 hover:bg-red-50 hover:text-red-500"
+                                  title="Remover destinatário"
+                                >
+                                  <Icon name="close" className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setEditC(null)}>Cancelar</Button>
-              <Button onClick={saveEditCampaign} loading={editBusy} disabled={!editName.trim() || !editMsg.trim()}>Salvar</Button>
+              <Button
+                onClick={saveEditCampaign}
+                loading={editBusy}
+                disabled={!editName.trim() || (isFullEdit && !editMsg.trim())}
+              >Salvar</Button>
             </div>
           </div>
         </Modal>
-      )}
+        );
+      })()}
 
       {show && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30 p-4" onClick={() => setShow(false)}>
@@ -830,25 +1271,32 @@ export function CampaignsPage() {
             {/* Header fixo */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-base-200 px-7 py-4"
                  style={{ background: 'var(--surface-elevated)' }}>
-              <h2 className="text-lg font-bold text-base-content">Nova campanha</h2>
+              <h2 className="text-lg font-bold text-base-content">{editingId ? 'Editar campanha' : 'Nova campanha'}</h2>
               <button type="button" onClick={() => { setShow(false); resetForm(); }}
                       className="text-base-content/40 hover:text-base-content"><Icon name="close" className="h-5 w-5" /></button>
             </div>
 
             <div className="px-7 pt-5 pb-8 space-y-5">
 
-            {/* Canal */}
-            <div className="flex rounded-xl border border-base-200 overflow-hidden text-sm font-medium">
+            {/* Canal / Tipo — bloqueado ao editar */}
+            <div className={`flex rounded-xl border border-base-200 overflow-hidden text-sm font-medium ${editingId ? 'pointer-events-none opacity-60' : ''}`}>
               <button
                 type="button"
-                onClick={() => { setChannel('whatsapp'); setFromContacts(true); }}
-                className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'whatsapp' ? 'bg-green-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
+                onClick={() => { setChannel('whatsapp'); setCampaignType('message'); setFromContacts(true); }}
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'whatsapp' && campaignType === 'message' ? 'bg-green-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
                 <Icon name="inbox" className="h-4 w-4" /> WhatsApp
               </button>
               <button
                 type="button"
-                onClick={() => { setChannel('email'); setFromContacts(false); }}
+                onClick={() => { setChannel('whatsapp'); setCampaignType('status'); }}
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'whatsapp' && campaignType === 'status' ? 'bg-purple-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
+              >
+                <Icon name="zap" className="h-4 w-4" /> WA Status
+              </button>
+              <button
+                type="button"
+                onClick={() => { setChannel('email'); setCampaignType('message'); setFromContacts(false); }}
                 className={`inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 transition-colors ${channel === 'email' ? 'bg-blue-500 text-white' : 'bg-transparent text-base-content/50 hover:bg-base-100'}`}
               >
                 <Icon name="mail" className="h-4 w-4" /> E-mail
@@ -858,9 +1306,62 @@ export function CampaignsPage() {
             {/* Nome */}
             <div>
               <label className="mb-1 block text-xs font-medium text-base-content/60">Nome da campanha</label>
-              <input className="input w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Prospecção Junho" required />
+              <input className="input w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Promoção Julho" required />
               {formErrors.name && <p className="mt-1 text-xs text-red-500">{formErrors.name}</p>}
             </div>
+
+            {/* ── WA Status: form simplificado ─────────────────────────────── */}
+            {channel === 'whatsapp' && campaignType === 'status' && (
+              <>
+                <div className="rounded-xl border border-purple-200 bg-purple-50/50 px-4 py-3 text-xs text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-300">
+                  <strong>WhatsApp Status</strong> — publica uma vez no Stories do número conectado. Todos os contatos que salvaram o número veem. Dura 24h. Sem destinatários individuais.
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center justify-between text-xs font-medium text-base-content/60">
+                    <span>Texto do Status</span>
+                    <span className={`font-mono ${template.length > 700 ? 'text-red-500' : 'text-base-content/30'}`}>{template.length}/700</span>
+                  </label>
+                  <textarea
+                    className="input w-full py-2 text-sm"
+                    style={{ minHeight: '120px', resize: 'vertical' }}
+                    value={template}
+                    onChange={(e) => setTemplate(e.target.value)}
+                    placeholder="Ex: 🔥 Promoção especial de julho! Entre em contato e garanta o desconto."
+                  />
+                  {formErrors.message && <p className="mt-1 text-xs text-red-500">{formErrors.message}</p>}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">Imagem (opcional)</label>
+                  {statusMediaUrl ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-base-200 bg-base-100 px-3 py-2 text-xs">
+                      <Icon name="upload" className="h-4 w-4 shrink-0 text-base-content/40" />
+                      <span className="min-w-0 flex-1 truncate text-base-content/70">{statusMediaUrl.split('/').pop()}</span>
+                      <button type="button" onClick={() => setStatusMediaUrl('')} className="shrink-0 text-base-content/30 hover:text-red-500">
+                        <Icon name="close" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-base-300 px-3 py-2 text-xs text-base-content/50 hover:border-purple-400 hover:text-purple-500">
+                        <Icon name="upload" className="h-4 w-4 shrink-0" />
+                        {uploading ? 'Enviando…' : 'Subir imagem (JPG/PNG)'}
+                        <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0]; if (!f) return;
+                            setUploading(true);
+                            try { const m = await uploadCampaignMedia(f); setStatusMediaUrl(m.url); }
+                            finally { setUploading(false); }
+                          }} />
+                      </label>
+                      <span className="flex items-center text-xs text-base-content/30">ou</span>
+                      <input className="input flex-1" placeholder="https://… URL pública"
+                        onChange={(e) => setStatusMediaUrl(e.target.value)} />
+                    </div>
+                  )}
+                  <p className="mt-1 text-[11px] text-base-content/35">Se preenchido, o texto vira legenda da imagem. Deixe vazio para Status só com texto.</p>
+                </div>
+              </>
+            )}
 
             {channel === 'email' ? (
               <>
@@ -1022,7 +1523,7 @@ export function CampaignsPage() {
                   )}
                 </div>
               </>
-            ) : (
+            ) : campaignType === 'message' ? (
               <>
                 {/* Mensagem WhatsApp */}
                 <div>
@@ -1040,7 +1541,38 @@ export function CampaignsPage() {
                   {formErrors.message && <p className="mt-1 text-xs text-red-500">{formErrors.message}</p>}
                 </div>
 
-                {/* Destinatários WA — seletor de público */}
+                {/* Destinatários WA */}
+                {editingId ? (
+                  /* modo edição: lista de contatos existentes com remoção */
+                  <div className="rounded-xl border border-base-200">
+                    <div className="flex items-center justify-between px-3 py-2.5 text-xs font-medium text-base-content/70">
+                      <span className="flex items-center gap-2"><Icon name="contacts" className="h-4 w-4" /> Destinatários desta campanha</span>
+                      {editTargetsLoading && <span className="text-[11px] text-base-content/40">carregando…</span>}
+                    </div>
+                    {!editTargetsLoading && (
+                      <div className="border-t border-base-200">
+                        {editTargets.length === 0 ? (
+                          <p className="px-3 py-3 text-xs text-base-content/40">Sem destinatários registrados (todos os contatos ativos).</p>
+                        ) : (
+                          <div className="max-h-52 overflow-y-auto">
+                            {editTargets.map((t: any) => (
+                              <div key={t.id} className="flex items-center justify-between border-b border-base-200 px-3 py-2 last:border-0 hover:bg-base-50">
+                                <div className="min-w-0">
+                                  <span className="block truncate text-sm font-medium text-base-content">{t.name || displayPhone(t.phone)}</span>
+                                  {t.name && <span className="block truncate text-[11px] text-base-content/50">{displayPhone(t.phone)}</span>}
+                                </div>
+                                <button type="button" onClick={() => removeEditTarget(t.id)}
+                                  className="ml-3 shrink-0 rounded p-1 text-base-content/30 hover:bg-red-50 hover:text-red-500" title="Remover">
+                                  <Icon name="close" className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
                 <div>
                   <div className="mb-2 text-sm text-base-content/70">Quem vai receber?</div>
                   <div className="mb-2 flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
@@ -1233,6 +1765,7 @@ export function CampaignsPage() {
                     </div>
                   )}
                 </div>
+                )} {/* fim ternário editingId destinatários WA */}
 
                 {/* Link + Anexo lado a lado */}
                 <div className="grid grid-cols-2 gap-4">
@@ -1272,9 +1805,10 @@ export function CampaignsPage() {
                   Número: {numbers[0] ? `${numbers[0].sentToday}/${numbers[0].dailyLimit} hoje` : '—'} · delay 30–90s · anti-ban ativo
                 </p>
               </>
-            )}
+            ) : null}
 
-            {/* Quantidade */}
+            {/* Quantidade — não se aplica para Status (1 publicação única) */}
+            {campaignType !== 'status' && (
             <div className="rounded-xl border border-base-200 px-4 py-3">
               <label className="mb-2 block text-xs font-medium text-base-content/60">Quantos enviar?</label>
               <div className="flex items-center gap-4 text-sm text-base-content/70">
@@ -1296,6 +1830,7 @@ export function CampaignsPage() {
                 </p>
               )}
             </div>
+            )}
 
             {/* Agendamento (opcional) — dia + hora dentro do horário permitido */}
             <div className="rounded-xl border border-base-200 px-4 py-3">
@@ -1384,111 +1919,13 @@ export function CampaignsPage() {
                  style={{ background: 'var(--surface-elevated)' }}>
               <Button type="button" variant="ghost" onClick={() => { setShow(false); resetForm(); }}>Cancelar</Button>
               <Button loading={busy} className="px-6">
-                {busy ? 'Criando...' : 'Criar campanha'}
+                {busy ? (editingId ? 'Salvando...' : 'Criando...') : (editingId ? 'Salvar alterações' : 'Criar campanha')}
               </Button>
             </div>
           </form>
         </div>
       )}
 
-      {/* modal de detalhe da campanha (resultados) */}
-      <Modal
-        open={showDetail}
-        onClose={() => setShowDetail(false)}
-        title={detail?.campaign?.name || 'Campanha'}
-        size="lg"
-      >
-        {detail && (
-          <>
-            <p className="mb-2 whitespace-pre-line rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/70">
-              {detail.campaign.template}
-            </p>
-            {(detail.campaign.subject || detail.campaign.mediaName || detail.campaign.link) && (
-              <div className="mb-3 space-y-1 text-xs text-base-content/60">
-                {detail.campaign.subject && (
-                  <div>Assunto: <span className="text-base-content/80">{detail.campaign.subject}</span></div>
-                )}
-                {detail.campaign.mediaName && (
-                  <div>Anexo: <span className="text-base-content/80">{detail.campaign.mediaName}</span></div>
-                )}
-                {detail.campaign.link && (
-                  <div className="truncate">Link: <span className="text-base-content/80">{detail.campaign.link}</span></div>
-                )}
-              </div>
-            )}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              {Object.entries(detail.counts || {}).map(([s, n]) => (
-                <StatusBadge key={s} tone={targetTone(s)}>
-                  {s}: {n as number}
-                </StatusBadge>
-              ))}
-              {Object.keys(detail.counts || {}).length === 0 && (
-                <span className="text-xs text-base-content/40">Sem envios ainda.</span>
-              )}
-              {((detail.counts?.failed ?? 0) + (detail.counts?.skipped ?? 0)) > 0 && (
-                <Button size="sm" variant="outline" className="ml-auto" onClick={resendFailed}>
-                  <Icon name="refresh" className="h-4 w-4" /> Reenviar aos que falharam
-                </Button>
-              )}
-            </div>
-
-            {detail.engagement && (
-              <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">Entregue: {detail.engagement.delivered}</span>
-                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">Lido: {detail.engagement.read}</span>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">Respondeu: {detail.engagement.replied}</span>
-              </div>
-            )}
-
-            {detail.conversion && detail.conversion.conversations > 0 && (
-              <div className="mb-3 rounded-lg border border-base-200 px-3 py-2 text-xs text-base-content/70">
-                <span className="font-medium text-base-content">Conversão:</span> {detail.conversion.conversations} conversa(s) originada(s)
-                {Object.entries(detail.conversion.byOutcome).map(([k, v]) => (
-                  <span key={k} className="ml-2">· {outcomeLabel(k)}: {v as number}</span>
-                ))}
-              </div>
-            )}
-
-            {detailLoading ? (
-              <div className="py-6 text-center text-sm text-base-content/50">Carregando destinatários…</div>
-            ) : detail.targets?.length ? (
-              <div className="max-h-80 space-y-1.5 overflow-y-auto">
-                {detail.targets.map((t: any) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between rounded-lg border border-base-200 px-3 py-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-base-content">{t.name || displayPhone(t.phone)}</div>
-                      {t.error && <div className="truncate text-[11px] text-red-500">{t.error}</div>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {t.sentAt && (
-                        <span className="text-[11px] text-base-content/40">
-                          {new Date(t.sentAt).toLocaleString('pt-BR')}
-                        </span>
-                      )}
-                      {engChip(t) && (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${engChip(t)!.cls}`}>
-                          {engChip(t)!.label}
-                        </span>
-                      )}
-                      <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : detailError ? (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-4 text-center text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                Não foi possível carregar os destinatários.<br />
-                O backend pode estar desatualizado — feche as janelas antigas e reinicie o servidor.
-              </div>
-            ) : (
-              <div className="py-6 text-center text-sm text-base-content/50">Sem destinatários.</div>
-            )}
-          </>
-        )}
-      </Modal>
     </PageContainer>
   );
 }

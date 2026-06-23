@@ -368,24 +368,29 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async updateCampaign(
     tenantId: string,
     id: string,
-    dto: { name?: string; template?: string; subject?: string; link?: string; sendLimit?: number },
+    dto: { name?: string; template?: string; subject?: string; link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number },
   ) {
     const c = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, _count: { select: { targets: { where: { status: 'sent' } } } } },
     });
     if (!c) throw new NotFoundException('Campanha não encontrada');
-    if (c.status !== 'draft') {
-      throw new BadRequestException('Só dá pra editar uma campanha que ainda não foi iniciada.');
+    const sentCount = c._count?.targets ?? 0;
+    // Allow full edit on draft; allow name-only on running/done; allow full edit on paused with 0 sent
+    const isEditableInFull = c.status === 'draft' || (c.status === 'paused' && sentCount === 0);
+    if (!isEditableInFull && (dto.template !== undefined || dto.link !== undefined || dto.mediaUrl !== undefined || dto.sendLimit !== undefined)) {
+      throw new BadRequestException('Campanha já em andamento — só é possível renomear.');
     }
     return this.prisma.campaign.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.template !== undefined ? { template: dto.template } : {}),
-        ...(dto.subject !== undefined ? { subject: dto.subject } : {}),
-        ...(dto.link !== undefined ? { link: dto.link || null } : {}),
-        ...(dto.sendLimit !== undefined ? { sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null } : {}),
+        ...(isEditableInFull && dto.template !== undefined ? { template: dto.template } : {}),
+        ...(isEditableInFull && dto.subject !== undefined ? { subject: dto.subject } : {}),
+        ...(isEditableInFull && dto.link !== undefined ? { link: dto.link || null } : {}),
+        ...(isEditableInFull && dto.mediaUrl !== undefined ? { mediaUrl: dto.mediaUrl || null } : {}),
+        ...(isEditableInFull && dto.mediaName !== undefined ? { mediaName: dto.mediaName || null } : {}),
+        ...(isEditableInFull && dto.sendLimit !== undefined ? { sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null } : {}),
       },
     });
   }
@@ -395,6 +400,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  async removeTarget(tenantId: string, campaignId: string, targetId: string) {
+    // Only allow removal from draft campaigns to avoid inconsistencies mid-send.
+    const campaign = await this.prisma.campaign.findFirst({ where: { id: campaignId, tenantId }, select: { status: true } });
+    if (!campaign) throw new Error('Campanha não encontrada');
+    if (campaign.status !== 'draft') throw new Error('Só é possível remover destinatários de campanhas em rascunho');
+    const r = await this.prisma.campaignTarget.deleteMany({ where: { id: targetId, campaignId } });
+    return { ok: r.count > 0 };
   }
 
   async removeCampaign(tenantId: string, id: string) {
@@ -499,8 +513,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       if (statusCampaign) {
         if (!(await this.withinWaWindow(statusCampaign.tenantId))) return;
         try {
-          const result = statusCampaign.mediaUrl
-            ? await this.waha.sendStatusImage(statusCampaign.mediaUrl, statusCampaign.template || undefined)
+          // Resolve relative mediaUrl (/uploads/...) to absolute URL for WAHA download.
+          const mediaBase = (process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL || '').replace(/\/$/, '');
+          const resolvedMediaUrl = statusCampaign.mediaUrl
+            ? (statusCampaign.mediaUrl.startsWith('http')
+                ? statusCampaign.mediaUrl
+                : mediaBase + (statusCampaign.mediaUrl.startsWith('/') ? '' : '/') + statusCampaign.mediaUrl)
+            : null;
+          const result = resolvedMediaUrl
+            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusCampaign.template || undefined)
             : await this.waha.sendStatusText(statusCampaign.template);
           if (result.sent) {
             await this.prisma.campaign.update({
@@ -584,16 +605,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
       let text = this.render(campaign.template, target.name);
       if (campaign.link) text += `\n\n${campaign.link}`; // anexa o link no texto
-      // anexo como LINK público (WAHA grátis não envia arquivo; link funciona).
-      // Base pública: MEDIA_PUBLIC_BASE (domínio fixo) ou, na falta, NEXA_PUBLIC_URL
-      // (o túnel atual — atualizado pelo .bat a cada subida, então o link fica válido).
+      // Public attachment link. mediaUrl is stored as a relative path (/uploads/filename)
+      // since the controller was updated (BUG-010). Legacy campaigns may still carry an
+      // absolute URL — we extract the /uploads/ segment in both cases.
       const mediaBase = process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL;
       if (campaign.mediaUrl && mediaBase) {
         const idx = campaign.mediaUrl.indexOf('/uploads/');
-        if (idx >= 0) {
-          const publicUrl = mediaBase.replace(/\/$/, '') + campaign.mediaUrl.slice(idx);
-          text += `\n\n📎 ${campaign.mediaName || 'Material'}: ${publicUrl}`;
-        }
+        const relativePath = idx >= 0 ? campaign.mediaUrl.slice(idx) : campaign.mediaUrl;
+        const publicUrl = mediaBase.replace(/\/$/, '') + relativePath;
+        text += `\n\n📎 ${campaign.mediaName || 'Material'}: ${publicUrl}`;
       }
       try {
         // UMA thread por contato (igual ao recebimento): acha a conversa mais recente
@@ -625,7 +645,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         // WAHA grátis não envia arquivo; até habilitar, o material vai como link no texto (acima).
         // Para ligar: defina WHATSAPP_MEDIA_ENABLED=true no .env.
         if (campaign.mediaUrl && process.env.WHATSAPP_MEDIA_ENABLED === 'true') {
-          await this.waha.sendFile(target.phone, campaign.mediaUrl, campaign.mediaName ?? 'arquivo', '');
+          // Build absolute URL for WAHA (internal reachable base, e.g. host.docker.internal).
+          const wahaBase = process.env.WAHA_REACHABLE_BASE ?? 'http://host.docker.internal:3001';
+          const idx2 = campaign.mediaUrl.indexOf('/uploads/');
+          const relativePath2 = idx2 >= 0 ? campaign.mediaUrl.slice(idx2) : campaign.mediaUrl;
+          const wahaUrl = campaign.mediaUrl.startsWith('http') && idx2 < 0
+            ? campaign.mediaUrl
+            : wahaBase.replace(/\/$/, '') + relativePath2;
+          await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '');
         }
 
         await this.prisma.$transaction([
@@ -657,7 +684,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return 'Boa noite';
   }
 
-  // rodapé de opt-out (LGPD) — business-rules §4/§8
+  // opt-out footer (LGPD §4/§8). Disabled by setting LGPD_OPT_OUT_FOOTER=false in .env.
+  // Warning: disabling removes the legally-recommended opt-out notice for Brazilian law.
   static OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
 
   private render(template: string, name?: string | null): string {
@@ -665,10 +693,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
-    // BUG-09 fix: verificação anterior /sair/i causava falso positivo em frases como
-    // "Saia na frente da concorrência" — o footer não era adicionado, violando LGPD.
-    // Agora verifica o texto exato do rodapé.
-    if (!txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;
+    const footerEnabled = process.env.LGPD_OPT_OUT_FOOTER !== 'false';
+    if (footerEnabled && !txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;
     return txt;
   }
 }

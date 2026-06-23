@@ -23,6 +23,19 @@ services:
     volumes:
       - ./redisdata:/data
 
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: nexa_waha
+    restart: unless-stopped
+    environment:
+      WAHA_API_KEY: Inicial398!
+      WAHA_PRINT_QR: "true"         # imprime QR no log na 1ª vez
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+    ports:
+      - "3018:3000"                 # backend local chama http://localhost:3018
+    volumes:
+      - ./waha-sessions:/app/.sessions  # persiste a sessão entre restarts
+
   backend:
     # Descomente para rodar o backend em container (opcional em dev local)
     # build: ./apps/backend
