@@ -5,6 +5,7 @@ import { ConversationsService } from './conversations.service';
 import { ConversationJanitorService } from './conversation-janitor.service';
 import { ConversationsController } from '@/presentation/http/conversations/conversations.controller';
 import { ConversationsGateway } from '@/presentation/ws/conversations.gateway';
+import { NotificationsModule } from '@/application/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ConversationsGateway } from '@/presentation/ws/conversations.gateway';
       }),
       inject: [ConfigService],
     }),
+    NotificationsModule,
   ],
   controllers: [ConversationsController],
   providers: [ConversationsService, ConversationsGateway, ConversationJanitorService],

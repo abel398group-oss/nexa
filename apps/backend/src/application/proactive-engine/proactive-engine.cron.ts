@@ -13,6 +13,16 @@ const DIGEST_TTL_S  = 23 * 60 * 60; // 23h — fires once per day
 export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProactiveEngineCron.name);
   private redis: Redis | null = null;
+  // MON-007/MON-008: stats expostos ao HealthController.
+  static lastRunAt: Date | null = null;
+  static lastDigestAt: Date | null = null;
+
+  getStats() {
+    return {
+      lastRunAt: ProactiveEngineCron.lastRunAt?.toISOString() ?? null,
+      lastDigestAt: ProactiveEngineCron.lastDigestAt?.toISOString() ?? null,
+    };
+  }
 
   constructor(
     private readonly detector: ProactiveDetectorService,
@@ -43,6 +53,7 @@ export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
       this.logger.log('[proactive-engine] starting detection cycle');
       await this.detector.evaluateAll();
       await this.executor.executeAll();
+      ProactiveEngineCron.lastRunAt = new Date();
       this.logger.log('[proactive-engine] cycle complete');
     } finally {
       await this.redis?.del(LOCK_KEY);
@@ -60,6 +71,7 @@ export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
       this.logger.log('[proactive-engine] running digest');
       await this.detector.evaluateDigest();
       await this.executor.executeAll();
+      ProactiveEngineCron.lastDigestAt = new Date();
     } finally {
       // Lock is intentionally NOT released — keeps it for 23h so it won't double-fire today.
     }

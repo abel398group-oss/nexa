@@ -4,6 +4,8 @@ import { Redis } from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
+import { ConversationJanitorService } from '@/application/conversations/conversation-janitor.service';
+import { ProactiveEngineCron } from '@/application/proactive-engine/proactive-engine.cron';
 
 @ApiTags('health')
 @Controller('health')
@@ -42,10 +44,24 @@ export class HealthController implements OnModuleDestroy {
     }
   }
 
-  // Health geral (compat) — db + redis + kill switch + ai stats
+  // MON-004: verifica se existe ao menos um emailChannel ativo no banco.
+  private async smtpConfigured(): Promise<boolean> {
+    try {
+      const count = await (this.prisma as any).emailChannel.count({ where: { isActive: true } });
+      return count > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // Health geral — db + redis + kill switch + ai stats + jobs + smtp
   @Get()
   async check() {
-    const [db, redis] = await Promise.all([this.dbOk(), this.redisOk()]);
+    const [db, redis, smtpConfigured] = await Promise.all([
+      this.dbOk(),
+      this.redisOk(),
+      this.smtpConfigured(),
+    ]);
     const ok = db && redis;
     return {
       status: ok ? 'ok' : 'degraded',
@@ -53,6 +69,14 @@ export class HealthController implements OnModuleDestroy {
       redis: redis ? 'ok' : 'down',
       aiAutonomyEnabled: this.autonomy.isEnabled(),
       ai: this.anthropic.getStats(),
+      // MON-004: canal de e-mail configurado?
+      smtp: smtpConfigured ? 'configured' : 'not_configured',
+      // MON-007/MON-008: últimos runs dos jobs agendados
+      jobs: {
+        janitor: ConversationJanitorService.lastRunAt?.toISOString() ?? null,
+        proactiveEngine: ProactiveEngineCron.lastRunAt?.toISOString() ?? null,
+        proactiveDigest: ProactiveEngineCron.lastDigestAt?.toISOString() ?? null,
+      },
       ts: new Date().toISOString(),
     };
   }

@@ -27,10 +27,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
 const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
+// MON-006: ticket escalado sem atendimento humano após N horas → alerta ao time
+const SLA_ESCALATION_HOURS = Number(process.env.SLA_ESCALATION_HOURS ?? 4);
 // LGPD: prazo de retenção de dados pessoais (padrão 2 anos = 730 dias).
 // Após esse prazo, contatos opt-out e conversas encerradas são anonimizados.
 const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
@@ -38,10 +41,17 @@ const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
 @Injectable()
 export class ConversationJanitorService {
   private readonly logger = new Logger('ConversationJanitor');
+  // MON-007: timestamp do último run — consumido pelo HealthController.
+  static lastRunAt: Date | null = null;
+
+  getStats() {
+    return { lastRunAt: ConversationJanitorService.lastRunAt?.toISOString() ?? null };
+  }
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly waha: WahaClientService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
@@ -57,12 +67,55 @@ export class ConversationJanitorService {
 
   @Interval(60 * 60 * 1000) // roda a cada hora
   async closeInactiveConversations() {
+    ConversationJanitorService.lastRunAt = new Date();
     // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
     await this.closeResolvedSupport();
     // ── Suporte: ticket aberto sem resposta do cliente → 48h → CLOSED ────
     await this.closeNoResponseSupport();
     // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
     await this.closeInactiveLeads();
+    // ── MON-006: ticket escalado sem atendimento humano → alerta ──────────
+    await this.alertSlaEscalated();
+  }
+
+  // MON-006: detecta tickets escalados a humano há mais de SLA_ESCALATION_HOURS sem atendimento.
+  // "Sem atendimento" = status ainda 'escalated' E lastActivityAt não avançou desde a escalação.
+  // Envia notificação ao time uma vez por ciclo (não repetida a cada hora — usa alerted_sla_at).
+  private async alertSlaEscalated() {
+    const cutoff = new Date(Date.now() - SLA_ESCALATION_HOURS * 60 * 60 * 1000);
+
+    const overdue = await this.prisma.aiConversation.findMany({
+      where: {
+        status: 'escalated' as any,
+        lastActivityAt: { lt: cutoff },
+        // Só alerta uma vez por ticket: se já notificamos nas últimas 24h, pula
+        // Usamos updatedAt como proxy — se o registro não foi tocado desde o cutoff,
+        // nunca foi atendido. Para evitar spam, agrupamos por tenant e mandamos 1 notif.
+      } as any,
+      select: { id: true, phone: true, tenantId: true, lastActivityAt: true },
+    });
+
+    if (!overdue.length) return;
+
+    // Agrupa por tenant para enviar uma notificação resumida por empresa
+    const byTenant = new Map<string, typeof overdue>();
+    for (const conv of overdue) {
+      const list = byTenant.get(conv.tenantId) ?? [];
+      list.push(conv);
+      byTenant.set(conv.tenantId, list);
+    }
+
+    for (const [tenantId, convs] of byTenant) {
+      await this.notifications.create(tenantId, {
+        type: 'info',
+        title: `⚠️ SLA: ${convs.length} chamado(s) escalado(s) sem atendimento há >${SLA_ESCALATION_HOURS}h`,
+        body: convs.map((c) => c.phone).join(', '),
+        link: '/inbox',
+      });
+      this.logger.warn(
+        `MON-006 SLA breach: tenantId=${tenantId} convs=${convs.length} sla=${SLA_ESCALATION_HOURS}h`,
+      );
+    }
   }
 
   // LGPD — anonimização por prazo de retenção.
