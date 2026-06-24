@@ -21,10 +21,26 @@ export function estimateCost(tokensIn: number, tokensOut: number): number {
 @Injectable()
 export class AnthropicService {
   private readonly logger = new Logger('Anthropic');
+  // In-memory failure counters (reset on process restart) — consumed by /health.
+  private _failureCount = 0;
+  private _lastFailAt: Date | null = null;
 
   get configured(): boolean {
     const k = process.env.ANTHROPIC_API_KEY;
     return !!k && !k.includes('xxxxx');
+  }
+
+  // Stats exposed to /health for monitoring.
+  getStats() {
+    return {
+      failures: this._failureCount,
+      lastFailAt: this._lastFailAt?.toISOString() ?? null,
+    };
+  }
+
+  private recordFailure() {
+    this._failureCount++;
+    this._lastFailAt = new Date();
   }
 
   // Completa um prompt; lança se a API falhar (chamador decide fallback).
@@ -52,11 +68,15 @@ export class AnthropicService {
     });
     if (!res.ok) {
       const body = await res.text();
+      this.recordFailure();
       throw new Error(`Anthropic ${res.status}: ${body.slice(0, 160)}`);
     }
     const data: any = await res.json();
     const text = data?.content?.[0]?.text?.trim();
-    if (!text) throw new Error('Resposta vazia da Anthropic');
+    if (!text) {
+      this.recordFailure();
+      throw new Error('Resposta vazia da Anthropic');
+    }
     return text;
   }
 
@@ -84,11 +104,15 @@ export class AnthropicService {
     });
     if (!res.ok) {
       const body = await res.text();
+      this.recordFailure();
       throw new Error(`Anthropic ${res.status}: ${body.slice(0, 160)}`);
     }
     const data: any = await res.json();
     const text = data?.content?.[0]?.text?.trim();
-    if (!text) throw new Error('Resposta vazia da Anthropic');
+    if (!text) {
+      this.recordFailure();
+      throw new Error('Resposta vazia da Anthropic');
+    }
     const tokensIn = data?.usage?.input_tokens ?? 0;
     const tokensOut = data?.usage?.output_tokens ?? 0;
     return { text, tokensIn, tokensOut, costUsd: estimateCost(tokensIn, tokensOut) };

@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
 import { MANUAIS_KB } from './hipertms-manuais.data';
 import { SUPORTE_KB } from './hipertms-suporte-kb.data';
@@ -7,7 +7,7 @@ import { SUPORTE_KB } from './hipertms-suporte-kb.data';
 // STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
 // Por enquanto: healthCheck reporta se TMS está configurado; getPlans devolve mock.
 @Injectable()
-export class HiperTmsConnector implements Connector {
+export class HiperTmsConnector implements Connector, OnModuleInit {
   readonly productCode = 'hipertms';
   private readonly logger = new Logger('HiperTmsConnector');
 
@@ -26,6 +26,19 @@ export class HiperTmsConnector implements Connector {
   // NUNCA logar ou expor este valor.
   private get internalToken(): string {
     return process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN ?? '';
+  }
+
+  // Ping no boot — alerta se TMS inacessível ao subir o backend.
+  async onModuleInit() {
+    const result = await this.healthCheck();
+    if (result.ok) {
+      this.logger.log(`TMS conectado: ${result.detail}`);
+    } else {
+      this.logger.warn(
+        `⚠️  TMS inacessível no boot: ${result.detail}. ` +
+        `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. Lia usará dados em cache enquanto TMS estiver fora.`,
+      );
+    }
   }
 
   async healthCheck() {

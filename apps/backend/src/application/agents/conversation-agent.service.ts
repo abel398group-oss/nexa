@@ -11,6 +11,7 @@ import { NotificationsService } from '@/application/notifications/notifications.
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { HandoffService } from '@/application/handoff/handoff.service';
 import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -63,6 +64,7 @@ export class ConversationAgentService {
     private readonly tmsLookup: TmsLookupService,
     private readonly handoff: HandoffService,
     private readonly opportunities: OpportunitiesService,
+    private readonly waha: WahaClientService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -464,6 +466,15 @@ export class ConversationAgentService {
         body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
         link: '/inbox',
       });
+      // Notifica o cliente que um humano assumirá o atendimento (fire-and-forget).
+      if (conv.phone && !conv.phone.startsWith('email:')) {
+        this.waha
+          .sendText(
+            conv.phone,
+            'Vou chamar um atendente para continuar seu atendimento. Aguarde, em breve alguém do time entrará em contato. 🙏',
+          )
+          .catch((e) => this.logger.warn(`Falha ao notificar escalação ao cliente: ${e?.message}`));
+      }
       this.logger.log(`Suporte escalado p/ humano: conv=${conv.id} tel=${conv.phone}`);
     }
 

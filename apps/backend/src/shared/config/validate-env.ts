@@ -20,6 +20,11 @@ const REQUIRED_IN_PROD = [
   'ANTHROPIC_API_KEY',
   'WAHA_WEBHOOK_TOKEN',
   'PORTAL_JWT_SECRET',
+  // Integração TMS + handoff
+  'TMS_SERVICE_TOKEN',
+  'NEXA_DEFAULT_TENANT_ID',
+  // Infra
+  'REDIS_URL',
 ];
 
 // Marcas de valor "placeholder" herdado do .env.example — proibido em produção

@@ -64,6 +64,17 @@ export class ConversationsController {
     return this.conversations.assign(tenantId, id, dto.sellerId ?? null);
   }
 
+  // Suporte: resolver (fecha com outcome=resolved) ou reabrir o chamado.
+  // Frontend chama PATCH /conversations/:id/resolve com { resolved: boolean }.
+  @Patch(':id/resolve')
+  resolve(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: { resolved: boolean },
+  ) {
+    return this.conversations.setResolved(tenantId, id, dto.resolved);
+  }
+
   @Post(':id/messages')
   addMessage(
     @CurrentTenant() tenantId: string,

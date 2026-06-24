@@ -26,6 +26,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
@@ -38,7 +39,21 @@ const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
 export class ConversationJanitorService {
   private readonly logger = new Logger('ConversationJanitor');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly waha: WahaClientService,
+  ) {}
+
+  // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
+  // Só envia para phones reais (não para contatos via e-mail ex: "email:foo@bar.com").
+  private notifyClose(phones: string[], message: string): void {
+    for (const phone of phones) {
+      if (!phone || phone.startsWith('email:')) continue;
+      this.waha.sendText(phone, message).catch((e) =>
+        this.logger.warn(`Falha ao notificar fechamento para ${phone}: ${e?.message}`),
+      );
+    }
+  }
 
   @Interval(60 * 60 * 1000) // roda a cada hora
   async closeInactiveConversations() {
@@ -100,7 +115,7 @@ export class ConversationJanitorService {
         status: { notIn: ['closed', 'opt_out'] as any },
         autoCloseAt: { lte: now },
       } as any,
-      select: { id: true, status: true }, // status real para o fromStatus do histórico
+      select: { id: true, status: true, phone: true },
     });
 
     if (!resolved.length) return;
@@ -125,6 +140,10 @@ export class ConversationJanitorService {
     ]);
 
     this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved)`);
+    this.notifyClose(
+      resolved.map((c: any) => c.phone),
+      'Seu chamado foi resolvido. Se precisar de mais ajuda, é só nos chamar novamente. 😊',
+    );
   }
 
   // Branch de suporte: fecha tickets com clienteStage ativo que ficaram abertos sem
@@ -143,7 +162,7 @@ export class ConversationJanitorService {
         lastActivityAt: { lt: cutoff },
         resolvedAt: null,                // não fechar tickets que já foram resolvidos (usam autoCloseAt)
       } as any,
-      select: { id: true, status: true }, // status real para fromStatus no histórico (BUG-004 fix)
+      select: { id: true, status: true, phone: true }, // status real para fromStatus no histórico (BUG-004 fix)
     });
 
     if (!candidates.length) return;
@@ -170,6 +189,10 @@ export class ConversationJanitorService {
 
     this.logger.log(
       `Suporte: ${candidates.length} ticket(s) sem resposta >${SUPPORT_INACTIVITY_HOURS}h → CLOSED (outcome=no_response)`,
+    );
+    this.notifyClose(
+      candidates.map((c: any) => c.phone),
+      `Fechamos seu chamado pois não recebemos resposta em ${SUPPORT_INACTIVITY_HOURS}h. Se ainda precisar de ajuda, é só nos chamar. 🙏`,
     );
   }
 
@@ -220,6 +243,10 @@ export class ConversationJanitorService {
 
     this.logger.log(
       `Auto-fechamento: ${candidates.length} lead(s) inativo(s) há >${INACTIVITY_DAYS} dias → CLOSED (outcome=no_response)`,
+    );
+    this.notifyClose(
+      candidates.map((c: any) => c.phone),
+      `Olá! Encerramos nossa conversa por inatividade. Quando quiser retomar, é só nos chamar. 😊`,
     );
   }
 }

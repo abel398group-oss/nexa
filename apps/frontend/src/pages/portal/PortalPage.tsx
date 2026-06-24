@@ -25,12 +25,25 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   waiting_customer: { label: 'Aguardando você', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
   waiting_internal: { label: 'Em análise', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
   escalated: { label: 'Com o suporte', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300' },
-  closed: { label: 'Resolvido', cls: 'bg-base-200 text-base-content/60' },
+  closed: { label: 'Encerrado', cls: 'bg-base-200 text-base-content/60' },
   opt_out: { label: 'Encerrado', cls: 'bg-base-200 text-base-content/60' },
 };
 function statusOf(s: string) {
   return STATUS[s] ?? { label: s, cls: 'bg-base-200 text-base-content/60' };
 }
+
+const OUTCOME_BANNER: Record<string, { icon: string; text: string; cls: string }> = {
+  resolved: {
+    icon: '✅',
+    text: 'Este chamado foi resolvido. Se o problema voltar, abra um novo chamado.',
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20',
+  },
+  no_response: {
+    icon: '⏱️',
+    text: 'Este chamado foi encerrado por falta de resposta. Se ainda precisar de ajuda, abra um novo chamado.',
+    cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20',
+  },
+};
 const isOpenStatus = (s: string) => s !== 'closed' && s !== 'opt_out';
 
 function fmt(ts?: string | null): string {
@@ -279,6 +292,13 @@ export function PortalPage() {
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusOf(detail.status).cls}`}>{statusOf(detail.status).label}</span>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-auto px-5 py-4">
+                {/* Banner de motivo de fechamento */}
+                {detail.status === 'closed' && detail.outcome && OUTCOME_BANNER[detail.outcome] && (
+                  <div className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-xs ${OUTCOME_BANNER[detail.outcome].cls}`}>
+                    <span>{OUTCOME_BANNER[detail.outcome].icon}</span>
+                    <span>{OUTCOME_BANNER[detail.outcome].text}</span>
+                  </div>
+                )}
                 {detail.messages.map((mmsg) => {
                   const mine = mmsg.direction === 'inbound';
                   return (
