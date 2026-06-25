@@ -1,11 +1,11 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
+  Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { Response } from 'express';
-import { HandoffService } from '@/application/handoff/handoff.service';
+import { HandoffService, TOKEN_TTL_MS_WEBCHAT } from '@/application/handoff/handoff.service';
 import { HiperTmsConnector } from '@/application/connectors/hipertms.connector';
 import { PortalSessionService } from '@/application/portal/portal-session.service';
 import { PortalSessionGuard } from '@/application/portal/portal-session.guard';
@@ -13,6 +13,13 @@ import { PortalTicketsService } from '@/application/portal/portal-tickets.servic
 
 class SessionDto {
   @IsString() @MinLength(4) token!: string;
+}
+
+// ADR 027 D3 — token server-to-server para o widget web_chat embutido no TMS.
+// O TMS autentica com Bearer TMS_SERVICE_TOKEN e passa o userId do usuário logado.
+class WebChatTokenDto {
+  @IsString() tmsUserId!: string;
+  @IsOptional() @IsString() name?: string;
 }
 
 class OpenTicketDto {
@@ -111,6 +118,28 @@ export class PortalController {
   logoutLegacy(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(COOKIE, { path: '/api/portal' });
     return { ok: true };
+  }
+
+  // POST /portal/web-chat-token — ADR 027 D3
+  // Endpoint server-to-server: TMS obtém token de curta duração (15 min) para o widget.
+  // Autenticação: Authorization: Bearer <TMS_SERVICE_TOKEN>
+  // O widget recebe SOMENTE o token opaco e o usa no handshake do Socket.IO.
+  // TMS_SERVICE_TOKEN nunca chega ao browser — permanece server-to-server.
+  @Post('web-chat-token')
+  @HttpCode(201)
+  async webChatToken(
+    @Body() dto: WebChatTokenDto,
+    @Headers('authorization') auth: string,
+  ) {
+    const serviceToken = auth?.replace(/^Bearer\s+/i, '');
+    const nexaTenantId = process.env.NEXA_DEFAULT_TENANT_ID ?? 'default';
+    return this.handoff.create({
+      externalId: dto.tmsUserId,
+      tenantId: nexaTenantId,
+      name: dto.name,
+      serviceToken,
+      ttlMs: TOKEN_TTL_MS_WEBCHAT,
+    });
   }
 
   // GET /portal/me — perfil do cliente + dados do contrato.

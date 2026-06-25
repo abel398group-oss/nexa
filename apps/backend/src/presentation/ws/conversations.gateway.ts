@@ -28,6 +28,7 @@ import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import { OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
@@ -66,9 +67,12 @@ interface WebChatSocketData {
 
 @WebSocketGateway({ cors: { origin: wsCorsOrigin, credentials: true }, path: '/ws' })
 export class ConversationsGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
 {
   private readonly logger = new Logger('ConversationsGateway');
+  // BUG-008 fix: salvar referências para fechar no destroy (evita leak de conexões Redis)
+  private redisPub: Redis | null = null;
+  private redisSub: Redis | null = null;
 
   @WebSocketServer()
   server!: Server;
@@ -80,6 +84,11 @@ export class ConversationsGateway
     private readonly jwt: JwtService,
   ) {}
 
+  async onModuleDestroy() {
+    await this.redisPub?.quit().catch(() => null);
+    await this.redisSub?.quit().catch(() => null);
+  }
+
   afterInit(server: Server) {
     // Redis adapter: garante que eventos de socket.io sejam compartilhados entre
     // réplicas do backend. Sem isso, room.emit() só alcança sockets no mesmo processo.
@@ -87,9 +96,9 @@ export class ConversationsGateway
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
       try {
-        const pubClient = new Redis(redisUrl, { lazyConnect: true });
-        const subClient = pubClient.duplicate();
-        server.adapter(createAdapter(pubClient, subClient));
+        this.redisPub = new Redis(redisUrl, { lazyConnect: true });
+        this.redisSub = this.redisPub.duplicate();
+        server.adapter(createAdapter(this.redisPub, this.redisSub));
         this.logger.log('WebSocket /ws: Redis adapter configurado');
       } catch (e: any) {
         this.logger.warn(`WebSocket /ws: Redis adapter falhou — rodando single-instance (${e?.message})`);

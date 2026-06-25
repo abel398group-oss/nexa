@@ -64,11 +64,23 @@ Ver detalhes em `docs/monitoramento.md` → MON-006.
 
 ## TMS — Web Chat embutido
 
-**Status:** ❌ Não iniciado — sem PRD, sem ADR, sem código.
+**Status:** 🔶 Parcialmente implementado — UI pronta, transporte real-time pendente.
 
-O `SupportDrawer` (portal de tickets) está implementado e em produção. O Web Chat embutido
-(Lia respondendo em tempo real como widget flutuante no TMS) é uma feature separada que
-ainda não foi especificada. Próximo passo: criar o PRD antes de qualquer código.
+| Camada | Status | Detalhe |
+|---|---|---|
+| `ChatWidget.tsx` (widget flutuante) | ✅ existe | Botão laranja fixo, badge de não-lidas |
+| `LiaChatWindow` embutido no widget | ✅ existe | Renderizado quando `selectedConversation === 'lia-support'` |
+| Comunicação com a Lia | ⚠️ polling 4s | Mesmo mecanismo do SupportDrawer, não Socket.IO |
+| `SourceChannel.web_chat` no Prisma | ❌ não existe | Migration pendente |
+| Handler WS dedicado no backend | ❌ não existe | ADR 027 D2 não implementado |
+| Autenticação por handshake Socket.IO | ❌ não existe | ADR 027 D3 não implementado |
+
+**O que falta para completar o ADR 027:**
+1. Migration Prisma: adicionar `web_chat` ao enum `SourceChannel`
+2. Handler `web_chat:send` no `ConversationsGateway` do Nexa
+3. Autenticação no handshake do socket (token curto gerado pelo TMS)
+4. Endurecer CORS do gateway (hoje `origin: true`)
+5. Rate limit por socket/identidade
 
 ---
 

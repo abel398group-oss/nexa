@@ -42,6 +42,8 @@ e quais alternativas foram rejeitadas.
 | [027](027-web-chat-suporte-embutido.md) | Modalidade C — Web Chat de Suporte embutido (widget no HiperTMS) | Proposto |
 | [028](028-monitor-proativo-tms.md) | Monitor Proativo TMS — alertas automáticos de pendências | Aceito (implementado) |
 | [029](029-canal-status-whatsapp.md) | Canal WhatsApp Status — broadcast passivo em campanhas | Aceito (implementado) |
+| [030](030-monitor-frota-whatsapp.md) | Monitor de Frota via WhatsApp — CNH, CRLV, manutenção por km/data | Aceito |
+| [031](031-cotacao-whatsapp.md) | Cotação de Frete via WhatsApp — dois modos: público (prospect) e personalizado (cliente) | Aceito |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.

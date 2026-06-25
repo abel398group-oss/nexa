@@ -49,3 +49,17 @@ Nexa — MonitorService (consome eventos do TMS)
 2. **Orquestra TMS** cria o endpoint `GET /proactivity/events`
 3. **Orquestra Nexa** implementa consumo, consolidação e envio
 4. Teste com 1 tenant piloto
+
+---
+
+## Monitor de Frota (extensão — ADR-030)
+
+Módulo adicional que estende o Monitor Proativo com domínio `fleet`.
+
+| Squad | Arquivo | Responsabilidade |
+|-------|---------|-----------------|
+| Orquestra TMS | `squad-tms-frota.md` | Regras fleet no `pending-event-rules.ts` + queries no `proactivity.service.ts` |
+| Orquestra Nexa | `squad-nexa-frota.md` | Reconhecer domínio `fleet` no `ConsolidationService` + intents Lia |
+
+**O que monitora:** CNH vencida/vencendo, CRLV/seguro/inspeção vencidos/vencendo, manutenção
+por km e por data. Uma mensagem consolidada por tenant/dia via WhatsApp.

@@ -3,7 +3,8 @@
 Plataforma de automação comercial e suporte B2B com IA (**Lia**) para SaaS.
 Primeiro conector: HiperTMS.
 
-> Princípio: **a IA conversa e recomenda; o backend decide e executa.**
+> Princípio 1: **a IA conversa e recomenda; o backend decide e executa.**  
+> Princípio 2: **o sistema é proativo** — avisa antes do problema, nunca depois. Ver [`principles/proatividade.md`](principles/proatividade.md)
 
 ## Estrutura documental
 
@@ -24,6 +25,7 @@ Primeiro conector: HiperTMS.
 | `manuais/` | Guias operacionais para usuários do painel |
 | `schema/` | Schema Prisma, estratégia de migração e runtime |
 | `reviews/` | Revisões, auditorias e postmortems datados |
+| `principles/` | Princípios de design que guiam todos os módulos |
 
 ## Como navegar
 

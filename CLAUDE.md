@@ -14,6 +14,16 @@ onboards and supports customers over WhatsApp (and e-mail) using an AI assistant
 
 Core principle: **the AI talks and recommends; the backend decides and executes.**
 
+Engineering principle: **the system must be proactive** — Lia and every agent should
+anticipate the next step, surface risks before they escalate, and close loops without
+waiting to be asked. When implementing any feature, ask: *"what would happen 5 minutes
+after this runs?"* and handle it. Examples: if a conversation is about to breach SLA,
+alert before it does; if a follow-up wasn't answered, re-engage; if a connector is
+unreachable at boot, log a clear warning and degrade gracefully instead of silently
+failing later. Claude (as dev agent) applies the same mindset to code: when fixing a
+bug, scan for the same pattern nearby; when adding a feature, wire up the monitoring
+for it; when touching a service, check that its lifecycle hooks are correct.
+
 pnpm monorepo:
 
 - `apps/backend` — backend: **NestJS + Prisma + PostgreSQL 16 (pgvector) + Redis**

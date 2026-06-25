@@ -7,7 +7,8 @@ function genToken(): string {
   return randomBytes(6).toString('base64url').slice(0, 8).toLowerCase().replace(/[^a-z0-9]/g, '0');
 }
 
-const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutos
+const TOKEN_TTL_MS_DEFAULT = 5 * 60 * 1000;   // 5 minutos (portal session, handoff)
+export const TOKEN_TTL_MS_WEBCHAT = 15 * 60 * 1000; // 15 minutos (ADR 027 — web_chat widget)
 
 // Token TMS_SERVICE_TOKEN — server-to-server, nunca exposto ao browser
 //
@@ -45,6 +46,8 @@ export interface CreateHandoffInput {
   page?: string;
   errorCode?: string;
   serviceToken?: string;
+  /** TTL em ms. Default: 5 min (portal). Web chat usa TOKEN_TTL_MS_WEBCHAT (15 min). */
+  ttlMs?: number;
 }
 
 export interface HandoffContext {
@@ -70,7 +73,8 @@ export class HandoffService {
     }
 
     const token = genToken();
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+    const ttl = input.ttlMs ?? TOKEN_TTL_MS_DEFAULT;
+    const expiresAt = new Date(Date.now() + ttl);
 
     // Usa o tenant do Nexa configurado no env, não o tenantId que o TMS envia
     // (o TMS manda o próprio UUID de tenant, diferente do tenant do Nexa).
@@ -90,7 +94,7 @@ export class HandoffService {
     });
 
     this.logger.log(`Handoff token criado: ${token} | tenant=${input.tenantId} | ext=${input.externalId} | nome=${input.name ?? '-'} | page=${input.page ?? '-'}`);
-    return { token, expiresIn: TOKEN_TTL_MS / 1000 };
+    return { token, expiresIn: ttl / 1000 };
   }
 
   // Consome o token (uso único). Retorna o contexto ou null se inválido/expirado.

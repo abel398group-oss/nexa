@@ -90,7 +90,7 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 - [x] Escalação para humano
 - [x] Separação Vendas × Suporte na UI
 - [x] Portal de Suporte do cliente
-- [x] Web chat embutido no TMS (ADR 027)
+- [~] Web chat embutido no TMS (ADR 027) — UI existe (ChatWidget + LiaChatWindow via polling 4s), Socket.IO real-time + SourceChannel.web_chat pendentes
 - [ ] KB pendente: reindexação completa com HNSW após 1.000+ itens
 
 **Em produção.**
