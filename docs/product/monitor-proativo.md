@@ -147,19 +147,26 @@ tenant_notification_config → preferências do tenant (horário, canal, categor
 
 ---
 
-## Itens pendentes de implementação
+## Status de implementação
 
-| # | Item | Responsável |
-|---|------|------------|
-| 1 | Criar tabelas Prisma no Nexa | Equipe Nexa |
-| 2 | Serviço de polling TMS (cron a cada X min) | Equipe Nexa |
-| 3 | Motor de regras e avaliação de thresholds | Equipe Nexa |
-| 4 | Serviço de consolidação e deduplicação | Equipe Nexa |
-| 5 | Integração com WAHA (fase piloto) | Equipe Nexa |
-| 6 | Interface de configuração no painel (tenant admin) | Equipe Nexa |
-| 7 | Endpoints de consulta on-demand para a Lia | Equipe TMS + Nexa |
-| 8 | Migração para WhatsApp Business API | Fase 2 |
-| 9 | Geração de relatório PDF mensal por e-mail | Fase 2 |
+| # | Item | Status |
+|---|------|--------|
+| 1 | Criar tabelas Prisma no Nexa | ✅ Migration `20260625000000_monitor_proativo` |
+| 2 | Serviço de polling TMS (cron a cada 30 min) | ✅ `MonitorService` em `application/monitor/` |
+| 3 | Motor de regras e avaliação de thresholds | ✅ Filtro por categoria em `MonitorService.syncAlertStates()` |
+| 4 | Serviço de consolidação e deduplicação | ✅ `ConsolidationService` — resumo diário com dedup por hora |
+| 5 | Integração com WAHA (fase piloto) | ✅ `WahaNotificationChannel` — usa `ALERT_ADMIN_PHONE` (Fase 1) |
+| 6 | Interface de configuração no painel (tenant admin) | ✅ `MonitorConfigPage` em `/settings/monitor` |
+| 7 | Endpoints de consulta on-demand para a Lia | ⏳ Fase 2 — depende do TMS expor endpoint de query |
+| 8 | Campo `whatsappPhone` por tenant (envio p/ número próprio) | ⏳ Fase 2 — hoje usa `ALERT_ADMIN_PHONE` global |
+| 9 | Migração para WhatsApp Business API | ⏳ Fase 2 |
+| 10 | Geração de relatório PDF mensal por e-mail | ⏳ Fase 2 |
+
+### Para ativar em produção
+
+1. Rodar a migration no banco: `pnpm db:migrate` (Abel)
+2. Adicionar `MONITOR_ENABLED=true` no `.env` do droplet
+3. Confirmar que `ALERT_ADMIN_PHONE` está configurado (já está)
 
 ---
 

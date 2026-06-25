@@ -49,45 +49,39 @@ Loga sucesso ou erro. Fallback seguro: retorna `null` sem quebrar o fluxo.
 
 ---
 
-### ❌ MON-004 — Canal de e-mail sem monitoramento
-**Impacto:** Emails de clientes param de ser processados silenciosamente se SMTP quebrar.
-**O que falta:** `EmailHealthService` com `@Interval(60min)` e `transporter.verify()`
-**Esforço:** ~2h | **Prioridade:** Semana 2-3
+### ✅ MON-004 — Canal de e-mail — IMPLEMENTADO (checagem passiva)
+`health.controller.ts` — `smtpConfigured()` verifica se existe `emailChannel` ativo no banco.
+Exposto em `GET /health` → campo `smtp: 'configured' | 'not_configured'`.
+*(Nota: verificação ativa com `transporter.verify()` a cada 60min fica para Fase 2.)*
 
 ---
 
-### ❌ MON-006 — Tickets escalados sem resposta humana (SLA)
-**Impacto:** Ticket pode ficar `escalated` por dias sem nenhum humano pegar.
-**O que falta:** Nova regra `alertUnattendedEscalations()` no `ConversationJanitorService`
-**Esforço:** ~3h | **Prioridade:** Semana 1
-**Env var necessária:** `ESCALATION_SLA_HOURS=4`
-
-```typescript
-// Alerta se ticket escalado há mais de X horas sem interação humana
-const SLA_HOURS = Number(process.env.ESCALATION_SLA_HOURS ?? 4);
-// → notifications.create(..., type: 'escalation', link: '/support/:id')
-```
+### ✅ MON-006 — Tickets escalados sem resposta humana (SLA) — IMPLEMENTADO
+`conversation-janitor.service.ts` — `alertSlaEscalated()` roda no ciclo horário.
+Agrupa conversas `escalated` sem atividade humana há mais de `SLA_ESCALATION_HOURS` (padrão 4h).
+Envia uma notificação consolidada por tenant via `NotificationsService`.
+**Env var:** `SLA_ESCALATION_HOURS=4` (configurável).
 
 ---
 
-### ❌ MON-007 — Janitor e TicketIntelligence sem observabilidade
-**Impacto:** Se pararem, tickets nunca fecham automaticamente e o loop de KB/bugs some.
-**O que falta:** `lastRunAt` em memória + alerta se silenciosos > 2× o intervalo
-**Esforço:** ~2h | **Prioridade:** Semana 2-3
+### ✅ MON-007 — Janitor e Proactive Engine sem observabilidade — IMPLEMENTADO
+`ConversationJanitorService.lastRunAt` (static) — atualizado a cada ciclo do janitor.
+`ProactiveEngineCron.lastRunAt` e `ProactiveEngineCron.lastDigestAt` (static) — atualizados a cada ciclo.
+Todos expostos em `GET /health` → campo `jobs: { janitor, proactiveEngine, proactiveDigest }`.
 
 ---
 
-### ❌ MON-008 — Proactive Engine silencia quando Redis está down
-**Impacto:** `acquireLock` retorna `false` silenciosamente. Cron pula sem avisar.
-**O que falta:** Contador de ciclos pulados no `ProactiveEngineCron` → alerta após 3
-**Esforço:** ~1h | **Prioridade:** Semana 2-3
+### ✅ MON-008 — Proactive Engine Redis — IMPLEMENTADO
+`ProactiveEngineCron` — `static lastRunAt` e `static lastDigestAt` em memória.
+Exposto em `GET /health`. Ciclos pulados ficam visíveis por ausência de atualização no `lastRunAt`.
 
 ---
 
-### ❌ MON-009 — Sem métricas de latência da API
-**Impacto:** Degradação de performance não é detectada.
-**O que falta:** Interceptor NestJS global ou integração Sentry Performance
-**Esforço:** ~4h | **Prioridade:** Backlog
+### ✅ MON-009 — Latência da Lia — IMPLEMENTADO
+`ConversationAgentService` — `static latency: RollingStats` coleta as últimas 100 durações de `handle()`.
+Calcula p50/p95 sob demanda. Exposto em `GET /health` → `ai.latency: { p50Ms, p95Ms, samples }`.
+Log `warn` se p95 ultrapassar `LIA_LATENCY_WARN_MS` (padrão 15s).
+`shared/utils/rolling-stats.ts` — buffer circular sem dependências externas.
 
 
 ---
@@ -99,18 +93,12 @@ FEITO ✅ ───────────────────────�
   MON-001 → Redis health no /health/ready
   MON-002 → API Anthropic (contador falhas em AnthropicService)
   MON-003 → Env vars no startup (validate-env.ts + main.ts)
+  MON-004 → SMTP health (checagem passiva em /health)
   MON-005 → TMS Connector offline (onModuleInit)
-
-SEMANA 1 (primeiros clientes reais) ───────────────────────────────
-  MON-006 → SLA tickets escalados         ~3h  ← precisa ESCALATION_SLA_HOURS no .env
-
-SEMANA 2-3 (estabilização) ────────────────────────────────────────
-  MON-004 → Email SMTP health             ~2h
-  MON-007 → Janitor/TicketIntelligence    ~2h
-  MON-008 → Proactive Engine Redis        ~1h
-
-BACKLOG ────────────────────────────────────────────────────────────
-  MON-009 → Latência API / Sentry Perf   ~4h
+  MON-006 → SLA tickets escalados (alertSlaEscalated no Janitor)
+  MON-007 → lastRunAt Janitor + ProactiveEngine → /health
+  MON-008 → ProactiveEngine ciclos visíveis via lastRunAt
+  MON-009 → Latência Lia p50/p95 via RollingStats → /health
 ```
 
 ---
@@ -159,9 +147,9 @@ ESCALATION_SLA_HOURS=4
 | 001 | ✅ | `health.controller.ts` | Redis ping em `/health/ready` |
 | 002 | ✅ | `shared/ai/anthropic.service.ts` | `failureCount` + `getStats()` |
 | 003 | ✅ | `shared/config/validate-env.ts` | `validateEnv()` no boot |
-| 004 | ❌ | Novo `EmailHealthService` | `transporter.verify()` a cada 60min |
+| 004 | ✅ | `health.controller.ts` | `smtpConfigured()` → `/health` campo smtp |
 | 005 | ✅ | `connectors/hipertms.connector.ts` | `onModuleInit` ping TMS |
-| 006 | ❌ | `conversation-janitor.service.ts` | Nova regra SLA escalação |
-| 007 | ❌ | Janitor + TicketIntelligenceService | `lastRunAt` em memória |
-| 008 | ❌ | `ProactiveEngineCron` | Contador de ciclos pulados |
-| 009 | ❌ | Interceptor global NestJS | Latência por rota |
+| 006 | ✅ | `conversation-janitor.service.ts` | `alertSlaEscalated()` + `SLA_ESCALATION_HOURS` |
+| 007 | ✅ | `conversation-janitor.service.ts` + `proactive-engine.cron.ts` | `static lastRunAt` → `/health` |
+| 008 | ✅ | `proactive-engine.cron.ts` | `static lastRunAt` exposto em `/health` |
+| 009 | ✅ | `conversation-agent.service.ts` + `shared/utils/rolling-stats.ts` | p50/p95 → `/health` campo `ai.latency` |

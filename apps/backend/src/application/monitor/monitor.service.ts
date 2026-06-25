@@ -26,7 +26,7 @@ export class MonitorService {
     return (process.env.MONITOR_ENABLED ?? '').toLowerCase() === 'true';
   }
 
-  @Interval(30 * 60 * 1000) // 30 minutos
+  @Interval(Number(process.env.MONITOR_SYNC_INTERVAL_MS ?? 30 * 60 * 1000)) // padrão 30min; teste: 600000 (10min)
   async runCycle(): Promise<void> {
     if (!this.enabled) return;
 

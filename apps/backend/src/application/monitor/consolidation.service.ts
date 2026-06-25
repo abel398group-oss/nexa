@@ -62,7 +62,7 @@ export class ConsolidationService {
 
   private async processForTenant(tenantId: string): Promise<void> {
     const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-    const sendHour = config?.sendHour ?? 7;
+    const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7); // teste: setar MONITOR_DEFAULT_SEND_HOUR=17
     const sendWeekends = config?.sendWeekends ?? false;
 
     const now = new Date();
