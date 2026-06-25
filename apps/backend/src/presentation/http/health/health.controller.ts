@@ -6,6 +6,7 @@ import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { ConversationJanitorService } from '@/application/conversations/conversation-janitor.service';
 import { ProactiveEngineCron } from '@/application/proactive-engine/proactive-engine.cron';
+import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
 
 @ApiTags('health')
 @Controller('health')
@@ -68,7 +69,11 @@ export class HealthController implements OnModuleDestroy {
       db: db ? 'ok' : 'down',
       redis: redis ? 'ok' : 'down',
       aiAutonomyEnabled: this.autonomy.isEnabled(),
-      ai: this.anthropic.getStats(),
+      ai: {
+        ...this.anthropic.getStats(),
+        // MON-009: latência ponta a ponta do pipeline da Lia (p50/p95 das últimas 100 respostas)
+        latency: ConversationAgentService.latency.percentiles(),
+      },
       // MON-004: canal de e-mail configurado?
       smtp: smtpConfigured ? 'configured' : 'not_configured',
       // MON-007/MON-008: últimos runs dos jobs agendados

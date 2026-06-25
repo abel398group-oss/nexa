@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { RollingStats } from '@/shared/utils/rolling-stats';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { SellersService } from '@/application/sellers/sellers.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
@@ -39,6 +40,9 @@ export interface HandleResult {
   handoff?: { assigned: boolean; sellerName?: string; reason?: string };
 }
 
+// MON-009: p95 > este threshold gera log warn para detectar degradação da Lia.
+const LATENCY_WARN_MS = Number(process.env.LIA_LATENCY_WARN_MS ?? 15_000);
+
 // lead quente → vai pro vendedor (IA-3). Configurável via env.
 const HOT_LEAD_SCORE = Number(process.env.HOT_LEAD_SCORE ?? 70);
 // humanização: espera alguns segundos antes de auto-responder (parecer humano) — G5
@@ -50,6 +54,10 @@ const MAX_AI_QUESTIONS = Number(process.env.MAX_AI_QUESTIONS ?? 3);
 @Injectable()
 export class ConversationAgentService {
   private readonly logger = new Logger('ConversationAgent');
+
+  // MON-009: latência ponta a ponta (entrada da mensagem → resposta persistida).
+  // Estático para acessar de HealthController sem acoplamento de DI.
+  static readonly latency = new RollingStats(100);
 
   constructor(
     private readonly router: RouterAgentService,
@@ -72,6 +80,7 @@ export class ConversationAgentService {
     tenantId: string,
     input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
   ): Promise<HandleResult> {
+    const _t0 = Date.now(); // MON-009: início da medição
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
 
@@ -477,6 +486,15 @@ export class ConversationAgentService {
       }
       this.logger.log(`Suporte escalado p/ humano: conv=${conv.id} tel=${conv.phone}`);
     }
+
+    // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
+    const elapsed = Date.now() - _t0;
+    ConversationAgentService.latency.record(elapsed);
+    const { p95Ms } = ConversationAgentService.latency.percentiles();
+    if (p95Ms !== null && p95Ms > LATENCY_WARN_MS) {
+      this.logger.warn(`[MON-009] latência p95=${p95Ms}ms acima de ${LATENCY_WARN_MS}ms`);
+    }
+    this.logger.debug(`[MON-009] handle() ${elapsed}ms conv=${input.conversationId?.slice(0, 8) ?? '-'}`);
 
     return {
       route,
