@@ -23,29 +23,36 @@ export class WahaNotificationChannel implements NotificationChannel {
   ) {}
 
   async send(tenantId: string, message: string): Promise<void> {
-    const phone = await this.resolvePhone(tenantId);
-    if (!phone) {
+    const phones = await this.resolvePhones(tenantId);
+    if (!phones.length) {
       this.logger.warn(`WahaNotification: sem número configurado para tenant ${tenantId} — use ALERT_ADMIN_PHONE`);
       return;
     }
 
-    const result = await this.waha.sendText(phone, message);
-    if (!result.sent) {
-      throw new Error(`WAHA: ${result.reason}`);
+    for (const phone of phones) {
+      const result = await this.waha.sendText(phone, message);
+      if (!result.sent) {
+        this.logger.warn(`WAHA: falha ao enviar para ${phone}: ${result.reason}`);
+      } else {
+        this.logger.debug(`WahaNotification: enviado para ${phone} (tenant=${tenantId})`);
+      }
     }
   }
 
-  private async resolvePhone(tenantId: string): Promise<string | null> {
-    // Fase 1: usa env global. Fase 2: buscar no config do tenant.
-    const env = (process.env.ALERT_ADMIN_PHONE ?? '').replace(/\D/g, '');
-    if (env) return env;
+  private async resolvePhones(tenantId: string): Promise<string[]> {
+    // Fase 1: ALERT_ADMIN_PHONE aceita um ou mais números separados por vírgula.
+    // Ex: "5511917747429,5511974869142"
+    const env = process.env.ALERT_ADMIN_PHONE ?? '';
+    const envPhones = env.split(',').map((p) => p.replace(/\D/g, '')).filter(Boolean);
+    if (envPhones.length) return envPhones;
 
-    // Fallback: primeiro seller ativo do tenant como destinatário (melhor que nada)
+    // Fallback: primeiro seller ativo do tenant
     const seller = await this.prisma.seller.findFirst({
       where: { tenantId, active: true },
       select: { phone: true },
       orderBy: { createdAt: 'asc' },
     });
-    return seller?.phone?.replace(/\D/g, '') ?? null;
+    const sellerPhone = seller?.phone?.replace(/\D/g, '');
+    return sellerPhone ? [sellerPhone] : [];
   }
 }
