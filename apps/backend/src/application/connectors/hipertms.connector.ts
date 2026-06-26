@@ -33,16 +33,25 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     return { Authorization: `Bearer ${this.internalToken}` };
   }
 
-  // Ping no boot — alerta se TMS inacessível ao subir o backend.
+  // Ping no boot com retry — aguarda redes Docker secundárias inicializarem.
+  // Tenta 3 vezes com backoff crescente (2s, 4s, 6s) antes de emitir o aviso.
   async onModuleInit() {
-    const result = await this.healthCheck();
-    if (result.ok) {
-      this.logger.log(`TMS conectado: ${result.detail}`);
-    } else {
-      this.logger.warn(
-        `⚠️  TMS inacessível no boot: ${result.detail}. ` +
-        `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. Lia usará dados em cache enquanto TMS estiver fora.`,
-      );
+    const attempts = 3;
+    for (let i = 1; i <= attempts; i++) {
+      await new Promise((r) => setTimeout(r, i * 2000));
+      const result = await this.healthCheck();
+      if (result.ok) {
+        this.logger.log(`TMS conectado: ${result.detail}`);
+        return;
+      }
+      if (i < attempts) {
+        this.logger.debug(`TMS ping tentativa ${i}/${attempts}: ${result.detail} — aguardando...`);
+      } else {
+        this.logger.warn(
+          `⚠️  TMS inacessível no boot: ${result.detail}. ` +
+          `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. Lia usará dados em cache enquanto TMS estiver fora.`,
+        );
+      }
     }
   }
 
