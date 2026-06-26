@@ -5,10 +5,23 @@ Versões seguem [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Não lançado]
+
+### Planejado
+- **Monitor Frota** (ADR-030) — alertas de km de manutenção, CNH, CRLV, ANTT via WhatsApp. Docs em `docs/monitor/squad-tms-frota.md` e `docs/monitor/squad-nexa-frota.md`.
+- **Cotação WhatsApp** (ADR-031) — cotação de frete via Lia com dois modos: prospect (calculadora pública TMS) e cliente existente (tabela de preços do tenant). Docs em `docs/features/cotacao-whatsapp/`.
+- **Índice HNSW pgvector** — antes de 1.000 itens na KB, para escala de busca semântica
+- **Backup automático PostgreSQL no Droplet** — equivalente Linux do `scripts/backup.ps1` (script local já rodando; versão Droplet pendente)
+- **Monitor externo** (UptimeRobot ou BetterStack)
+- **Playwright E2E** (`apps/e2e/`)
+- **Página de status pública**
+
+---
+
 ## [1.0.0] — 2026-06-20
 
 ### Adicionado
-- **Monitor Proativo TMS** — motor de alertas automáticos (`src/application/monitor/`). Consome eventos do módulo `proactivity` do TMS, consolida por severidade (CRITICAL → OVERDUE → DUE_SOON → INFO) e envia via WhatsApp (WAHA) ou e-mail. Feature flag `MONITOR_ENABLED`. Frontend: `MonitorConfigPage` em `/settings/monitor`.
+- **Monitor Proativo TMS** — motor de alertas automáticos (`apps/backend/src/application/monitor/`). Consome eventos do módulo `proactivity` do TMS, consolida por severidade (CRITICAL → OVERDUE → DUE_SOON → INFO) e envia via WhatsApp (WAHA) ou e-mail. Feature flag `MONITOR_ENABLED`. Frontend: `MonitorConfigPage` em `/settings/monitor`.
 - **Webhooks outbound** — módulo completo com `webhook_subscriptions`, `webhook_deliveries`, HMAC-SHA256 (`X-Nexa-Signature`), retry backoff exponencial 5 tentativas.
 - **PlanQuotaGuard** — tabela `plan_limits`, decorator `@UsePlanQuota`, HTTP 402 ao atingir cota de contatos/campanhas/mensagens.
 - **Exportação LGPD** — `GET /contacts/:id/export` retorna CSV com dados do contato (portabilidade art. 18).
@@ -21,23 +34,10 @@ Versões seguem [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Infra
 - **Socket.IO Redis Adapter** — `@socket.io/redis-adapter` via `REDIS_URL`. Fail-open em single-instance.
 - **Slow query logging** — `$on('query')` no `PrismaService` acima de `PRISMA_SLOW_QUERY_MS` ms (padrão 500ms).
+- **Backup automático local** — `scripts/backup.ps1` rodando diariamente, retém últimos 14 arquivos em `backups/`.
 
 ### Env vars novas
 `EMAIL_ENCRYPTION_KEY` · `REDIS_URL` · `DATA_RETENTION_DAYS` · `PRISMA_SLOW_QUERY_MS` · `MONITOR_ENABLED`
-
----
-
-## [Não lançado]
-
-### Próximos
-- Índice HNSW pgvector (antes de 1.000 itens na KB)
-- Backup automático PostgreSQL agendado no Droplet
-- Monitor externo (UptimeRobot ou BetterStack)
-- Playwright E2E (`apps/e2e/`)
-- Página de status pública
-- Exportação de dados de contato (portabilidade LGPD)
-- Monitoramento externo (UptimeRobot / BetterStack)
-- Índice HNSW do pgvector para escala da KB
 
 ---
 

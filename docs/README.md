@@ -16,7 +16,7 @@ Primeiro conector: HiperTMS.
 | `features/` | PRDs de cada módulo do sistema |
 | `prd/` | Regras de negócio, IA autônoma, workflows, modelo de dados |
 | `architecture/` | Estrutura de código, frontend, diagramas C4, ERD e decisões |
-| `adr/` | Architecture Decision Records (árvore canônica — 27 ADRs) |
+| `adr/` | Architecture Decision Records (árvore canônica — 31 ADRs) |
 | `ai/` | Camada de IA: agentes, guardrails, RAG, contexto, memória, revisão |
 | `api/` | Padrões de API, Swagger, guia de integração para parceiros |
 | `security/` | Visão de segurança, LGPD, política de secrets |
@@ -26,6 +26,8 @@ Primeiro conector: HiperTMS.
 | `schema/` | Schema Prisma, estratégia de migração e runtime |
 | `reviews/` | Revisões, auditorias e postmortems datados |
 | `principles/` | Princípios de design que guiam todos os módulos |
+| `proactive-engine/` | Motor proativo nativo do Nexa (conversas, campanhas, tickets) |
+| `monitor/` | Monitor Proativo TMS (logística, financeiro, frota) |
 
 ## Como navegar
 
@@ -56,9 +58,9 @@ Para agentes de IA trabalhando no repositório: começar por `CLAUDE.md` (raiz).
 
 ## Decisões de Arquitetura (ADRs)
 
-Índice em [`adr/README.md`](adr/README.md) — 27 ADRs por domínio (automação,
+Índice em [`adr/README.md`](adr/README.md) — 31 ADRs por domínio (automação,
 agentes, event bus, segurança, KB, conectores, ambiente, suporte, e-mail,
-platform admin, web chat embutido, …).
+platform admin, web chat embutido, monitor frota, cotação WhatsApp, …).
 
 ## Repositório e componentes
 
@@ -117,7 +119,16 @@ Guias operacionais para quem usa o painel:
 - [SLA por Plano](product/sla.md) — uptime, limites, créditos, suporte
 - [Monitor Proativo TMS](product/monitor-proativo.md) — escopo do módulo de alertas automáticos
 
-## Monitor Proativo
+## Motor Proativo Nativo (proactive-engine)
+
+Motor interno que detecta anomalias nas conversas, campanhas e tickets do Nexa:
+
+- [Documentação completa](proactive-engine/README.md) — regras, cron, deduplicação, configuração
+- 6 regras: `conversation.stale_open`, `lead_no_reply`, `sla_breach`, `campaign.followup_due`, `ticket.auto_close`, `conversation.digest`
+- Cron a cada 15min + digest diário às 18h BRT
+- Módulo: `apps/backend/src/application/proactive-engine/`
+
+## Monitor Proativo TMS
 
 Módulo que observa o TMS e avisa o cliente via WhatsApp/e-mail sobre pendências críticas.
 
@@ -128,6 +139,20 @@ Módulo que observa o TMS e avisa o cliente via WhatsApp/e-mail sobre pendência
 - [Squad Orquestra Nexa IA](monitor/squad-orquestra-nexa-ia.md) — intents da Lia on-demand
 - [ADR 028](adr/028-monitor-proativo-tms.md) — decisão arquitetural
 
+### Em implementação — Monitor Frota (ADR-030)
+- [Squad TMS — Frota](monitor/squad-tms-frota.md) — km, CNH, CRLV, ANTT
+- [Squad Nexa — Frota](monitor/squad-nexa-frota.md) — intents e formatação
+- [ADR 030](adr/030-monitor-frota-whatsapp.md)
+
+## Cotação WhatsApp (em implementação — ADR-031)
+
+Cotação de frete via Lia com dois modos: prospect (calculadora pública) e cliente (tabela de preços do tenant).
+
+- [PRD](features/cotacao-whatsapp/prd.md)
+- [Squad TMS](features/cotacao-whatsapp/squad-tms.md)
+- [Squad Nexa](features/cotacao-whatsapp/squad-nexa.md)
+- [ADR 031](adr/031-cotacao-whatsapp.md)
+
 ## Qualidade
 
 - [Plano de Testes](quality/plano-testes.md) — cobertura mínima, E2E, critérios de PR
@@ -136,6 +161,11 @@ Módulo que observa o TMS e avisa o cliente via WhatsApp/e-mail sobre pendência
 
 - [Glossário](glossario.md) — definições de todos os termos do sistema
 - [CHANGELOG](../CHANGELOG.md) — histórico de versões
+
+## Auditorias e Reviews
+
+- [2026-06-26 — Auditoria Docs vs Código](reviews/2026-06-26-auditoria-docs-vs-codigo.md) — gaps e desatualizações encontradas
+- [2026-06-20 — Auditoria de Implementação](reviews/2026-06-20-auditoria-implementacao-nexa.md) — NEXA-01→08 + Monitor
 
 ## Gap documental e análise comparativa
 

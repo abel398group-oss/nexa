@@ -2,9 +2,9 @@
 
 > Roadmap de implementação derivado dos PRDs, ADRs e Schema (todos aprovados).
 > Reflete a arquitetura NOVA (NestJS + agentes + event bus + billing TMS).
-> **Atualizado em 2026-06-20** — fases 0 a 5 implementadas e em produção.
+> **Atualizado em 2026-06-26** — fases 0 a 5 implementadas e em produção. Monitor Proativo implementado.
 
-**Última atualização:** 2026-06-20
+**Última atualização:** 2026-06-26
 
 **Princípio de priorização:** o maior risco hoje NÃO é arquitetura — é **construir coisas
 demais antes de validar vendas reais**. Validar primeiro: lead → venda → pagamento → onboarding.
@@ -61,7 +61,7 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 - [x] Webhooks outbound — módulo completo com HMAC-SHA256 + retry backoff
 - [x] `PlanQuotaGuard` — tabela `plan_limits`, HTTP 402, decorator `@UsePlanQuota`
 - [x] Slow query logging — `$on('query')` acima de `PRISMA_SLOW_QUERY_MS`ms
-- [x] Monitor Proativo — módulo completo `src/application/monitor/`
+- [x] Monitor Proativo — módulo completo `apps/backend/src/application/monitor/`
 
 ---
 
@@ -97,7 +97,20 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 
 ---
 
-## Fase 6 — IA Autônoma (agentes — ADRs 003/004/007)
+## Fase 6 — Monitor Proativo TMS ✅ (concluído)
+- [x] Motor de alertas automáticos (`apps/backend/src/application/monitor/`)
+- [x] Consome eventos do módulo `proactivity` do TMS
+- [x] Consolida por severidade (CRITICAL → OVERDUE → DUE_SOON → INFO)
+- [x] Envia via WhatsApp (WAHA) — `WahaNotificationChannel`
+- [x] Feature flag `MONITOR_ENABLED`
+- [x] Frontend: `MonitorConfigPage` em `/settings/monitor`
+- [ ] Monitor Frota (km, CNH, CRLV) — ADR-030, docs em `docs/monitor/squad-tms-frota.md`
+
+**Em produção.**
+
+---
+
+## Fase 7 — IA Autônoma (agentes — ADRs 003/004/007)
 - [ ] Router/Supervisor (valida entrada/saída)
 - [ ] SDR Agent · Sales Agent · Onboarding Agent · Billing Agent
 - [ ] Event Bus completo (DLQ, circuit breaker)
@@ -109,7 +122,7 @@ Inbound IA, Sender, Follow-up, Supervisor. Migrado de n8n para NestJS + Prisma e
 
 ---
 
-## Fase 7 — Multi-tenant (virar SaaS)
+## Fase 8 — Multi-tenant (virar SaaS)
 Antes da escala. Schema já é multi-tenant-ready; aqui ativa-se isolamento e fluxos.
 - [ ] Tenant isolation (toda query filtra tenant)
 - [ ] Roles · Permissions (CASL)
@@ -120,7 +133,7 @@ Antes da escala. Schema já é multi-tenant-ready; aqui ativa-se isolamento e fl
 
 ---
 
-## Fase 8 — Escala
+## Fase 9 — Escala
 - [ ] Pool de múltiplos números WhatsApp
 - [ ] Aquecimento automático por fase
 - [ ] NPS pós-venda
@@ -156,10 +169,10 @@ Adiar até validar lead → venda → pagamento → onboarding:
 3   — Conector TMS ✅ em produção
 4   — Frontend ✅ em produção
 5   — Suporte TMS ✅ em produção (HNSW pendente)
-6   — Monitor Proativo → próximo (docs/monitor/)
+6   — Monitor Proativo ✅ em produção (Monitor Frota pendente — ADR-030)
 7   — IA Autônoma (Router/SDR/Sales/Onboarding)
 8   — Multi-tenant completo
 9   — Escala (Redis adapter, pool, API Meta)
 ```
 
-> Sistema em produção desde 2026. Próximo foco: Monitor Proativo TMS.
+> Sistema em produção desde 2026. Próximo foco: Monitor Frota (ADR-030) + Cotação WhatsApp (ADR-031).
