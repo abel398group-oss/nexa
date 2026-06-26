@@ -1,15 +1,14 @@
 /**
  * MonitorService — sincroniza eventos de proatividade do TMS → AlertState local.
  *
- * Roda a cada 30 minutos (@Interval). Para cada tenant ativo com produto TMS:
- *  1. Chama GET /api/nexa/proactivity/events no TMS
- *  2. Faz upsert no AlertState (severity/title podem mudar)
- *  3. Resolve alertas que o TMS não retornou mais (fechados lá → resolved aqui)
+ * Fluxo principal (webhook): o TMS empurra eventos via POST /monitor/ingest.
+ *   → ingestFromTms() faz o mapeamento tmsTenantId → Nexa tenantId e chama syncAlertStates().
  *
- * Feature flag: MONITOR_ENABLED=true. Se ausente/false, o ciclo não roda.
+ * Debug manual: POST /monitor/sync chama syncNow(), que ainda usa polling sob demanda.
+ *
+ * Feature flag: MONITOR_ENABLED=true (ainda lido pelo ConsolidationService para notificações).
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { HiperTmsConnector, TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
 
@@ -22,23 +21,31 @@ export class MonitorService {
     private readonly tms: HiperTmsConnector,
   ) {}
 
-  private get enabled(): boolean {
-    return (process.env.MONITOR_ENABLED ?? '').toLowerCase() === 'true';
-  }
-
-  @Interval(Number(process.env.MONITOR_SYNC_INTERVAL_MS ?? 30 * 60 * 1000)) // padrão 30min; teste: 60000 (1min)
-  async runCycle(): Promise<void> {
-    if (!this.enabled) return;
-
+  /**
+   * Recebe eventos empurrados pelo TMS (webhook push).
+   *
+   * Faz o reverse lookup tmsTenantId (UUID TMS) → Nexa tenantId usando as envs
+   * TMS_TENANT_ID_<SLUG>. Se não encontrar mapeamento, loga e descarta.
+   * Se `events` vier vazio, fecha todos os alertas abertos do tenant.
+   */
+  async ingestFromTms(
+    tmsTenantId: string,
+    events: TmsProactivityEvent[],
+  ): Promise<{ synced: number; resolved: number }> {
     const tenants = await this.getActiveTenants();
-    for (const tenant of tenants) {
-      try {
-        const events = await this.tms.getProactivityEvents(this.resolveTmsTenantId(tenant.slug));
-        await this.syncAlertStates(tenant.id, events);
-      } catch (err: any) {
-        this.logger.warn(`Monitor ciclo falhou para tenant ${tenant.id}: ${err?.message}`);
-      }
+
+    const tenant = tenants.find((t) => {
+      const key = `TMS_TENANT_ID_${t.slug.toUpperCase().replace(/-/g, '_')}`;
+      return process.env[key] === tmsTenantId;
+    });
+
+    if (!tenant) {
+      this.logger.warn(`ingestFromTms: tmsTenantId "${tmsTenantId}" não mapeado para nenhum tenant ativo`);
+      return { synced: 0, resolved: 0 };
     }
+
+    this.logger.log(`ingestFromTms: ${events.length} evento(s) recebido(s) do TMS para tenant ${tenant.id}`);
+    return this.syncAlertStates(tenant.id, events);
   }
 
   /** Força uma sincronização imediata para um tenant (usado pelo controller p/ debug). */

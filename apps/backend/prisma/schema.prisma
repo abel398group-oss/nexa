@@ -782,7 +782,8 @@ model PlanLimit {
 model TenantNotificationConfig {
   id              String   @id @default(cuid())
   tenantId        String   @unique @map("tenant_id")
-  sendHour        Int      @default(7) @map("send_hour")
+  enabled         Boolean  @default(false) @map("enabled") // on/off por tenant
+  sendHour        Int      @default(7) @map("send_hour")   // hora UTC de envio (0-23)
   sendWeekends    Boolean  @default(false) @map("send_weekends")
   channel         String   @default("whatsapp") // whatsapp | email | both
   fiscalEnabled   Boolean  @default(true) @map("fiscal_enabled")

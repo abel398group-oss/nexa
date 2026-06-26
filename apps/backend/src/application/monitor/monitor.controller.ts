@@ -26,6 +26,7 @@ import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
 
 class UpdateConfigDto {
+  @IsBoolean() @IsOptional() enabled?: boolean;
   @IsInt() @Min(0) @Max(23) @IsOptional() sendHour?: number;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;
@@ -51,6 +52,7 @@ export class MonitorController {
     // Retorna defaults se não existe ainda
     return config ?? {
       tenantId,
+      enabled: false,
       sendHour: 7,
       sendWeekends: false,
       channel: 'whatsapp',
