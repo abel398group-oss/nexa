@@ -21,11 +21,16 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     return !!this.baseUrl && !!(process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN);
   }
 
-  // Token enviado no header x-internal-token para a API interna do TMS (/nexa/*).
-  // Deve ser IGUAL ao NEXA_INTERNAL_TOKEN configurado no TMS.
+  // Token enviado no header Authorization: Bearer para a API interna do TMS (/nexa/*).
+  // Validado pelo ServiceTokenGuard do TMS contra NEXA_SERVICE_TOKEN.
   // NUNCA logar ou expor este valor.
   private get internalToken(): string {
     return process.env.TMS_INTERNAL_TOKEN ?? process.env.TMS_SERVICE_TOKEN ?? '';
+  }
+
+  // Header de autenticação server-to-server enviado em todas as chamadas ao TMS.
+  private get authHeader(): Record<string, string> {
+    return { Authorization: `Bearer ${this.internalToken}` };
   }
 
   // Ping no boot — alerta se TMS inacessível ao subir o backend.
@@ -48,7 +53,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     try {
       // baseUrl já inclui /api (ex.: http://localhost:3000/api), então health fica em /api/health.
       const res = await fetch(`${this.baseUrl}/health`, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return { ok: false, detail: `TMS retornou ${res.status}` };
@@ -70,7 +75,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       const url = `${this.baseUrl}/nexa/plans`;
 
       const res = await fetch(url, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
@@ -665,7 +670,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         `?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`;
 
       const res = await fetch(url, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(5000),
       });
 
@@ -760,7 +765,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     try {
       const url = `${this.baseUrl}/nexa/contract?tenantId=${encodeURIComponent(externalId)}`;
       const res = await fetch(url, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
@@ -799,7 +804,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         `?phone=${encodeURIComponent(phone)}`;
 
       const res = await fetch(url, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
@@ -834,7 +839,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     try {
       const url = `${this.baseUrl}/nexa/proactivity/events?tenantId=${encodeURIComponent(externalTenantId)}`;
       const res = await fetch(url, {
-        headers: { 'x-internal-token': this.internalToken },
+        headers: this.authHeader,
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {

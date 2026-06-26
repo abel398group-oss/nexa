@@ -26,6 +26,9 @@ services:
         condition: service_started
       waha:
         condition: service_started
+    # Permite que o container acesse serviços no host (ex.: TMS em :3000).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
       interval: 30s
