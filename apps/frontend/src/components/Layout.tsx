@@ -23,33 +23,43 @@ const TOUR_STEPS: TourStep[] = [
 type NavItem = { to: string; label: string; ic: IconName; perm: string };
 type NavGroup = { label: string | null; items: NavItem[] };
 
-// Navegação agrupada (padrão HiperTMS: Grupo → Item). Grupo sem label = item solto no topo.
+// Navegação agrupada em 3 serviços principais + suporte operacional.
 const NAV_GROUPS: NavGroup[] = [
   { label: null, items: [
     { to: '/dashboard', label: 'Painel', ic: 'dashboard', perm: 'dashboard' },
   ] },
+
+  // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
   { label: 'Vendas', items: [
-    { to: '/inbox', label: 'Inbox de Vendas', ic: 'inbox', perm: 'inbox' },
-    { to: '/contacts', label: 'Contatos', ic: 'contacts', perm: 'contacts' },
-    { to: '/campaigns', label: 'Disparo', ic: 'campaigns', perm: 'campaigns' },
-    { to: '/sender/health', label: 'Saúde dos números', ic: 'pulse', perm: 'campaigns' },
-    { to: '/opportunities', label: 'Oportunidades', ic: 'dollar', perm: 'opportunities' },
-    { to: '/sellers', label: 'Vendedores', ic: 'sellers', perm: 'sellers' },
-    { to: '/playbook', label: 'Playbook de Vendas', ic: 'playbook', perm: 'ai_control' },
+    { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
+    { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
+    { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
+    { to: '/campaigns',      label: 'Disparo',           ic: 'campaigns', perm: 'campaigns' },
+    { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
+    { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
+    { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
   ] },
+
+  // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
   { label: 'Suporte', items: [
-    { to: '/support', label: 'Inbox de Suporte', ic: 'support', perm: 'inbox' },
-    { to: '/support/dashboard', label: 'Dashboard', ic: 'dashboard', perm: 'dashboard' },
-    { to: '/support/clients', label: 'Clientes', ic: 'contacts', perm: 'inbox' },
-    { to: '/support/config', label: 'Config de Suporte', ic: 'bot', perm: 'ai_control' },
+    { to: '/support',           label: 'Inbox de Suporte', ic: 'support',   perm: 'inbox' },
+    { to: '/support/dashboard', label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
+    { to: '/support/clients',   label: 'Clientes',         ic: 'contacts',  perm: 'inbox' },
+    { to: '/support/config',    label: 'Configurações',    ic: 'bot',       perm: 'ai_control' },
   ] },
+
+  // ── Serviço 3: Monitoramento ───────────────────────────────────────────────
+  { label: 'Monitoramento', items: [
+    { to: '/settings/monitor', label: 'Monitor Proativo', ic: 'bell', perm: 'admin' },
+  ] },
+
+  // ── Suporte operacional ────────────────────────────────────────────────────
   { label: 'Conhecimento', items: [
     { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
   ] },
   { label: 'Administração', items: [
-    { to: '/users', label: 'Usuários', ic: 'users', perm: 'users' },
+    { to: '/users',                  label: 'Usuários',      ic: 'users', perm: 'users' },
     { to: '/settings/email-channel', label: 'Canal de E-mail', ic: 'mail', perm: 'admin' },
-    { to: '/settings/monitor', label: 'Monitor Proativo', ic: 'bell', perm: 'admin' },
   ] },
 ];
 

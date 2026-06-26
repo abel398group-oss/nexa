@@ -26,7 +26,7 @@ import { MonitorService } from './monitor.service';
 export class TmsEventDto {
   @IsString() id!: string;
   @IsIn(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']) severity!: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
-  @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category!: string;
+  @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category!: 'fiscal' | 'frota' | 'logistic' | 'finance';
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
 }
