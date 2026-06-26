@@ -40,13 +40,25 @@ export class WahaNotificationChannel implements NotificationChannel {
   }
 
   private async resolvePhones(tenantId: string): Promise<string[]> {
-    // Fase 1: ALERT_ADMIN_PHONE aceita um ou mais números separados por vírgula.
-    // Ex: "5511917747429,5511974869142"
+    // Prioridade 1: telefone configurado na tela do tenant (TenantNotificationConfig.notificationPhone)
+    const config = await this.prisma.tenantNotificationConfig.findUnique({
+      where: { tenantId },
+      select: { notificationPhone: true },
+    });
+    if (config?.notificationPhone) {
+      const phones = config.notificationPhone
+        .split(',')
+        .map((p) => p.replace(/\D/g, ''))
+        .filter(Boolean);
+      if (phones.length) return phones;
+    }
+
+    // Prioridade 2: ALERT_ADMIN_PHONE global (fallback operacional)
     const env = process.env.ALERT_ADMIN_PHONE ?? '';
     const envPhones = env.split(',').map((p) => p.replace(/\D/g, '')).filter(Boolean);
     if (envPhones.length) return envPhones;
 
-    // Fallback: primeiro seller ativo do tenant
+    // Prioridade 3: primeiro seller ativo do tenant
     const seller = await this.prisma.seller.findFirst({
       where: { tenantId, active: true },
       select: { phone: true },

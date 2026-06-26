@@ -28,6 +28,8 @@ import { ConsolidationService } from './consolidation.service';
 class UpdateConfigDto {
   @IsBoolean() @IsOptional() enabled?: boolean;
   @IsInt() @Min(0) @Max(23) @IsOptional() sendHour?: number;
+  @IsInt() @IsIn([0, 15, 30, 45]) @IsOptional() sendMinute?: number;
+  @IsString() @IsOptional() notificationPhone?: string;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;
   @IsBoolean() @IsOptional() fiscalEnabled?: boolean;
@@ -54,6 +56,8 @@ export class MonitorController {
       tenantId,
       enabled: false,
       sendHour: 7,
+      sendMinute: 0,
+      notificationPhone: null,
       sendWeekends: false,
       channel: 'whatsapp',
       fiscalEnabled: true,

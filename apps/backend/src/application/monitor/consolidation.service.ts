@@ -75,19 +75,25 @@ export class ConsolidationService {
     const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
     const sendWeekends = config?.sendWeekends ?? false;
 
+    const sendMinute = config?.sendMinute ?? 0;
+
     const now = new Date();
     const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
     const dayOfWeek = now.getDay(); // 0=dom 6=sáb
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
     if (!force) {
       if (currentHour !== sendHour) return 0;
+      // Verifica se estamos na janela de 15 min do minuto configurado
+      if (currentMinute < sendMinute || currentMinute >= sendMinute + 15) return 0;
       if (isWeekend && !sendWeekends) return 0;
     }
 
-    // Evita reenviar na mesma hora (janela de 15min pode disparar 2x na mesma hora)
+    // Evita reenviar na mesma janela (chave inclui hora+minuto arredondado p/ 15min)
     const lastSentHour = this.sentThisHour.get(tenantId);
-    const currentHourKey = now.getFullYear() * 100000 + now.getMonth() * 10000 + now.getDate() * 100 + currentHour;
+    const slotMinute = Math.floor(currentMinute / 15) * 15;
+    const currentHourKey = now.getFullYear() * 10000000 + now.getMonth() * 100000 + now.getDate() * 1000 + currentHour * 10 + slotMinute / 15;
     if (!force && lastSentHour === currentHourKey) return 0;
 
     const alerts = await this.prisma.alertState.findMany({

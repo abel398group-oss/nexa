@@ -13,6 +13,8 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 interface MonitorConfig {
   enabled: boolean;
   sendHour: number;
+  sendMinute: number;
+  notificationPhone: string | null;
   sendWeekends: boolean;
   channel: 'whatsapp' | 'email' | 'both';
   fiscalEnabled: boolean;
@@ -55,11 +57,17 @@ const CATEGORY_LABEL: Record<string, string> = {
   finance:  'Financeiro',
 };
 
+// Horários exibidos em BRT (UTC-3). Conversão feita ao salvar/carregar.
+const BRT_OFFSET = 3;
+const utcToBrt = (h: number) => (h - BRT_OFFSET + 24) % 24;
+const brtToUtc = (h: number) => (h + BRT_OFFSET) % 24;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const DEFAULT_CONFIG: MonitorConfig = {
   enabled: false,
   sendHour: 7,
+  sendMinute: 0,
+  notificationPhone: null,
   sendWeekends: false,
   channel: 'whatsapp',
   fiscalEnabled: true,
@@ -193,20 +201,33 @@ export function MonitorConfigPage() {
             <h2 className="text-sm font-semibold text-base-content">Preferências de envio</h2>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* Hora de envio */}
+              {/* Hora e minuto de envio */}
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-base-content/60">Horário do resumo diário</span>
-                <select
-                  className="select select-bordered select-sm w-full"
-                  value={cfg.sendHour}
-                  onChange={(e) => set('sendHour', Number(e.target.value))}
-                >
-                  {HOURS.map((h) => (
-                    <option key={h} value={h}>
-                      {String(h).padStart(2, '0')}:00
-                    </option>
-                  ))}
-                </select>
+                <span className="text-xs text-base-content/60">Horário do resumo diário (Brasília)</span>
+                <div className="flex gap-2">
+                  <select
+                    className="select select-bordered select-sm flex-1"
+                    value={utcToBrt(cfg.sendHour)}
+                    onChange={(e) => set('sendHour', brtToUtc(Number(e.target.value)))}
+                  >
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>
+                        {String(h).padStart(2, '0')}h
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="select select-bordered select-sm w-24"
+                    value={cfg.sendMinute}
+                    onChange={(e) => set('sendMinute', Number(e.target.value))}
+                  >
+                    {[0, 15, 30, 45].map((m) => (
+                      <option key={m} value={m}>
+                        {String(m).padStart(2, '0')}min
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </label>
 
               {/* Canal */}
@@ -221,6 +242,19 @@ export function MonitorConfigPage() {
                   <option value="email">E-mail</option>
                   <option value="both">Ambos</option>
                 </select>
+              </label>
+
+              {/* Telefone de destino */}
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span className="text-xs text-base-content/60">Telefone de destino (WhatsApp)</span>
+                <input
+                  type="tel"
+                  className="input input-bordered input-sm w-full"
+                  placeholder="Ex: 5511917747429  (com DDI, sem espaços)"
+                  value={cfg.notificationPhone ?? ''}
+                  onChange={(e) => set('notificationPhone', e.target.value || null)}
+                />
+                <span className="text-xs text-base-content/40">Deixe vazio para usar o padrão do sistema.</span>
               </label>
             </div>
 
