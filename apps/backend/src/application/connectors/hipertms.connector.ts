@@ -856,7 +856,20 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         return [];
       }
       const data = await res.json() as { events?: TmsProactivityEvent[] } | TmsProactivityEvent[];
-      return Array.isArray(data) ? data : (data?.events ?? []);
+      const raw = Array.isArray(data) ? data : (data?.events ?? []);
+      const DOMAIN_TO_CATEGORY: Record<string, string> = {
+        fleet: 'frota',
+        logistic: 'logistic',
+        finance: 'finance',
+        fiscal: 'fiscal',
+      };
+      return raw.map((e: any) => ({
+        id: e.id,
+        severity: e.severity,
+        category: DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain,
+        title: e.title ?? e.reason ?? e.ruleId,
+        description: e.description ?? (e.subjectLabel ?? null),
+      }));
     } catch (err: any) {
       this.logger.warn(`getProactivityEvents falhou: ${err?.message}`);
       return [];
