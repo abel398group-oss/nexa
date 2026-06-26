@@ -11,6 +11,7 @@ import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui
 import { SkeletonList } from '@/components/ui/Skeleton';
 
 interface MonitorConfig {
+  enabled: boolean;
   sendHour: number;
   sendWeekends: boolean;
   channel: 'whatsapp' | 'email' | 'both';
@@ -57,6 +58,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const DEFAULT_CONFIG: MonitorConfig = {
+  enabled: false,
   sendHour: 7,
   sendWeekends: false,
   channel: 'whatsapp',
@@ -168,8 +170,26 @@ export function MonitorConfigPage() {
         <SkeletonList />
       ) : (
         <div className="space-y-6">
+          {/* ── On/Off ── */}
+          <section className="card p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-base-content">Monitoramento ativo</p>
+                <p className="text-xs text-base-content/50 mt-0.5">
+                  Quando ativado, você recebe um resumo diário via {cfg.channel === 'whatsapp' ? 'WhatsApp' : cfg.channel === 'email' ? 'e-mail' : 'WhatsApp e e-mail'} com os alertas do TMS.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                className="toggle toggle-primary toggle-lg"
+                checked={cfg.enabled}
+                onChange={(e) => set('enabled', e.target.checked)}
+              />
+            </div>
+          </section>
+
           {/* ── Preferências de envio ── */}
-          <section className="card p-5 space-y-4">
+          <section className={`card p-5 space-y-4 transition-opacity ${cfg.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
             <h2 className="text-sm font-semibold text-base-content">Preferências de envio</h2>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -217,7 +237,7 @@ export function MonitorConfigPage() {
           </section>
 
           {/* ── Categorias ── */}
-          <section className="card p-5 space-y-4">
+          <section className={`card p-5 space-y-4 transition-opacity ${cfg.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
             <h2 className="text-sm font-semibold text-base-content">Categorias monitoradas</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(

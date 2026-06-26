@@ -49,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
   { label: 'Administração', items: [
     { to: '/users', label: 'Usuários', ic: 'users', perm: 'users' },
     { to: '/settings/email-channel', label: 'Canal de E-mail', ic: 'mail', perm: 'admin' },
+    { to: '/settings/monitor', label: 'Monitor Proativo', ic: 'bell', perm: 'admin' },
   ] },
 ];
 
@@ -68,6 +69,7 @@ const titles: Record<string, string> = {
   '/playbook': 'Playbook de Vendas',
   '/users': 'Usuários & Acessos',
   '/settings/email-channel': 'Canal de E-mail',
+  '/settings/monitor': 'Monitor Proativo',
 };
 
 type AutonomyState = { master: boolean; whatsapp: boolean; email: boolean };

@@ -24,17 +24,17 @@ import { ServiceTokenGuard } from '@/shared/guards/service-token.guard';
 import { MonitorService } from './monitor.service';
 
 export class TmsEventDto {
-  @IsString() id: string;
-  @IsIn(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']) severity: string;
-  @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category: string;
-  @IsString() title: string;
+  @IsString() id!: string;
+  @IsIn(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']) severity!: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
+  @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category!: string;
+  @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
 }
 
 export class IngestFromTmsDto {
-  @IsString() tmsTenantId: string;
+  @IsString() tmsTenantId!: string;
   @IsArray() @ValidateNested({ each: true }) @Type(() => TmsEventDto)
-  events: TmsEventDto[];
+  events!: TmsEventDto[];
 }
 
 @Controller('monitor')
