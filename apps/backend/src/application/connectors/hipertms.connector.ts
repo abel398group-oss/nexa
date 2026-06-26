@@ -857,7 +857,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       }
       const data = await res.json() as { events?: TmsProactivityEvent[] } | TmsProactivityEvent[];
       const raw = Array.isArray(data) ? data : (data?.events ?? []);
-      const DOMAIN_TO_CATEGORY: Record<string, string> = {
+      const DOMAIN_TO_CATEGORY: Record<string, TmsProactivityEvent['category']> = {
         fleet: 'frota',
         logistic: 'logistic',
         finance: 'finance',
@@ -865,10 +865,10 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       };
       return raw.map((e: any) => ({
         id: e.id,
-        severity: e.severity,
-        category: DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain,
-        title: e.title ?? e.reason ?? e.ruleId,
-        description: e.description ?? (e.subjectLabel ?? null),
+        severity: e.severity as TmsProactivityEvent['severity'],
+        category: (DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain) as TmsProactivityEvent['category'],
+        title: String(e.title ?? e.reason ?? e.ruleId ?? 'Evento pendente'),
+        description: (e.description ?? e.subjectLabel ?? null) as string | undefined,
       }));
     } catch (err: any) {
       this.logger.warn(`getProactivityEvents falhou: ${err?.message}`);
