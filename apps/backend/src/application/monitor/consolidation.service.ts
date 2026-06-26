@@ -60,9 +60,15 @@ export class ConsolidationService {
     }
   }
 
-  private async processForTenant(tenantId: string): Promise<void> {
+  /** Força o envio imediato para um tenant, ignorando hora e deduplicação (debug/teste). */
+  async forceForTenant(tenantId: string): Promise<{ sent: boolean; alerts: number }> {
+    const count = await this.processForTenant(tenantId, true);
+    return { sent: count > 0, alerts: count };
+  }
+
+  private async processForTenant(tenantId: string, force = false): Promise<number> {
     const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-    const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7); // teste: setar MONITOR_DEFAULT_SEND_HOUR=17
+    const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
     const sendWeekends = config?.sendWeekends ?? false;
 
     const now = new Date();
@@ -70,13 +76,15 @@ export class ConsolidationService {
     const dayOfWeek = now.getDay(); // 0=dom 6=sáb
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    if (currentHour !== sendHour) return;
-    if (isWeekend && !sendWeekends) return;
+    if (!force) {
+      if (currentHour !== sendHour) return 0;
+      if (isWeekend && !sendWeekends) return 0;
+    }
 
     // Evita reenviar na mesma hora (janela de 15min pode disparar 2x na mesma hora)
     const lastSentHour = this.sentThisHour.get(tenantId);
     const currentHourKey = now.getFullYear() * 100000 + now.getMonth() * 10000 + now.getDate() * 100 + currentHour;
-    if (lastSentHour === currentHourKey) return;
+    if (!force && lastSentHour === currentHourKey) return 0;
 
     const alerts = await this.prisma.alertState.findMany({
       where: {
@@ -89,7 +97,7 @@ export class ConsolidationService {
       },
     });
 
-    if (alerts.length === 0) return;
+    if (alerts.length === 0) return 0;
 
     // Agrupa por severidade
     const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
@@ -109,7 +117,7 @@ export class ConsolidationService {
 
     const message = lines.join('\n');
     await this.notification.notify(tenantId, message);
-    this.sentThisHour.set(tenantId, currentHourKey);
+    if (!force) this.sentThisHour.set(tenantId, currentHourKey);
 
     // Atualiza notifiedAt e notifyCount
     const alertIds = alerts.map((a) => a.id);
@@ -130,5 +138,6 @@ export class ConsolidationService {
     });
 
     this.logger.log(`Consolidation: ${alerts.length} alerta(s) notificado(s) para tenant ${tenantId}`);
+    return alerts.length;
   }
 }

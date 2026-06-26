@@ -26,14 +26,14 @@ export class MonitorService {
     return (process.env.MONITOR_ENABLED ?? '').toLowerCase() === 'true';
   }
 
-  @Interval(Number(process.env.MONITOR_SYNC_INTERVAL_MS ?? 30 * 60 * 1000)) // padrão 30min; teste: 600000 (10min)
+  @Interval(Number(process.env.MONITOR_SYNC_INTERVAL_MS ?? 30 * 60 * 1000)) // padrão 30min; teste: 60000 (1min)
   async runCycle(): Promise<void> {
     if (!this.enabled) return;
 
     const tenants = await this.getActiveTenants();
     for (const tenant of tenants) {
       try {
-        const events = await this.tms.getProactivityEvents(tenant.slug);
+        const events = await this.tms.getProactivityEvents(this.resolveTmsTenantId(tenant.slug));
         await this.syncAlertStates(tenant.id, events);
       } catch (err: any) {
         this.logger.warn(`Monitor ciclo falhou para tenant ${tenant.id}: ${err?.message}`);
@@ -46,8 +46,28 @@ export class MonitorService {
     const tenant = await this.prisma.tenant.findFirst({ where: { id: tenantId, status: 'active' } });
     if (!tenant) return { synced: 0, resolved: 0 };
 
-    const events = await this.tms.getProactivityEvents(tenant.slug);
+    const events = await this.tms.getProactivityEvents(this.resolveTmsTenantId(tenant.slug));
     return this.syncAlertStates(tenantId, events);
+  }
+
+  /**
+   * Mapeia o slug do Nexa para o UUID interno do TMS.
+   *
+   * O TMS usa UUIDs como tenantId; o Nexa usa slugs legíveis ("hipertms").
+   * Para cada tenant, define a env TMS_TENANT_ID_<SLUG_UPPER> com o UUID correto.
+   * Ex.: TMS_TENANT_ID_HIPERTMS=a1b2c3d4-...
+   *
+   * Solução de longo prazo: adicionar campo `tmsId` no schema Tenant (ver backlog).
+   */
+  private resolveTmsTenantId(slug: string): string {
+    const key = `TMS_TENANT_ID_${slug.toUpperCase().replace(/-/g, '_')}`;
+    const override = process.env[key];
+    if (override) {
+      this.logger.debug(`Monitor: usando TMS UUID override para slug "${slug}" → ${override}`);
+      return override;
+    }
+    this.logger.warn(`Monitor: sem override para slug "${slug}" (${key} não definida) — passando slug direto, TMS pode não encontrar`);
+    return slug;
   }
 
   private async getActiveTenants() {

@@ -23,6 +23,7 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorService } from './monitor.service';
+import { ConsolidationService } from './consolidation.service';
 
 class UpdateConfigDto {
   @IsInt() @Min(0) @Max(23) @IsOptional() sendHour?: number;
@@ -40,6 +41,7 @@ export class MonitorController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly monitor: MonitorService,
+    private readonly consolidation: ConsolidationService,
   ) {}
 
   @RequirePerm('admin')
@@ -113,5 +115,12 @@ export class MonitorController {
   @Post('sync')
   async syncNow(@CurrentTenant() tenantId: string) {
     return this.monitor.syncNow(tenantId);
+  }
+
+  // Força envio imediato da notificação WhatsApp, ignorando hora configurada (debug/teste)
+  @RequirePerm('admin')
+  @Post('notify-now')
+  async notifyNow(@CurrentTenant() tenantId: string) {
+    return this.consolidation.forceForTenant(tenantId);
   }
 }
