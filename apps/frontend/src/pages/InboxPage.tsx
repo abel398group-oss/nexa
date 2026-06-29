@@ -3,6 +3,8 @@ import { io, Socket } from 'socket.io-client';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { Select } from '@/shared/ui';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { useAuth } from '@/app/providers/AuthContext';
 import { useTenant } from '@/app/providers/TenantContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
@@ -20,6 +22,9 @@ import {
   setConversationOutcome,
   assignSeller as reassignSeller,
   setConversationResolved,
+  archiveConversation,
+  deleteConversation,
+  bulkConversationAction,
 } from '@/entities/conversation';
 import { ConversationStatusBadge } from '@/components/conversation/ConversationStatusBadge';
 import { ConversationOutcomeBadge } from '@/components/conversation/ConversationOutcomeBadge';
@@ -112,6 +117,8 @@ function Recibo({ ack }: { ack?: number }) {
 export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'support' }) {
   const { user } = useAuth();
   const { actingTenantId } = useTenant();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [sellerFilter, setSellerFilter] = useState(''); // '' = todos · '__none__' = sem vendedor
@@ -125,6 +132,84 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [convsError, setConvsError] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  // seleção em massa (chave = conversationId do representante do grupo)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  function toggleSelect(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function selectAll() {
+    setSelectedIds(new Set(filtered.map((c) => c.id)));
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function bulkArchive() {
+    if (!selectedIds.size || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const r = await bulkConversationAction([...selectedIds], 'archive');
+      setConvs((cs) => cs.filter((c) => !selectedIds.has(c.id)));
+      if (active && selectedIds.has(active.id)) setActive(null);
+      clearSelection();
+      toast.success(`${r.archived} conversa(s) arquivada(s).`);
+    } catch {
+      toast.error('Erro ao arquivar conversas.');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.size || bulkBusy) return;
+    const ok = await confirm({ title: 'Excluir conversas', message: `Excluir permanentemente ${selectedIds.size} conversa(s)? Esta ação não pode ser desfeita.`, variant: 'danger', confirmLabel: 'Excluir' });
+    if (!ok) return;
+    setBulkBusy(true);
+    try {
+      const r = await bulkConversationAction([...selectedIds], 'delete');
+      setConvs((cs) => cs.filter((c) => !selectedIds.has(c.id)));
+      if (active && selectedIds.has(active.id)) setActive(null);
+      clearSelection();
+      toast.success(`${r.deleted} conversa(s) excluída(s).`);
+    } catch {
+      toast.error('Erro ao excluir conversas.');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function archiveOne(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await archiveConversation(id);
+      setConvs((cs) => cs.filter((c) => c.id !== id));
+      if (active?.id === id) setActive(null);
+      toast.success('Conversa arquivada.');
+    } catch {
+      toast.error('Erro ao arquivar.');
+    }
+  }
+
+  async function deleteOne(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = await confirm({ title: 'Excluir conversa', message: 'Excluir permanentemente esta conversa? Esta ação não pode ser desfeita.', variant: 'danger', confirmLabel: 'Excluir' });
+    if (!ok) return;
+    try {
+      await deleteConversation(id);
+      setConvs((cs) => cs.filter((c) => c.id !== id));
+      if (active?.id === id) setActive(null);
+      toast.success('Conversa excluída.');
+    } catch {
+      toast.error('Erro ao excluir.');
+    }
+  }
 
   // tags do contato da conversa aberta: atualiza local + servidor
   function setActiveTags(tags: string[]) {
@@ -340,9 +425,41 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     <div className="flex h-full">
       {/* ── Sidebar conversas ─────────────────────────────────────────── */}
       <aside className="flex w-80 flex-col border-r border-base-200 bg-[var(--surface)]">
-        <div className="border-b border-base-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-          Conversas
-        </div>
+        {selectedIds.size > 0 ? (
+          /* ── Barra de ação em massa ── */
+          <div className="flex items-center gap-2 border-b border-base-200 bg-base-200 px-3 py-2">
+            <button onClick={clearSelection} className="text-base-content/50 hover:text-base-content transition-colors" title="Cancelar seleção">
+              <Icon name="close" className="h-4 w-4" />
+            </button>
+            <span className="flex-1 text-xs font-semibold text-base-content">{selectedIds.size} selecionada(s)</span>
+            <button
+              onClick={selectAll}
+              className="rounded px-2 py-1 text-xs text-base-content/60 hover:bg-base-300 transition-colors"
+            >
+              Todas
+            </button>
+            <button
+              onClick={bulkArchive}
+              disabled={bulkBusy}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-base-content/70 hover:bg-base-300 disabled:opacity-50 transition-colors"
+              title="Arquivar selecionadas"
+            >
+              <Icon name="archive" className="h-3.5 w-3.5" /> Arquivar
+            </button>
+            <button
+              onClick={bulkDelete}
+              disabled={bulkBusy}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
+              title="Excluir selecionadas"
+            >
+              <Icon name="trash" className="h-3.5 w-3.5" /> Excluir
+            </button>
+          </div>
+        ) : (
+          <div className="border-b border-base-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+            Conversas
+          </div>
+        )}
 
         {/* filtros rápidos */}
         {!loadingConvs && convs.length > 0 && (
@@ -398,69 +515,112 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
           {!loadingConvs && groups.map((g) => {
             const c = g.rep;
             const stale = c.status === 'waiting_internal' && isWaitingInternalStale(c.lastActivityAt);
+            const isSelected = selectedIds.has(c.id);
+            const hasSelection = selectedIds.size > 0;
             return (
-              <button
+              <div
                 key={g.key}
-                onClick={() => openGroup(g)}
                 className={[
-                  'block w-full border-b px-4 py-3 text-left text-sm hover:bg-base-100 transition-colors',
-                  active?.id === c.id ? 'bg-base-200' : '',
+                  'group/item relative border-b transition-colors',
+                  active?.id === c.id ? 'bg-base-200' : 'hover:bg-base-100',
                   c.status === 'escalated' ? 'border-l-2 border-l-orange-400' : '',
+                  isSelected ? 'bg-base-200' : '',
                 ].join(' ')}
                 style={{ borderColor: 'var(--border)' }}
               >
-                <div className="flex gap-3">
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
-                    {(c.contact?.name
-                      ? c.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
-                      : displayPhone(c.phone).slice(0, 2)
-                    ).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="truncate font-medium text-base-content">
-                        {c.contact?.name || displayPhone(c.phone)}
-                      </span>
-                      {stale && <span title="Aguardando equipe há +2h" className="inline-flex shrink-0 text-amber-500"><Icon name="alert" className="h-3.5 w-3.5" /></span>}
-                    </div>
-                    {c.contact?.name && (
-                      <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
-                    )}
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
-                      {g.convs.length > 1 && (
-                        <span title={`${g.convs.length} conversas com este contato`} className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">
-                          <Icon name="inbox" className="h-3 w-3" /> {g.convs.length}
+                {/* Checkbox — visível no hover ou quando há seleção ativa */}
+                <div
+                  className={[
+                    'absolute left-1 top-1/2 -translate-y-1/2 z-10 transition-opacity',
+                    hasSelection || isSelected ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100',
+                  ].join(' ')}
+                  onClick={(e) => toggleSelect(c.id, e)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => {}}
+                    className="checkbox checkbox-xs cursor-pointer"
+                  />
+                </div>
+
+                <button
+                  onClick={() => openGroup(g)}
+                  className="block w-full py-3 pr-2 text-left text-sm"
+                  style={{ paddingLeft: hasSelection || isSelected ? '1.75rem' : '1rem' }}
+                >
+                  <div className="flex gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
+                      {(c.contact?.name
+                        ? c.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
+                        : displayPhone(c.phone).slice(0, 2)
+                      ).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate font-medium text-base-content">
+                          {c.contact?.name || displayPhone(c.phone)}
                         </span>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {stale && <span title="Aguardando equipe há +2h" className="inline-flex text-amber-500"><Icon name="alert" className="h-3.5 w-3.5" /></span>}
+                          {/* Botões de ação individual — visíveis no hover */}
+                          <div className="hidden items-center gap-0.5 group-hover/item:flex">
+                            <button
+                              onClick={(e) => archiveOne(c.id, e)}
+                              title="Arquivar"
+                              className="rounded p-1 text-base-content/40 hover:bg-base-300 hover:text-base-content transition-colors"
+                            >
+                              <Icon name="archive" className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => deleteOne(c.id, e)}
+                              title="Excluir"
+                              className="rounded p-1 text-base-content/40 hover:bg-error/10 hover:text-error transition-colors"
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {c.contact?.name && (
+                        <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
                       )}
-                      {c.outcome && c.outcome !== c.status && <ConversationOutcomeBadge outcome={c.outcome} />}
-                      {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
-                        <ChannelBadge sourceChannel={c.sourceChannel} />
-                      )}
-                      {(c.ticketCategory || c.ticketPriority) && (
-                        <TicketCategoryBadge category={c.ticketCategory} priority={c.ticketPriority} compact />
-                      )}
-                      {c.assignedSeller && (
-                        <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
-                          {c.assignedSeller.name}
-                        </span>
-                      )}
-                      {c.campaign && (
-                        <span
-                          title={`Veio da campanha: ${c.campaign.name}`}
-                          className="inline-flex max-w-[120px] items-center gap-1 truncate rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
-                        >
-                          <Icon name="campaigns" className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{c.campaign.name}</span>
-                        </span>
-                      )}
-                      {(c.contact?.tags ?? []).slice(0, 3).map((t) => (
-                        <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">{t}</span>
-                      ))}
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
+                        {g.convs.length > 1 && (
+                          <span title={`${g.convs.length} conversas com este contato`} className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">
+                            <Icon name="inbox" className="h-3 w-3" /> {g.convs.length}
+                          </span>
+                        )}
+                        {c.outcome && c.outcome !== c.status && <ConversationOutcomeBadge outcome={c.outcome} />}
+                        {c.sourceChannel && c.sourceChannel !== 'whatsapp' && (
+                          <ChannelBadge sourceChannel={c.sourceChannel} />
+                        )}
+                        {(c.ticketCategory || c.ticketPriority) && (
+                          <TicketCategoryBadge category={c.ticketCategory} priority={c.ticketPriority} compact />
+                        )}
+                        {c.assignedSeller && (
+                          <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
+                            {c.assignedSeller.name}
+                          </span>
+                        )}
+                        {c.campaign && (
+                          <span
+                            title={`Veio da campanha: ${c.campaign.name}`}
+                            className="inline-flex max-w-[120px] items-center gap-1 truncate rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                          >
+                            <Icon name="campaigns" className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{c.campaign.name}</span>
+                          </span>
+                        )}
+                        {(c.contact?.tags ?? []).slice(0, 3).map((t) => (
+                          <span key={t} className="rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">{t}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              </div>
             );
           })}
         </div>

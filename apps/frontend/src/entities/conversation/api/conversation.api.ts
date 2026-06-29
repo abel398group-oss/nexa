@@ -44,3 +44,24 @@ export async function setConversationResolved(
   const r = await api.patch(`/conversations/${id}/resolve`, { resolved });
   return r.data;
 }
+
+// Arquiva uma conversa (soft close — some da lista, mas permanece no banco).
+export async function archiveConversation(id: string): Promise<{ id: string; archived: boolean }> {
+  const r = await api.patch(`/conversations/${id}/archive`);
+  return r.data;
+}
+
+// Exclui permanentemente uma conversa e todas as suas mensagens.
+export async function deleteConversation(id: string): Promise<{ id: string; deleted: boolean }> {
+  const r = await api.delete(`/conversations/${id}`);
+  return r.data;
+}
+
+// Ação em lote: arquivar ou excluir múltiplas conversas.
+export async function bulkConversationAction(
+  ids: string[],
+  action: 'archive' | 'delete',
+): Promise<{ archived?: number; deleted?: number }> {
+  const r = await api.post('/conversations/bulk-action', { ids, action });
+  return r.data;
+}

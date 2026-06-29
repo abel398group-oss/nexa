@@ -17,7 +17,9 @@ export class ConversationsService {
 
   // Inbox: lista conversas do tenant
   async findAll(tenantId: string, q: PaginationQueryDto, sellerId?: string): Promise<Paginated<any>> {
-    const where: any = { tenantId };
+    // Exclui conversas arquivadas da listagem padrão.
+    // OR necessário: `outcome != 'archived'` em SQL exclui rows com NULL (three-valued logic).
+    const where: any = { tenantId, OR: [{ outcome: null }, { outcome: { not: 'archived' } }] };
     if (sellerId) where.assignedSellerId = sellerId; // carteira do vendedor
     if (q.search) where.phone = { contains: q.search };
     const [items, total] = await Promise.all([
@@ -192,6 +194,55 @@ export class ConversationsService {
       }),
     ]);
     return { id, status: toStatus, outcome: resolved ? 'resolved' : null };
+  }
+
+  // Arquiva uma conversa (soft): outcome='archived', status='closed'. Sem migration.
+  async archive(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    const now = new Date();
+    await this.prisma.aiConversation.update({
+      where: { id },
+      data: { status: 'closed' as any, outcome: 'archived', outcomeAt: now, endedAt: now },
+    });
+    return { id, archived: true };
+  }
+
+  // Arquiva múltiplas conversas em lote (validando tenant em cada uma).
+  async bulkArchive(tenantId: string, ids: string[]) {
+    // valida: só opera em conversas do tenant
+    const owned = await this.prisma.aiConversation.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true },
+    });
+    const validIds = owned.map((c) => c.id);
+    if (!validIds.length) return { archived: 0 };
+    const now = new Date();
+    const result = await this.prisma.aiConversation.updateMany({
+      where: { id: { in: validIds } },
+      data: { status: 'closed' as any, outcome: 'archived', outcomeAt: now, endedAt: now },
+    });
+    return { archived: result.count };
+  }
+
+  // Exclui uma conversa permanentemente (cascade apaga mensagens via FK).
+  async remove(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
+    await this.prisma.aiConversation.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  // Exclui múltiplas conversas permanentemente.
+  async bulkRemove(tenantId: string, ids: string[]) {
+    const owned = await this.prisma.aiConversation.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true },
+    });
+    const validIds = owned.map((c) => c.id);
+    if (!validIds.length) return { deleted: 0 };
+    const result = await this.prisma.aiConversation.deleteMany({
+      where: { id: { in: validIds } },
+    });
+    return { deleted: result.count };
   }
 
   // Atualiza last_activity_at — chamado sempre que uma mensagem é gravada

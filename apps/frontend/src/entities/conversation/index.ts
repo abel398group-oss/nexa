@@ -9,4 +9,7 @@ export {
   setConversationOutcome,
   assignSeller,
   setConversationResolved,
+  archiveConversation,
+  deleteConversation,
+  bulkConversationAction,
 } from './api/conversation.api';

@@ -1,8 +1,14 @@
-import { Body, Controller, Get, Logger, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { IsArray, IsIn, IsString } from 'class-validator';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
+
+class BulkActionDto {
+  @IsIn(['archive', 'delete']) action!: 'archive' | 'delete';
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}
 
 // se for vendedor, restringe à carteira dele (assignedSellerId); admin/gestor veem tudo
 function sellerScope(user: any): string | undefined {
@@ -73,6 +79,25 @@ export class ConversationsController {
     @Body() dto: { resolved: boolean },
   ) {
     return this.conversations.setResolved(tenantId, id, dto.resolved);
+  }
+
+  // Arquiva uma conversa (soft close, outcome=archived).
+  @Patch(':id/archive')
+  archive(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.conversations.archive(tenantId, id);
+  }
+
+  // Exclui permanentemente uma conversa e suas mensagens.
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.conversations.remove(tenantId, id);
+  }
+
+  // Ação em lote: arquivar ou excluir múltiplas conversas.
+  @Post('bulk-action')
+  bulkAction(@CurrentTenant() tenantId: string, @Body() dto: BulkActionDto) {
+    if (dto.action === 'archive') return this.conversations.bulkArchive(tenantId, dto.ids);
+    return this.conversations.bulkRemove(tenantId, dto.ids);
   }
 
   @Post(':id/messages')
