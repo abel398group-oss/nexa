@@ -885,4 +885,10 @@ export interface TmsProactivityEvent {
   category: 'fiscal' | 'logistic' | 'frota' | 'finance';
   title: string;
   description?: string;
+  /** Phone of the sub-client admin to notify via WhatsApp (e.g. "5511999990001"). */
+  adminPhone?: string;
+  /** Display name of the admin (used in message greeting). */
+  adminName?: string;
+  /** Company/transportadora name (used in message context). */
+  companyName?: string;
 }

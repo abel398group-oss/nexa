@@ -29,6 +29,12 @@ export class TmsEventDto {
   @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category!: 'fiscal' | 'frota' | 'logistic' | 'finance';
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
+  /** Phone do admin do sub-cliente no formato E.164 sem "+" (ex: "5511999990001"). */
+  @IsOptional() @IsString() adminPhone?: string;
+  /** Nome do admin para personalizar a saudação da mensagem. */
+  @IsOptional() @IsString() adminName?: string;
+  /** Nome da empresa/transportadora para contextualizar a mensagem. */
+  @IsOptional() @IsString() companyName?: string;
 }
 
 export class IngestFromTmsDto {
