@@ -21,7 +21,7 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 type NavItem = { to: string; label: string; ic: IconName; perm: string };
-type NavGroup = { label: string | null; items: NavItem[] };
+type NavGroup = { label: string | null; icon?: IconName; items: NavItem[] };
 
 // Navegação agrupada em 3 serviços principais + suporte operacional.
 const NAV_GROUPS: NavGroup[] = [
@@ -30,7 +30,7 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
 
   // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
-  { label: 'Vendas', items: [
+  { label: 'Vendas', icon: 'dollar', items: [
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
     { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
@@ -41,7 +41,7 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
-  { label: 'Suporte', items: [
+  { label: 'Suporte', icon: 'support', items: [
     { to: '/support',           label: 'Inbox de Suporte', ic: 'support',   perm: 'inbox' },
     { to: '/support/dashboard', label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
     { to: '/support/clients',   label: 'Clientes',         ic: 'contacts',  perm: 'inbox' },
@@ -49,15 +49,15 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
 
   // ── Serviço 3: Monitoramento ───────────────────────────────────────────────
-  { label: 'Monitoramento', items: [
+  { label: 'Monitoramento', icon: 'bell', items: [
     { to: '/settings/monitor', label: 'Monitor Proativo', ic: 'bell', perm: 'admin' },
   ] },
 
   // ── Suporte operacional ────────────────────────────────────────────────────
-  { label: 'Conhecimento', items: [
+  { label: 'Conhecimento', icon: 'knowledge', items: [
     { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
   ] },
-  { label: 'Administração', items: [
+  { label: 'Administração', icon: 'users', items: [
     { to: '/users',                  label: 'Usuários',      ic: 'users', perm: 'users' },
     { to: '/settings/email-channel', label: 'Canal de E-mail', ic: 'mail', perm: 'admin' },
   ] },
@@ -287,6 +287,29 @@ export function Layout() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   // menu mobile off-canvas (desktop: sempre rail+hover, sem botão de fixar)
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // hover state do sidebar (desktop) — necessário para controlar collapse via JS
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  // sidebar "expandido" = mobile aberto OU hover no desktop
+  const isExpandedMode = mobileNavOpen || sidebarHovered;
+  // grupos colapsados/expandidos — persiste no localStorage
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('nexa_nav_expanded') ?? 'null');
+      if (Array.isArray(saved)) return new Set<string>(saved);
+    } catch {}
+    // default: abre o grupo da rota atual (ou Vendas se não encontrar)
+    const active = NAV_GROUPS.find((g) => g.label && g.items.some((it) => location.pathname.startsWith(it.to)));
+    return new Set<string>([active?.label ?? 'Vendas']);
+  });
+
+  function toggleGroup(label: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      localStorage.setItem('nexa_nav_expanded', JSON.stringify([...next]));
+      return next;
+    });
+  }
   // command palette (Ctrl+K)
   const [cmdOpen, setCmdOpen] = useState(false);
 
@@ -324,6 +347,20 @@ export function Layout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [visibleItems, dark]);
 
+  // auto-expand o grupo quando a rota mudar para dentro dele
+  useEffect(() => {
+    const active = visibleGroups.find((g) => g.label && g.items.some((it) => location.pathname.startsWith(it.to)));
+    if (active?.label && !expandedGroups.has(active.label)) {
+      setExpandedGroups((prev) => {
+        const next = new Set(prev);
+        next.add(active.label!);
+        localStorage.setItem('nexa_nav_expanded', JSON.stringify([...next]));
+        return next;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   // tour automático na primeira vez
   useEffect(() => {
     if (!localStorage.getItem('nexa_tour_done')) {
@@ -352,11 +389,13 @@ export function Layout() {
         className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-all duration-200 ease-layout ${
           mobileNavOpen ? 'translate-x-0 w-60 shadow-elevated' : '-translate-x-full'
         } sm:translate-x-0 sm:w-16 sm:hover:w-60 sm:hover:shadow-elevated`}
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
       >
         {/* marca: símbolo no rail, wordmark quando expandido (fixado ou hover) */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>Nexa</span>
+          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${isExpandedMode ? 'inline' : 'hidden'}`}>Nexa</span>
         </div>
 
         {/* atalhos rápidos — sempre visíveis, ícone no rail / label no hover */}
@@ -381,7 +420,7 @@ export function Layout() {
                 <>
                   {isActive && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />}
                   <Icon name={s.ic} className={`h-4 w-4 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                  <span className={`truncate whitespace-nowrap text-xs ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{s.label}</span>
+                  <span className={`truncate whitespace-nowrap text-xs ${isExpandedMode ? 'inline' : 'hidden'}`}>{s.label}</span>
                 </>
               )}
             </NavLink>
@@ -389,44 +428,66 @@ export function Layout() {
         </div>
 
         <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
-          {visibleGroups.map((g, gi) => (
-            <div key={gi} className={gi > 0 ? 'pt-3' : ''}>
-              {g.label && (
-                <div className={`px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${mobileNavOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
-                  {g.label}
-                </div>
-              )}
-              {g.items.map((it) => (
-                <NavLink
-                  key={it.to}
-                  to={it.to}
-                  title={it.label}
-                  onClick={() => setMobileNavOpen(false)}
-                  className={({ isActive }) =>
-                    `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      mobileNavOpen ? 'justify-start' : 'justify-center group-hover/sb:justify-start'
-                    } ${
-                      isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
-                    }`
-                  }
+          {visibleGroups.map((g, gi) => {
+            const isOpen = !g.label || !isExpandedMode || expandedGroups.has(g.label);
+            return (
+              <div key={gi} className={gi > 0 ? 'pt-2' : ''}>
+                {/* Cabeçalho do grupo — visível apenas no modo expandido */}
+                {g.label && (
+                  <button
+                    onClick={() => toggleGroup(g.label!)}
+                    className={`w-full flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:bg-white/[0.07] ${isExpandedMode ? 'flex' : 'hidden'}`}
+                  >
+                    {g.icon && (
+                      <Icon name={g.icon} className="h-4 w-4 shrink-0 text-white/50" />
+                    )}
+                    <span className="flex-1 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                      {g.label}
+                    </span>
+                    <Icon
+                      name="chevronDown"
+                      className={`h-3.5 w-3.5 shrink-0 text-white/30 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                    />
+                  </button>
+                )}
+                {/* Items: sempre visíveis no rail, colapsáveis no modo expandido */}
+                <div
+                  className="overflow-hidden transition-all duration-200"
+                  style={isExpandedMode ? { maxHeight: isOpen ? '20rem' : '0', opacity: isOpen ? 1 : 0 } : undefined}
                 >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
+                  {g.items.map((it) => (
+                    <NavLink
+                      key={it.to}
+                      to={it.to}
+                      title={it.label}
+                      onClick={() => setMobileNavOpen(false)}
+                      className={({ isActive }) =>
+                        `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          isExpandedMode ? 'justify-start' : 'justify-center'
+                        } ${
+                          isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          {isActive && (
+                            <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
+                          )}
+                          <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
+                          <span className={`truncate whitespace-nowrap ${isExpandedMode ? 'inline' : 'hidden'}`}>{it.label}</span>
+                        </>
                       )}
-                      <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                      <span className={`truncate whitespace-nowrap ${mobileNavOpen ? 'inline' : 'hidden group-hover/sb:inline'}`}>{it.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          ))}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         {/* rodapé — só quando expandido (hover ou mobile) */}
-        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${mobileNavOpen ? 'block' : 'hidden group-hover/sb:block'}`}>
+        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${isExpandedMode ? 'block' : 'hidden'}`}>
           <div className="truncate">{user?.email}</div>
           <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
         </div>
