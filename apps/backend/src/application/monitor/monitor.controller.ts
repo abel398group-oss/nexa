@@ -17,7 +17,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
@@ -27,9 +27,11 @@ import { ConsolidationService } from './consolidation.service';
 
 class UpdateConfigDto {
   @IsBoolean() @IsOptional() enabled?: boolean;
-  @IsInt() @Min(0) @Max(23) @IsOptional() sendHour?: number;
-  @IsInt() @IsIn([0, 15, 30, 45]) @IsOptional() sendMinute?: number;
-  @IsString() @IsOptional() notificationPhone?: string;
+  // @IsOptional() ignora undefined; ValidateIf ignora null — necessário porque
+  // class-validator não pula validators para null com @IsOptional() sozinho.
+  @IsInt() @Min(0) @Max(23) @ValidateIf((o) => o.sendHour != null) @IsOptional() sendHour?: number;
+  @IsInt() @IsIn([0, 15, 30, 45]) @ValidateIf((o) => o.sendMinute != null) @IsOptional() sendMinute?: number;
+  @IsString() @ValidateIf((o) => o.notificationPhone != null) @IsOptional() notificationPhone?: string | null;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;
   @IsBoolean() @IsOptional() fiscalEnabled?: boolean;
