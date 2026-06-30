@@ -103,7 +103,11 @@ export function MonitorConfigPage() {
   async function saveConfig() {
     setSaving(true);
     try {
-      await api.put('/monitor/config', cfg);
+      // Remove null/undefined — class-validator rejeita null mesmo em campos opcionais
+      const payload = Object.fromEntries(
+        Object.entries(cfg).filter(([, v]) => v !== null && v !== undefined),
+      );
+      await api.put('/monitor/config', payload);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });
       toast.success('Configurações de monitor salvas!');
     } catch {
