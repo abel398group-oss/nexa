@@ -139,11 +139,22 @@ export class SellersService {
     tenantId: string,
     input: { conversationId: string; contactPhone: string; leadScore: number; summary?: string },
   ) {
-    // já notificado? (dedup)
+    // já notificado? → lead re-engajou: avisa o mesmo vendedor sem mudar atribuição
     const existing = await this.prisma.sellerNotification.findUnique({
       where: { conversationId: input.conversationId },
     });
     if (existing) {
+      const seller = await this.prisma.seller.findUnique({ where: { id: existing.sellerId } });
+      if (seller?.phone) {
+        const msg =
+          `👋 *Lead voltou!* (score ${input.leadScore})\n` +
+          `Cliente: ${input.contactPhone}\n` +
+          (input.summary ? `Resumo: ${input.summary}\n` : '') +
+          `Este lead já é seu — ele enviou uma nova mensagem. Confira no Nexa.`;
+        const sent = await this.waha.sendText(seller.phone, msg);
+        this.logger.log(`Re-engagement → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
+        return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: sent.sent };
+      }
       return { assigned: false, reason: 'já atribuído', sellerId: existing.sellerId };
     }
 
