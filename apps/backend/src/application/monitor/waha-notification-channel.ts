@@ -12,6 +12,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationChannel } from './notification-channel.interface';
+import { normalizePhone } from '@/shared/utils/phone.util';
 
 @Injectable()
 export class WahaNotificationChannel implements NotificationChannel {
@@ -48,14 +49,14 @@ export class WahaNotificationChannel implements NotificationChannel {
     if (config?.notificationPhone) {
       const phones = config.notificationPhone
         .split(',')
-        .map((p) => p.replace(/\D/g, ''))
-        .filter(Boolean);
+        .map((p) => normalizePhone(p)) // normalizePhone adiciona DDI 55 automaticamente
+        .filter((p) => p.length >= 12);
       if (phones.length) return phones;
     }
 
     // Prioridade 2: ALERT_ADMIN_PHONE global (fallback operacional)
     const env = process.env.ALERT_ADMIN_PHONE ?? '';
-    const envPhones = env.split(',').map((p) => p.replace(/\D/g, '')).filter(Boolean);
+    const envPhones = env.split(',').map((p) => normalizePhone(p)).filter((p) => p.length >= 12);
     if (envPhones.length) return envPhones;
 
     // Prioridade 3: primeiro seller ativo do tenant
@@ -64,7 +65,7 @@ export class WahaNotificationChannel implements NotificationChannel {
       select: { phone: true },
       orderBy: { createdAt: 'asc' },
     });
-    const sellerPhone = seller?.phone?.replace(/\D/g, '');
-    return sellerPhone ? [sellerPhone] : [];
+    const sellerPhone = seller?.phone ? normalizePhone(seller.phone) : '';
+    return sellerPhone.length >= 12 ? [sellerPhone] : [];
   }
 }

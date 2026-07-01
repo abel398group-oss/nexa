@@ -145,6 +145,19 @@ export function MonitorConfigPage() {
     onError: () => toast.error('Falha ao sincronizar com o TMS.'),
   });
 
+  // Testar notificação — envia mensagem de teste para o phone configurado
+  const testNotify = useMutation({
+    mutationFn: () => api.post('/monitor/test'),
+    onSuccess: (res) => {
+      if (res.data.sent) {
+        toast.success(`✅ Mensagem de teste enviada para ${res.data.phone}!`);
+      } else {
+        toast.error(`Falha: ${res.data.reason ?? 'erro desconhecido'}`);
+      }
+    },
+    onError: () => toast.error('Erro ao enviar teste de notificação.'),
+  });
+
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
@@ -170,6 +183,14 @@ export function MonitorConfigPage() {
               loading={syncNow.isPending}
             >
               <Icon name="refresh" className="h-4 w-4" /> Sincronizar agora
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => testNotify.mutate()}
+              loading={testNotify.isPending}
+              title="Envia uma mensagem de teste para o WhatsApp configurado"
+            >
+              <Icon name="zap" className="h-4 w-4" /> Testar notificação
             </Button>
             <Button onClick={saveConfig} loading={saving}>
               <Icon name="check" className="h-4 w-4" /> Salvar

@@ -23,6 +23,8 @@ import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { normalizePhone } from '@/shared/utils/phone.util';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
 
@@ -52,6 +54,7 @@ export class MonitorController {
     private readonly prisma: PrismaService,
     private readonly monitor: MonitorService,
     private readonly consolidation: ConsolidationService,
+    private readonly waha: WahaClientService,
   ) {}
 
   @RequirePerm('admin')
@@ -135,6 +138,26 @@ export class MonitorController {
       where: { id },
       data: { status: 'resolved', updatedAt: new Date() },
     });
+  }
+
+  // Envia uma mensagem de teste WhatsApp diretamente para o notificationPhone configurado.
+  // Ignora alertas e hora — serve apenas para validar se o canal está funcionando.
+  @RequirePerm('admin')
+  @Post('test')
+  async testNotify(@CurrentTenant() tenantId: string) {
+    const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
+    const rawPhone = config?.notificationPhone ?? process.env.ALERT_ADMIN_PHONE ?? '';
+    const phone = normalizePhone(rawPhone.split(',')[0]);
+    if (!phone || phone.length < 12) {
+      return { sent: false, reason: 'Nenhum telefone configurado. Salve um número no campo "Telefone de destino" primeiro.' };
+    }
+    const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const msg =
+      `🧪 *Teste do Monitor Proativo — Nexa*\n\n` +
+      `Se você recebeu esta mensagem, as notificações estão funcionando corretamente! ✅\n\n` +
+      `_Enviado em: ${now}_`;
+    const result = await this.waha.sendText(phone, msg);
+    return { sent: result.sent, phone, reason: result.reason ?? null };
   }
 
   // Disparo manual do ciclo de sincronização (útil para teste/debug)
