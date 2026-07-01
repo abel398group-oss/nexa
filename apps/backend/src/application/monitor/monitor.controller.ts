@@ -37,7 +37,7 @@ const nullToUndefined = () => Transform(({ value }) => (value === null ? undefin
 class UpdateConfigDto {
   @IsBoolean() @IsOptional() enabled?: boolean;
   @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendHour?: number;
-  @IsInt() @IsIn([0, 15, 30, 45]) @IsOptional() @nullToUndefined() sendMinute?: number;
+  @IsInt() @IsIn([0,5,10,15,20,25,30,35,40,45,50,55]) @IsOptional() @nullToUndefined() sendMinute?: number;
   @IsString() @IsOptional() @nullToUndefined() notificationPhone?: string;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;

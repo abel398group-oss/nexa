@@ -246,7 +246,7 @@ export function MonitorConfigPage() {
                     value={cfg.sendMinute}
                     onChange={(e) => set('sendMinute', Number(e.target.value))}
                   >
-                    {[0, 15, 30, 45].map((m) => (
+                    {[0,5,10,15,20,25,30,35,40,45,50,55].map((m) => (
                       <option key={m} value={m}>
                         {String(m).padStart(2, '0')}min
                       </option>

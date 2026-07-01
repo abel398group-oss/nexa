@@ -42,7 +42,7 @@ export class ConsolidationService {
     return (process.env.MONITOR_ENABLED ?? '').toLowerCase() === 'true';
   }
 
-  @Interval(15 * 60 * 1000) // verifica a cada 15 minutos
+  @Interval(5 * 60 * 1000) // verifica a cada 5 minutos (permite granularidade de 5min no horário)
   async runConsolidation(): Promise<void> {
     if (!this.enabled) return;
 
@@ -86,14 +86,14 @@ export class ConsolidationService {
     if (!force) {
       if (currentHour !== sendHour) return 0;
       // Verifica se estamos na janela de 15 min do minuto configurado
-      if (currentMinute < sendMinute || currentMinute >= sendMinute + 15) return 0;
+      if (currentMinute < sendMinute || currentMinute >= sendMinute + 5) return 0;
       if (isWeekend && !sendWeekends) return 0;
     }
 
     // Evita reenviar na mesma janela (chave inclui hora+minuto arredondado p/ 15min)
     const lastSentHour = this.sentThisHour.get(tenantId);
-    const slotMinute = Math.floor(currentMinute / 15) * 15;
-    const currentHourKey = now.getFullYear() * 10000000 + now.getMonth() * 100000 + now.getDate() * 1000 + currentHour * 10 + slotMinute / 15;
+    const slotMinute = Math.floor(currentMinute / 5) * 5;
+    const currentHourKey = now.getFullYear() * 10000000 + now.getMonth() * 100000 + now.getDate() * 1000 + currentHour * 100 + slotMinute / 5;
     if (!force && lastSentHour === currentHourKey) return 0;
 
     const alerts = await this.prisma.alertState.findMany({
