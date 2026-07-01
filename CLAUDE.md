@@ -104,6 +104,14 @@ Dois ambientes distintos — nunca confundir:
 - Erros com caminho `C:\Users\Hipervias - Abel\...` → são **locais**
 - Erros com caminho `/root/nexa/` → são de **produção**
 
+## WhatsApp / WAHA — regras críticas (leia antes de tocar em qualquer coisa de WhatsApp)
+
+- **WAHA usa `latest` em produção** — cada redeploy pode puxar versão nova com formato de payload diferente. Nunca assuma que o formato do webhook é estável.
+- **LID (anonimização do WhatsApp)**: o WhatsApp envia remetentes como `<id>@lid` em vez do número real. O campo `payload.from` contém o LID, NÃO o número. Para resolver o número real, use a API do WAHA `/api/contacts?session=default&contactId=<lid>`.
+- **`resolveLidToPhone()` — campo correto é `data.id`, não `data.number`**: o WAHA retorna `{ "id": "5512988073788@c.us", "number": "234754356076551" }`. O `number` é só o user do LID (sem código de país — inválido como fone BR). O número real está em `id` (ex: `"5512988073788@c.us"` → pegar antes do `@`). **Nunca ler `data.number` como telefone definitivo.**
+- **Ao tocar em `whatsapp.service.ts` / `normalize()` / `resolveLidToPhone()`**: sempre testar com mensagem real antes de commitar. O fluxo de rejeição silenciosa (sem log) é perigoso — adicione log explícito em qualquer novo early-return.
+- **Não adicionar early-returns sem `this.logger.warn()`**: todo caminho de descarte de mensagem DEVE logar o motivo. Silently dropping messages é o pior cenário para debug em produção.
+
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
