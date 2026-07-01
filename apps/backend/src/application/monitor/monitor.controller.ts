@@ -17,7 +17,8 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
@@ -25,13 +26,17 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
 
+// Converte null → undefined para que @IsOptional() pule a validação.
+// Necessário porque o ValidationPipe global tem transform:true (class-transformer ativo)
+// mas @IsOptional() só ignora undefined, não null. Com @Transform antes, null vira
+// undefined e todos os validadores são pulados corretamente.
+const nullToUndefined = () => Transform(({ value }) => (value === null ? undefined : value));
+
 class UpdateConfigDto {
   @IsBoolean() @IsOptional() enabled?: boolean;
-  // @IsOptional() ignora undefined; ValidateIf ignora null — necessário porque
-  // class-validator não pula validators para null com @IsOptional() sozinho.
-  @IsInt() @Min(0) @Max(23) @ValidateIf((o) => o.sendHour != null) @IsOptional() sendHour?: number;
-  @IsInt() @IsIn([0, 15, 30, 45]) @ValidateIf((o) => o.sendMinute != null) @IsOptional() sendMinute?: number;
-  @IsString() @ValidateIf((o) => o.notificationPhone != null) @IsOptional() notificationPhone?: string | null;
+  @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendHour?: number;
+  @IsInt() @IsIn([0, 15, 30, 45]) @IsOptional() @nullToUndefined() sendMinute?: number;
+  @IsString() @IsOptional() @nullToUndefined() notificationPhone?: string;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;
   @IsBoolean() @IsOptional() fiscalEnabled?: boolean;
@@ -52,10 +57,24 @@ export class MonitorController {
   @RequirePerm('admin')
   @Get('config')
   async getConfig(@CurrentTenant() tenantId: string) {
-    const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-    // Retorna defaults se não existe ainda
+    const config = await this.prisma.tenantNotificationConfig.findUnique({
+      where: { tenantId },
+      // Seleciona apenas campos de config — exclui id/tenantId/createdAt/updatedAt
+      // para evitar que o frontend os reenvie no PUT e tome 400 (forbidNonWhitelisted).
+      select: {
+        enabled: true,
+        sendHour: true,
+        sendMinute: true,
+        notificationPhone: true,
+        sendWeekends: true,
+        channel: true,
+        fiscalEnabled: true,
+        logisticEnabled: true,
+        frotaEnabled: true,
+        financeEnabled: true,
+      },
+    });
     return config ?? {
-      tenantId,
       enabled: false,
       sendHour: 7,
       sendMinute: 0,
