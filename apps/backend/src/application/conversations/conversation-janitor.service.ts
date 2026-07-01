@@ -43,6 +43,9 @@ export class ConversationJanitorService {
   private readonly logger = new Logger('ConversationJanitor');
   // MON-007: timestamp do último run — consumido pelo HealthController.
   static lastRunAt: Date | null = null;
+  // BUG-003: dedup de alertas SLA — evita spam a cada hora para o mesmo ticket escalado.
+  // Key: conversationId, Value: timestamp do último alerta. Entries removidas após 25h.
+  private slaAlerted = new Map<string, number>();
 
   getStats() {
     return { lastRunAt: ConversationJanitorService.lastRunAt?.toISOString() ?? null };
@@ -80,26 +83,26 @@ export class ConversationJanitorService {
 
   // MON-006: detecta tickets escalados a humano há mais de SLA_ESCALATION_HOURS sem atendimento.
   // "Sem atendimento" = status ainda 'escalated' E lastActivityAt não avançou desde a escalação.
-  // Envia notificação ao time uma vez por ciclo (não repetida a cada hora — usa alerted_sla_at).
+  // BUG-003 fix: usa slaAlerted Map para não re-alertar o mesmo ticket a cada hora (dedup 24h).
   private async alertSlaEscalated() {
     const cutoff = new Date(Date.now() - SLA_ESCALATION_HOURS * 60 * 60 * 1000);
+    const dedup24h = 24 * 60 * 60 * 1000;
 
     const overdue = await this.prisma.aiConversation.findMany({
-      where: {
-        status: 'escalated' as any,
-        lastActivityAt: { lt: cutoff },
-        // Só alerta uma vez por ticket: se já notificamos nas últimas 24h, pula
-        // Usamos updatedAt como proxy — se o registro não foi tocado desde o cutoff,
-        // nunca foi atendido. Para evitar spam, agrupamos por tenant e mandamos 1 notif.
-      } as any,
+      where: { status: 'escalated' as any, lastActivityAt: { lt: cutoff } } as any,
       select: { id: true, phone: true, tenantId: true, lastActivityAt: true },
     });
 
     if (!overdue.length) return;
 
+    // BUG-003: filtra os que já foram alertados nas últimas 24h
+    const now = Date.now();
+    const unalerted = overdue.filter((c) => now - (this.slaAlerted.get(c.id) ?? 0) > dedup24h);
+    if (!unalerted.length) return;
+
     // Agrupa por tenant para enviar uma notificação resumida por empresa
-    const byTenant = new Map<string, typeof overdue>();
-    for (const conv of overdue) {
+    const byTenant = new Map<string, typeof unalerted>();
+    for (const conv of unalerted) {
       const list = byTenant.get(conv.tenantId) ?? [];
       list.push(conv);
       byTenant.set(conv.tenantId, list);
@@ -115,6 +118,12 @@ export class ConversationJanitorService {
       this.logger.warn(
         `MON-006 SLA breach: tenantId=${tenantId} convs=${convs.length} sla=${SLA_ESCALATION_HOURS}h`,
       );
+    }
+
+    // Marca como alertados e agenda limpeza após 25h (janela > 24h para evitar alerta no próximo ciclo)
+    for (const conv of unalerted) {
+      this.slaAlerted.set(conv.id, now);
+      setTimeout(() => this.slaAlerted.delete(conv.id), dedup24h + 60 * 60 * 1000);
     }
   }
 

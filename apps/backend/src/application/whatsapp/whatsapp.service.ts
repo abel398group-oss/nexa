@@ -21,7 +21,9 @@ interface Normalized {
   shouldProcess: boolean;
 }
 
-const STOP_WORDS = ['parar', 'sair', 'remover', 'nao quero', 'descadastrar', 'cancelar', 'pare', 'stop', 'unsubscribe'];
+// QUAL-002: 'cancelar' removido — palavra genérica usada em contextos de negócio (ex: "cancelar pedido")
+// que causava falsos opt-outs. Opt-out requer palavras inequívocas (parar, sair, stop, unsubscribe).
+const STOP_WORDS = ['parar', 'sair', 'remover', 'nao quero', 'descadastrar', 'pare', 'stop', 'unsubscribe'];
 
 const RATE_LIMIT_MS = Number(process.env.INBOUND_RATE_LIMIT_MS ?? 12000); // anti-resposta-dupla (G2)
 
@@ -186,7 +188,7 @@ export class WhatsappService {
       const url = `${base.replace(/\/+$/, '')}/api/contacts?session=${session}&contactId=${encodeURIComponent(lid)}`;
       const headers: Record<string, string> = {};
       if (key) headers['X-Api-Key'] = key;
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(5_000) }); // SEC-002: timeout
       if (!res.ok) return null;
       const data = (await res.json()) as any;
       // WAHA returns { id: "5512988073788@c.us", number: "234754356076551" (LID user, sem código país) }
@@ -195,7 +197,8 @@ export class WhatsappService {
       const fromNum = String(data?.number ?? data?.id?.user ?? '').replace(/\D/g, '');
       const num = fromId || fromNum;
       return num || null;
-    } catch {
+    } catch (e: any) {
+      this.logger.warn(`resolveLidToPhone falhou para ${lid}: ${e?.message}`); // SEC-002: log errors
       return null;
     }
   }
@@ -409,6 +412,7 @@ export class WhatsappService {
     const rateLimited = Date.now() - last < RATE_LIMIT_MS;
     if (this.autonomy.isEnabled('whatsapp') && !rateLimited) {
       this.lastProcessed.set(n.phone, Date.now());
+      setTimeout(() => this.lastProcessed.delete(n.phone), RATE_LIMIT_MS + 1000); // BUG-001: prevent memory leak
       agentResult = await this.agent.handle(tenantId, { message: n.text, conversationId: conv.id });
       // diagnóstico: por que respondeu ou não (visível no log)
       this.logger.log(
@@ -421,6 +425,7 @@ export class WhatsappService {
       // IA-3 (complemento): a Lia não responde com a autonomia OFF, mas ainda escala leads
       // quentes / pedidos de humano pro vendedor. Marca lastProcessed p/ aplicar o rate-limit.
       this.lastProcessed.set(n.phone, Date.now());
+      setTimeout(() => this.lastProcessed.delete(n.phone), RATE_LIMIT_MS + 1000); // BUG-001: prevent memory leak
       const esc = await this.agent
         .escalateOnly(tenantId, { message: n.text, conversationId: conv.id })
         .catch(() => null);

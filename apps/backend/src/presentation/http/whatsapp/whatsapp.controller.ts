@@ -45,6 +45,6 @@ export class WhatsappController {
     if (event && event !== 'message') {
       return { ignored: true, reason: `evento ${event}` };
     }
-    return this.whatsapp.process(body, 'default');
+    return this.whatsapp.process(body, process.env.NEXA_DEFAULT_TENANT_ID ?? 'default');
   }
 }
