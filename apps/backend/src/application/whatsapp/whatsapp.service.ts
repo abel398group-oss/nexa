@@ -189,7 +189,11 @@ export class WhatsappService {
       const res = await fetch(url, { headers });
       if (!res.ok) return null;
       const data = (await res.json()) as any;
-      const num = String(data?.number ?? data?.id?.user ?? '').replace(/\D/g, '');
+      // WAHA returns { id: "5512988073788@c.us", number: "234754356076551" (LID user, sem código país) }
+      // The real phone (with country code) lives in 'id'; 'number' is the LID user portion — not a valid BR phone.
+      const fromId = String(data?.id ?? '').split('@')[0].replace(/\D/g, '');
+      const fromNum = String(data?.number ?? data?.id?.user ?? '').replace(/\D/g, '');
+      const num = fromId || fromNum;
       return num || null;
     } catch {
       return null;
