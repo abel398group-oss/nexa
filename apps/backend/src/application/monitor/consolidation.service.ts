@@ -44,14 +44,27 @@ export class ConsolidationService {
 
   @Interval(5 * 60 * 1000) // verifica a cada 5 minutos (permite granularidade de 5min no horário)
   async runConsolidation(): Promise<void> {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      this.logger.debug('tick pulado — MONITOR_ENABLED != true');
+      return;
+    }
 
-    const tenants = await this.prisma.tenant.findMany({
-      where: { status: 'active' },
-      select: { id: true },
+    // ROOT-CAUSE FIX: a fonte da verdade é QUEM configurou notificação
+    // (tenant_notification_configs.enabled=true), NÃO a tabela platform-admin
+    // `tenants`. Os alertas usam tenantId cru (ex.: 'default'), que pode não ter
+    // linha correspondente em `tenants` (seed-tenants é manual/SÓ ABEL e pode
+    // nunca ter rodado no Postgres gerenciado). Quando não tinha, o loop iterava
+    // vazio e o serviço ficava 100% silencioso — nenhum log, nenhum envio.
+    const configs = await this.prisma.tenantNotificationConfig.findMany({
+      where: { enabled: true },
+      select: { tenantId: true },
     });
 
-    for (const { id: tenantId } of tenants) {
+    // log em nível INFO (visível em produção): confirma que o @Interval está vivo
+    // e quantos tenants estão elegíveis a cada tick.
+    this.logger.log(`tick — ${configs.length} tenant(s) com notificação habilitada`);
+
+    for (const { tenantId } of configs) {
       try {
         await this.processForTenant(tenantId);
       } catch (e: any) {
@@ -84,10 +97,27 @@ export class ConsolidationService {
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
     if (!force) {
-      if (currentHour !== sendHour) return 0;
-      // Verifica se estamos na janela de 15 min do minuto configurado
-      if (currentMinute < sendMinute || currentMinute >= sendMinute + 5) return 0;
-      if (isWeekend && !sendWeekends) return 0;
+      // ATENÇÃO TZ: getHours()/getMinutes() usam o fuso do processo (env TZ).
+      // Em produção o container sobe em UTC (compose não define TZ) → sendHour é
+      // interpretado como UTC. Se algum dia definirem TZ=America/Sao_Paulo, o
+      // sendHour passa a ser horário de Brasília. O log abaixo torna isso explícito.
+      if (currentHour !== sendHour) {
+        this.logger.debug(
+          `[${tenantId}] fora da hora (agora=${currentHour}h alvo=${sendHour}h TZ=${process.env.TZ ?? 'UTC(default)'})`,
+        );
+        return 0;
+      }
+      // Verifica se estamos na janela de 5 min do minuto configurado
+      if (currentMinute < sendMinute || currentMinute >= sendMinute + 5) {
+        this.logger.debug(
+          `[${tenantId}] fora da janela (min=${currentMinute} alvo=${sendMinute}-${sendMinute + 5})`,
+        );
+        return 0;
+      }
+      if (isWeekend && !sendWeekends) {
+        this.logger.debug(`[${tenantId}] fim de semana e sendWeekends=false — pulando`);
+        return 0;
+      }
     }
 
     // Evita reenviar na mesma janela (chave inclui hora+minuto arredondado p/ 15min)
