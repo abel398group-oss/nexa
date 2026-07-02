@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { displayPhone } from '@/shared/lib/phone';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { listSenderNumbers } from '@/entities/campaign';
 import { WhatsappConnectionStatus } from '@/components/WhatsappConnectionStatus';
+import { restartWhatsappSession, getWhatsappQr } from '@/shared/lib/whatsappStatus';
 
 // barra de progresso com cor por nível de uso (verde → âmbar → vermelho)
 function UsageBar({ used, total }: { used: number; total: number }) {
@@ -27,13 +29,38 @@ export function NumberHealthPage() {
   const totalCap = items.reduce((a, n) => a + n.effectiveDailyLimit, 0);
   const activeCount = items.filter((n) => n.active).length;
 
+  // Reconexão do WhatsApp (reiniciar sessão + mostrar QR para reparear)
+  const qc = useQueryClient();
+  const [showQr, setShowQr] = useState(false);
+
+  const qr = useQuery({
+    queryKey: ['whatsapp-qr'],
+    queryFn: getWhatsappQr,
+    enabled: showQr,
+    refetchInterval: showQr ? 3000 : false,
+  });
+
+  const restart = useMutation({ mutationFn: restartWhatsappSession });
+  const connected = qr.data?.status === 'WORKING';
+
   return (
     <PageContainer>
       <PageHeader
         breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Saúde dos números' }]} />}
         title="Saúde dos números"
         subtitle="Status, limites e aquecimento dos números de WhatsApp (anti-ban). Atualiza a cada 10s."
-        actions={<Button variant="outline" onClick={() => refetch()}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>}
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={restart.isPending}
+              onClick={() => { setShowQr(true); restart.mutate(); }}
+            >
+              <Icon name="refresh" className="h-4 w-4" /> {restart.isPending ? 'Reiniciando…' : 'Reconectar'}
+            </Button>
+            <Button variant="outline" onClick={() => refetch()}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>
+          </div>
+        }
       />
 
       {/* resumo */}
@@ -113,6 +140,57 @@ export function NumberHealthPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {showQr && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowQr(false)}
+        >
+          <div className="w-full max-w-sm rounded-xl bg-base-100 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-base-content">Reconectar WhatsApp</h3>
+              <button onClick={() => setShowQr(false)} className="text-lg leading-none text-base-content/50 hover:text-base-content">×</button>
+            </div>
+
+            {connected ? (
+              <div className="py-6 text-center">
+                <p className="text-2xl">✅</p>
+                <p className="mt-2 text-sm font-medium text-base-content">Conectado!</p>
+                <p className="mt-1 text-xs text-base-content/50">O número está pronto para enviar.</p>
+                <Button
+                  className="mt-4"
+                  onClick={() => {
+                    setShowQr(false);
+                    qc.invalidateQueries({ queryKey: ['whatsapp-status'] });
+                    qc.invalidateQueries({ queryKey: ['sender-numbers'] });
+                    refetch();
+                  }}
+                >
+                  Fechar
+                </Button>
+              </div>
+            ) : restart.isPending || !qr.data?.qr ? (
+              <div className="py-8 text-center">
+                <div className="mb-3 flex justify-center text-base-content/40">
+                  <Icon name="refresh" className="h-8 w-8 animate-spin" />
+                </div>
+                <p className="text-sm text-base-content/70">Reiniciando a sessão e gerando o QR…</p>
+                <p className="mt-1 text-[11px] text-base-content/40">status: {qr.data?.status ?? '—'}</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <img src={qr.data?.qr} alt="QR code de pareamento" className="mx-auto h-56 w-56 rounded-lg bg-white p-2" />
+                <ol className="mt-4 space-y-1 text-left text-xs text-base-content/70">
+                  <li>1. Abra o WhatsApp no celular do número.</li>
+                  <li>2. Toque em <b>Configurações → Aparelhos conectados</b>.</li>
+                  <li>3. Toque em <b>Conectar aparelho</b> e escaneie este QR.</li>
+                </ol>
+                <p className="mt-3 text-[11px] text-base-content/40">Atualiza sozinho — assim que conectar, esta janela confirma.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </PageContainer>

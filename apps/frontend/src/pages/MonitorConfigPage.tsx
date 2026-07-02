@@ -10,13 +10,20 @@ import { useToast } from '@/app/providers/ToastContext';
 import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 
+interface NotificationRecipient {
+  label: string;    // nome/rótulo do destinatário
+  contact: string;  // telefone (WhatsApp) ou e-mail
+  channel: 'whatsapp' | 'email';
+}
+
 interface MonitorConfig {
   enabled: boolean;
   sendHour: number;
   sendMinute: number;
-  notificationPhone: string | null;
+  notificationPhone: string | null; // legado — mantido para compat; UI usa recipients
+  recipients: NotificationRecipient[];
   sendWeekends: boolean;
-  channel: 'whatsapp' | 'email' | 'both';
+  channel: 'whatsapp' | 'email' | 'both'; // legado — derivado automaticamente dos recipients
   fiscalEnabled: boolean;
   logisticEnabled: boolean;
   frotaEnabled: boolean;
@@ -70,6 +77,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   sendHour: 7,
   sendMinute: 0,
   notificationPhone: null,
+  recipients: [],
   sendWeekends: false,
   channel: 'whatsapp',
   fiscalEnabled: true,
@@ -91,7 +99,7 @@ export function MonitorConfigPage() {
   });
 
   useEffect(() => {
-    if (config) setCfg(config);
+    if (config) setCfg({ ...DEFAULT_CONFIG, ...config, recipients: (config.recipients as any) ?? [] });
   }, [config]);
 
   // Alertas
@@ -163,6 +171,23 @@ export function MonitorConfigPage() {
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
+  // Helpers para a lista de destinatários
+  const addRecipient = () =>
+    setCfg((c) => ({
+      ...c,
+      recipients: [...c.recipients, { label: '', contact: '', channel: 'whatsapp' }],
+    }));
+
+  const updateRecipient = (i: number, patch: Partial<NotificationRecipient>) =>
+    setCfg((c) => {
+      const next = [...c.recipients];
+      next[i] = { ...next[i], ...patch };
+      return { ...c, recipients: next };
+    });
+
+  const removeRecipient = (i: number) =>
+    setCfg((c) => ({ ...c, recipients: c.recipients.filter((_, idx) => idx !== i) }));
+
   return (
     <PageContainer>
       <PageHeader
@@ -211,7 +236,7 @@ export function MonitorConfigPage() {
               <div>
                 <p className="text-sm font-semibold text-base-content">Monitoramento ativo</p>
                 <p className="text-xs text-base-content/50 mt-0.5">
-                  Quando ativado, você recebe um resumo diário via {cfg.channel === 'whatsapp' ? 'WhatsApp' : cfg.channel === 'email' ? 'e-mail' : 'WhatsApp e e-mail'} com os alertas do TMS.
+                  Quando ativado, você recebe um resumo diário com os alertas do TMS nos canais configurados abaixo.
                 </p>
               </div>
               <input
@@ -257,32 +282,65 @@ export function MonitorConfigPage() {
                 </div>
               </label>
 
-              {/* Canal */}
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-base-content/60">Canal de notificação</span>
-                <select
-                  className="select select-bordered select-sm w-full"
-                  value={cfg.channel}
-                  onChange={(e) => set('channel', e.target.value as MonitorConfig['channel'])}
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="email">E-mail</option>
-                  <option value="both">Ambos</option>
-                </select>
-              </label>
+            </div>
 
-              {/* Telefone de destino */}
-              <label className="flex flex-col gap-1 sm:col-span-2">
-                <span className="text-xs text-base-content/60">Telefone de destino (WhatsApp)</span>
-                <input
-                  type="tel"
-                  className="input input-bordered input-sm w-full"
-                  placeholder="Ex: 5511917747429  (com DDI, sem espaços)"
-                  value={cfg.notificationPhone ?? ''}
-                  onChange={(e) => set('notificationPhone', e.target.value || null)}
-                />
-                <span className="text-xs text-base-content/40">Deixe vazio para usar o padrão do sistema.</span>
-              </label>
+            {/* Lista de destinatários */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-base-content/60">Destinatários</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={addRecipient}
+                >
+                  <Icon name="plus" className="h-3 w-3" /> Adicionar
+                </button>
+              </div>
+
+              {(cfg.recipients ?? []).length === 0 && (
+                <p className="text-xs text-base-content/40 italic">
+                  Nenhum destinatário configurado — clique em "Adicionar".
+                </p>
+              )}
+
+              {(cfg.recipients ?? []).map((r, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  {/* Nome / rótulo */}
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-32 shrink-0"
+                    placeholder="Nome"
+                    value={r.label}
+                    onChange={(e) => updateRecipient(i, { label: e.target.value })}
+                  />
+                  {/* Contato: fone ou e-mail */}
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm flex-1 min-w-0"
+                    placeholder={r.channel === 'email' ? 'email@empresa.com' : '5511999999999'}
+                    value={r.contact}
+                    onChange={(e) => updateRecipient(i, { contact: e.target.value })}
+                  />
+                  {/* Canal */}
+                  <select
+                    className="select select-bordered select-sm w-32 shrink-0"
+                    value={r.channel}
+                    onChange={(e) => updateRecipient(i, { channel: e.target.value as 'whatsapp' | 'email' })}
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">E-mail</option>
+                  </select>
+                  {/* Remover */}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs text-error shrink-0"
+                    title="Remover destinatário"
+                    onClick={() => removeRecipient(i)}
+                  >
+                    <Icon name="trash" className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
             </div>
 
             {/* Enviar nos fins de semana */}

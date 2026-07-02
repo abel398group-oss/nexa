@@ -168,6 +168,18 @@ export class SenderController {
     return this.sender.listNumbers(tenantId);
   }
 
+  // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão" / reparear)
+  @Post('sender/session/restart')
+  restartSession() {
+    return this.sender.restartWahaSession();
+  }
+
+  // QR de pareamento + status atual da sessão (a tela mostra o QR para escanear)
+  @Get('sender/session/qr')
+  sessionQr() {
+    return this.sender.getWahaQr();
+  }
+
   // janela de envio (horários) por tenant — exibida/editada na tela de Disparo
   @Get('sender/settings')
   getSettings(@CurrentTenant() tenantId: string) {

@@ -90,7 +90,6 @@ import { HealthController } from './presentation/http/health/health.controller';
     WebhookModule,
     MonitorModule,
     ProactiveEngineModule,
-    // Proximos modulos de feature: router, sales, supervisor ...
   ],
   controllers: [HealthController],
   providers: [

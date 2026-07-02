@@ -19,9 +19,23 @@ export class MonitorNotificationService {
 
   async notify(tenantId: string, content: string, channelOverride?: string): Promise<void> {
     const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-    const ch = channelOverride ?? config?.channel ?? 'whatsapp';
 
-    const channels: string[] = ch === 'both' ? ['whatsapp', 'email'] : [ch];
+    // Determine which channel types to activate.
+    // If a recipients list exists, derive channel types from it (each recipient declares its own channel).
+    // Otherwise fall back to the legacy config.channel field.
+    let channels: string[];
+    if (channelOverride) {
+      channels = channelOverride === 'both' ? ['whatsapp', 'email'] : [channelOverride];
+    } else {
+      const recipients = (config?.recipients as Array<{ channel: string }> | null) ?? [];
+      if (recipients.length > 0) {
+        const types = new Set(recipients.map((r) => r.channel));
+        channels = Array.from(types);
+      } else {
+        const ch = config?.channel ?? 'whatsapp';
+        channels = ch === 'both' ? ['whatsapp', 'email'] : [ch];
+      }
+    }
 
     for (const c of channels) {
       let success = false;

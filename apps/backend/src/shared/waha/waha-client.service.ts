@@ -141,4 +141,62 @@ export class WahaClientService {
       return { sent: false, reason: 'erro_rede' };
     }
   }
+
+  // ── Gestão da sessão (reconectar número) ────────────────────────────────────
+  // Estado atual: WORKING | SCAN_QR_CODE | STARTING | FAILED | STOPPED
+  async getSessionStatus(): Promise<{ status: string } | null> {
+    if (!this.configured) return null;
+    try {
+      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}`, {
+        headers: { 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      const data: any = await res.json().catch(() => ({}));
+      return { status: data?.status ?? 'UNKNOWN' };
+    } catch {
+      return null;
+    }
+  }
+
+  // Reinicia a sessão (recupera de FAILED e força novo pareamento por QR
+  // quando o aparelho foi desvinculado do WhatsApp).
+  async restartSession(): Promise<{ ok: boolean; reason?: string }> {
+    if (!this.configured) return { ok: false, reason: 'waha_nao_configurado' };
+    try {
+      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}/restart`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.error(`WAHA restart ${res.status}: ${(await res.text()).slice(0, 160)}`);
+        return { ok: false, reason: `waha_${res.status}` };
+      }
+      return { ok: true };
+    } catch (e: any) {
+      this.logger.error(`WAHA restart falhou: ${e?.message}`);
+      return { ok: false, reason: 'erro_rede' };
+    }
+  }
+
+  // QR de pareamento como data URL (image/png) + status atual.
+  // Se já estiver WORKING, não há QR (retorna só o status).
+  async getQr(): Promise<{ status: string; qr?: string; reason?: string }> {
+    if (!this.configured) return { status: 'UNKNOWN', reason: 'waha_nao_configurado' };
+    const st = await this.getSessionStatus();
+    const status = st?.status ?? 'UNKNOWN';
+    if (status === 'WORKING') return { status };
+    try {
+      const res = await fetch(`${this.baseUrl}/api/${this.session}/auth/qr?format=image`, {
+        headers: { 'X-Api-Key': process.env.WAHA_API_KEY as string, Accept: 'image/png' },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) return { status, reason: `waha_${res.status}` };
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { status, qr: `data:image/png;base64,${buf.toString('base64')}` };
+    } catch (e: any) {
+      return { status, reason: 'erro_rede' };
+    }
+  }
 }

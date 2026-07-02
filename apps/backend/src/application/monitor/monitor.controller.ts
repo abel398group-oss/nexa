@@ -18,7 +18,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
@@ -39,6 +39,7 @@ class UpdateConfigDto {
   @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendHour?: number;
   @IsInt() @IsIn([0,5,10,15,20,25,30,35,40,45,50,55]) @IsOptional() @nullToUndefined() sendMinute?: number;
   @IsString() @IsOptional() @nullToUndefined() notificationPhone?: string;
+  @IsArray() @IsOptional() recipients?: Array<{ label: string; contact: string; channel: string }>;
   @IsBoolean() @IsOptional() sendWeekends?: boolean;
   @IsIn(['whatsapp', 'email', 'both']) @IsOptional() channel?: string;
   @IsBoolean() @IsOptional() fiscalEnabled?: boolean;
@@ -69,6 +70,7 @@ export class MonitorController {
         sendHour: true,
         sendMinute: true,
         notificationPhone: true,
+        recipients: true,
         sendWeekends: true,
         channel: true,
         fiscalEnabled: true,
@@ -82,6 +84,7 @@ export class MonitorController {
       sendHour: 7,
       sendMinute: 0,
       notificationPhone: null,
+      recipients: [],
       sendWeekends: false,
       channel: 'whatsapp',
       fiscalEnabled: true,
@@ -140,16 +143,22 @@ export class MonitorController {
     });
   }
 
-  // Envia uma mensagem de teste WhatsApp diretamente para o notificationPhone configurado.
+  // Envia uma mensagem de teste WhatsApp para o primeiro destinatário WA configurado.
   // Ignora alertas e hora — serve apenas para validar se o canal está funcionando.
   @RequirePerm('admin')
   @Post('test')
   async testNotify(@CurrentTenant() tenantId: string) {
     const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-    const rawPhone = config?.notificationPhone ?? process.env.ALERT_ADMIN_PHONE ?? '';
+
+    // Resolve o telefone de teste: recipients (wa) → notificationPhone → env
+    const recipients = (config?.recipients as Array<{ contact: string; channel: string }> | null) ?? [];
+    const firstWaRecipient = recipients.find((r) => r.channel === 'whatsapp' && r.contact);
+    const rawPhone =
+      firstWaRecipient?.contact ?? config?.notificationPhone ?? process.env.ALERT_ADMIN_PHONE ?? '';
     const phone = normalizePhone(rawPhone.split(',')[0]);
+
     if (!phone || phone.length < 12) {
-      return { sent: false, reason: 'Nenhum telefone configurado. Salve um número no campo "Telefone de destino" primeiro.' };
+      return { sent: false, reason: 'Nenhum destinatário WhatsApp configurado. Adicione um na lista de destinatários primeiro.' };
     }
     const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const msg =

@@ -86,6 +86,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     private readonly tmsLookup: TmsLookupService,
   ) {}
 
+  // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
+  // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão") e devolve o
+  // status/QR para a tela de Saúde dos números.
+  async restartWahaSession() {
+    return this.waha.restartSession();
+  }
+
+  async getWahaQr() {
+    return this.waha.getQr();
+  }
+
   // ---------- número do pool ----------
   private today(): string {
     const d = new Date();

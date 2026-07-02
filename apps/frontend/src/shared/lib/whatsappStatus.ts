@@ -16,6 +16,24 @@ export async function getWhatsappStatus(): Promise<WhatsappStatus> {
   return r.data;
 }
 
+// Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão" / reparear via QR).
+export async function restartWhatsappSession(): Promise<{ ok: boolean; reason?: string }> {
+  const r = await api.post('/sender/session/restart');
+  return r.data;
+}
+
+export interface WhatsappQr {
+  status: string; // WORKING | SCAN_QR_CODE | STARTING | FAILED | STOPPED | UNKNOWN
+  qr?: string;    // data URL (image/png) — só quando aguardando leitura
+  reason?: string;
+}
+
+// QR de pareamento + status atual (para a tela mostrar o código a escanear).
+export async function getWhatsappQr(): Promise<WhatsappQr> {
+  const r = await api.get('/sender/session/qr');
+  return r.data;
+}
+
 // Rótulo amigável do estado bruto da sessão (pt-BR).
 export function whatsappStatusLabel(s: WhatsappStatus): string {
   if (s.connected) return 'Conectado';
