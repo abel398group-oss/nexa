@@ -186,4 +186,52 @@ export class MonitorController {
   async notifyNow(@CurrentTenant() tenantId: string) {
     return this.consolidation.forceForTenant(tenantId);
   }
+
+  /**
+   * Injeta alertas de teste em todos os setores para validar o fluxo de notificação
+   * end-to-end sem depender do TMS ter dados reais.
+   * Remove alertas de teste anteriores antes de criar novos.
+   * Uso: POST /monitor/seed-test → depois POST /monitor/notify-now para disparar.
+   */
+  @RequirePerm('admin')
+  @Post('seed-test')
+  async seedTestAlerts(@CurrentTenant() tenantId: string) {
+    // Remove alertas de teste anteriores deste tenant
+    await this.prisma.alertState.deleteMany({
+      where: { tenantId, tmsEventId: { startsWith: 'seed-test-' } },
+    });
+
+    const now = new Date();
+    const seeds = [
+      { id: 'seed-test-fiscal-1',   category: 'fiscal',   severity: 'CRITICAL', title: 'CT-e 999001 rejeitado — código 539 SEFAZ',          description: 'Rejeição por certificado vencido' },
+      { id: 'seed-test-fiscal-2',   category: 'fiscal',   severity: 'DUE_SOON', title: 'MDF-e 888002 vence em 24h',                          description: 'Prazo de encerramento próximo' },
+      { id: 'seed-test-logistic-1', category: 'logistic', severity: 'OVERDUE',  title: 'Embarque #4501 atrasado há 2 dias',                  description: 'Entrega prevista 30/06 não confirmada' },
+      { id: 'seed-test-frota-1',    category: 'frota',    severity: 'DUE_SOON', title: 'Revisão obrigatória — placa ABC-1234 vence amanhã',   description: 'CRLV e revisão periódica' },
+      { id: 'seed-test-finance-1',  category: 'finance',  severity: 'OVERDUE',  title: 'Fatura #7890 venceu há 3 dias',                      description: 'R$ 12.500,00 em aberto' },
+    ];
+
+    const created = await Promise.all(
+      seeds.map((s) =>
+        this.prisma.alertState.create({
+          data: {
+            tenantId,
+            tmsEventId: s.id,
+            severity: s.severity,
+            category: s.category,
+            title: s.title,
+            description: s.description,
+            status: 'open',
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+      ),
+    );
+
+    return {
+      seeded: created.length,
+      message: 'Alertas de teste criados. Agora chame POST /monitor/notify-now para disparar as notificações.',
+      alerts: created.map((a) => ({ id: a.id, category: a.category, severity: a.severity, title: a.title })),
+    };
+  }
 }

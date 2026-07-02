@@ -233,6 +233,26 @@ export function MonitorConfigPage() {
     onError: () => toast.error('Erro ao enviar teste.'),
   });
 
+  // Injeta alertas de teste em todos os setores (debug)
+  const seedAlerts = useMutation({
+    mutationFn: () => api.post('/monitor/seed-test'),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
+      toast.success(`🧪 ${res.data.seeded} alerta(s) de teste criados! Clique em "Notificar agora" para disparar.`);
+    },
+    onError: () => toast.error('Erro ao criar alertas de teste.'),
+  });
+
+  // Força o disparo imediato de notificações para todos os setores configurados
+  const notifyNow = useMutation({
+    mutationFn: () => api.post('/monitor/notify-now'),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
+      toast.success(`📨 Notificações disparadas: ${res.data.alerts} alerta(s) enviado(s).`);
+    },
+    onError: () => toast.error('Erro ao disparar notificações.'),
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
@@ -259,16 +279,22 @@ export function MonitorConfigPage() {
         subtitle="Configure horários e telefones de alerta por setor do TMS."
         actions={
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => syncNow.mutate()} loading={syncNow.isPending}>
+            <Button variant="ghost" onClick={() => syncNow.mutate()} loading={syncNow.isPending} title="Busca eventos atuais do TMS">
               <Icon name="refresh" className="h-4 w-4" /> Sincronizar
+            </Button>
+            <Button variant="ghost" onClick={() => seedAlerts.mutate()} loading={seedAlerts.isPending} title="Cria alertas de teste em todos os setores">
+              <Icon name="pulse" className="h-4 w-4" /> Seed alertas
+            </Button>
+            <Button variant="ghost" onClick={() => notifyNow.mutate()} loading={notifyNow.isPending} title="Dispara notificações agora para todos os setores configurados">
+              <Icon name="send" className="h-4 w-4" /> Notificar agora
             </Button>
             <Button
               variant="ghost"
               onClick={() => testNotify.mutate()}
               loading={testNotify.isPending}
-              title="Envia mensagem de teste para o primeiro telefone configurado"
+              title="Envia mensagem simples de teste para o primeiro telefone configurado"
             >
-              <Icon name="zap" className="h-4 w-4" /> Testar
+              <Icon name="zap" className="h-4 w-4" /> Testar canal
             </Button>
             <Button onClick={saveConfig} loading={saving}>
               <Icon name="check" className="h-4 w-4" /> Salvar
