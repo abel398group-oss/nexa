@@ -57,10 +57,12 @@ const CATEGORY_LABEL: Record<string, string> = {
   finance:  'Financeiro',
 };
 
-// Horários exibidos em BRT (UTC-3). Conversão feita ao salvar/carregar.
-const BRT_OFFSET = 3;
-const utcToBrt = (h: number) => (h - BRT_OFFSET + 24) % 24;
-const brtToUtc = (h: number) => (h + BRT_OFFSET) % 24;
+// O backend do Monitor roda em horário de Brasília (TZ=America/Sao_Paulo) e
+// compara com new Date().getHours() LOCAL. Logo sendHour JÁ É a hora de Brasília
+// — NÃO converter para UTC (a conversão +3/-3 causava defasagem de 3h e o resumo
+// nunca disparava no horário configurado).
+const utcToBrt = (h: number) => h;
+const brtToUtc = (h: number) => h;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const DEFAULT_CONFIG: MonitorConfig = {
