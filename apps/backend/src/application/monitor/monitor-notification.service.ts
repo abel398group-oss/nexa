@@ -1,11 +1,16 @@
 /**
  * MonitorNotificationService — orquestra o envio por canal configurado.
  *
- * Recebe a mensagem pronta do ConsolidationService, escolhe o(s) canal(is)
- * com base no `TenantNotificationConfig.channel` e persiste o log.
+ * Dois modos de envio:
+ *  - notify(tenantId, content)       → resolve destinatários do config (legado)
+ *  - notifyPhone(tenantId, phone, content) → envia para telefone específico (per-sector)
+ *
+ * Ambos persistem log em notificationLog.
  */
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { normalizePhone } from '@/shared/utils/phone.util';
 import { NotificationChannel, NOTIFICATION_CHANNEL } from './notification-channel.interface';
 
 @Injectable()
@@ -14,6 +19,7 @@ export class MonitorNotificationService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly waha: WahaClientService,
     @Inject(NOTIFICATION_CHANNEL) private readonly channel: NotificationChannel,
   ) {}
 
@@ -57,5 +63,31 @@ export class MonitorNotificationService {
         data: { tenantId, channel: c, content, success, error: error ?? null },
       }).catch((e: any) => this.logger.warn(`Log de notificação falhou: ${e?.message}`));
     }
+  }
+
+  /**
+   * Envia para um telefone específico (usado no dispatch per-sector).
+   * Normaliza o número, envia via WAHA e persiste log — mesmo padrão do notify().
+   */
+  async notifyPhone(tenantId: string, rawPhone: string, content: string): Promise<void> {
+    const phone = normalizePhone(rawPhone);
+    if (phone.length < 12) {
+      this.logger.warn(`notifyPhone: telefone inválido "${rawPhone}" para tenant ${tenantId}`);
+      return;
+    }
+    let success = false;
+    let error: string | undefined;
+    try {
+      const result = await this.waha.sendText(phone, content);
+      if (!result.sent) throw new Error(result.reason ?? 'WAHA send falhou');
+      success = true;
+      this.logger.debug(`notifyPhone: enviado para ${phone} (tenant=${tenantId})`);
+    } catch (e: any) {
+      error = e?.message?.slice(0, 500);
+      this.logger.warn(`notifyPhone: falha para ${phone} (tenant=${tenantId}): ${error}`);
+    }
+    await this.prisma.notificationLog.create({
+      data: { tenantId, channel: 'whatsapp', content, success, error: error ?? null },
+    }).catch((e: any) => this.logger.warn(`Log de notificação falhou: ${e?.message}`));
   }
 }

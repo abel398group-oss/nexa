@@ -1,21 +1,50 @@
 /**
- * ConsolidationService — agrupa alertas abertos e dispara 1 mensagem por dia.
+ * ConsolidationService — agrupa alertas abertos e dispara resumos diários.
  *
- * Roda a cada 15 minutos (@Interval) mas só envia quando a hora local bater
- * com o `sendHour` configurado pelo tenant (padrão: 7h). Isso evita precisar
- * de um cron com tz — basta verificar se a hora atual == sendHour.
+ * Dois modos de operação:
  *
- * Lógica de envio:
- *   - Agrupa AlertState abertos por severidade: CRITICAL → OVERDUE → DUE_SOON → INFO
- *   - Monta texto consolidado com emojis por severidade
- *   - Chama MonitorNotificationService.notify()
- *   - Atualiza notifiedAt + notifyCount em cada alerta enviado
- *   - Arquiva alertas com notifyCount >= 2 e sem resolução em 48h
+ * ── MODO PER-SECTOR (sectorConfig preenchido) ──────────────────────────────
+ *   Cada setor (fiscal, logistic, frota, finance) tem:
+ *     - sendHour / sendMinute próprios
+ *     - telefone WhatsApp próprio
+ *   O serviço itera os setores ativos, verifica a janela de tempo de cada um
+ *   e envia somente os alertas daquele setor para aquele telefone.
+ *   Deduplicação por chave `tenantId:sector`.
+ *
+ * ── MODO LEGADO (sem sectorConfig) ────────────────────────────────────────
+ *   Comportamento anterior: um digest global com todos os alertas, enviado no
+ *   sendHour global para todos os destinatários do config.
+ *
+ * Roda a cada 5 minutos (@Interval). Granularidade de 5 min no horário.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorNotificationService } from './monitor-notification.service';
+
+// ─── Tipos ───────────────────────────────────────────────────────────────────
+
+interface SectorCfg {
+  phone?: string;
+  sendHour?: number;
+  sendMinute?: number;
+}
+
+interface SectorMeta {
+  key: string;
+  enabledField: string;
+  label: string;
+  emoji: string;
+}
+
+// ─── Constantes ──────────────────────────────────────────────────────────────
+
+const SECTORS: SectorMeta[] = [
+  { key: 'fiscal',   enabledField: 'fiscalEnabled',   label: 'Fiscal',     emoji: '📄' },
+  { key: 'logistic', enabledField: 'logisticEnabled', label: 'Logística',  emoji: '🚚' },
+  { key: 'frota',    enabledField: 'frotaEnabled',    label: 'Frota',      emoji: '🔧' },
+  { key: 'finance',  enabledField: 'financeEnabled',  label: 'Financeiro', emoji: '💰' },
+];
 
 const SEVERITY_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
 const SEVERITY_EMOJI: Record<string, string> = {
@@ -27,11 +56,15 @@ const SEVERITY_EMOJI: Record<string, string> = {
 const ARCHIVE_AFTER_NOTIFICATIONS = 2;
 const ARCHIVE_AFTER_HOURS = 48;
 
+// ─── Serviço ─────────────────────────────────────────────────────────────────
+
 @Injectable()
 export class ConsolidationService {
   private readonly logger = new Logger('ConsolidationService');
-  // Controle de envio: evita disparar mais de 1x na mesma hora
-  private readonly sentThisHour = new Map<string, number>(); // tenantId → hora do último envio
+
+  // Dedup de envio: chave → `tenantId` (legado) ou `tenantId:sector` (per-sector)
+  // Valor → slot numérico único para a janela de 5 min (evita reenvio no mesmo slot)
+  private readonly sentThisHour = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -42,26 +75,18 @@ export class ConsolidationService {
     return (process.env.MONITOR_ENABLED ?? '').toLowerCase() === 'true';
   }
 
-  @Interval(5 * 60 * 1000) // verifica a cada 5 minutos (permite granularidade de 5min no horário)
+  @Interval(5 * 60 * 1000)
   async runConsolidation(): Promise<void> {
     if (!this.enabled) {
       this.logger.debug('tick pulado — MONITOR_ENABLED != true');
       return;
     }
 
-    // ROOT-CAUSE FIX: a fonte da verdade é QUEM configurou notificação
-    // (tenant_notification_configs.enabled=true), NÃO a tabela platform-admin
-    // `tenants`. Os alertas usam tenantId cru (ex.: 'default'), que pode não ter
-    // linha correspondente em `tenants` (seed-tenants é manual/SÓ ABEL e pode
-    // nunca ter rodado no Postgres gerenciado). Quando não tinha, o loop iterava
-    // vazio e o serviço ficava 100% silencioso — nenhum log, nenhum envio.
     const configs = await this.prisma.tenantNotificationConfig.findMany({
       where: { enabled: true },
       select: { tenantId: true },
     });
 
-    // log em nível INFO (visível em produção): confirma que o @Interval está vivo
-    // e quantos tenants estão elegíveis a cada tick.
     this.logger.log(`tick — ${configs.length} tenant(s) com notificação habilitada`);
 
     for (const { tenantId } of configs) {
@@ -73,100 +98,253 @@ export class ConsolidationService {
     }
   }
 
-  /** Força o envio imediato para um tenant, ignorando hora e deduplicação (debug/teste). */
+  /** Força envio imediato para um tenant, ignorando hora e deduplicação. */
   async forceForTenant(tenantId: string): Promise<{ sent: boolean; alerts: number }> {
     const count = await this.processForTenant(tenantId, true);
     return { sent: count > 0, alerts: count };
   }
 
+  // ─── Core ───────────────────────────────────────────────────────────────────
+
   private async processForTenant(tenantId: string, force = false): Promise<number> {
     const config = await this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId } });
-
-    // Tenant precisa ter habilitado explicitamente as notificações
     if (!force && !config?.enabled) return 0;
-
-    const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
-    const sendWeekends = config?.sendWeekends ?? false;
-
-    const sendMinute = config?.sendMinute ?? 0;
 
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    const dayOfWeek = now.getDay(); // 0=dom 6=sáb
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+    const sendWeekends = config?.sendWeekends ?? false;
+
+    if (!force && isWeekend && !sendWeekends) {
+      this.logger.debug(`[${tenantId}] fim de semana e sendWeekends=false — pulando`);
+      return 0;
+    }
+
+    const sectorConfig = config?.sectorConfig as Record<string, SectorCfg> | null | undefined;
+    const hasSectorConfig = sectorConfig && Object.values(sectorConfig).some((sc) => sc?.phone);
+
+    if (hasSectorConfig) {
+      return this.processPerSector(tenantId, config as any, sectorConfig!, now, currentHour, currentMinute, force);
+    } else {
+      return this.processLegacy(tenantId, config as any, now, currentHour, currentMinute, force);
+    }
+  }
+
+  // ─── Modo per-sector ────────────────────────────────────────────────────────
+
+  private async processPerSector(
+    tenantId: string,
+    config: Record<string, any>,
+    sectorConfig: Record<string, SectorCfg>,
+    now: Date,
+    currentHour: number,
+    currentMinute: number,
+    force: boolean,
+  ): Promise<number> {
+    let totalSent = 0;
+    const globalHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
+    const globalMinute = config?.sendMinute ?? 0;
+
+    for (const sector of SECTORS) {
+      const sc = sectorConfig[sector.key];
+      if (!sc?.phone) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem telefone configurado — pulando`);
+        continue;
+      }
+
+      // Verifica se o setor está habilitado
+      if (!config[sector.enabledField]) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: desabilitado — pulando`);
+        continue;
+      }
+
+      const sectorHour = sc.sendHour ?? globalHour;
+      const sectorMinute = sc.sendMinute ?? globalMinute;
+
+      if (!force) {
+        if (currentHour !== sectorHour) {
+          this.logger.debug(
+            `[${tenantId}] setor ${sector.key}: fora da hora (agora=${currentHour}h alvo=${sectorHour}h)`,
+          );
+          continue;
+        }
+        if (currentMinute < sectorMinute || currentMinute >= sectorMinute + 5) {
+          this.logger.debug(
+            `[${tenantId}] setor ${sector.key}: fora da janela (min=${currentMinute} alvo=${sectorMinute}-${sectorMinute + 5})`,
+          );
+          continue;
+        }
+      }
+
+      // Dedup por tenant:sector
+      const dedupKey = `${tenantId}:${sector.key}`;
+      const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
+      if (!force && this.sentThisHour.get(dedupKey) === slotKey) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: já enviado neste slot — pulando`);
+        continue;
+      }
+
+      // Busca alertas do setor
+      const alerts = await this.prisma.alertState.findMany({
+        where: {
+          tenantId,
+          category: sector.key,
+          status: 'open',
+          OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
+        },
+        orderBy: { severity: 'asc' },
+      });
+
+      if (!alerts.length) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem alertas abertos`);
+        continue;
+      }
+
+      const message = this.buildSectorMessage(sector, alerts, now);
+      await this.notification.notifyPhone(tenantId, sc.phone, message);
+
+      if (!force) this.sentThisHour.set(dedupKey, slotKey);
+
+      const alertIds = alerts.map((a) => a.id);
+      await this.persistAlertUpdates(alertIds, now);
+
+      this.logger.log(
+        `[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → ${sc.phone}`,
+      );
+      totalSent += alerts.length;
+    }
+
+    return totalSent;
+  }
+
+  // ─── Modo legado (global) ───────────────────────────────────────────────────
+
+  private async processLegacy(
+    tenantId: string,
+    config: Record<string, any> | null,
+    now: Date,
+    currentHour: number,
+    currentMinute: number,
+    force: boolean,
+  ): Promise<number> {
+    const sendHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
+    const sendMinute = config?.sendMinute ?? 0;
 
     if (!force) {
-      // ATENÇÃO TZ: getHours()/getMinutes() usam o fuso do processo (env TZ).
-      // Em produção o container sobe em UTC (compose não define TZ) → sendHour é
-      // interpretado como UTC. Se algum dia definirem TZ=America/Sao_Paulo, o
-      // sendHour passa a ser horário de Brasília. O log abaixo torna isso explícito.
       if (currentHour !== sendHour) {
         this.logger.debug(
-          `[${tenantId}] fora da hora (agora=${currentHour}h alvo=${sendHour}h TZ=${process.env.TZ ?? 'UTC(default)'})`,
+          `[${tenantId}] fora da hora (agora=${currentHour}h alvo=${sendHour}h TZ=${process.env.TZ ?? 'UTC'})`,
         );
         return 0;
       }
-      // Verifica se estamos na janela de 5 min do minuto configurado
       if (currentMinute < sendMinute || currentMinute >= sendMinute + 5) {
         this.logger.debug(
           `[${tenantId}] fora da janela (min=${currentMinute} alvo=${sendMinute}-${sendMinute + 5})`,
         );
         return 0;
       }
-      if (isWeekend && !sendWeekends) {
-        this.logger.debug(`[${tenantId}] fim de semana e sendWeekends=false — pulando`);
-        return 0;
-      }
     }
 
-    // Evita reenviar na mesma janela (chave inclui hora+minuto arredondado p/ 15min)
-    const lastSentHour = this.sentThisHour.get(tenantId);
-    const slotMinute = Math.floor(currentMinute / 5) * 5;
-    const currentHourKey = now.getFullYear() * 10000000 + now.getMonth() * 100000 + now.getDate() * 1000 + currentHour * 100 + slotMinute / 5;
-    if (!force && lastSentHour === currentHourKey) return 0;
+    const slotKey = this.makeSlotKey(now, sendHour, currentMinute);
+    if (!force && this.sentThisHour.get(tenantId) === slotKey) return 0;
 
     const alerts = await this.prisma.alertState.findMany({
       where: {
         tenantId,
         status: 'open',
-        OR: [
-          { snoozedUntil: null },
-          { snoozedUntil: { lt: now } },
-        ],
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
       },
+      orderBy: { severity: 'asc' },
     });
 
-    if (alerts.length === 0) return 0;
+    if (!alerts.length) return 0;
 
-    // Agrupa por severidade
+    const message = this.buildGlobalMessage(alerts, now);
+    await this.notification.notify(tenantId, message);
+    if (!force) this.sentThisHour.set(tenantId, slotKey);
+
+    const alertIds = alerts.map((a) => a.id);
+    await this.persistAlertUpdates(alertIds, now);
+
+    this.logger.log(`[${tenantId}] legado: ${alerts.length} alerta(s) notificado(s)`);
+    return alerts.length;
+  }
+
+  // ─── Builders de mensagem ───────────────────────────────────────────────────
+
+  private buildSectorMessage(
+    sector: SectorMeta,
+    alerts: Array<{ severity: string; title: string }>,
+    now: Date,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR');
+    const lines: string[] = [
+      `${sector.emoji} *Alertas ${sector.label} — ${date}*\n`,
+    ];
+
     const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
-      acc[s] = alerts.filter((a: (typeof alerts)[number]) => a.severity === s);
+      acc[s] = alerts.filter((a) => a.severity === s);
       return acc;
     }, {});
 
-    const lines: string[] = [`*📊 Resumo de Alertas — ${now.toLocaleDateString('pt-BR')}*\n`];
     for (const sev of SEVERITY_ORDER) {
       const group = grouped[sev];
       if (!group.length) continue;
       lines.push(`${SEVERITY_EMOJI[sev]} *${sev}* (${group.length})`);
       group.slice(0, 5).forEach((a) => lines.push(`  • ${a.title}`));
-      if (group.length > 5) lines.push(`  … e mais ${group.length - 5} itens`);
+      if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
+
     lines.push('\nAcesse o painel do Nexa para mais detalhes.');
+    return lines.join('\n');
+  }
 
-    const message = lines.join('\n');
-    await this.notification.notify(tenantId, message);
-    if (!force) this.sentThisHour.set(tenantId, currentHourKey);
+  private buildGlobalMessage(
+    alerts: Array<{ severity: string; title: string }>,
+    now: Date,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR');
+    const lines: string[] = [`*📊 Resumo de Alertas — ${date}*\n`];
 
-    // Atualiza notifiedAt e notifyCount
-    const alertIds = alerts.map((a) => a.id);
+    const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
+      acc[s] = alerts.filter((a) => a.severity === s);
+      return acc;
+    }, {});
+
+    for (const sev of SEVERITY_ORDER) {
+      const group = grouped[sev];
+      if (!group.length) continue;
+      lines.push(`${SEVERITY_EMOJI[sev]} *${sev}* (${group.length})`);
+      group.slice(0, 5).forEach((a) => lines.push(`  • ${a.title}`));
+      if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
+    }
+
+    lines.push('\nAcesse o painel do Nexa para mais detalhes.');
+    return lines.join('\n');
+  }
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Gera chave numérica única por janela de 5 min (para deduplicação). */
+  private makeSlotKey(now: Date, hour: number, minute: number): number {
+    const slot5 = Math.floor(minute / 5);
+    return (
+      now.getFullYear() * 100_000_000 +
+      now.getMonth() * 1_000_000 +
+      now.getDate() * 10_000 +
+      hour * 100 +
+      slot5
+    );
+  }
+
+  /** Atualiza notifiedAt, incrementa notifyCount e arquiva alertas antigos. */
+  private async persistAlertUpdates(alertIds: string[], now: Date): Promise<void> {
     await this.prisma.alertState.updateMany({
       where: { id: { in: alertIds } },
       data: { notifiedAt: now, notifyCount: { increment: 1 } },
     });
 
-    // Arquiva alertas notificados >= 2x e sem resolução em 48h
     const archiveCutoff = new Date(now.getTime() - ARCHIVE_AFTER_HOURS * 60 * 60 * 1000);
     await this.prisma.alertState.updateMany({
       where: {
@@ -176,8 +354,5 @@ export class ConsolidationService {
       },
       data: { status: 'archived' },
     });
-
-    this.logger.log(`Consolidation: ${alerts.length} alerta(s) notificado(s) para tenant ${tenantId}`);
-    return alerts.length;
   }
 }
