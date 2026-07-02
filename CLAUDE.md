@@ -142,13 +142,18 @@ Run from the repo root unless noted. Package manager: **pnpm 9** (Node >= 20).
 |------|---------|
 | Bring up DB + Redis + WAHA | `pnpm db:up` |
 | Tear down infra | `pnpm db:down` |
-| Prisma client (no DB) | `pnpm db:generate` |
-| **DB migrate (USER ONLY)** | `pnpm db:migrate` |
+| Prisma client (no DB) | `cd apps/backend && pnpm prisma:generate` |
+| **DB migrate (USER ONLY)** | `cd apps/backend && npx prisma migrate deploy` |
 | **Seed (USER ONLY)** | `pnpm db:seed` |
 | Prisma Studio | `pnpm db:studio` |
 | Backend dev (`:3001`) | `cd apps/backend && pnpm start:dev` |
 | Frontend dev (`:5174`) | `cd apps/frontend && pnpm dev` |
 | Frontend build | `cd apps/frontend && pnpm build` |
+
+> ⚠️ **Windows — `prisma:generate` trava se o backend estiver rodando.**
+> O NestJS mantém o arquivo `query_engine-windows.dll.node` bloqueado enquanto
+> o processo estiver ativo. **Sempre avisar o usuário para parar o backend local
+> antes de rodar `prisma:generate`**, e lembrar de reiniciá-lo depois.
 
 API docs (Swagger) at `http://localhost:3001/api/docs` (disabled in production).
 

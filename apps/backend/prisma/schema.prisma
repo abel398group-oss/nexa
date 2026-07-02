@@ -785,14 +785,15 @@ model TenantNotificationConfig {
   enabled              Boolean  @default(false) @map("enabled")         // on/off por tenant
   sendHour             Int      @default(7) @map("send_hour")            // hora UTC de envio (0-23)
   sendMinute           Int      @default(0) @map("send_minute")          // minuto de envio (0|15|30|45)
-  notificationPhone    String?  @map("notification_phone")               // telefone destino (legado — substituído por recipients)
-  recipients           Json     @default("[]") @map("recipients")         // NotificationRecipient[] — lista de destinatários
+  notificationPhone    String?  @map("notification_phone")               // telefone destino (legado)
+  recipients           Json     @default("[]") @map("recipients")         // legado — mantido para compat
   sendWeekends         Boolean  @default(false) @map("send_weekends")
   channel         String   @default("whatsapp") // whatsapp | email | both
   fiscalEnabled   Boolean  @default(true) @map("fiscal_enabled")
   logisticEnabled Boolean  @default(true) @map("logistic_enabled")
   frotaEnabled    Boolean  @default(true) @map("frota_enabled")
   financeEnabled  Boolean  @default(true) @map("finance_enabled")
+  sectorConfig    Json?    @map("sector_config")  // { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute } }
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

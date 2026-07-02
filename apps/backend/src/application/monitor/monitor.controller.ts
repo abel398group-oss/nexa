@@ -46,6 +46,8 @@ class UpdateConfigDto {
   @IsBoolean() @IsOptional() logisticEnabled?: boolean;
   @IsBoolean() @IsOptional() frotaEnabled?: boolean;
   @IsBoolean() @IsOptional() financeEnabled?: boolean;
+  // Config por setor: { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute } }
+  @IsOptional() sectorConfig?: Record<string, { phone?: string; sendHour?: number; sendMinute?: number }>;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -77,6 +79,7 @@ export class MonitorController {
         logisticEnabled: true,
         frotaEnabled: true,
         financeEnabled: true,
+        sectorConfig: true,
       },
     });
     return config ?? {
@@ -91,6 +94,7 @@ export class MonitorController {
       logisticEnabled: true,
       frotaEnabled: true,
       financeEnabled: true,
+      sectorConfig: null,
     };
   }
 

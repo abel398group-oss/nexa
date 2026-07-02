@@ -1,7 +1,7 @@
 /**
  * MonitorConfigPage — /settings/monitor
- * Configura preferências de notificações proativas do Monitor Nexa.
- * Role: admin
+ * Monitor Proativo: alertas automáticos do TMS por setor.
+ * Cada setor tem toggle, horário próprio e telefone WhatsApp.
  */
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,38 +10,97 @@ import { useToast } from '@/app/providers/ToastContext';
 import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 
-interface NotificationRecipient {
-  label: string;    // nome/rótulo do destinatário
-  contact: string;  // telefone (WhatsApp) ou e-mail
-  channel: 'whatsapp' | 'email';
+// ─── Tipos ───────────────────────────────────────────────────────────────────
+
+type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
+
+interface SectorDetail {
+  phone: string;
+  sendHour: number;
+  sendMinute: number;
 }
+
+type SectorConfigMap = Record<SectorKey, SectorDetail>;
 
 interface MonitorConfig {
   enabled: boolean;
   sendHour: number;
   sendMinute: number;
-  notificationPhone: string | null; // legado — mantido para compat; UI usa recipients
-  recipients: NotificationRecipient[];
+  notificationPhone: string | null;
+  recipients: unknown[];
   sendWeekends: boolean;
-  channel: 'whatsapp' | 'email' | 'both'; // legado — derivado automaticamente dos recipients
+  channel: string;
   fiscalEnabled: boolean;
   logisticEnabled: boolean;
   frotaEnabled: boolean;
   financeEnabled: boolean;
+  sectorConfig?: SectorConfigMap | null;
 }
 
 interface AlertState {
   id: string;
-  tmsEventId: string;
   severity: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
   category: string;
   title: string;
   description?: string;
-  status: 'open' | 'snoozed' | 'resolved' | 'archived';
+  status: string;
   notifiedAt?: string;
   notifyCount: number;
-  createdAt: string;
 }
+
+// ─── Setores ─────────────────────────────────────────────────────────────────
+
+const SECTORS: Array<{
+  key: SectorKey;
+  enabledKey: keyof MonitorConfig;
+  label: string;
+  sub: string;
+  emoji: string;
+  borderClass: string;
+  headerClass: string;
+  badgeClass: string;
+}> = [
+  {
+    key: 'fiscal',
+    enabledKey: 'fiscalEnabled',
+    label: 'Fiscal',
+    sub: 'CT-e · MDF-e',
+    emoji: '📄',
+    borderClass: 'border-l-4 border-l-blue-500',
+    headerClass: 'bg-blue-500/10',
+    badgeClass: 'bg-blue-500/20 text-blue-400',
+  },
+  {
+    key: 'logistic',
+    enabledKey: 'logisticEnabled',
+    label: 'Logística',
+    sub: 'embarques · coletas',
+    emoji: '🚚',
+    borderClass: 'border-l-4 border-l-orange-500',
+    headerClass: 'bg-orange-500/10',
+    badgeClass: 'bg-orange-500/20 text-orange-400',
+  },
+  {
+    key: 'frota',
+    enabledKey: 'frotaEnabled',
+    label: 'Frota',
+    sub: 'manutenções · vencimentos',
+    emoji: '🔧',
+    borderClass: 'border-l-4 border-l-purple-500',
+    headerClass: 'bg-purple-500/10',
+    badgeClass: 'bg-purple-500/20 text-purple-400',
+  },
+  {
+    key: 'finance',
+    enabledKey: 'financeEnabled',
+    label: 'Financeiro',
+    sub: 'vencimentos · cobranças',
+    emoji: '💰',
+    borderClass: 'border-l-4 border-l-emerald-500',
+    headerClass: 'bg-emerald-500/10',
+    badgeClass: 'bg-emerald-500/20 text-emerald-400',
+  },
+];
 
 const SEVERITY_BADGE: Record<string, string> = {
   CRITICAL: 'badge-error',
@@ -58,19 +117,11 @@ const SEVERITY_LABEL: Record<string, string> = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  fiscal:   'Fiscal',
-  logistic: 'Logística',
-  frota:    'Frota',
-  finance:  'Financeiro',
+  fiscal: 'Fiscal', logistic: 'Logística', frota: 'Frota', finance: 'Financeiro',
 };
 
-// O backend do Monitor roda em horário de Brasília (TZ=America/Sao_Paulo) e
-// compara com new Date().getHours() LOCAL. Logo sendHour JÁ É a hora de Brasília
-// — NÃO converter para UTC (a conversão +3/-3 causava defasagem de 3h e o resumo
-// nunca disparava no horário configurado).
-const utcToBrt = (h: number) => h;
-const brtToUtc = (h: number) => h;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 const DEFAULT_CONFIG: MonitorConfig = {
   enabled: false,
@@ -84,42 +135,69 @@ const DEFAULT_CONFIG: MonitorConfig = {
   logisticEnabled: true,
   frotaEnabled: true,
   financeEnabled: true,
+  sectorConfig: null,
 };
+
+const makeSectorConfig = (defaultHour = 7, defaultMinute = 0): SectorConfigMap => ({
+  fiscal:   { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
+  logistic: { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
+  frota:    { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
+  finance:  { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
+});
+
+// ─── Componente ──────────────────────────────────────────────────────────────
 
 export function MonitorConfigPage() {
   const [cfg, setCfg] = useState<MonitorConfig>(DEFAULT_CONFIG);
+  const [sectors, setSectors] = useState<SectorConfigMap>(makeSectorConfig());
   const [saving, setSaving] = useState(false);
+
   const toast = useToast();
   const qc = useQueryClient();
 
-  // Config
+  // ── Queries ─────────────────────────────────────────────────────────────────
+
   const { data: config, isLoading: loadingConfig } = useQuery<MonitorConfig>({
     queryKey: ['monitor-config'],
     queryFn: () => api.get('/monitor/config').then((r) => r.data),
   });
 
   useEffect(() => {
-    if (config) setCfg({ ...DEFAULT_CONFIG, ...config, recipients: (config.recipients as any) ?? [] });
+    if (!config) return;
+    setCfg({ ...DEFAULT_CONFIG, ...config });
+
+    // Inicializa sectorConfig: usa dados do banco ou herda hora global
+    const sc = config.sectorConfig as SectorConfigMap | null | undefined;
+    const h = config.sendHour ?? 7;
+    const m = config.sendMinute ?? 0;
+    setSectors({
+      fiscal:   { phone: '', sendHour: h, sendMinute: m, ...sc?.fiscal },
+      logistic: { phone: '', sendHour: h, sendMinute: m, ...sc?.logistic },
+      frota:    { phone: '', sendHour: h, sendMinute: m, ...sc?.frota },
+      finance:  { phone: '', sendHour: h, sendMinute: m, ...sc?.finance },
+    });
   }, [config]);
 
-  // Alertas
   const { data: alerts = [], isLoading: loadingAlerts } = useQuery<AlertState[]>({
     queryKey: ['monitor-alerts'],
     queryFn: () => api.get('/monitor/alerts').then((r) => r.data),
     refetchInterval: 60_000,
   });
 
-  // Salvar config
+  // ── Mutations ────────────────────────────────────────────────────────────────
+
   async function saveConfig() {
     setSaving(true);
     try {
-      // Remove null/undefined — class-validator rejeita null mesmo em campos opcionais
-      const payload = Object.fromEntries(
-        Object.entries(cfg).filter(([, v]) => v !== null && v !== undefined),
-      );
+      const payload = {
+        ...Object.fromEntries(
+          Object.entries(cfg).filter(([k, v]) => v !== null && v !== undefined && k !== 'sectorConfig'),
+        ),
+        sectorConfig: sectors,
+      };
       await api.put('/monitor/config', payload);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });
-      toast.success('Configurações de monitor salvas!');
+      toast.success('Configurações salvas!');
     } catch {
       toast.error('Erro ao salvar configurações.');
     } finally {
@@ -127,66 +205,43 @@ export function MonitorConfigPage() {
     }
   }
 
-  // Snooze alerta
   const snooze = useMutation({
     mutationFn: (id: string) => api.post(`/monitor/alerts/${id}/snooze`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
-      toast.success('Alerta adiado por 24h.');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['monitor-alerts'] }); toast.success('Alerta adiado por 24h.'); },
   });
 
-  // Resolve alerta
   const resolve = useMutation({
     mutationFn: (id: string) => api.post(`/monitor/alerts/${id}/resolve`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
-      toast.success('Alerta marcado como resolvido.');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['monitor-alerts'] }); toast.success('Alerta resolvido.'); },
   });
 
-  // Sincronizar agora
   const syncNow = useMutation({
     mutationFn: () => api.post('/monitor/sync'),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
-      toast.success(`Sincronizado: ${res.data.synced} alerta(s) ativos, ${res.data.resolved} resolvidos.`);
+      toast.success(`Sincronizado: ${res.data.synced} ativo(s), ${res.data.resolved} resolvido(s).`);
     },
-    onError: () => toast.error('Falha ao sincronizar com o TMS.'),
+    onError: () => toast.error('Falha ao sincronizar.'),
   });
 
-  // Testar notificação — envia mensagem de teste para o phone configurado
   const testNotify = useMutation({
     mutationFn: () => api.post('/monitor/test'),
     onSuccess: (res) => {
-      if (res.data.sent) {
-        toast.success(`✅ Mensagem de teste enviada para ${res.data.phone}!`);
-      } else {
-        toast.error(`Falha: ${res.data.reason ?? 'erro desconhecido'}`);
-      }
+      if (res.data.sent) toast.success(`✅ Teste enviado para ${res.data.phone}!`);
+      else toast.error(`Falha: ${res.data.reason ?? 'erro desconhecido'}`);
     },
-    onError: () => toast.error('Erro ao enviar teste de notificação.'),
+    onError: () => toast.error('Erro ao enviar teste.'),
   });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
-  // Helpers para a lista de destinatários
-  const addRecipient = () =>
-    setCfg((c) => ({
-      ...c,
-      recipients: [...c.recipients, { label: '', contact: '', channel: 'whatsapp' }],
-    }));
+  const setSector = (key: SectorKey, field: keyof SectorDetail, val: string | number) =>
+    setSectors((s) => ({ ...s, [key]: { ...s[key], [field]: val } }));
 
-  const updateRecipient = (i: number, patch: Partial<NotificationRecipient>) =>
-    setCfg((c) => {
-      const next = [...c.recipients];
-      next[i] = { ...next[i], ...patch };
-      return { ...c, recipients: next };
-    });
-
-  const removeRecipient = (i: number) =>
-    setCfg((c) => ({ ...c, recipients: c.recipients.filter((_, idx) => idx !== i) }));
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <PageContainer>
@@ -201,23 +256,19 @@ export function MonitorConfigPage() {
           />
         }
         title="Monitor Proativo"
-        subtitle="Alertas automáticos do TMS entregues via WhatsApp ou e-mail."
+        subtitle="Configure horários e telefones de alerta por setor do TMS."
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => syncNow.mutate()}
-              loading={syncNow.isPending}
-            >
-              <Icon name="refresh" className="h-4 w-4" /> Sincronizar agora
+            <Button variant="ghost" onClick={() => syncNow.mutate()} loading={syncNow.isPending}>
+              <Icon name="refresh" className="h-4 w-4" /> Sincronizar
             </Button>
             <Button
               variant="ghost"
               onClick={() => testNotify.mutate()}
               loading={testNotify.isPending}
-              title="Envia uma mensagem de teste para o WhatsApp configurado"
+              title="Envia mensagem de teste para o primeiro telefone configurado"
             >
-              <Icon name="zap" className="h-4 w-4" /> Testar notificação
+              <Icon name="zap" className="h-4 w-4" /> Testar
             </Button>
             <Button onClick={saveConfig} loading={saving}>
               <Icon name="check" className="h-4 w-4" /> Salvar
@@ -230,179 +281,166 @@ export function MonitorConfigPage() {
         <SkeletonList />
       ) : (
         <div className="space-y-6">
-          {/* ── On/Off ── */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between gap-4">
+
+          {/* ─── Configurações gerais ────────────────────────────────────── */}
+          <div className="card">
+            <div className="flex items-center justify-between gap-4 px-6 py-5 border-b border-base-200">
               <div>
                 <p className="text-sm font-semibold text-base-content">Monitoramento ativo</p>
                 <p className="text-xs text-base-content/50 mt-0.5">
-                  Quando ativado, você recebe um resumo diário com os alertas do TMS nos canais configurados abaixo.
+                  Quando ativado, cada setor dispara alertas no telefone e horário configurados abaixo.
                 </p>
               </div>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary toggle-lg"
-                checked={cfg.enabled}
-                onChange={(e) => set('enabled', e.target.checked)}
-              />
-            </div>
-          </section>
-
-          {/* ── Preferências de envio ── */}
-          <section className={`card p-5 space-y-4 transition-opacity ${cfg.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <h2 className="text-sm font-semibold text-base-content">Preferências de envio</h2>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* Hora e minuto de envio */}
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-base-content/60">Horário do resumo diário (Brasília)</span>
-                <div className="flex gap-2">
-                  <select
-                    className="select select-bordered select-sm flex-1"
-                    value={utcToBrt(cfg.sendHour)}
-                    onChange={(e) => set('sendHour', brtToUtc(Number(e.target.value)))}
-                  >
-                    {HOURS.map((h) => (
-                      <option key={h} value={h}>
-                        {String(h).padStart(2, '0')}h
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="select select-bordered select-sm w-24"
-                    value={cfg.sendMinute}
-                    onChange={(e) => set('sendMinute', Number(e.target.value))}
-                  >
-                    {[0,5,10,15,20,25,30,35,40,45,50,55].map((m) => (
-                      <option key={m} value={m}>
-                        {String(m).padStart(2, '0')}min
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-xs text-base-content/50">{cfg.enabled ? 'Ativo' : 'Inativo'}</span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={cfg.enabled}
+                  onChange={(e) => set('enabled', e.target.checked)}
+                />
               </label>
-
             </div>
 
-            {/* Lista de destinatários */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-base-content/60">Destinatários</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs"
-                  onClick={addRecipient}
-                >
-                  <Icon name="plus" className="h-3 w-3" /> Adicionar
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-6 px-6 py-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm"
+                  checked={cfg.sendWeekends}
+                  onChange={(e) => set('sendWeekends', e.target.checked)}
+                />
+                <span className="text-sm text-base-content">Enviar alertas nos fins de semana</span>
+              </label>
+            </div>
+          </div>
 
-              {(cfg.recipients ?? []).length === 0 && (
-                <p className="text-xs text-base-content/40 italic">
-                  Nenhum destinatário configurado — clique em "Adicionar".
-                </p>
+          {/* ─── Grid de setores ─────────────────────────────────────────── */}
+          <div className={`transition-opacity ${cfg.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+            <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
+              Alertas por setor
+            </p>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {SECTORS.map((sector) => {
+                const enabled = !!cfg[sector.enabledKey];
+                const sc = sectors[sector.key];
+
+                return (
+                  <div
+                    key={sector.key}
+                    className={`card overflow-hidden ${sector.borderClass}`}
+                  >
+                    {/* Cabeçalho colorido */}
+                    <div className={`flex items-center justify-between gap-3 px-5 py-4 ${sector.headerClass} border-b border-base-200`}>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${sector.badgeClass}`}
+                        >
+                          {sector.emoji}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-base-content">{sector.label}</p>
+                          <p className="text-xs text-base-content/50">{sector.sub}</p>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-xs text-base-content/40">
+                          {enabled ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="toggle toggle-primary toggle-sm"
+                          checked={enabled}
+                          onChange={(e) => set(sector.enabledKey, e.target.checked as any)}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Corpo: horário + telefone */}
+                    <div
+                      className={`px-5 py-5 space-y-4 transition-opacity ${
+                        enabled ? '' : 'opacity-40 pointer-events-none'
+                      }`}
+                    >
+                      {/* Horário */}
+                      <div>
+                        <p className="text-xs font-medium text-base-content/60 mb-2">
+                          Horário do alerta (Brasília)
+                        </p>
+                        <div className="flex gap-2">
+                          <select
+                            className="select select-bordered select-sm flex-1"
+                            value={sc.sendHour}
+                            onChange={(e) => setSector(sector.key, 'sendHour', Number(e.target.value))}
+                          >
+                            {HOURS.map((h) => (
+                              <option key={h} value={h}>
+                                {String(h).padStart(2, '0')}h
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="select select-bordered select-sm w-28"
+                            value={sc.sendMinute}
+                            onChange={(e) => setSector(sector.key, 'sendMinute', Number(e.target.value))}
+                          >
+                            {MINUTES.map((m) => (
+                              <option key={m} value={m}>
+                                {String(m).padStart(2, '0')}min
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Telefone */}
+                      <div>
+                        <p className="text-xs font-medium text-base-content/60 mb-2">
+                          Telefone WhatsApp (com DDI)
+                        </p>
+                        <input
+                          type="text"
+                          className="input input-bordered input-sm w-full"
+                          placeholder="5511999999999"
+                          value={sc.phone}
+                          onChange={(e) => setSector(sector.key, 'phone', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ─── Alertas ativos ──────────────────────────────────────────── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
+              Alertas ativos
+              {alerts.length > 0 && (
+                <span className="badge badge-neutral badge-sm ml-2 normal-case tracking-normal">
+                  {alerts.length}
+                </span>
               )}
-
-              {(cfg.recipients ?? []).map((r, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  {/* Nome / rótulo */}
-                  <input
-                    type="text"
-                    className="input input-bordered input-sm w-32 shrink-0"
-                    placeholder="Nome"
-                    value={r.label}
-                    onChange={(e) => updateRecipient(i, { label: e.target.value })}
-                  />
-                  {/* Contato: fone ou e-mail */}
-                  <input
-                    type="text"
-                    className="input input-bordered input-sm flex-1 min-w-0"
-                    placeholder={r.channel === 'email' ? 'email@empresa.com' : '5511999999999'}
-                    value={r.contact}
-                    onChange={(e) => updateRecipient(i, { contact: e.target.value })}
-                  />
-                  {/* Canal */}
-                  <select
-                    className="select select-bordered select-sm w-32 shrink-0"
-                    value={r.channel}
-                    onChange={(e) => updateRecipient(i, { channel: e.target.value as 'whatsapp' | 'email' })}
-                  >
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="email">E-mail</option>
-                  </select>
-                  {/* Remover */}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs text-error shrink-0"
-                    title="Remover destinatário"
-                    onClick={() => removeRecipient(i)}
-                  >
-                    <Icon name="trash" className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Enviar nos fins de semana */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm"
-                checked={cfg.sendWeekends}
-                onChange={(e) => set('sendWeekends', e.target.checked)}
-              />
-              <span className="text-sm text-base-content">Enviar nos fins de semana</span>
-            </label>
-          </section>
-
-          {/* ── Categorias ── */}
-          <section className={`card p-5 space-y-4 transition-opacity ${cfg.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <h2 className="text-sm font-semibold text-base-content">Categorias monitoradas</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(
-                [
-                  { key: 'fiscalEnabled', label: 'Fiscal (CT-e / MDF-e)' },
-                  { key: 'logisticEnabled', label: 'Logística (embarques)' },
-                  { key: 'frotaEnabled', label: 'Frota (manutenções)' },
-                  { key: 'financeEnabled', label: 'Financeiro (vencimentos)' },
-                ] as { key: keyof MonitorConfig; label: string }[]
-              ).map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    checked={!!cfg[key]}
-                    onChange={(e) => set(key, e.target.checked as any)}
-                  />
-                  <span className="text-sm text-base-content">{label}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          {/* ── Alertas ativos ── */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-base-content">
-                Alertas ativos{' '}
-                {alerts.length > 0 && (
-                  <span className="badge badge-neutral badge-sm ml-1">{alerts.length}</span>
-                )}
-              </h2>
-            </div>
+            </p>
 
             {loadingAlerts ? (
               <SkeletonList />
             ) : alerts.length === 0 ? (
-              <div className="card p-8 text-center text-base-content/40 text-sm">
+              <div className="card px-6 py-10 text-center text-base-content/40 text-sm">
                 Nenhum alerta aberto no momento ✅
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="card divide-y divide-base-200">
                 {alerts.map((alert) => (
-                  <div key={alert.id} className="card p-4 flex items-start justify-between gap-3">
+                  <div key={alert.id} className="flex items-start justify-between gap-3 px-5 py-4">
                     <div className="flex items-start gap-3 min-w-0">
-                      <span className={`badge badge-sm mt-0.5 shrink-0 ${SEVERITY_BADGE[alert.severity] ?? 'badge-ghost'}`}>
+                      <span
+                        className={`badge badge-sm mt-0.5 shrink-0 ${
+                          SEVERITY_BADGE[alert.severity] ?? 'badge-ghost'
+                        }`}
+                      >
                         {SEVERITY_LABEL[alert.severity] ?? alert.severity}
                       </span>
                       <div className="min-w-0">
@@ -412,7 +450,8 @@ export function MonitorConfigPage() {
                         )}
                         <p className="text-xs text-base-content/40 mt-1">
                           {CATEGORY_LABEL[alert.category] ?? alert.category}
-                          {alert.notifiedAt && ` · notificado ${new Date(alert.notifiedAt).toLocaleDateString('pt-BR')}`}
+                          {alert.notifiedAt &&
+                            ` · notificado ${new Date(alert.notifiedAt).toLocaleDateString('pt-BR')}`}
                           {alert.status === 'snoozed' && ' · adiado'}
                         </p>
                       </div>
@@ -437,7 +476,7 @@ export function MonitorConfigPage() {
                 ))}
               </div>
             )}
-          </section>
+          </div>
         </div>
       )}
     </PageContainer>
