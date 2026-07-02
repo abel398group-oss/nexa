@@ -296,7 +296,7 @@ export class ConsolidationService {
       if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
 
-    lines.push('\nAcesse o painel do Nexa para mais detalhes.');
+    lines.push('\nAcesse o painel da Hipervias para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
   }
 
@@ -320,7 +320,7 @@ export class ConsolidationService {
       if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
 
-    lines.push('\nAcesse o painel do Nexa para mais detalhes.');
+    lines.push('\nAcesse o painel da Hipervias para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
   }
 
