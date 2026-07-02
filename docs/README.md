@@ -1,3 +1,9 @@
+---
+type: moc
+tags: [moc, docs, index]
+updated: 2026-07-02
+summary: Índice completo da documentação do Nexa — todas as pastas e links.
+---
 # Documentação — Nexa
 
 Plataforma de automação comercial e suporte B2B com IA (**Lia**) para SaaS.

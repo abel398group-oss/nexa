@@ -1,0 +1,20 @@
+{
+  "userIgnoreFilters": [
+    "node_modules",
+    "dist",
+    "build",
+    ".pnpm-store",
+    "backups",
+    "coverage",
+    "uploads",
+    ".git",
+    "prisma/migrations",
+    "packages/shared/node_modules",
+    "packages/types/node_modules"
+  ],
+  "attachmentFolderPath": "docs/_assets",
+  "newFileLocation": "current",
+  "showUnsupportedFiles": false,
+  "promptDelete": true,
+  "trashOption": "local"
+}

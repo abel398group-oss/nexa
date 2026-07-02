@@ -1,3 +1,9 @@
+---
+type: note
+tags: [changelog, versoes]
+updated: 2026-07-02
+summary: Histórico de versões do Nexa — o que está em produção (v1.0.0) e o que está planejado.
+---
 # Changelog — Nexa
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).

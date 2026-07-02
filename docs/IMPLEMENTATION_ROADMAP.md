@@ -1,3 +1,9 @@
+---
+type: note
+tags: [roadmap, fases, status]
+updated: 2026-07-02
+summary: Roadmap de implementação do Nexa — fases 0 a 9, o que está em produção e o que vem a seguir.
+---
 # Implementation Roadmap — Sistema de Leads / IA Autônoma
 
 > Roadmap de implementação derivado dos PRDs, ADRs e Schema (todos aprovados).
