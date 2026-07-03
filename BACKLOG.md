@@ -8,10 +8,9 @@
 
 | # | Prioridade | Tarefa | Notas |
 |---|---|---|---|
-| 1 | 🔴 | Implementar `GET /api/plans` no HiperTMS (TMS-5) | Nexa já consome — falta o endpoint no TMS. Ver seção TMS abaixo |
-| 2 | 🔴 | Implementar `GET /api/companies/by-phone` no HiperTMS (TMS-1) | Habilita roteamento automático Lia Vendas ↔ Lia Suporte |
-| 3 | 🔴 | Atualizar Router do Nexa para usar lookup de telefone | Lógica: cadastrado no TMS → Lia Suporte / não cadastrado → Lia Vendas |
-| 4 | 🟡 | Testar envio de e-mail real (SMTP Hostgator) | Portas já abertas no DO. Configurar `.env` e disparar campanha teste |
+| 1 | 🔴 | Configurar `TMS_BASE_URL` no Nexa em produção (TMS-2) | Apontar para a URL pública do TMS (`http://hipertms.com.br/api`). `TMS_SERVICE_TOKEN` já está correto em ambos os lados |
+| 2 | 🔴 | Configurar `NEXA_SERVICE_TOKEN` no HiperTMS em produção | Deve ser igual ao `TMS_SERVICE_TOKEN` do Nexa (`hipertms-nexa-secret-2026`) |
+| 3 | 🟡 | Testar envio de e-mail real (SMTP Hostgator) | Portas já abertas no DO. Configurar `.env` e disparar campanha teste |
 
 ---
 
@@ -78,11 +77,11 @@ Suporte   Vendas
 
 | # | Prioridade | Tarefa | Notas |
 |---|---|---|---|
-| TMS-1 | 🔴 | Criar `GET /api/companies/by-phone` no HiperTMS | Nexa chama para rotear Lia Vendas vs Lia Suporte |
-| TMS-2 | 🟡 | Preencher `TMS_API_BASE_URL`, `TMS_SERVICE_TOKEN`, `TMS_TENANT_ID` no `.env` | Após TMS-1 e TMS-5 estarem prontos |
+| TMS-1 | ✅ | `GET /api/nexa/customers/by-phone` no HiperTMS | Implementado em `nexa-external.controller.ts`. Router Nexa já usa via `TmsLookupService` (DB direto) |
+| TMS-2 | 🔴 | Configurar `TMS_BASE_URL` no Nexa em produção + `NEXA_SERVICE_TOKEN` no TMS | Localmente já funciona. Em prod: apontar para URL pública do TMS |
 | TMS-3 | 🟢 | Handoff Modalidade B — chamar endpoint do Nexa ao abrir chamado | `POST /api/handoff/from-tms` já implementado no Nexa |
 | TMS-4 | 🟢 | Handoff Modalidade A — botão "Abrir no Nexa" no painel TMS | HTML simples apontando para o Nexa |
-| TMS-5 | 🔴 | Criar `GET /api/plans` no HiperTMS | **Nexa pronto** (`getPlans()` com fallback p/ catálogo). Lia vende preço real |
+| TMS-5 | ✅ | `GET /api/nexa/plans` no HiperTMS | Implementado em `nexa-external.controller.ts`. Auth: `Authorization: Bearer` via `ServiceTokenGuard` |
 | TMS-6 | 🟢 | Criar `GET /api/health` no HiperTMS | **Nexa pronto** (`healthCheck()` faz ping real) |
 
 ### Contrato esperado pelo Nexa (consumidor JÁ implementado)
@@ -95,11 +94,11 @@ Todos com header `x-internal-token: <TMS_SERVICE_TOKEN>`, timeout 5s. Se a chama
 
 ### Ordem de implementação recomendada
 
-1. **TMS-5** — `GET /api/plans` no HiperTMS (simples, retorna o catálogo existente)
-2. **TMS-1** — `GET /api/companies/by-phone` no HiperTMS (busca empresa por telefone)
-3. **Router Nexa** — atualizar lógica de roteamento para usar o lookup (TMS-1)
-4. **TMS-2** — configurar variáveis de ambiente (`.env`) com URLs e tokens reais
-5. **Testar** — conversa de teste com número cadastrado e não cadastrado
+1. ✅ **TMS-5** — `GET /api/nexa/plans` (implementado)
+2. ✅ **TMS-1** — `GET /api/nexa/customers/by-phone` (implementado)
+3. ✅ **Router Nexa** — roteamento por telefone via `TmsLookupService` (já implementado)
+4. 🔴 **TMS-2** — configurar em PRODUÇÃO: `TMS_BASE_URL` no Nexa + `NEXA_SERVICE_TOKEN` no TMS
+5. **Testar** — conversa de teste com número cadastrado e não cadastrado no TMS
 
 ---
 
