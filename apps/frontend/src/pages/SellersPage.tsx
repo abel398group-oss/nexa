@@ -264,7 +264,7 @@ export function SellersPage() {
   return (
     <StandardListPage
       title="Vendedores"
-      breadcrumb={[{ label: 'Inicio', to: '/dashboard' }, { label: 'Vendedores' }]}
+      breadcrumb={[{ label: 'Inicio', path: '/dashboard' }, { label: 'Vendedores' }]}
       description="Leads quentes sao distribuidos (round-robin) e notificados no WhatsApp"
       isLoading={loading}
       hasData={items.length > 0}

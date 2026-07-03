@@ -56,7 +56,7 @@ export function SupportClientsPage() {
   return (
     <StandardListPage
       title="Clientes"
-      breadcrumb={[{ label: 'Início', to: '/dashboard' }, { label: 'Suporte' }, { label: 'Clientes' }]}
+      breadcrumb={[{ label: 'Início', path: '/dashboard' }, { label: 'Suporte' }, { label: 'Clientes' }]}
       description="Quem já abriu chamado de suporte, agrupado por contato. Abra o atendimento no Inbox de Suporte."
       isLoading={isLoading}
       hasData={clients.length > 0}

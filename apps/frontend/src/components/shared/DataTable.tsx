@@ -28,6 +28,8 @@ interface RowAction {
 }
 
 interface DataTableEmpty {
+  /** Ícone SVG exibido acima do título */
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   /** Ação (botão/link) JSX exibido abaixo da mensagem */
@@ -70,7 +72,7 @@ export function DataTable<T>({
     a === 'center' ? 'text-center' : a === 'right' ? 'text-right' : 'text-left';
 
   const emptyNode = empty ? (
-    <EmptyState title={empty.title} description={empty.description} action={empty.action} />
+    <EmptyState icon={empty.icon} title={empty.title} description={empty.description} action={empty.action} />
   ) : (
     <span className="text-sm text-base-content/40">Nenhum registro encontrado</span>
   );

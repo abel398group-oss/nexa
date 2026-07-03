@@ -27,7 +27,8 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
-import { Button, Card, StatusBadge, Modal, PageContainer, PageHeader, Breadcrumb, Icon, Badge, statusVariant } from '@/shared/ui';
+import { Button, Card, StatusBadge, Modal, Icon, Badge, statusVariant } from '@/shared/ui';
+import { StandardListPage } from '@/components/shared/StandardListPage';
 
 type Channel = 'whatsapp' | 'email';
 
@@ -1904,7 +1905,6 @@ export function CampaignsPage() {
           </form>
         </div>
       )}
-
     </StandardListPage>
   );
 }

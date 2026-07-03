@@ -85,7 +85,7 @@ export function PlaybookPage() {
     <StandardFormPage
       title="Playbook de Vendas da Lia"
       description="Edite como a Lia conduz a venda — sem mexer no codigo. As mudancas valem na proxima resposta dela."
-      breadcrumb={[{ label: 'Inicio', to: '/dashboard' }, { label: 'Playbook IA' }]}
+      breadcrumb={[{ label: 'Inicio', path: '/dashboard' }, { label: 'Playbook IA' }]}
       isLoading={loading}
       hasData={!!pb}
       loadingMessage="Carregando playbook..."

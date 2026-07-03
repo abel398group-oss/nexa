@@ -105,7 +105,7 @@ export function UsersPage() {
     <>
       <StandardListPage
         title="Usuarios & Acessos"
-        breadcrumb={[{ label: 'Inicio', to: '/dashboard' }, { label: 'Usuarios' }]}
+        breadcrumb={[{ label: 'Inicio', path: '/dashboard' }, { label: 'Usuarios' }]}
         description="Administradores do sistema (acesso total). Vendedores tem login proprio criado na tela Vendedores."
         isLoading={isLoading}
         hasData={shown.length > 0}
