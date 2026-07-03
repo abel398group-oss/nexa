@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 import { queryClient } from '@/shared/lib/queryClient';
 import { AuthProvider } from '@/app/providers/AuthContext';
 import { TenantProvider, TenantGate } from '@/app/providers/TenantContext';
@@ -93,6 +94,7 @@ export default function App() {
         </AuthProvider>
       </ConfirmProvider>
     </ToastProvider>
+    <Toaster position="bottom-right" richColors closeButton />
     </QueryClientProvider>
   );
 }

@@ -1,8 +1,12 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Icon, type IconName } from '@/components/ui/icons';
-
-type ToastType = 'success' | 'error' | 'info' | 'warning';
-interface Toast { id: number; type: ToastType; message: string }
+/**
+ * ToastContext -- thin wrapper over `sonner` that keeps the existing
+ * `useToast().success/error/info/warning` API intact across all pages.
+ *
+ * The actual <Toaster> renderer is placed once in App.tsx.
+ * New code can also call `toast.*` from 'sonner' directly.
+ */
+import { createContext, useContext, type ReactNode } from 'react';
+import { toast } from 'sonner';
 
 interface ToastApi {
   success: (msg: string) => void;
@@ -10,6 +14,7 @@ interface ToastApi {
   info:    (msg: string) => void;
   warning: (msg: string) => void;
 }
+
 const ToastCtx = createContext<ToastApi>({
   success: () => {},
   error:   () => {},
@@ -17,51 +22,16 @@ const ToastCtx = createContext<ToastApi>({
   warning: () => {},
 });
 
-let counter = 0;
-const STYLE: Record<ToastType, { bg: string; icon: IconName }> = {
-  success: { bg: 'border-emerald-500 bg-emerald-50 text-emerald-800', icon: 'check' },
-  error:   { bg: 'border-red-500 bg-red-50 text-red-800',             icon: 'close' },
-  info:    { bg: 'border-sky-500 bg-sky-50 text-sky-800',             icon: 'help'  },
-  warning: { bg: 'border-amber-500 bg-amber-50 text-amber-800',       icon: 'alert' },
+const api: ToastApi = {
+  success: (m) => toast.success(m),
+  error:   (m) => toast.error(m),
+  info:    (m) => toast.info(m),
+  warning: (m) => toast.warning(m),
 };
 
+/** Keeps the provider wrapper so App.tsx tree structure stays the same. */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const remove = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
-  const push = useCallback(
-    (type: ToastType, message: string) => {
-      const id = ++counter;
-      setToasts((t) => [...t, { id, type, message }]);
-      setTimeout(() => remove(id), 3800);
-    },
-    [remove],
-  );
-
-  const api: ToastApi = {
-    success: (m) => push('success', m),
-    error:   (m) => push('error', m),
-    info:    (m) => push('info', m),
-    warning: (m) => push('warning', m),
-  };
-
-  return (
-    <ToastCtx.Provider value={api}>
-      {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-80 max-w-[90vw] flex-col gap-2">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            onClick={() => remove(t.id)}
-            className={`pointer-events-auto flex cursor-pointer items-start gap-2 rounded-lg border-l-4 px-4 py-3 text-sm shadow-lg animate-[slideInRight_.2s_ease-out] ${STYLE[t.type].bg}`}
-          >
-            <Icon name={STYLE[t.type].icon} className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="flex-1">{t.message}</span>
-          </div>
-        ))}
-      </div>
-    </ToastCtx.Provider>
-  );
+  return <ToastCtx.Provider value={api}>{children}</ToastCtx.Provider>;
 }
 
 export const useToast = () => useContext(ToastCtx);

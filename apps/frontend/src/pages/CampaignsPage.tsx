@@ -796,24 +796,79 @@ export function CampaignsPage() {
   }
 
   return (
-    <PageContainer>
-      <PageHeader
-        breadcrumb={<Breadcrumb items={[{ label: 'Início', to: '/dashboard' }, { label: 'Disparo' }]} />}
-        title="Disparo de Leads"
-        subtitle={
-          <>
-            WhatsApp: {settings ? `${settings.waStartHour}h–${settings.waEndHour}h` : '—'} · {numbers.map((n) => `${displayPhone(n.phone)}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ') || 'sem número'} &nbsp;|&nbsp; E-mail: {settings ? `${settings.emailStartHour}h–${settings.emailEndHour}h` : '—'} · 50/dia · delay 90–180s (anti-spam)
-          </>
-        }
-        actions={
-          <>
-            <Button variant="outline" onClick={() => setShowHours(true)}>
-              <Icon name="calendar" className="h-4 w-4" /> Horários
-            </Button>
-            <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
-          </>
-        }
-      />
+    <StandardListPage
+      title="Disparo de Leads"
+      breadcrumb={[{ label: 'Início', to: '/dashboard' }, { label: 'Disparo' }]}
+      isLoading={loading && items.length === 0}
+      hasData={items.length > 0}
+      entityName="campanha(s)"
+      headerActions={
+        <>
+          <Button variant="outline" onClick={() => setShowHours(true)}>
+            <Icon name="calendar" className="h-4 w-4" /> Horários
+          </Button>
+          <Button onClick={() => setShow(true)}>+ Nova campanha</Button>
+        </>
+      }
+      topContent={
+        settings ? (
+          <p className="mb-2 text-xs text-base-content/50">
+            WhatsApp: {settings.waStartHour}h–{settings.waEndHour}h
+            {numbers.length > 0 && <> · {numbers.map((n) => `${displayPhone(n.phone)}: ${n.sentToday}/${n.dailyLimit} hoje`).join(' · ')}</>}
+            {' '}| E-mail: {settings.emailStartHour}h–{settings.emailEndHour}h · 50/dia · delay 90–180s (anti-spam)
+          </p>
+        ) : null
+      }
+      extraToolbar={
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+          <div className="inline-flex rounded-lg border border-base-300 p-0.5 text-xs font-medium">
+            <button
+              onClick={() => setArchivedView(false)}
+              className={`rounded-md px-3 py-1.5 transition-colors ${!archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
+            >
+              Ativas
+            </button>
+            <button
+              onClick={() => setArchivedView(true)}
+              className={`rounded-md px-3 py-1.5 transition-colors ${archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
+            >
+              Arquivadas
+            </button>
+          </div>
+
+          {items.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-base-content/70">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-base-300 accent-brand-500"
+                />
+                Selecionar todos
+              </label>
+              {selected.size > 0 && (
+                <>
+                  <span className="text-xs text-base-content/50">{selected.size} selecionada(s)</span>
+                  {archivedView ? (
+                    <Button size="sm" variant="outline" onClick={() => archiveSelected(false)}>
+                      <Icon name="undo" className="h-4 w-4" /> Desarquivar
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => archiveSelected(true)}>
+                      <Icon name="archive" className="h-4 w-4" /> Arquivar
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={deleteSelected} className="text-red-500 hover:bg-red-50">
+                    <Icon name="trash" className="h-4 w-4" /> Excluir
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      }
+    >
 
       {/* modal: janela de horário de envio (por tenant, por canal) */}
       <Modal open={showHours} onClose={() => setShowHours(false)} title="Horários de envio" size="sm">
@@ -868,55 +923,6 @@ export function CampaignsPage() {
           </form>
         )}
       </Modal>
-
-      {/* barra: filtro Ativas/Arquivadas + ações em massa */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-base-300 p-0.5 text-xs font-medium">
-          <button
-            onClick={() => setArchivedView(false)}
-            className={`rounded-md px-3 py-1.5 transition-colors ${!archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
-          >
-            Ativas
-          </button>
-          <button
-            onClick={() => setArchivedView(true)}
-            className={`rounded-md px-3 py-1.5 transition-colors ${archivedView ? 'bg-brand-500 text-white' : 'text-base-content/60 hover:bg-base-200'}`}
-          >
-            Arquivadas
-          </button>
-        </div>
-
-        {items.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-base-content/70">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleAll}
-                className="h-4 w-4 rounded border-base-300 accent-brand-500"
-              />
-              Selecionar todos
-            </label>
-            {selected.size > 0 && (
-              <>
-                <span className="text-xs text-base-content/50">{selected.size} selecionada(s)</span>
-                {archivedView ? (
-                  <Button size="sm" variant="outline" onClick={() => archiveSelected(false)}>
-                    <Icon name="undo" className="h-4 w-4" /> Desarquivar
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={() => archiveSelected(true)}>
-                    <Icon name="archive" className="h-4 w-4" /> Arquivar
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" onClick={deleteSelected} className="text-red-500 hover:bg-red-50">
-                  <Icon name="trash" className="h-4 w-4" /> Excluir
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
 
       <div className="space-y-3">
         {loading && <SkeletonList rows={3} />}
@@ -1899,6 +1905,6 @@ export function CampaignsPage() {
         </div>
       )}
 
-    </PageContainer>
+    </StandardListPage>
   );
 }

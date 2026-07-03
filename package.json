@@ -14,7 +14,11 @@
     "db:migrate": "pnpm --filter backend prisma:migrate",
     "db:studio": "pnpm --filter backend prisma:studio",
     "db:seed": "pnpm --filter backend prisma:seed",
-    "lint": "eslint apps/backend/src"
+    "lint": "eslint apps/backend/src",
+    "test:frontend": "pnpm --filter frontend test",
+    "test:backend": "pnpm --filter backend test",
+    "typecheck": "pnpm --filter frontend typecheck",
+    "test": "pnpm --filter backend test"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

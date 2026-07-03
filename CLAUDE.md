@@ -134,6 +134,48 @@ Dois ambientes distintos — nunca confundir:
 - Free, no prompt: **reading and editing any project file**, plus build, tests,
   lint, type-check, and `prisma generate`.
 
+## Build & test rule — MANDATORY
+
+> **Every change must pass build and tests before being considered done.**
+> No exceptions — not even "small" fixes or refactors.
+
+### O que Claude roda no sandbox (gate automático)
+
+Claude's sandbox has Node but **no `pnpm`** — testes e build completo só rodam localmente.
+O que Claude **deve** rodar via `mcp__workspace__bash` antes de qualquer commit:
+
+| Escopo alterado | Comando no sandbox |
+|----------------|--------------------|
+| Frontend | `node node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc --noEmit --project apps/frontend/tsconfig.json 2>&1 \| grep "error TS" \| grep -v "vite/client"` |
+| Backend | ⚠️ **não roda no sandbox** — symlinks pnpm não resolvem no Linux. Abel roda `cd apps/backend ; pnpm build` localmente. |
+
+Se houver **qualquer erro `error TS` no frontend** → corrigir antes de commitar. Zero tolerância.
+
+### O que o usuário (Abel) deve rodar localmente antes de fazer push
+
+```powershell
+# Frontend — type-check, build e testes
+pnpm typecheck                       # tsc --noEmit (atalho raiz)
+pnpm --filter frontend typecheck     # idem
+cd apps/frontend ; pnpm build        # tsc -b + vite bundle
+pnpm test:frontend                   # vitest run (atalho raiz)
+pnpm --filter frontend test          # idem
+
+# Backend — build e testes
+cd apps/backend ; pnpm build         # nest build
+pnpm test:backend                    # vitest run (atalho raiz)
+pnpm --filter backend test           # idem
+
+# Lint backend
+pnpm lint
+```
+
+**Regras:**
+1. Claude roda o type-check do **frontend** no sandbox a cada mudança — sem exceção.
+2. Se o type-check falhar → Claude corrige antes de commitar.
+3. Claude instrui Abel a rodar `typecheck` + `build` + `test:frontend` + `test:backend` antes de qualquer push para produção.
+4. Nunca commitar código com erros de TypeScript conhecidos ou testes quebrados.
+
 ## Commands
 
 Run from the repo root unless noted. Package manager: **pnpm 9** (Node >= 20).
@@ -148,7 +190,12 @@ Run from the repo root unless noted. Package manager: **pnpm 9** (Node >= 20).
 | Prisma Studio | `pnpm db:studio` |
 | Backend dev (`:3001`) | `cd apps/backend && pnpm start:dev` |
 | Frontend dev (`:5174`) | `cd apps/frontend && pnpm dev` |
-| Frontend build | `cd apps/frontend && pnpm build` |
+| **Frontend build** ⚠️ | `cd apps/frontend && pnpm build` |
+| **Frontend type-check** ⚠️ | `pnpm typecheck` · ou `pnpm --filter frontend typecheck` |
+| **Frontend tests** ⚠️ | `pnpm test:frontend` · ou `pnpm --filter frontend test` |
+| **Backend build** ⚠️ | `cd apps/backend && pnpm build` |
+| **Backend tests** ⚠️ | `pnpm test:backend` · ou `pnpm --filter backend test` |
+| Lint (backend) | `pnpm lint` |
 
 > ⚠️ **Windows — `prisma:generate` trava se o backend estiver rodando.**
 > O NestJS mantém o arquivo `query_engine-windows.dll.node` bloqueado enquanto
