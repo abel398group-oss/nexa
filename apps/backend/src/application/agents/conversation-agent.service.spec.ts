@@ -67,6 +67,7 @@ const mockNotifications = { create: vi.fn() };
 const mockTmsLookup     = { batchLookup: vi.fn() };
 const mockHandoff       = { consume: vi.fn() };
 const mockOpportunities = { createFromLead: vi.fn() };
+const mockWaha          = { sendText: vi.fn() };
 
 function makeService() {
   return new ConversationAgentService(
@@ -82,6 +83,7 @@ function makeService() {
     mockTmsLookup as any,
     mockHandoff as any,
     mockOpportunities as any,
+    mockWaha as any,
   );
 }
 
@@ -111,6 +113,7 @@ beforeEach(() => {
   mockHandoff.consume.mockResolvedValue(null);
   mockSellers.handoff.mockResolvedValue({ assigned: false });
   mockOpportunities.createFromLead.mockResolvedValue(undefined);
+  mockWaha.sendText.mockResolvedValue(undefined);
 
   mockSupervisor.review.mockResolvedValue(okVerdict);
   mockSales.sell.mockResolvedValue({

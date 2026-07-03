@@ -7,9 +7,13 @@ const KEYS = [
   'DATABASE_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
+  'PORTAL_JWT_SECRET',
   'ANTHROPIC_API_KEY',
   'WAHA_WEBHOOK_TOKEN',
   'CORS_ORIGINS',
+  'TMS_SERVICE_TOKEN',
+  'NEXA_DEFAULT_TENANT_ID',
+  'REDIS_URL',
 ];
 
 const STRONG_A = 'A1b2C3d4'.repeat(5); // 40 chars
@@ -20,10 +24,13 @@ function setValidProd() {
   process.env.DATABASE_URL = 'postgresql://nexa:S3nh4Forte@db:5432/nexa';
   process.env.JWT_SECRET = STRONG_A;
   process.env.JWT_REFRESH_SECRET = STRONG_B;
-  process.env.PORTAL_JWT_SECRET = 'P0rtalSecret9'.repeat(4); // 52 chars, forte e diferente
+  process.env.PORTAL_JWT_SECRET = 'P0rtalSecret9'.repeat(4); // 52 chars
   process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-realvalue1234567890abcdef';
   process.env.WAHA_WEBHOOK_TOKEN = 'whk_realtoken1234567890abcdef';
   process.env.CORS_ORIGINS = 'https://app.hipertms.com.br';
+  process.env.TMS_SERVICE_TOKEN = 'tms_svc_token_prod_1234567890abcdef';
+  process.env.NEXA_DEFAULT_TENANT_ID = 'tenant-prod-uuid-1234';
+  process.env.REDIS_URL = 'redis://redis:6379';
 }
 
 describe('validateEnv', () => {
