@@ -75,19 +75,25 @@ New migrations must always be **additive**. If a column or table needs to be
 removed, write a dedicated migration and get approval before running it in
 production.
 
-## Database rule — local only in development
+## Database rule — Abel uses the production DB locally (ALWAYS)
 
-**Never** point `DATABASE_URL`, `TMS_DB_URL`, `MIRROR_*`, `IMPORT_*` or any
-connection variable to the DigitalOcean database in local `.env` files.
+**Abel's `apps/backend/.env` points directly to the DigitalOcean managed database.**
+This is intentional and permanent — do not suggest changing it, do not replace it
+with a local URL, do not suggest `pnpm db:up` to solve database issues.
 
-In development, all DB connections must target local Docker containers:
+- `DATABASE_URL` in `apps/backend/.env` → always the DO managed Postgres URL
+- Never suggest "use local DB" or "run pnpm db:up" to fix database connection issues
+- Migrations run against the real DO database — always use `prisma migrate deploy`,
+  never `migrate dev` or `migrate reset`
 
-- **Nexa** → `postgresql://nexa:nexa_local_dev@127.0.0.1:5433/nexa`
-- **TMS / HiperTMS** → `postgresql://postgres:postgres@localhost:15432/hipervias`
+**What DOES need to run locally (Docker):**
+- **Redis** — runs locally on port 6388. Start with: `docker compose up -d redis`
+  (or `pnpm db:up` which also starts WAHA and Postgres — Postgres container is
+  unused but harmless)
+- **WAHA** — local WhatsApp testing only. Not required for most dev tasks.
 
-The DigitalOcean DB is production/staging only — changes there affect real
-customer data. If a `.env` with a DigitalOcean URL is received, replace it
-with the local address before running any command.
+**The only rule that still applies:** never run destructive migrations (`reset`,
+`db push`, `drop`) against the DO database. `migrate deploy` only.
 
 ## Ambientes de execução
 
