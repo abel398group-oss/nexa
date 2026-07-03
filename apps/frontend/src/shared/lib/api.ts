@@ -10,11 +10,18 @@ export const api = axios.create({
 
 // Injeta o cliente ativo (platform admin) em cada request. O backend SO honra este
 // header quando o usuario e admin da plataforma (User.tenantId === null).
+// Tambem injeta X-Acting-Override quando o config foi marcado como break-glass (_override),
+// pois o mergeConfig do Axios cria nova instancia de AxiosHeaders no retry e perderia o header
+// setado diretamente no objeto original antes do retry.
 api.interceptors.request.use((config) => {
   const acting = getActingTenantId();
   if (acting) {
     config.headers = config.headers ?? {};
     (config.headers as any)['X-Acting-Tenant-Id'] = acting;
+  }
+  if ((config as any)._override) {
+    config.headers = config.headers ?? {};
+    (config.headers as any)['X-Acting-Override'] = 'true';
   }
   return config;
 });
@@ -55,23 +62,29 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Quebra de vidro: acao irreversivel bloqueada em modo cliente. Confirma e repete
-    // a MESMA requisicao com o header de override.
-    if (
-      status === 403 &&
-      error.response?.data?.code === 'acting_destructive_blocked' &&
-      original &&
-      !original._override
-    ) {
+    // Quebra de vidro: acao irreversivel bloqueada em modo cliente.
+    // Primeira ocorrencia: abre modal de confirmacao e repete com _override=true.
+    // O interceptor de REQUEST injeta X-Acting-Override quando config._override=true,
+    // pois o mergeConfig do Axios perderia o header setado diretamente no objeto original.
+    const isDestructiveBlocked =
+      status === 403 && error.response?.data?.code === 'acting_destructive_blocked';
+
+    if (isDestructiveBlocked && original && !original._override) {
       const msg =
         error.response?.data?.message ||
         'Esta acao e irreversivel e voce esta operando como cliente. Confirmar?';
       const ok = await confirmDestructive(msg);
       if (ok) {
         original._override = true;
-        original.headers = original.headers ?? {};
-        original.headers['X-Acting-Override'] = 'true';
         return api(original);
+      }
+      return Promise.reject(error);
+    }
+
+    // Retry com override ainda bloqueado -- troca o code para o caller exibir toast de erro.
+    if (isDestructiveBlocked && original && original._override) {
+      if (error.response) {
+        error.response.data = { ...error.response.data, code: 'acting_override_failed' };
       }
       return Promise.reject(error);
     }
