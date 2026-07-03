@@ -202,14 +202,15 @@ export class ConversationsGateway
   // (WebChatService escuta 'web_chat.inbound' em AgentsModule — sem circular dep).
   @SubscribeMessage('web_chat:send')
   async onWebChatSend(
-    @MessageBody() data: { message: string },
+    // Contrato ADR 027: o widget TMS envia { body }; aceita { message } por compat.
+    @MessageBody() data: { message?: string; body?: string; category?: string },
     @ConnectedSocket() socket: Socket,
   ) {
     const d = socket.data as Partial<WebChatSocketData>;
     if (!d?.tenantId || !d.conversationId) {
       return { error: 'Sessão inválida. Recarregue a página.' };
     }
-    const text = data?.message?.trim();
+    const text = (data?.message ?? data?.body)?.trim();
     if (!text) return { error: 'Mensagem vazia.' };
 
     // Persiste mensagem inbound (o evento message.created chegará de volta via @OnEvent)
@@ -261,7 +262,24 @@ export class ConversationsGateway
   // ── Evento interno: nova mensagem criada → empurra para a sala ───────────────
   @OnEvent('message.created')
   handleMessageCreated(payload: { conversationId: string; message: unknown }) {
-    this.server.to(`conv:${payload.conversationId}`).emit('message', payload.message);
+    const room = `conv:${payload.conversationId}`;
+    this.server.to(room).emit('message', payload.message);
+    // Contrato ADR 027 do widget TMS: evento 'web_chat:message' { id, body, isAgent, createdAt }.
+    const m = payload.message as {
+      id?: string;
+      content?: string;
+      direction?: string;
+      createdAt?: Date | string;
+    } | null;
+    // Só outbound (resposta da Lia/operador): o widget já ecoa a própria mensagem localmente.
+    if (m?.id && m.content != null && m.direction === 'outbound') {
+      this.server.to(room).emit('web_chat:message', {
+        id: m.id,
+        body: m.content,
+        isAgent: true,
+        createdAt: m.createdAt ?? new Date().toISOString(),
+      });
+    }
   }
 
   // ── Evento interno: conversa teve atividade → atualiza lista do inbox ─────────
