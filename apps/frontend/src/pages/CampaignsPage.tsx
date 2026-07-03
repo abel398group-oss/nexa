@@ -799,7 +799,7 @@ export function CampaignsPage() {
   return (
     <StandardListPage
       title="Disparo de Leads"
-      breadcrumb={[{ label: 'Início', to: '/dashboard' }, { label: 'Disparo' }]}
+      breadcrumb={[{ label: 'Início', path: '/dashboard' }, { label: 'Disparo' }]}
       isLoading={loading && items.length === 0}
       hasData={items.length > 0}
       entityName="campanha(s)"
