@@ -7,8 +7,6 @@
  *   - Criar/editar via modal (POST / PATCH /:id)
  *   - Mover estágio inline (PATCH /:id/stage)
  *   - Excluir com confirmação (DELETE /:id)
- *
- * Segue o padrão canônico de listas do Nexa (ContactsPage / CampaignsPage).
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,11 +14,11 @@ import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import {
-  Button, Card, Input, Select, Modal, Label, Textarea,
-  PageContainer, PageHeader, Breadcrumb, Icon,
-  SkeletonList, EmptyState, ErrorState, Pagination, KpiCard,
+  Button, Input, Select, Modal, Label, Textarea, Icon, KpiCard,
 } from '@/shared/ui';
 import { displayPhone } from '@/shared/lib/phone';
+import { StandardListPage } from '@/components/shared/StandardListPage';
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -47,12 +45,12 @@ interface OppSummaryRow { stage: OppStage; count: number; value: number }
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
 
-const STAGES: { key: OppStage; label: string; badgeCls: string }[] = [
-  { key: 'new',       label: 'Novo',        badgeCls: 'bg-base-200 text-base-content/70' },
-  { key: 'qualified', label: 'Qualificado', badgeCls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
-  { key: 'proposal',  label: 'Proposta',    badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
-  { key: 'won',       label: 'Ganho',       badgeCls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
-  { key: 'lost',      label: 'Perdido',     badgeCls: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' },
+const STAGES: { key: OppStage; label: string }[] = [
+  { key: 'new',       label: 'Novo'        },
+  { key: 'qualified', label: 'Qualificado' },
+  { key: 'proposal',  label: 'Proposta'    },
+  { key: 'won',       label: 'Ganho'       },
+  { key: 'lost',      label: 'Perdido'     },
 ];
 
 const PAGE = 30;
@@ -82,11 +80,10 @@ async function listOpportunities(params: { search?: string; stage?: string; limi
 
 async function getOpportunitiesSummary() {
   const r = await api.get('/opportunities/summary');
-  // Backend: [{ stage, count, value }] — mapeado pelo service antes de retornar
   return r.data as OppSummaryRow[];
 }
 
-// ── Form (create / edit) ───────────────────────────────────────────────────────
+// ── Form ───────────────────────────────────────────────────────────────────────
 
 interface OppForm {
   name: string; company: string; phone: string;
@@ -110,6 +107,90 @@ function formFromOpp(o: Opportunity): OppForm {
     summary: o.summary ?? '',
     assignedTo: o.assignedTo ?? '',
   };
+}
+
+// ── Colunas da tabela ─────────────────────────────────────────────────────────
+
+function buildColumns(
+  moveStage: (id: string, stage: OppStage) => void,
+  openEdit: (o: Opportunity) => void,
+): DataTableColumn<Opportunity>[] {
+  return [
+    {
+      id: 'name',
+      header: 'Oportunidade',
+      mobileTitle: true,
+      cell: (o) => (
+        <div>
+          <div className="font-medium text-base-content">{o.name || '—'}</div>
+          {o.company && <div className="text-xs text-base-content/50">{o.company}</div>}
+          {o.intent && (
+            <div className="truncate max-w-[180px] text-xs text-base-content/40" title={o.intent}>
+              {o.intent}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'phone',
+      header: 'Contato',
+      mobileHidden: true,
+      cell: (o) => <span className="text-base-content/70">{o.phone ? displayPhone(o.phone) : '—'}</span>,
+    },
+    {
+      id: 'stage',
+      header: 'Estágio',
+      cell: (o) => (
+        <Select
+          value={o.stage}
+          onChange={(e) => moveStage(o.id, e.target.value as OppStage)}
+          className="!h-7 !py-0 text-xs !w-auto"
+          title="Mover estágio"
+        >
+          {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </Select>
+      ),
+    },
+    {
+      id: 'score',
+      header: 'Score',
+      align: 'right',
+      mobileHidden: true,
+      cell: (o) =>
+        o.interestScore != null ? (
+          <span
+            className={`text-sm font-medium ${
+              o.interestScore >= 70 ? 'text-emerald-600' :
+              o.interestScore >= 40 ? 'text-amber-600' : 'text-base-content/50'
+            }`}
+          >
+            {o.interestScore}
+          </span>
+        ) : (
+          <span className="text-base-content/30">—</span>
+        ),
+    },
+    {
+      id: 'value',
+      header: 'Valor',
+      align: 'right',
+      mobileHidden: true,
+      cell: (o) => <span className="font-mono text-sm text-base-content/80">{fmtBrl(o.value)}</span>,
+    },
+    {
+      id: 'assignedTo',
+      header: 'Responsável',
+      mobileHidden: true,
+      cell: (o) => <span className="text-xs text-base-content/60">{o.assignedTo || '—'}</span>,
+    },
+    {
+      id: 'updatedAt',
+      header: 'Atualizado',
+      mobileHidden: true,
+      cell: (o) => <span className="text-xs text-base-content/40">{fmtDate(o.updatedAt)}</span>,
+    },
+  ];
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
@@ -185,12 +266,12 @@ export function OpportunitiesPage() {
 
   async function submitForm() {
     if (formBusy) return;
-    const payload: Record<string, any> = {};
-    if (form.name.trim())          payload.name = form.name.trim();
-    if (form.company.trim())       payload.company = form.company.trim();
-    if (form.phone.trim())         payload.phone = form.phone.trim();
-    if (form.assignedTo.trim())    payload.assignedTo = form.assignedTo.trim();
-    if (form.summary.trim())       payload.summary = form.summary.trim();
+    const payload: Record<string, unknown> = {};
+    if (form.name.trim())         payload.name = form.name.trim();
+    if (form.company.trim())      payload.company = form.company.trim();
+    if (form.phone.trim())        payload.phone = form.phone.trim();
+    if (form.assignedTo.trim())   payload.assignedTo = form.assignedTo.trim();
+    if (form.summary.trim())      payload.summary = form.summary.trim();
     if (form.value.trim()) {
       const v = parseFloat(form.value.replace(',', '.'));
       if (!isNaN(v)) payload.value = v;
@@ -243,7 +324,7 @@ export function OpportunitiesPage() {
     }
   }
 
-  // ── Resumo ──
+  // ── Dados ──
 
   const summary = summaryQ.data ?? [];
   const summaryByStage = Object.fromEntries(
@@ -252,175 +333,82 @@ export function OpportunitiesPage() {
   const totalValue = summary.reduce((acc, r) => acc + (r.value ?? 0), 0);
   const totalCount = summary.reduce((acc, r) => acc + (r.count ?? 0), 0);
 
-  // ── Lista ──
-
   const items = listQ.data?.items ?? [];
   const total = listQ.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE));
 
+  const columns = buildColumns(moveStage, openEdit);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <PageContainer>
-      <PageHeader
+    <>
+      <StandardListPage
         title="Oportunidades"
-        breadcrumb={<Breadcrumb items={[{ label: 'Vendas' }, { label: 'Oportunidades' }]} />}
-        actions={
+        breadcrumb={[{ label: 'Vendas' }, { label: 'Oportunidades' }]}
+        isLoading={listQ.isLoading && !listQ.isPlaceholderData}
+        hasData={items.length > 0}
+        error={listQ.error}
+        totalItems={total}
+        entityName="oportunidades"
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar por nome, empresa ou telefone…"
+        filtersContent={
+          <Select
+            value={stageFilter}
+            onChange={(e) => { setStageFilter(e.target.value); setPage(1); }}
+            className="w-44"
+          >
+            <option value="">Todos os estágios</option>
+            {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </Select>
+        }
+        headerActions={
           <Button onClick={openCreate}>
             <Icon name="plus" className="h-4 w-4" /> Nova oportunidade
           </Button>
         }
-      />
-
-      {/* ── Resumo do funil ────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <KpiCard
-          label="Total"
-          value={String(totalCount)}
-          sub={fmtBrl(totalValue)}
-          tone="muted"
-        />
-        {STAGES.map((s) => {
-          const row = summaryByStage[s.key];
-          return (
-            <KpiCard
-              key={s.key}
-              label={s.label}
-              value={String(row?.count ?? 0)}
-              sub={fmtBrl(row?.value)}
-              tone={s.key === 'won' ? 'pos' : s.key === 'lost' ? 'neg' : 'muted'}
-            />
-          );
-        })}
-      </div>
-
-      {/* ── Filtros ────────────────────────────────────────────────────────── */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Buscar por nome, empresa ou telefone…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
-        <Select
-          value={stageFilter}
-          onChange={(e) => { setStageFilter(e.target.value); setPage(1); }}
-          className="w-44"
-        >
-          <option value="">Todos os estágios</option>
-          {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </Select>
-      </div>
-
-      {/* ── Lista ──────────────────────────────────────────────────────────── */}
-      {listQ.isLoading && <SkeletonList rows={6} />}
-      {listQ.isError && <ErrorState title="Erro ao carregar oportunidades." />}
-
-      {!listQ.isLoading && !listQ.isError && items.length === 0 && (
-        <EmptyState
-          icon={<Icon name="dollar" className="h-9 w-9" />}
-          title="Nenhuma oportunidade"
-          description="Crie a primeira oportunidade ou aguarde que a Lia detecte um lead quente."
-          action={<Button onClick={openCreate}><Icon name="plus" className="h-4 w-4" /> Nova</Button>}
-        />
-      )}
-
-      {!listQ.isLoading && items.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-base-200 bg-base-100 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-                  <th className="px-4 py-3 text-left">Oportunidade</th>
-                  <th className="px-4 py-3 text-left hidden sm:table-cell">Contato</th>
-                  <th className="px-4 py-3 text-left">Estágio</th>
-                  <th className="px-4 py-3 text-right hidden md:table-cell">Score</th>
-                  <th className="px-4 py-3 text-right hidden md:table-cell">Valor</th>
-                  <th className="px-4 py-3 text-left hidden lg:table-cell">Responsável</th>
-                  <th className="px-4 py-3 text-left hidden lg:table-cell">Atualizado</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((o) => (
-                  <tr key={o.id} className="border-b border-base-200 hover:bg-base-100/60 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-base-content">{o.name || '—'}</div>
-                      {o.company && <div className="text-xs text-base-content/50">{o.company}</div>}
-                      {o.intent && (
-                        <div className="text-xs text-base-content/40 truncate max-w-[180px]" title={o.intent}>
-                          {o.intent}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell text-base-content/70">
-                      {o.phone ? displayPhone(o.phone) : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {/* Mover estágio inline via Select */}
-                      <Select
-                        value={o.stage}
-                        onChange={(e) => moveStage(o.id, e.target.value as OppStage)}
-                        className="!h-7 !py-0 text-xs !w-auto"
-                        title="Mover estágio"
-                      >
-                        {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                      </Select>
-                    </td>
-                    <td className="px-4 py-3 text-right hidden md:table-cell">
-                      {o.interestScore != null ? (
-                        <span
-                          className={`text-sm font-medium ${
-                            o.interestScore >= 70 ? 'text-emerald-600' :
-                            o.interestScore >= 40 ? 'text-amber-600' : 'text-base-content/50'
-                          }`}
-                        >
-                          {o.interestScore}
-                        </span>
-                      ) : <span className="text-base-content/30">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right hidden md:table-cell font-mono text-sm text-base-content/80">
-                      {fmtBrl(o.value)}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-base-content/60 text-xs">
-                      {o.assignedTo || '—'}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-base-content/40 text-xs">
-                      {fmtDate(o.updatedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEdit(o)}
-                          className="rounded p-1.5 text-base-content/40 hover:bg-base-200 hover:text-base-content"
-                          title="Editar"
-                        >
-                          <Icon name="edit" className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(o.id, o.name)}
-                          className="rounded p-1.5 text-base-content/40 hover:bg-red-50 hover:text-red-600"
-                          title="Excluir"
-                        >
-                          <Icon name="trash" className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        topContent={
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <KpiCard label="Total" value={String(totalCount)} sub={fmtBrl(totalValue)} tone="muted" />
+            {STAGES.map((s) => {
+              const row = summaryByStage[s.key];
+              return (
+                <KpiCard
+                  key={s.key}
+                  label={s.label}
+                  value={String(row?.count ?? 0)}
+                  sub={fmtBrl(row?.value)}
+                  tone={s.key === 'won' ? 'pos' : s.key === 'lost' ? 'neg' : 'muted'}
+                />
+              );
+            })}
           </div>
-        </Card>
-      )}
+        }
+        pagination={{ page, pageCount, onPageChange: setPage }}
+      >
+        <DataTable
+          columns={columns}
+          rows={items}
+          getRowId={(o) => o.id}
+          rowActions={(o) => [
+            { label: 'Editar', onClick: () => openEdit(o) },
+            { label: 'Excluir', onClick: () => handleDelete(o.id, o.name), destructive: true },
+          ]}
+          empty={{
+            title: 'Nenhuma oportunidade',
+            description: 'Crie a primeira oportunidade ou aguarde que a Lia detecte um lead quente.',
+            action: (
+              <Button onClick={openCreate}>
+                <Icon name="plus" className="h-4 w-4" /> Nova
+              </Button>
+            ),
+          }}
+        />
+      </StandardListPage>
 
-      {pageCount > 1 && (
-        <div className="mt-4 flex justify-center">
-          <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-        </div>
-      )}
-
-      {/* ── Modal criar / editar ──────────────────────────────────────────── */}
+      {/* Modal criar / editar */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -474,6 +462,6 @@ export function OpportunitiesPage() {
           </div>
         </div>
       </Modal>
-    </PageContainer>
+    </>
   );
 }
