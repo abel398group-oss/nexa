@@ -86,7 +86,7 @@ export function ConversationTimeline({ conversationId }: Props) {
 
             {/* dot */}
             <div
-              className="relative z-10 mt-1 h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 border-white"
+              className="relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-white"
               style={{ background: toStatus.dot, boxShadow: '0 0 0 2px var(--border)' }}
             />
 

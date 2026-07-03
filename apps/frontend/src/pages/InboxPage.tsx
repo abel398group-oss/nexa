@@ -713,7 +713,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {/* botão timeline */}
                 <button
                   onClick={() => setShowTimeline(!showTimeline)}
@@ -847,7 +847,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
               {/* painel timeline */}
               {showTimeline && (
-                <div className="w-64 flex-shrink-0 border-l bg-[var(--surface)] overflow-y-auto p-4" style={{ borderColor: 'var(--border)' }}>
+                <div className="w-64 shrink-0 border-l bg-[var(--surface)] overflow-y-auto p-4" style={{ borderColor: 'var(--border)' }}>
                   <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
                     Histórico de Status
                   </div>

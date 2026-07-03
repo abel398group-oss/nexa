@@ -1,6 +1,79 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Dark mode: .dark class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =====================================================================
+   DESIGN TOKENS — Tailwind v4 @theme
+   Mirrors tailwind.config.js — generates bg-brand-*, text-base-content,
+   shadow-card, rounded-3xl, font-sans, ease-entrance, etc.
+   ===================================================================== */
+@theme {
+  /* ─── Sidebar colors ─────────────────────────────────────────────── */
+  --color-sidebar:             #16181d;
+  --color-sidebar-subtle:      #0e0f13;
+  --color-sidebar-hover:       rgba(255, 255, 255, 0.07);
+  --color-sidebar-active:      rgba(255, 255, 255, 0.13);
+  --color-sidebar-border:      rgba(255, 255, 255, 0.09);
+  --color-sidebar-text:        rgba(255, 255, 255, 0.56);
+  --color-sidebar-text-hover:  rgba(255, 255, 255, 0.93);
+  --color-sidebar-text-active: #f4f4f8;
+  --color-sidebar-accent:      #ff7a47;
+
+  /* ─── Brand — Laranja Ignição ────────────────────────────────────── */
+  --color-brand-50:  #fff3ed;
+  --color-brand-100: #ffe2d1;
+  --color-brand-200: #ffd0b3;
+  --color-brand-300: #ffb089;
+  --color-brand-400: #ff8a5c;
+  --color-brand-500: #ff5a1f;
+  --color-brand-600: #ed4708;
+  --color-brand-700: #c23a0a;
+  --color-brand-800: #9a2e08;
+  --color-brand-900: #7a2406;
+
+  /* ─── Base — superfícies e conteúdo ──────────────────────────────── */
+  --color-base-100:     #fafaf9;
+  --color-base-200:     #f2f2f0;
+  --color-base-300:     #e6e6e3;
+  --color-base-content: #16181d;
+
+  /* ─── Navy — secundário (gráficos + gradiente assinatura) ────────── */
+  --color-navy:     #1e3a5f;
+  --color-navy-700: #16304d;
+
+  /* ─── Zinc (aliases de compatibilidade) ──────────────────────────── */
+  --color-zinc-50:  #f4f4f5;
+  --color-zinc-100: #e4e4e7;
+  --color-zinc-200: #d4d4d8;
+  --color-zinc-300: #a1a1aa;
+  --color-zinc-400: #71717a;
+  --color-zinc-500: #52525b;
+  --color-zinc-600: #3f3f46;
+  --color-zinc-700: #27272a;
+  --color-zinc-800: #18181b;
+  --color-zinc-900: #09090b;
+
+  /* ─── Typography ─────────────────────────────────────────────────── */
+  --font-sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* ─── Shadows ────────────────────────────────────────────────────── */
+  --shadow-card:         0 2px 8px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-card-hover:   0 10px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+  --shadow-elevated:     0 10px 40px -10px rgb(0 0 0 / 0.15), 0 4px 12px -4px rgb(0 0 0 / 0.08);
+  --shadow-inner-soft:   inset 0 2px 4px 0 rgb(0 0 0 / 0.04);
+  --shadow-up:           0 -2px 10px rgb(0 0 0 / 0.06);
+  --shadow-glow-brand:   0 0 26px -4px rgb(255 90 31 / 0.30);
+  --shadow-glow-danger:  0 0 20px -4px rgb(220 38 38 / 0.30);
+  --shadow-glow-success: 0 0 20px -4px rgb(22 163 74 / 0.30);
+
+  /* ─── Border radius ──────────────────────────────────────────────── */
+  --radius-3xl: 1.875rem;
+
+  /* ─── Easing ─────────────────────────────────────────────────────── */
+  --ease-entrance: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-layout:   cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 /* =====================================================================
    DESIGN TOKENS — Nexa

@@ -27,7 +27,7 @@ for it; when touching a service, check that its lifecycle hooks are correct.
 pnpm monorepo:
 
 - `apps/backend` — backend: **NestJS + Prisma + PostgreSQL 16 (pgvector) + Redis**
-- `apps/frontend` — frontend: **React 18 + Vite 5 + TypeScript + Tailwind 3**
+- `apps/frontend` — frontend: **React 18 + Vite 5 + TypeScript + Tailwind 4**
 - `packages/shared` · `packages/types` · `packages/sdk` — shared utils, types, API client
 
 ## Production environment (droplet hiperTMS)
@@ -257,7 +257,7 @@ writes are audited and irreversible actions need an `x-acting-override`
 
 React 18 + Vite. `axios` (`lib/api.ts`) for HTTP, `socket.io-client` for the
 real-time inbox, `react-router-dom` 6 for routing (public landing + protected
-area), Tailwind 3. Proprietary **design system** in `components/ui/` (~30
+area), Tailwind 4. Proprietary **design system** in `components/ui/` (~30
 components, dark mode via `html.dark` — ADR 002 / ADR 014) documented in
 **Storybook** (`pnpm storybook`, `.storybook/`). `pages/` (one per route),
 `components/conversation/` (inbox/support composites), `contexts/` (Auth, Toast,
