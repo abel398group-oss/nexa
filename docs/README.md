@@ -111,6 +111,18 @@ Guias operacionais para quem usa o painel:
 - [Diagrama C4](architecture/c4-context.md)
 - [ERD — Banco de Dados](architecture/erd.md) — diagrama de entidades e relacionamentos
 
+## Frontend — Evolução e Replicação TMS
+
+Análise estrutural completa do frontend HiperTMS com guias de implementação no Nexa:
+
+- [Replicação TMS → Nexa](frontend/tms-nexa-replication.md) — gaps, prioridades, código pronto para `StandardListPage`, `DataTable`, `StandardFormPage`, Tailwind 4, sonner
+  - **Fase A** — PageContainer + Breadcrumbs + StandardListPage
+  - **Fase B** — DataTable genérico com mobile cards automáticos
+  - **Fase C** — StandardFormPage + FormSection / FormGroup / FormField
+  - **Fase D** — migração em massa de todas as listagens
+  - **Fase E** — Tailwind 4 (branch separado)
+  - **Fase F** — sonner e CASL (quando necessário)
+
 ## API e Integrações
 
 - [Padrões de API](api/api-standards.md)
