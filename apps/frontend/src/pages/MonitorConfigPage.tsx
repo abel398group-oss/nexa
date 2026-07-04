@@ -356,20 +356,8 @@ export function MonitorConfigPage() {
               </label>
             </div>
 
-            <div className="flex flex-wrap items-center gap-6 px-6 py-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={cfg.sendWeekends}
-                  onChange={(e) => set('sendWeekends', e.target.checked)}
-                />
-                <span className="text-sm text-base-content">Enviar alertas nos fins de semana</span>
-                <span className="text-xs text-base-content/40">
-                  (padrão para setores sem dias próprios — os "Dias de envio" de cada setor têm prioridade)
-                </span>
-              </label>
-            </div>
+            {/* sendWeekends saiu da UI: substituído pelos "Dias de envio" por setor.
+                O campo permanece no backend apenas como fallback de configs antigas. */}
           </div>
 
           {/* ─── Grid de setores ─────────────────────────────────────────── */}
