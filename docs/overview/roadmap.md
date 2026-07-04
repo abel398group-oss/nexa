@@ -1,6 +1,6 @@
-# Roadmap — Hipervias Leads
+# Roadmap — Nexa
 
-**Última atualização:** 2026-06
+**Última atualização:** 2026-07
 
 ---
 
@@ -20,56 +20,67 @@
 
 ---
 
-## Fase 1 — Hardening para produção ⏳ (antes do Digital Ocean)
+## Fase 1 — Hardening para produção ✅ (concluído)
 
-- [ ] API keys → variáveis de ambiente (revogar key Anthropic exposta)
-- [ ] Senha do WAHA → variável de ambiente
-- [ ] HTTPS no webhook (domínio + SSL)
-- [ ] Autenticação no painel n8n
-- [ ] Firewall (bloquear portas internas)
-- [ ] Backup automático do PostgreSQL
-- [ ] Agendar Follow-up (10h) e Supervisor (22h) via UI do n8n
-- [ ] Delay outbound para 30-90s
-- [ ] Atualizar n8n (1.123 → 2.x) com planejamento
+- [x] API keys → variáveis de ambiente
+- [x] Senha do WAHA → variável de ambiente
+- [x] HTTPS no webhook (domínio + SSL)
+- [x] Firewall (bloquear portas internas)
+- [x] Backup automático do PostgreSQL (banco gerenciado DO)
+- [x] Delay outbound configurável
 
 ---
 
-## Fase 2 — Backend + API (base do frontend)
+## Fase 2 — Backend + API ✅ (concluído)
 
-- [ ] API REST (NestJS + Prisma) sobre o PostgreSQL existente
-- [ ] Autenticação (JWT cookie HttpOnly)
-- [ ] Endpoints: contatos, conversas, campanhas, oportunidades, dashboard
-- [ ] Eventos em tempo real (mensagens novas)
-
----
-
-## Fase 3 — Frontend MVP (padrão TMS)
-
-- [ ] Login / Auth
-- [ ] Dashboard (queries já prontas → cards/gráficos)
-- [ ] Importar contatos (CSV/Excel)
-- [ ] Lista de contatos / CRM
-- [ ] Campanhas (criar + acompanhar)
-- [ ] Saúde dos números
-- [ ] Inbox de conversas (estilo WhatsApp Web)
+- [x] API REST (NestJS + Prisma) sobre PostgreSQL gerenciado DO
+- [x] Autenticação JWT cookie HttpOnly
+- [x] Endpoints: contatos, conversas, campanhas, oportunidades, dashboard
+- [x] Eventos em tempo real via WebSocket (Socket.io)
+- [x] Multi-tenant com EffectiveTenantInterceptor
+- [x] RBAC + platform-admin guard (ADR 005/025)
 
 ---
 
-## Fase 4 — Suporte TMS (atendimento de clientes)
+## Fase 3 — Frontend MVP ✅ (concluído)
 
-- [ ] Workflow de suporte (IA com base de conhecimento técnica do TMS)
-- [ ] Ler documentação do HiperTMS → popular base de conhecimento
-- [ ] Escalação em níveis (normal / humano / crítico)
-- [ ] Integração com Chatwoot (handoff humano)
+- [x] Login / Auth
+- [x] Dashboard (métricas + gráficos)
+- [x] Importar contatos (CSV/Excel)
+- [x] Lista de contatos / CRM
+- [x] Campanhas (criar + acompanhar)
+- [x] Saúde dos números (NumberHealth + polling 10s)
+- [x] Inbox de conversas (estilo WhatsApp Web, socket real-time)
+- [x] Design system próprio (~30 componentes, dark mode — ADR 002/014)
 
 ---
 
-## Fase 5 — Escala
+## Fase 4 — Produção + Suporte TMS ✅ (no ar)
 
-- [ ] Pool de múltiplos números WhatsApp
-- [ ] Aquecimento automático por fase
+- [x] Deploy DigitalOcean (Docker Compose, CI/CD GitHub Actions)
+- [x] Canal de e-mail (SMTP/IMAP — ADR 021)
+- [x] Suporte TMS via IA (agentes diagnostic/resolution/escalation)
+- [x] Base de conhecimento de suporte (ADR 018)
+- [x] Playbooks de diagnóstico (ADR 017)
+- [x] Escalação em níveis (ADR 015/016)
+- [x] Portal do cliente (sessão + chamados — ADR 026)
+- [x] Web chat embutido no TMS (ADR 027)
+- [x] Pipeline de vendas / oportunidades
+- [x] Conector HiperTMS (enriquecimento de contato — ADR 020)
+- [x] Proactive engine (SLA, follow-up, alertas antecipados)
+
+---
+
+## Fase 5 — Escala (backlog)
+
+- [ ] Testes de frontend (Vitest + Playwright)
+- [ ] Rotacionar segredos expostos (ANTHROPIC_API_KEY)
+- [ ] Fail-closed do tenant em admin.controller
+- [ ] InboxPage — paginação (socket real-time)
+- [ ] DateRange wiring — Campaigns / Opportunities / SupportDashboard
+- [ ] Lint bloqueante no CI
 - [ ] Reconhecimento de áudio (Whisper)
 - [ ] Agendamento de reuniões (Google Calendar)
 - [ ] NPS pós-venda
-- [ ] Multi-tenant (virar SaaS)
+- [ ] Multi-tenant SaaS (outros conectores além do HiperTMS)
 - [ ] Avaliar migração para API oficial da Meta

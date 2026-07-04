@@ -38,6 +38,9 @@ src/
     followup/ sellers/ sender/ email/ whatsapp/ metrics/ notifications/
     opportunities/        pipeline de vendas (estágios new→qualified→proposal→won/lost)
     portal/               sessão + chamados do cliente (Portal de Suporte)
+    monitor/              monitor de saúde do WAHA + alertas proativos
+    proactive-engine/     engine de SLA, follow-up e alertas antecipados
+    webhooks/             recepção e roteamento de webhooks externos
     auth/ users/ admin/
   presentation/
     http/<feature>/       controllers + DTOs (boundary HTTP, prefixo /api)
@@ -55,6 +58,7 @@ src/
     config/               validate-env (aborta boot em produção com segredo inseguro)
     audit/ middleware/    auditoria + correlationId
     dto/                  pagination.dto
+    email-crypto/         criptografia de credenciais SMTP/IMAP em repouso
     waha/ decorators/ utils/
 ```
 
@@ -75,7 +79,8 @@ src/
     ui/         design system próprio (~30 componentes) + stories (Storybook)
     conversation/  compostos do inbox/suporte (timeline, badges, métricas)
     Layout, HelpDrawer, GuidedTour
-  contexts/     Auth, Toast, Confirm, DateRange
+  app/
+    providers/  Auth, Toast, Confirm, DateRange, Tenant (contexts React)
   lib/          api.ts (axios) + helpers (conversation-status, ticket-category)
 .storybook/     configuração do Storybook (catálogo visual de UI)
 ```
