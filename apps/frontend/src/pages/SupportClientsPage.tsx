@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { displayPhone } from '@/shared/lib/phone';
@@ -17,17 +17,21 @@ interface Client {
 }
 
 function fmt(ts: number): string {
-  if (!ts) return '—';
+  if (!ts) return '--';
   return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+const PAGE_SIZE = 20;
+
 /**
- * Clientes (sob Suporte) — lista de quem tem chamado de atendimento, agrupado por
- * contato. Leitura apenas; reaproveita GET /conversations e o helper isSupportTicket
- * (mesma regra do Inbox de Suporte).
+ * Clients (support) -- list of contacts that opened support tickets, grouped by
+ * contact. Read-only; reuses GET /conversations and isSupportTicket helper.
  */
 export function SupportClientsPage() {
-  const { data: convs = [], isLoading } = useQuery({
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  const { data: convs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['conversations'],
     queryFn: () => listConversations().then((r) => r.items),
   });
@@ -51,6 +55,22 @@ export function SupportClientsPage() {
     return [...map.values()].sort((a, b) => b.lastAt - a.lastAt);
   }, [convs]);
 
+  // Client-side search by name or phone.
+  const filtered = useMemo<Client[]>(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return clients;
+    const digits = q.replace(/\D/g, '');
+    return clients.filter(
+      (c) =>
+        (c.name ?? '').toLowerCase().includes(q) ||
+        (digits.length > 0 && c.phone.replace(/\D/g, '').includes(digits)),
+    );
+  }, [clients, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   const totalOpen = clients.reduce((a, c) => a + c.open, 0);
 
   return (
@@ -60,8 +80,22 @@ export function SupportClientsPage() {
       description="Quem já abriu chamado de suporte, agrupado por contato. Abra o atendimento no Inbox de Suporte."
       isLoading={isLoading}
       hasData={clients.length > 0}
-      totalItems={clients.length}
+      error={isError ? error : undefined}
+      onRetry={() => refetch()}
+      totalItems={filtered.length}
+      totalShowing={pageItems.length}
       entityName="cliente(s)"
+      searchValue={search}
+      onSearchChange={(v) => {
+        setSearch(v);
+        setPage(1);
+      }}
+      searchPlaceholder="Buscar por nome ou telefone..."
+      pagination={
+        pageCount > 1
+          ? { page: safePage, pageCount, onPageChange: setPage }
+          : undefined
+      }
       headerActions={
         <Link
           to="/support"
@@ -85,14 +119,18 @@ export function SupportClientsPage() {
         </div>
       }
     >
-      {clients.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-16 text-base-content/40">
           <Icon name="support" className="h-9 w-9" />
-          <p className="text-sm">Nenhum cliente com chamado de suporte.</p>
+          <p className="text-sm">
+            {search.trim()
+              ? 'Nenhum cliente encontrado para essa busca.'
+              : 'Nenhum cliente com chamado de suporte.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2 p-4">
-          {clients.map((c) => (
+          {pageItems.map((c) => (
             <div key={c.key} className="flex items-center justify-between rounded-xl border border-base-200 bg-[var(--surface)] p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">

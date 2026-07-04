@@ -19,7 +19,7 @@ function UsageBar({ used, total }: { used: number; total: number }) {
 
 export function NumberHealthPage() {
   // React Query: leitura + polling (10s) sem useEffect/setInterval manual.
-  const { data: items = [], isLoading, refetch } = useQuery({
+  const { data: items = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sender-numbers'],
     queryFn: listSenderNumbers,
     refetchInterval: 10_000,
@@ -85,6 +85,16 @@ export function NumberHealthPage() {
 
       {isLoading ? (
         <p className="py-10 text-center text-sm text-base-content/40">Carregando…</p>
+      ) : isError ? (
+        <Card className="p-8 text-center">
+          <p className="text-sm font-medium text-base-content">Erro ao carregar a saúde dos números.</p>
+          {(error as Error)?.message && (
+            <p className="mt-1 text-xs text-base-content/50">{(error as Error).message}</p>
+          )}
+          <Button variant="outline" className="mt-3" onClick={() => refetch()}>
+            <Icon name="refresh" className="h-4 w-4" /> Tentar novamente
+          </Button>
+        </Card>
       ) : items.length === 0 ? (
         <Card className="p-8 text-center">
           <div className="mb-2 flex justify-center text-base-content/30"><Icon name="inbox" className="h-9 w-9" /></div>

@@ -5,6 +5,16 @@
 
 **Status:** Proposto · **Data:** 2026-06 · **Base URL:** `/api`
 
+> **⚠️ Defasagem conhecida (auditoria 2026-07-03):** este contrato cobre só o
+> núcleo inicial. O backend hoje tem ~24 controllers; ficaram FORA deste doc
+> (fonte da verdade = Swagger `/api/docs` + controllers em
+> `apps/backend/src/presentation/http/`): `portal/*` (sessão, tickets, web-chat-token),
+> `settings/email-channel`, `opportunities/*`, `sellers/*`, `agents/*`, `handoff/*`,
+> `webhook/email`, `email/optout`, `notifications/*`, `playbook/*`, `whatsapp/*`,
+> `followup/*`, `metrics/*`, `users/*`, `admin/*`, `campaigns/email` e
+> `campaigns/:id/start|pause` (o `dispatch` abaixo está obsoleto). Formalizar em
+> OpenAPI é tarefa aberta.
+
 ---
 
 ## Convenções

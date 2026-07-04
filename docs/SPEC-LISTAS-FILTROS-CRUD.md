@@ -23,9 +23,12 @@ editar/excluir/lote (ver §6).
 
 ## 2. Matriz de capacidades (estado atual)
 
-> **Atualizado em 2026-06** após auditoria do código: os gaps de Knowledge e
-> Sellers foram fechados (FE + BE); Users e Playbook ainda têm pendências; surgiu
-> o módulo **Opportunities** (pipeline de vendas, backend pronto, **sem página**).
+> **Atualizado em 2026-07-03** (auditoria completa em
+> `docs/reviews/2026-07-03-frontend-audit.md`): a página de **Opportunities foi
+> criada** (busca + filtro por stage + paginação — falta confirmação em ações
+> destrutivas); Users e Playbook seguem com pendências; novos gaps mapeados em
+> SupportClients (página crua), Inbox (sem paginação da lista) e dashboards sem
+> estado de erro.
 
 Legenda: ✅ existe · ⚠️ parcial · ❌ falta · — não se aplica
 
@@ -37,11 +40,15 @@ Legenda: ✅ existe · ⚠️ parcial · ❌ falta · — não se aplica
 | **Sellers** | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ concluído (FE + BE) |
 | **Users** | ✅ | ⚠️ | ✅ | ❌ | ✅ | ❌ | ✅ | falta **editar (UI)** e lote |
 | **Playbook** | ❌ | ❌ | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | frontend + backend (busca/delete/paginação) |
-| **Opportunities** (novo) | ✅ | ✅ (stage) | ✅ | ✅ | ✅ | ❌ | ✅ | **sem página no frontend** (backend pronto: CRUD + summary + stage) |
+| **Opportunities** | ✅ | ✅ (stage) | ✅ | ✅ | ✅ | ❌ | ✅ | página criada (2026-07) — falta lote e confirmar ações destrutivas |
+| **SupportClients** (novo gap) | ❌ | ❌ | — | — | — | — | ❌ | página crua (126 linhas): sem busca/filtro/paginação/estado de erro |
 | Conversations/Inbox | ✅ | ✅ | — | ⚠️ | — | — | ✅ | feed de conversa (§6); arquivar = `conversation-archive` |
 | Notificações | — | — | — | — | — | — | ✅ | feed (§6) |
 
-**Prioridade restante:** Users (editar UI) → Playbook → criar a página de Opportunities.
+**Prioridade restante (2026-07-03):** SupportClients (página crua) → Inbox
+(paginação da lista de conversas) → Users (editar UI + paginação) → Playbook →
+Opportunities (lote + confirmação). Detalhes e critérios em
+`docs/reviews/2026-07-03-frontend-audit.md`.
 
 ---
 

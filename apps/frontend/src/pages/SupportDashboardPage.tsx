@@ -86,7 +86,7 @@ export function SupportDashboardPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
-  const { data, isLoading, refetch } = useQuery<SupportOverview>({
+  const { data, isLoading, isError, error, refetch } = useQuery<SupportOverview>({
     queryKey: ['support-overview', from, to],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -151,6 +151,20 @@ export function SupportDashboardPage() {
 
       {isLoading ? (
         <div className="flex h-40 items-center justify-center text-base-content/40">Carregando métricas...</div>
+      ) : isError ? (
+        <div className="flex h-40 flex-col items-center justify-center gap-2 text-base-content/60">
+          <p className="text-sm font-medium">Erro ao carregar as métricas de suporte.</p>
+          {(error as Error)?.message && (
+            <p className="text-xs text-base-content/40">{(error as Error).message}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-1 inline-flex h-8 items-center rounded-md border border-base-300 bg-base-100 px-3 text-xs font-medium hover:bg-base-200"
+          >
+            Tentar novamente
+          </button>
+        </div>
       ) : !data || total === 0 ? (
         <div className="flex h-40 flex-col items-center justify-center gap-2 text-base-content/40">
           <Icon name="support" className="h-8 w-8" />

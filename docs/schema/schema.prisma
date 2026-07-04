@@ -1,7 +1,11 @@
 // ============================================================================
 // SCHEMA PRISMA — Sistema de Leads / IA Autônoma (Hipervias)
 // ============================================================================
-// ARTEFATO DE DESIGN — NÃO implementar ainda. Base para o backend NestJS futuro.
+// ARTEFATO DE DESIGN HISTÓRICO (2026-06) — JÁ IMPLEMENTADO E SUPERADO.
+// A fonte da verdade é apps/backend/prisma/schema.prisma (30+ models: User,
+// Contact, Campaign, EmailChannel, Opportunity, FollowUp, Tenant, etc. — este
+// artefato cobre só os 8 models da Fase 1 e enums antigos). Mantido apenas como
+// registro de design; NÃO usar como referência de implementação.
 // Convenções (validadas com os ADRs e o GPT):
 //   - id String @id @default(uuid()) em tudo
 //   - idempotency_key = UNIQUE (evita duplicação)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +8,8 @@ import { Button, Card, Modal, Input, Icon } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { StandardListPage } from '@/components/shared/StandardListPage';
+
+const PAGE_SIZE = 20;
 
 interface User {
   id: string; email: string; name?: string; role: string;
@@ -39,6 +41,7 @@ export function UsersPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [page, setPage] = useState(1);
   const toast = useToast();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
@@ -48,7 +51,7 @@ export function UsersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: items = [], isLoading } = useQuery({
+  const { data: items = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['users', debouncedSearch],
     queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then((r) => r.data as User[]),
   });
@@ -56,6 +59,15 @@ export function UsersPage() {
 
   const roles = [...new Set(items.map((u) => u.role))];
   const shown = items.filter((u) => u.role !== 'vendedor' && (!roleFilter || u.role === roleFilter));
+
+  // Reset page quando filtro ou busca muda.
+  useEffect(() => { setPage(1); }, [debouncedSearch, roleFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const pageItems = useMemo(
+    () => shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [shown, page],
+  );
 
   async function del(u: User) {
     const ok = await confirm({
@@ -109,8 +121,12 @@ export function UsersPage() {
         description="Administradores do sistema (acesso total). Vendedores tem login proprio criado na tela Vendedores."
         isLoading={isLoading}
         hasData={shown.length > 0}
+        error={isError ? new Error('Falha ao carregar usuarios') : undefined}
+        onRetry={() => refetch()}
         totalItems={shown.length}
+        totalShowing={pageItems.length}
         entityName="usuario(s)"
+        pagination={pageCount > 1 ? { page, pageCount, onPageChange: setPage } : undefined}
         headerActions={
           <Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo administrador</Button>
         }
@@ -141,7 +157,7 @@ export function UsersPage() {
           </div>
         ) : (
           <div className="space-y-3 p-4">
-            {shown.map((u) => (
+            {pageItems.map((u) => (
               <Card key={u.id} className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>

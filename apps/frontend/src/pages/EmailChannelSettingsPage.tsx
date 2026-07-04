@@ -8,6 +8,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/shared/lib/api';
 import { Button, Input, Checkbox, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
+import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 
 // validação do canal de e-mail (RHF + Zod). Portas como string (input number → string).
 const emailSchema = z.object({
@@ -51,6 +53,9 @@ export function EmailChannelSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [showPasses, setShowPasses] = useState(false);
+  const [hasExistingConfig, setHasExistingConfig] = useState(false);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const {
     register,
@@ -66,6 +71,7 @@ export function EmailChannelSettingsPage() {
     api.get('/settings/email-channel')
       .then((r) => {
         if (r.data) {
+          setHasExistingConfig(true);
           reset({
             ...DEFAULT,
             fromEmail: r.data.fromEmail ?? '',
@@ -98,6 +104,19 @@ export function EmailChannelSettingsPage() {
 
   const onSubmit = async (form: EmailForm) => {
     setSaved(false);
+
+    // Confirmacao obrigatoria ao sobrescrever canal existente: evita perda de config funcional por acidente.
+    if (hasExistingConfig) {
+      const ok = await confirm({
+        title: 'Sobrescrever configuracao de e-mail?',
+        message: 'Ja existe um canal de e-mail configurado. Salvar vai substituir as credenciais atuais. O canal pode parar de funcionar se os dados novos estiverem incorretos.',
+        confirmLabel: 'Salvar assim mesmo',
+        cancelLabel: 'Cancelar',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+
     try {
       await api.put('/settings/email-channel', {
         fromEmail: form.fromEmail,
@@ -119,7 +138,9 @@ export function EmailChannelSettingsPage() {
       // limpa os campos de senha após salvar (segurança)
       reset({ ...form, smtpPass: '', imapPass: '' });
     } catch (err: any) {
-      setError('root', { message: err?.response?.data?.message ?? 'Erro ao salvar configurações.' });
+      const msg = err?.response?.data?.message ?? 'Erro ao salvar configuracoes de e-mail.';
+      setError('root', { message: msg });
+      toast.error(msg);
     }
   };
 

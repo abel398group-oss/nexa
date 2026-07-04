@@ -22,9 +22,10 @@ Storybook: `pnpm storybook` (`:6006`).
 ## Organização (`src/`)
 
 - **`pages/`** — uma página por rota: `LoginPage`, `DashboardPage`, `InboxPage`,
-  `SupportPage`, `SupportConfigPage`, `SupportClientsPage`, `ContactsPage`,
-  `KnowledgePage`, `SellersPage`, `CampaignsPage`, `NumberHealthPage`, `UsersPage`,
-  `PlaybookPage`, `EmailChannelSettingsPage`, `DevTokensPage`, e `portal/PortalPage`
+  `SupportPage`, `SupportConfigPage`, `SupportClientsPage`, `SupportDashboardPage`,
+  `ContactsPage`, `KnowledgePage`, `SellersPage`, `CampaignsPage`,
+  `OpportunitiesPage` (pipeline de vendas), `MonitorConfigPage`, `NumberHealthPage`,
+  `UsersPage`, `PlaybookPage`, `EmailChannelSettingsPage`, `DevTokensPage`, e `portal/PortalPage`
   (área pública do cliente). A `LandingPage` fica em `/landing` (modo interno: a
   raiz `/` redireciona p/ login ou app via `RootRedirect` — ver `internal-mode`).
 - **`components/ui/`** — **design system / biblioteca de UI** própria (ver abaixo).

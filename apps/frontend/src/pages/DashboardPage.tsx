@@ -176,8 +176,11 @@ export function DashboardPage() {
     resolutionQ.refetch();
   };
 
-  // Skeleton inline — não bloqueia o render; cada seção mostra loading/dado conforme chega.
-  const loading = overviewQ.isLoading;
+  // anyError: true se qualquer query principal falhou. O banner de erro assume a comunicacao
+  // com retry. O `loading` continua verdadeiro enquanto `m` for undefined (inclusive em
+  // cenario de erro), garantindo que os blocos que usam `m!` nunca crashem.
+  const anyError = overviewQ.isError || seriesQ.isError || supportQ.isError || oppQ.isError || sellersQ.isError || resolutionQ.isError;
+  const loading = overviewQ.isLoading || !overviewQ.data;
   const SkeletonCard = () => (
     <div className="animate-pulse rounded-xl bg-base-200 h-[76px]" />
   );
@@ -205,6 +208,19 @@ export function DashboardPage() {
           </div>
         }
       />
+
+      {/* Banner de erro: visivel quando qualquer query falha; convive com o skeleton abaixo. */}
+      {anyError && (
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm dark:border-red-800/40 dark:bg-red-900/15">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+            <Icon name="alert" className="h-4 w-4 shrink-0" />
+            <span>Falha ao carregar as metricas. Verifique a conexao e tente novamente.</span>
+          </div>
+          <Button variant="outline" onClick={refresh} className="ml-4 h-7 px-2.5 text-xs">
+            Tentar novamente
+          </Button>
+        </div>
+      )}
 
       {/* ── Visão geral ────────────────────────────────────────────── */}
       <SectionTitle>Visão Geral</SectionTitle>

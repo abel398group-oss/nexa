@@ -30,9 +30,17 @@ Em `apps/backend/src/application/agents/`:
 | `case-classifier-agent.service` | Classifica o chamado de suporte | read-only | classificação | — |
 | `escalation-agent.service` | Decide e formaliza a escalada para humano | — | escalations | — |
 | `supervisor-agent.service` | Valida entrada (injection/risco) e saída (alucinação/LGPD/tom) | — | audits | risco na saída |
+| `web-chat.service` | Ponte do widget TMS (ADR 027): escuta `web_chat.inbound` e delega ao pipeline com `portalIdentity` | — | via conversation | — |
+| `ticket-intelligence.service` | Análise pós-ticket (ADR 019): recorrência, bugs, sugestões de KB | read-only | notificações | — |
 
 > Agentes de **Onboarding**, **Billing** e **Analytics** são alvo do ADR 003 e
-> ainda não têm serviço dedicado (consumidos hoje por conversation/support).
+> ainda não têm serviço dedicado (consumidos hoje por conversation/support) —
+> status: backlog, sem previsão.
+>
+> **Contrato do web chat (ADR 027, atualizado 2026-07-03):** o widget TMS envia
+> `web_chat:send { body }` e escuta `web_chat:message { id, body, isAgent, createdAt }`;
+> o gateway aceita `body|message` e emite `message` (inbox Nexa) + `web_chat:message`
+> (widget, apenas outbound).
 
 ## Como os agentes conversam (envelope padrão)
 
