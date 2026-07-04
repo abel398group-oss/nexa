@@ -182,6 +182,7 @@ Cotação de frete via Lia com dois modos: prospect (calculadora pública) e cli
 
 ## Auditorias e Reviews
 
+- [2026-07-04 — Estrutura de Engenharia: TMS vs Nexa](reviews/2026-07-04-tms-vs-nexa-engineering-gaps.md) — matriz comparativa em 10 dimensões, o que adotar (Sentry, CI, testes, E2E), quando (storage, rollback, staging) e o que pular (CASL, RLS), com viabilidade e esforço
 - [2026-07-03 — Auditoria de Frontend](reviews/2026-07-03-frontend-audit.md) — matriz de UI por página, gaps priorizados (P0–P2) e bugs funcionais verificados (web chat, opt-out localhost, entregabilidade Gmail)
 - [2026-06-26 — Auditoria Docs vs Código](reviews/2026-06-26-auditoria-docs-vs-codigo.md) — gaps e desatualizações encontradas
 - [2026-06-20 — Auditoria de Implementação](reviews/2026-06-20-auditoria-implementacao-nexa.md) — NEXA-01→08 + Monitor

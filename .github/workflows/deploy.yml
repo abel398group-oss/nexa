@@ -106,22 +106,84 @@ jobs:
           command_timeout: 15m
           script: |
             set -e
-            cd ~/nexa
+            cd /root/nexa
+
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+            # ── helpers ────────────────────────────────────────────────
+            wait_healthy() {
+              local SERVICE=$1 URL=$2 MAX=${3:-7} INTERVAL=${4:-12}
+              for i in $(seq 1 $MAX); do
+                echo "  [$SERVICE] tentativa $i/$MAX..."
+                sleep $INTERVAL
+                local STATUS
+                STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+                if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "304" ]; then
+                  echo "  [$SERVICE] saudavel — HTTP $STATUS"
+                  return 0
+                fi
+                echo "  [$SERVICE] HTTP $STATUS — aguardando..."
+              done
+              echo "  [$SERVICE] FALHA apos $MAX tentativas"
+              return 1
+            }
+
+            rollback_service() {
+              local SERVICE=$1 PREV_TAG=$2
+              echo "  Rollback $SERVICE -> $PREV_TAG"
+              if [ "$PREV_TAG" != "none" ]; then
+                docker tag "$PREV_TAG" "$DOCKERHUB_USERNAME/nexa-${SERVICE}:latest" 2>/dev/null || true
+              fi
+              docker compose -f docker-compose.production.yml up -d --no-deps --force-recreate "$SERVICE" || true
+              echo "  Rollback $SERVICE concluido."
+            }
+            # ──────────────────────────────────────────────────────────
+
+            echo "[1/5] Salvando estado atual para rollback..."
+            PREV_BACKEND_IMG=$(docker inspect --format='{{.Image}}' $(docker compose -f docker-compose.production.yml ps -q backend 2>/dev/null) 2>/dev/null || echo "none")
+            PREV_FRONTEND_IMG=$(docker inspect --format='{{.Image}}' $(docker compose -f docker-compose.production.yml ps -q frontend 2>/dev/null) 2>/dev/null || echo "none")
+            echo "  Backend anterior: $PREV_BACKEND_IMG"
+            echo "  Frontend anterior: $PREV_FRONTEND_IMG"
+
+            echo "[2/5] Baixando novas imagens..."
             docker compose -f docker-compose.production.yml pull
-            docker compose -f docker-compose.production.yml up -d
-            OK=false
-            for i in 1 2 3 4 5 6 7; do
-              sleep 12
-              CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health || echo 000)
-              if [ "$CODE" = "200" ]; then OK=true; echo "backend healthy"; break; fi
-              echo "tentativa $i de 7 backend HTTP $CODE"
-            done
-            if [ "$OK" != "true" ]; then
-              echo "FALHA no health check"
-              docker compose -f docker-compose.production.yml logs --tail=50 backend
+
+            echo "[3/5] Rolling deploy — backend..."
+            docker compose -f docker-compose.production.yml up -d --no-deps --force-recreate backend
+
+            echo "[4/5] Health check backend (7 x 12s)..."
+            if ! wait_healthy "backend" "http://localhost:3001/api/health" 7 12; then
+              echo "FALHA: backend nao ficou saudavel!"
+              docker compose -f docker-compose.production.yml logs --tail=60 backend
+              echo "Iniciando rollback do backend..."
+              rollback_service "backend" "$PREV_BACKEND_IMG"
               exit 1
             fi
+
+            echo "[4b/5] Rolling deploy — frontend..."
+            docker compose -f docker-compose.production.yml up -d --no-deps --force-recreate frontend
+
+            echo "[4c/5] Health check frontend (5 x 8s)..."
+            if ! wait_healthy "frontend" "http://localhost:8081/" 5 8; then
+              echo "FALHA: frontend nao ficou saudavel!"
+              docker compose -f docker-compose.production.yml logs --tail=60 frontend
+              echo "Iniciando rollback do frontend..."
+              rollback_service "frontend" "$PREV_FRONTEND_IMG"
+              exit 1
+            fi
+
+            echo "[5/5] Limpando imagens antigas (mantendo 3 mais recentes)..."
+            for REPO in "$DOCKERHUB_USERNAME/nexa-backend" "$DOCKERHUB_USERNAME/nexa-frontend"; do
+              IDS=$(docker images "$REPO" --format '{{.ID}}' | awk '!seen[$0]++')
+              KEEP=$(echo "$IDS" | head -n 3)
+              IN_USE=$(docker ps -q | xargs -r docker inspect --format '{{.Image}}' | sort -u)
+              for ID in $IDS; do
+                if echo "$KEEP" | grep -q "$ID"; then continue; fi
+                if echo "$IN_USE" | grep -q "$ID"; then continue; fi
+                docker rmi -f "$ID" >/dev/null 2>&1 && echo "  removido $REPO ($ID)" || true
+              done
+            done
             docker image prune -f >/dev/null 2>&1 || true
+
             docker compose -f docker-compose.production.yml ps
-            echo "Deploy concluido"
+            echo "Deploy concluido com sucesso!"

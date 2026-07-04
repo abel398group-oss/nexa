@@ -40,12 +40,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (backend, nao-bloqueante)
+      - name: Lint (backend)
         run: pnpm lint
-        continue-on-error: true
 
-      - name: Run tests
+      - name: Frontend typecheck
+        run: pnpm --filter frontend typecheck
+
+      - name: Backend tests
         run: pnpm --filter backend test
+
+      - name: Frontend tests
+        run: pnpm --filter frontend test
 
       - name: Generate Prisma client
         run: pnpm --filter backend exec prisma generate
