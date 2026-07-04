@@ -23,6 +23,8 @@ const REQUIRED_IN_PROD = [
   // Integração TMS + handoff
   'TMS_SERVICE_TOKEN',
   'NEXA_DEFAULT_TENANT_ID',
+  // Shared secret para plan-sync TMS → Nexa (IntegrationsController)
+  'TMS_SYNC_SECRET',
   // Email opt-out link (LGPD) — sem isso o link no e-mail aponta para localhost
   'APP_BASE_URL',
   // Infra

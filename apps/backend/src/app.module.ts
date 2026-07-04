@@ -35,6 +35,7 @@ import { NotificationsModule } from './application/notifications/notifications.m
 import { HandoffModule } from './application/handoff/handoff.module';
 import { EmailModule } from './application/email/email.module';
 import { ProactiveEngineModule } from './application/proactive-engine/proactive-engine.module';
+import { IntegrationsModule } from './application/integrations/integrations.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -90,6 +91,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     WebhookModule,
     MonitorModule,
     ProactiveEngineModule,
+    IntegrationsModule,
   ],
   controllers: [HealthController],
   providers: [

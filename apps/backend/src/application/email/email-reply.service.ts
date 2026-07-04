@@ -156,4 +156,44 @@ export class EmailReplyService {
       return { sent: false, reason: `smtp_error: ${err?.message}` };
     }
   }
+
+  /**
+   * Envia e-mail operacional (alerta do Monitor Proativo) sem opt-out link e sem rastreamento de contato.
+   * Usado para notificações admin-para-admin, não para marketing.
+   */
+  async sendAlertEmail(
+    to: string,
+    subject: string,
+    text: string,
+    tenantId: string,
+  ): Promise<{ sent: boolean; reason?: string }> {
+    const config = await this.resolveConfig(tenantId);
+    if (!config) {
+      this.logger.warn(`sendAlertEmail: SMTP não configurado para tenant ${tenantId} — e-mail não enviado`);
+      return { sent: false, reason: 'smtp_not_configured' };
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: { user: config.user, pass: config.pass },
+      tls: { rejectUnauthorized: false },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: `"${config.fromName}" <${config.fromEmail}>`,
+        to,
+        subject,
+        text: `${text}\n\n--\n${SIGNATURE}`,
+        replyTo: config.replyTo,
+      });
+      this.logger.log(`sendAlertEmail: enviado para ${to} (tenant=${tenantId})`);
+      return { sent: true };
+    } catch (err: any) {
+      this.logger.error(`sendAlertEmail: erro SMTP para ${to}: ${err?.message}`);
+      return { sent: false, reason: `smtp_error: ${err?.message}` };
+    }
+  }
 }

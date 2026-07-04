@@ -21,11 +21,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorNotificationService } from './monitor-notification.service';
+import { EmailReplyService } from '@/application/email/email-reply.service';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 interface SectorCfg {
   phone?: string;
+  /** E-mail do responsável pelo setor (opcional — canal dual). */
+  email?: string;
   sendHour?: number;
   sendMinute?: number;
   /** Dias da semana de envio (0=dom … 6=sáb). Ausente → deriva do sendWeekends global. */
@@ -71,6 +74,7 @@ export class ConsolidationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notification: MonitorNotificationService,
+    private readonly emailReply: EmailReplyService,
   ) {}
 
   private get enabled(): boolean {
@@ -163,8 +167,8 @@ export class ConsolidationService {
 
     for (const sector of SECTORS) {
       const sc = sectorConfig[sector.key];
-      if (!sc?.phone) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem telefone configurado — pulando`);
+      if (!sc?.phone && !sc?.email) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem telefone nem e-mail configurado — pulando`);
         continue;
       }
 
@@ -225,16 +229,29 @@ export class ConsolidationService {
       }
 
       const message = this.buildSectorMessage(sector, alerts, now);
-      await this.notification.notifyPhone(tenantId, sc.phone, message);
+
+      // WhatsApp — envia se telefone configurado
+      if (sc.phone) {
+        await this.notification.notifyPhone(tenantId, sc.phone, message);
+        this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → WhatsApp ${sc.phone}`);
+      }
+
+      // E-mail — envia se endereço configurado (canal dual)
+      if (sc.email) {
+        const subject = `${sector.emoji} Alertas ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
+        const result = await this.emailReply.sendAlertEmail(sc.email, subject, message, tenantId);
+        if (result.sent) {
+          this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${sc.email}`);
+        } else {
+          this.logger.warn(`[${tenantId}] setor ${sector.key}: falha e-mail → ${sc.email}: ${result.reason}`);
+        }
+      }
 
       if (!force) this.sentThisHour.set(dedupKey, slotKey);
 
       const alertIds = alerts.map((a) => a.id);
       await this.persistAlertUpdates(alertIds, now);
 
-      this.logger.log(
-        `[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → ${sc.phone}`,
-      );
       totalSent += alerts.length;
     }
 

@@ -1,12 +1,19 @@
 /**
  * MonitorConfigPage — /settings/monitor
  * Monitor Proativo: alertas automáticos do TMS por setor.
- * Cada setor tem toggle, horário próprio e telefone WhatsApp.
+ * Cada setor tem toggle, horário próprio, telefone WhatsApp e e-mail (canal dual).
+ *
+ * Funcionalidades:
+ *  - Auto-fill de telefone/e-mail a partir do cadastro do usuário (GET /monitor/prefill)
+ *  - Default Dom-Sáb (todos os dias) para novos setores
+ *  - Plan gate: exibe banner + bloqueia edição quando plano não permite
+ *  - Override de plano: visível apenas para platform admins
  */
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
+import { useAuth } from '@/app/providers/AuthContext';
 import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 
@@ -16,14 +23,16 @@ type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
 
 interface SectorDetail {
   phone: string;
+  /** E-mail para canal dual (WhatsApp + e-mail). */
+  email: string;
   sendHour: number;
   sendMinute: number;
   /** Dias da semana de envio (0=dom … 6=sáb). */
   sendDays: number[];
 }
 
-const WEEKDAYS = [1, 2, 3, 4, 5];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS = [1, 2, 3, 4, 5];
 const DAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const DAY_TITLES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -42,6 +51,10 @@ interface MonitorConfig {
   frotaEnabled: boolean;
   financeEnabled: boolean;
   sectorConfig?: SectorConfigMap | null;
+  /** Computed by backend: true if tenant plan allows Monitor (or override active). */
+  planAllowed?: boolean;
+  /** True if platform admin enabled override for this tenant. */
+  monitorOverride?: boolean;
 }
 
 interface AlertState {
@@ -136,20 +149,23 @@ const DEFAULT_CONFIG: MonitorConfig = {
   sendMinute: 0,
   notificationPhone: null,
   recipients: [],
-  sendWeekends: false,
+  sendWeekends: true,  // default Dom-Sáb
   channel: 'whatsapp',
   fiscalEnabled: true,
   logisticEnabled: true,
   frotaEnabled: true,
   financeEnabled: true,
   sectorConfig: null,
+  planAllowed: false,
+  monitorOverride: false,
 };
 
+/** Cria sectorConfig vazio com dias Dom-Sáb por padrão. */
 const makeSectorConfig = (defaultHour = 7, defaultMinute = 0): SectorConfigMap => ({
-  fiscal:   { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
-  logistic: { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
-  frota:    { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
-  finance:  { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
+  fiscal:   { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  logistic: { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  frota:    { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  finance:  { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
 });
 
 // ─── Componente ──────────────────────────────────────────────────────────────
@@ -161,6 +177,9 @@ export function MonitorConfigPage() {
 
   const toast = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
+
+  const isPlatformAdmin = user?.tenantId === null || user?.tenantId === undefined;
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
@@ -169,19 +188,25 @@ export function MonitorConfigPage() {
     queryFn: () => api.get('/monitor/config').then((r) => r.data),
   });
 
+  const { data: prefill } = useQuery<{ email: string | null; phone: string | null }>({
+    queryKey: ['monitor-prefill'],
+    queryFn: () => api.get('/monitor/prefill').then((r) => r.data),
+    staleTime: Infinity,
+  });
+
   useEffect(() => {
     if (!config) return;
     setCfg({ ...DEFAULT_CONFIG, ...config });
 
     // Inicializa sectorConfig: usa dados do banco ou herda hora global.
-    // sendDays ausente (config antiga) → deriva do sendWeekends global,
-    // espelhando o fallback do backend (todos os dias ou só dias úteis).
     const sc = config.sectorConfig as SectorConfigMap | null | undefined;
     const h = config.sendHour ?? 7;
     const m = config.sendMinute ?? 0;
-    const legacyDays = config.sendWeekends ? ALL_DAYS : WEEKDAYS;
+    // Legado: sem sectorConfig → deriva dias do sendWeekends (ou Dom-Sáb como novo default)
+    const legacyDays = (config.sendWeekends ?? true) ? ALL_DAYS : WEEKDAYS;
     const withDays = (detail?: Partial<SectorDetail>): SectorDetail => ({
       phone: '',
+      email: '',
       sendHour: h,
       sendMinute: m,
       ...detail,
@@ -204,19 +229,28 @@ export function MonitorConfigPage() {
   // ── Mutations ────────────────────────────────────────────────────────────────
 
   async function saveConfig() {
+    if (!planAllowed) {
+      toast.error('Upgrade necessário para usar o Monitor Proativo.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         ...Object.fromEntries(
-          Object.entries(cfg).filter(([k, v]) => v !== null && v !== undefined && k !== 'sectorConfig'),
+          Object.entries(cfg).filter(([k, v]) =>
+            v !== null &&
+            v !== undefined &&
+            !['sectorConfig', 'planAllowed', 'monitorOverride'].includes(k),
+          ),
         ),
         sectorConfig: sectors,
       };
       await api.put('/monitor/config', payload);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });
       toast.success('Configurações salvas!');
-    } catch {
-      toast.error('Erro ao salvar configurações.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Erro ao salvar configurações.';
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -250,27 +284,37 @@ export function MonitorConfigPage() {
     onError: () => toast.error('Erro ao enviar teste.'),
   });
 
-  // Injeta alertas de teste em todos os setores (debug)
   const seedAlerts = useMutation({
     mutationFn: () => api.post('/monitor/seed-test'),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
-      toast.success(`🧪 ${res.data.seeded} alerta(s) de teste criados! Clique em "Notificar agora" para disparar.`);
+      toast.success(`🧪 ${res.data.seeded} alerta(s) de teste criados!`);
     },
     onError: () => toast.error('Erro ao criar alertas de teste.'),
   });
 
-  // Força o disparo imediato de notificações para todos os setores configurados
   const notifyNow = useMutation({
     mutationFn: () => api.post('/monitor/notify-now'),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['monitor-alerts'] });
-      toast.success(`📨 Notificações disparadas: ${res.data.alerts} alerta(s) enviado(s).`);
+      toast.success(`📨 Notificações disparadas: ${res.data.alerts} alerta(s).`);
     },
     onError: () => toast.error('Erro ao disparar notificações.'),
   });
 
+  /** Platform admin: toggle override de plano para o tenant ativo (x-acting-tenant-id). */
+  const toggleOverride = useMutation({
+    mutationFn: (enabled: boolean) => api.post('/monitor/config/override', { enabled }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monitor-config'] });
+      toast.success('Override de plano atualizado.');
+    },
+    onError: () => toast.error('Erro ao alterar override.'),
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  const planAllowed = cfg.planAllowed ?? false;
 
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
@@ -281,13 +325,30 @@ export function MonitorConfigPage() {
   /** Liga/desliga um dia do setor. Impede deixar zero dias (mínimo 1). */
   const toggleSectorDay = (key: SectorKey, day: number) =>
     setSectors((s) => {
-      const current = s[key].sendDays ?? WEEKDAYS;
+      const current = s[key].sendDays ?? ALL_DAYS;
       const next = current.includes(day)
         ? current.filter((d) => d !== day)
         : [...current, day].sort((a, b) => a - b);
       if (next.length === 0) return s; // pelo menos 1 dia
       return { ...s, [key]: { ...s[key], sendDays: next } };
     });
+
+  /** Auto-fill: preenche telefone e e-mail de todos os setores com os dados do cadastro. */
+  function fillAllSectorsFromPrefill() {
+    if (!prefill) return;
+    setSectors((s) => {
+      const updated = { ...s };
+      for (const key of Object.keys(updated) as SectorKey[]) {
+        updated[key] = {
+          ...updated[key],
+          phone: prefill.phone ? (updated[key].phone || prefill.phone) : updated[key].phone,
+          email: prefill.email ? (updated[key].email || prefill.email) : updated[key].email,
+        };
+      }
+      return updated;
+    });
+    toast.success('Dados pré-preenchidos a partir do seu cadastro.');
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -304,7 +365,7 @@ export function MonitorConfigPage() {
           />
         }
         title="Monitor Proativo"
-        subtitle="Configure horários e telefones de alerta por setor do TMS."
+        subtitle="Configure horários e canais de alerta por setor do TMS."
         actions={
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => syncNow.mutate()} loading={syncNow.isPending} title="Busca eventos atuais do TMS">
@@ -313,18 +374,18 @@ export function MonitorConfigPage() {
             <Button variant="ghost" onClick={() => seedAlerts.mutate()} loading={seedAlerts.isPending} title="Cria alertas de teste em todos os setores">
               <Icon name="pulse" className="h-4 w-4" /> Seed alertas
             </Button>
-            <Button variant="ghost" onClick={() => notifyNow.mutate()} loading={notifyNow.isPending} title="Dispara notificações agora para todos os setores configurados">
+            <Button variant="ghost" onClick={() => notifyNow.mutate()} loading={notifyNow.isPending} title="Dispara notificações agora para todos os setores">
               <Icon name="send" className="h-4 w-4" /> Notificar agora
             </Button>
             <Button
               variant="ghost"
               onClick={() => testNotify.mutate()}
               loading={testNotify.isPending}
-              title="Envia mensagem simples de teste para o primeiro telefone configurado"
+              title="Envia mensagem simples de teste para o primeiro canal configurado"
             >
               <Icon name="zap" className="h-4 w-4" /> Testar canal
             </Button>
-            <Button onClick={saveConfig} loading={saving}>
+            <Button onClick={saveConfig} loading={saving} disabled={!planAllowed}>
               <Icon name="check" className="h-4 w-4" /> Salvar
             </Button>
           </div>
@@ -336,13 +397,53 @@ export function MonitorConfigPage() {
       ) : (
         <div className="space-y-6">
 
+          {/* ─── Banner de plano bloqueado ───────────────────────────────── */}
+          {!planAllowed && (
+            <div className="card px-6 py-5 border border-warning/40 bg-warning/5 flex items-start gap-4">
+              <span className="text-2xl shrink-0">🔒</span>
+              <div>
+                <p className="text-sm font-semibold text-base-content">
+                  Monitor Proativo disponível nos planos Profissional e Corporativo
+                </p>
+                <p className="text-xs text-base-content/60 mt-1">
+                  Faça upgrade do seu plano para habilitar alertas automáticos do TMS por WhatsApp e e-mail.
+                  Entre em contato com o suporte para mais informações.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Override de plano (só platform admin) ───────────────────── */}
+          {isPlatformAdmin && (
+            <div className="card px-6 py-4 border border-dashed border-warning/60 bg-warning/5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-warning">Admin Override — plano</p>
+                <p className="text-xs text-base-content/50 mt-0.5">
+                  Habilita o Monitor para este tenant independentemente do plano contratado.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                <span className="text-xs text-base-content/50">
+                  {cfg.monitorOverride ? 'Override ativo' : 'Override inativo'}
+                </span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-warning toggle-sm"
+                  checked={!!cfg.monitorOverride}
+                  onChange={(e) => toggleOverride.mutate(e.target.checked)}
+                  disabled={toggleOverride.isPending}
+                />
+              </label>
+            </div>
+          )}
+
           {/* ─── Configurações gerais ────────────────────────────────────── */}
-          <div className="card">
+          <div className={`card ${!planAllowed ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between gap-4 px-6 py-5 border-b border-base-200">
               <div>
                 <p className="text-sm font-semibold text-base-content">Monitoramento ativo</p>
                 <p className="text-xs text-base-content/50 mt-0.5">
-                  Quando ativado, cada setor dispara alertas no telefone e horário configurados abaixo.
+                  Quando ativado, cada setor dispara alertas no telefone/e-mail e horário configurados abaixo.
                 </p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -355,16 +456,27 @@ export function MonitorConfigPage() {
                 />
               </label>
             </div>
-
-            {/* sendWeekends saiu da UI: substituído pelos "Dias de envio" por setor.
-                O campo permanece no backend apenas como fallback de configs antigas. */}
           </div>
 
           {/* ─── Grid de setores ─────────────────────────────────────────── */}
-          <div className={`transition-opacity ${cfg.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
-            <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
-              Alertas por setor
-            </p>
+          <div className={`transition-opacity ${cfg.enabled && planAllowed ? '' : 'opacity-40 pointer-events-none'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40">
+                Alertas por setor
+              </p>
+              {/* Auto-fill a partir do cadastro */}
+              {prefill && (prefill.phone || prefill.email) && (
+                <button
+                  type="button"
+                  className="text-xs text-brand-500 hover:text-brand-400 transition-colors flex items-center gap-1"
+                  onClick={fillAllSectorsFromPrefill}
+                  title="Preenche telefone/e-mail com dados do seu cadastro nos setores que ainda estão em branco"
+                >
+                  <Icon name="users" className="h-3 w-3" />
+                  Usar dados do meu cadastro
+                </button>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {SECTORS.map((sector) => {
@@ -379,9 +491,7 @@ export function MonitorConfigPage() {
                     {/* Cabeçalho colorido */}
                     <div className={`flex items-center justify-between gap-3 px-5 py-4 ${sector.headerClass} border-b border-base-200`}>
                       <div className="flex items-center gap-3">
-                        <span
-                          className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${sector.badgeClass}`}
-                        >
+                        <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${sector.badgeClass}`}>
                           {sector.emoji}
                         </span>
                         <div>
@@ -402,12 +512,9 @@ export function MonitorConfigPage() {
                       </label>
                     </div>
 
-                    {/* Corpo: horário + telefone */}
-                    <div
-                      className={`px-5 py-5 space-y-4 transition-opacity ${
-                        enabled ? '' : 'opacity-40 pointer-events-none'
-                      }`}
-                    >
+                    {/* Corpo: horário + telefone + e-mail + dias */}
+                    <div className={`px-5 py-5 space-y-4 transition-opacity ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+
                       {/* Horário */}
                       <div>
                         <p className="text-xs font-medium text-base-content/60 mb-2">
@@ -420,9 +527,7 @@ export function MonitorConfigPage() {
                             onChange={(e) => setSector(sector.key, 'sendHour', Number(e.target.value))}
                           >
                             {HOURS.map((h) => (
-                              <option key={h} value={h}>
-                                {String(h).padStart(2, '0')}h
-                              </option>
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
                             ))}
                           </select>
                           <select
@@ -431,18 +536,16 @@ export function MonitorConfigPage() {
                             onChange={(e) => setSector(sector.key, 'sendMinute', Number(e.target.value))}
                           >
                             {MINUTES.map((m) => (
-                              <option key={m} value={m}>
-                                {String(m).padStart(2, '0')}min
-                              </option>
+                              <option key={m} value={m}>{String(m).padStart(2, '0')}min</option>
                             ))}
                           </select>
                         </div>
                       </div>
 
-                      {/* Telefone */}
+                      {/* WhatsApp */}
                       <div>
-                        <p className="text-xs font-medium text-base-content/60 mb-2">
-                          Telefone WhatsApp (com DDI)
+                        <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
+                          <span>📱</span> WhatsApp (com DDI)
                         </p>
                         <input
                           type="text"
@@ -450,6 +553,20 @@ export function MonitorConfigPage() {
                           placeholder="5511999999999"
                           value={sc.phone}
                           onChange={(e) => setSector(sector.key, 'phone', e.target.value)}
+                        />
+                      </div>
+
+                      {/* E-mail */}
+                      <div>
+                        <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
+                          <span>✉️</span> E-mail (opcional — canal dual)
+                        </p>
+                        <input
+                          type="email"
+                          className="input input-bordered input-sm w-full"
+                          placeholder="financeiro@empresa.com.br"
+                          value={sc.email}
+                          onChange={(e) => setSector(sector.key, 'email', e.target.value)}
                         />
                       </div>
 
@@ -476,7 +593,7 @@ export function MonitorConfigPage() {
                         </div>
                         <div className="flex gap-1.5">
                           {ALL_DAYS.map((day) => {
-                            const active = (sc.sendDays ?? WEEKDAYS).includes(day);
+                            const active = (sc.sendDays ?? ALL_DAYS).includes(day);
                             return (
                               <button
                                 key={day}

@@ -793,7 +793,8 @@ model TenantNotificationConfig {
   logisticEnabled Boolean  @default(true) @map("logistic_enabled")
   frotaEnabled    Boolean  @default(true) @map("frota_enabled")
   financeEnabled  Boolean  @default(true) @map("finance_enabled")
-  sectorConfig    Json?    @map("sector_config")  // { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute } }
+  sectorConfig    Json?    @map("sector_config")    // { fiscal|logistic|frota|finance: { phone, email, sendHour, sendMinute, sendDays } }
+  monitorOverride Boolean  @default(false) @map("monitor_override") // platform-admin override: unlock monitor regardless of plan
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

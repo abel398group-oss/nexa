@@ -8,10 +8,11 @@ import { MonitorIngestController } from './monitor-ingest.controller';
 import { PrismaModule } from '@/infra/prisma/prisma.module';
 import { ConnectorsModule } from '@/application/connectors/connectors.module';
 import { WahaModule } from '@/shared/waha/waha.module';
+import { EmailModule } from '@/application/email/email.module';
 import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
 
 @Module({
-  imports: [PrismaModule, ConnectorsModule, WahaModule],
+  imports: [PrismaModule, ConnectorsModule, WahaModule, EmailModule],
   providers: [
     MonitorService,
     ConsolidationService,

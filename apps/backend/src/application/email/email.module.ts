@@ -24,6 +24,6 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     EmailChannelService,
     EmailCampaignSenderService,
   ],
-  exports: [EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
+  exports: [EmailReplyService, EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
 })
 export class EmailModule {}

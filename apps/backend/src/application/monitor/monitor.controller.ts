@@ -10,6 +10,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -21,12 +22,19 @@ import { Transform } from 'class-transformer';
 import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
+import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { normalizePhone } from '@/shared/utils/phone.util';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
+
+/** Plans that have Monitor Proativo included. */
+const MONITOR_PLANS = new Set(['pro', 'enterprise', 'profissional', 'corporativo', 'professional', 'corporate']);
+
+function isPlanAllowed(plan: string | null | undefined): boolean {
+  return MONITOR_PLANS.has((plan ?? 'free').toLowerCase());
+}
 
 // Converte null → undefined para que @IsOptional() pule a validação.
 // Necessário porque o ValidationPipe global tem transform:true (class-transformer ativo)
@@ -46,11 +54,11 @@ class UpdateConfigDto {
   @IsBoolean() @IsOptional() logisticEnabled?: boolean;
   @IsBoolean() @IsOptional() frotaEnabled?: boolean;
   @IsBoolean() @IsOptional() financeEnabled?: boolean;
-  // Config por setor: { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute, sendDays } }
+  // Config por setor: { fiscal|logistic|frota|finance: { phone, email, sendHour, sendMinute, sendDays } }
   // sendDays: dias da semana de envio (0=dom … 6=sáb); ausente → deriva de sendWeekends.
   @IsOptional() sectorConfig?: Record<
     string,
-    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+    { phone?: string; email?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
   >;
 }
 
@@ -67,26 +75,34 @@ export class MonitorController {
   @RequirePerm('admin')
   @Get('config')
   async getConfig(@CurrentTenant() tenantId: string) {
-    const config = await this.prisma.tenantNotificationConfig.findUnique({
-      where: { tenantId },
-      // Seleciona apenas campos de config — exclui id/tenantId/createdAt/updatedAt
-      // para evitar que o frontend os reenvie no PUT e tome 400 (forbidNonWhitelisted).
-      select: {
-        enabled: true,
-        sendHour: true,
-        sendMinute: true,
-        notificationPhone: true,
-        recipients: true,
-        sendWeekends: true,
-        channel: true,
-        fiscalEnabled: true,
-        logisticEnabled: true,
-        frotaEnabled: true,
-        financeEnabled: true,
-        sectorConfig: true,
-      },
-    });
-    return config ?? {
+    const [config, planLimit] = await Promise.all([
+      this.prisma.tenantNotificationConfig.findUnique({
+        where: { tenantId },
+        // Seleciona apenas campos de config — exclui id/tenantId/createdAt/updatedAt
+        // para evitar que o frontend os reenvie no PUT e tome 400 (forbidNonWhitelisted).
+        select: {
+          enabled: true,
+          sendHour: true,
+          sendMinute: true,
+          notificationPhone: true,
+          recipients: true,
+          sendWeekends: true,
+          channel: true,
+          fiscalEnabled: true,
+          logisticEnabled: true,
+          frotaEnabled: true,
+          financeEnabled: true,
+          sectorConfig: true,
+          monitorOverride: true,
+        },
+      }),
+      this.prisma.planLimit.findUnique({ where: { tenantId }, select: { plan: true } }),
+    ]);
+
+    const monitorOverride = config?.monitorOverride ?? false;
+    const planAllowed = isPlanAllowed(planLimit?.plan) || monitorOverride;
+
+    const defaults = {
       enabled: false,
       sendHour: 7,
       sendMinute: 0,
@@ -99,16 +115,80 @@ export class MonitorController {
       frotaEnabled: true,
       financeEnabled: true,
       sectorConfig: null,
+      monitorOverride: false,
     };
+
+    return { ...(config ?? defaults), planAllowed, monitorOverride };
   }
 
   @RequirePerm('admin')
   @Put('config')
   async updateConfig(@CurrentTenant() tenantId: string, @Body() dto: UpdateConfigDto) {
+    // Plan gate: block saves (except disabling) when plan not allowed and no override
+    if (dto.enabled) {
+      const [planLimit, existing] = await Promise.all([
+        this.prisma.planLimit.findUnique({ where: { tenantId }, select: { plan: true } }),
+        this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId }, select: { monitorOverride: true } }),
+      ]);
+      if (!isPlanAllowed(planLimit?.plan) && !existing?.monitorOverride) {
+        throw new ForbiddenException('Monitor Proativo não está disponível no plano atual. Faça upgrade para Profissional ou Corporativo.');
+      }
+    }
+
     return this.prisma.tenantNotificationConfig.upsert({
       where: { tenantId },
       create: { tenantId, ...dto },
       update: { ...dto },
+    });
+  }
+
+  /**
+   * Retorna e-mail e telefone pré-cadastrados para auto-fill na UI do Monitor.
+   * E-mail: primeiro usuário admin do tenant. Telefone: primeiro seller ativo.
+   */
+  @RequirePerm('admin')
+  @Get('prefill')
+  async prefill(@CurrentTenant() tenantId: string) {
+    const [adminUser, seller] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: { tenantId, role: 'admin' },
+        select: { email: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.seller.findFirst({
+        where: { tenantId, active: true },
+        select: { phone: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    return {
+      email: adminUser?.email ?? null,
+      phone: seller?.phone ?? null,
+    };
+  }
+
+  /**
+   * Platform-admin only: habilita/desabilita o override de plano para o tenant ativo.
+   * Permite que o Monitor Proativo funcione em qualquer plano para o tenant selecionado.
+   * Verificação inline: apenas usuários com tenantId === null (platform-admin) podem chamar.
+   */
+  @RequirePerm('admin')
+  @Post('config/override')
+  async setMonitorOverride(
+    @CurrentUser() user: any,
+    @CurrentTenant() tenantId: string,
+    @Body() dto: { enabled: boolean },
+  ) {
+    // Only platform admin (tenantId null in JWT) can set the override.
+    // The target tenant is resolved from x-acting-tenant-id header via EffectiveTenantInterceptor.
+    if (user?.tenantId !== null && user?.tenantId !== undefined) {
+      throw new ForbiddenException('Somente o administrador da plataforma pode alterar o override de plano.');
+    }
+    return this.prisma.tenantNotificationConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, monitorOverride: dto.enabled },
+      update: { monitorOverride: dto.enabled },
+      select: { tenantId: true, monitorOverride: true },
     });
   }
 
