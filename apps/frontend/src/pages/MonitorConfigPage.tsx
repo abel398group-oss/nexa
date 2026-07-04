@@ -18,7 +18,14 @@ interface SectorDetail {
   phone: string;
   sendHour: number;
   sendMinute: number;
+  /** Dias da semana de envio (0=dom … 6=sáb). */
+  sendDays: number[];
 }
+
+const WEEKDAYS = [1, 2, 3, 4, 5];
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const DAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const DAY_TITLES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 type SectorConfigMap = Record<SectorKey, SectorDetail>;
 
@@ -139,10 +146,10 @@ const DEFAULT_CONFIG: MonitorConfig = {
 };
 
 const makeSectorConfig = (defaultHour = 7, defaultMinute = 0): SectorConfigMap => ({
-  fiscal:   { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
-  logistic: { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
-  frota:    { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
-  finance:  { phone: '', sendHour: defaultHour, sendMinute: defaultMinute },
+  fiscal:   { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
+  logistic: { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
+  frota:    { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
+  finance:  { phone: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: WEEKDAYS },
 });
 
 // ─── Componente ──────────────────────────────────────────────────────────────
@@ -166,15 +173,25 @@ export function MonitorConfigPage() {
     if (!config) return;
     setCfg({ ...DEFAULT_CONFIG, ...config });
 
-    // Inicializa sectorConfig: usa dados do banco ou herda hora global
+    // Inicializa sectorConfig: usa dados do banco ou herda hora global.
+    // sendDays ausente (config antiga) → deriva do sendWeekends global,
+    // espelhando o fallback do backend (todos os dias ou só dias úteis).
     const sc = config.sectorConfig as SectorConfigMap | null | undefined;
     const h = config.sendHour ?? 7;
     const m = config.sendMinute ?? 0;
+    const legacyDays = config.sendWeekends ? ALL_DAYS : WEEKDAYS;
+    const withDays = (detail?: Partial<SectorDetail>): SectorDetail => ({
+      phone: '',
+      sendHour: h,
+      sendMinute: m,
+      ...detail,
+      sendDays: detail?.sendDays?.length ? detail.sendDays : legacyDays,
+    });
     setSectors({
-      fiscal:   { phone: '', sendHour: h, sendMinute: m, ...sc?.fiscal },
-      logistic: { phone: '', sendHour: h, sendMinute: m, ...sc?.logistic },
-      frota:    { phone: '', sendHour: h, sendMinute: m, ...sc?.frota },
-      finance:  { phone: '', sendHour: h, sendMinute: m, ...sc?.finance },
+      fiscal:   withDays(sc?.fiscal),
+      logistic: withDays(sc?.logistic),
+      frota:    withDays(sc?.frota),
+      finance:  withDays(sc?.finance),
     });
   }, [config]);
 
@@ -258,8 +275,19 @@ export function MonitorConfigPage() {
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
-  const setSector = (key: SectorKey, field: keyof SectorDetail, val: string | number) =>
+  const setSector = (key: SectorKey, field: keyof SectorDetail, val: string | number | number[]) =>
     setSectors((s) => ({ ...s, [key]: { ...s[key], [field]: val } }));
+
+  /** Liga/desliga um dia do setor. Impede deixar zero dias (mínimo 1). */
+  const toggleSectorDay = (key: SectorKey, day: number) =>
+    setSectors((s) => {
+      const current = s[key].sendDays ?? WEEKDAYS;
+      const next = current.includes(day)
+        ? current.filter((d) => d !== day)
+        : [...current, day].sort((a, b) => a - b);
+      if (next.length === 0) return s; // pelo menos 1 dia
+      return { ...s, [key]: { ...s[key], sendDays: next } };
+    });
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -337,6 +365,9 @@ export function MonitorConfigPage() {
                   onChange={(e) => set('sendWeekends', e.target.checked)}
                 />
                 <span className="text-sm text-base-content">Enviar alertas nos fins de semana</span>
+                <span className="text-xs text-base-content/40">
+                  (padrão para setores sem dias próprios — os "Dias de envio" de cada setor têm prioridade)
+                </span>
               </label>
             </div>
           </div>
@@ -432,6 +463,50 @@ export function MonitorConfigPage() {
                           value={sc.phone}
                           onChange={(e) => setSector(sector.key, 'phone', e.target.value)}
                         />
+                      </div>
+
+                      {/* Dias de envio */}
+                      <div>
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-xs font-medium text-base-content/60">Dias de envio</p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
+                              onClick={() => setSector(sector.key, 'sendDays', WEEKDAYS)}
+                            >
+                              Dias úteis
+                            </button>
+                            <button
+                              type="button"
+                              className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
+                              onClick={() => setSector(sector.key, 'sendDays', ALL_DAYS)}
+                            >
+                              Todos
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5">
+                          {ALL_DAYS.map((day) => {
+                            const active = (sc.sendDays ?? WEEKDAYS).includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                title={DAY_TITLES[day]}
+                                aria-pressed={active}
+                                onClick={() => toggleSectorDay(sector.key, day)}
+                                className={`h-7 w-7 rounded-full text-[11px] font-semibold transition-colors ${
+                                  active
+                                    ? 'bg-brand-500 text-white'
+                                    : 'bg-base-200 text-base-content/40 hover:bg-base-300'
+                                }`}
+                              >
+                                {DAY_LABELS[day]}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>

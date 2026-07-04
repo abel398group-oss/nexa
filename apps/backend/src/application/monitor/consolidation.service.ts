@@ -28,6 +28,8 @@ interface SectorCfg {
   phone?: string;
   sendHour?: number;
   sendMinute?: number;
+  /** Dias da semana de envio (0=dom … 6=sáb). Ausente → deriva do sendWeekends global. */
+  sendDays?: number[];
 }
 
 interface SectorMeta {
@@ -113,22 +115,35 @@ export class ConsolidationService {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    const isWeekend = now.getDay() === 0 || now.getDay() === 6;
-    const sendWeekends = config?.sendWeekends ?? false;
-
-    if (!force && isWeekend && !sendWeekends) {
-      this.logger.debug(`[${tenantId}] fim de semana e sendWeekends=false — pulando`);
-      return 0;
-    }
 
     const sectorConfig = config?.sectorConfig as Record<string, SectorCfg> | null | undefined;
     const hasSectorConfig = sectorConfig && Object.values(sectorConfig).some((sc) => sc?.phone);
 
     if (hasSectorConfig) {
+      // Modo per-sector: cada setor decide seus dias via sendDays (fallback: sendWeekends global).
       return this.processPerSector(tenantId, config as any, sectorConfig!, now, currentHour, currentMinute, force);
-    } else {
-      return this.processLegacy(tenantId, config as any, now, currentHour, currentMinute, force);
     }
+
+    // Modo legado: mantém o comportamento global de fim de semana.
+    const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+    const sendWeekends = config?.sendWeekends ?? false;
+    if (!force && isWeekend && !sendWeekends) {
+      this.logger.debug(`[${tenantId}] fim de semana e sendWeekends=false — pulando`);
+      return 0;
+    }
+    return this.processLegacy(tenantId, config as any, now, currentHour, currentMinute, force);
+  }
+
+  /**
+   * Dias de envio efetivos do setor (0=dom … 6=sáb).
+   * Prioridade: sendDays do setor → derivado do sendWeekends global
+   * (true = todos os dias; false = dias úteis) — compatível com configs antigas.
+   */
+  private resolveSendDays(sc: SectorCfg, config: Record<string, any>): number[] {
+    if (Array.isArray(sc.sendDays) && sc.sendDays.length > 0) {
+      return sc.sendDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+    }
+    return (config?.sendWeekends ?? false) ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5];
   }
 
   // ─── Modo per-sector ────────────────────────────────────────────────────────
@@ -161,6 +176,14 @@ export class ConsolidationService {
 
       const sectorHour = sc.sendHour ?? globalHour;
       const sectorMinute = sc.sendMinute ?? globalMinute;
+      const sendDays = this.resolveSendDays(sc, config);
+
+      if (!force && !sendDays.includes(now.getDay())) {
+        this.logger.debug(
+          `[${tenantId}] setor ${sector.key}: hoje (dia ${now.getDay()}) fora dos dias de envio [${sendDays.join(',')}] — pulando`,
+        );
+        continue;
+      }
 
       if (!force) {
         if (currentHour !== sectorHour) {

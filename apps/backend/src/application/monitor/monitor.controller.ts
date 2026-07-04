@@ -46,8 +46,12 @@ class UpdateConfigDto {
   @IsBoolean() @IsOptional() logisticEnabled?: boolean;
   @IsBoolean() @IsOptional() frotaEnabled?: boolean;
   @IsBoolean() @IsOptional() financeEnabled?: boolean;
-  // Config por setor: { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute } }
-  @IsOptional() sectorConfig?: Record<string, { phone?: string; sendHour?: number; sendMinute?: number }>;
+  // Config por setor: { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute, sendDays } }
+  // sendDays: dias da semana de envio (0=dom … 6=sáb); ausente → deriva de sendWeekends.
+  @IsOptional() sectorConfig?: Record<
+    string,
+    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+  >;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
