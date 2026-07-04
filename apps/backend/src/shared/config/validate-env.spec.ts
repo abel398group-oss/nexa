@@ -14,6 +14,7 @@ const KEYS = [
   'TMS_SERVICE_TOKEN',
   'NEXA_DEFAULT_TENANT_ID',
   'REDIS_URL',
+  'APP_BASE_URL',
 ];
 
 const STRONG_A = 'A1b2C3d4'.repeat(5); // 40 chars
@@ -31,6 +32,7 @@ function setValidProd() {
   process.env.TMS_SERVICE_TOKEN = 'tms_svc_token_prod_1234567890abcdef';
   process.env.NEXA_DEFAULT_TENANT_ID = 'tenant-prod-uuid-1234';
   process.env.REDIS_URL = 'redis://redis:6379';
+  process.env.APP_BASE_URL = 'https://nexa.hipertms.com.br';
 }
 
 describe('validateEnv', () => {
