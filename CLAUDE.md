@@ -47,6 +47,10 @@ pnpm monorepo:
 - **Alternativa para logs em produção**: usar o **console web do DigitalOcean** → Droplets → hiperTMS → Console (terminal direto no browser, sem chave).
 - **Alternativa para comandos no container**: via painel DO Console, rodar os comandos docker normalmente.
 
+### Regra: sempre ler o .env de produção antes de sugerir adicionar variável
+
+**Antes de mandar qualquer comando `echo ... >> .env` para produção, sempre pedir `cat /root/nexa/.env` primeiro** — a variável pode já estar lá. Nunca assumir que falta sem verificar.
+
 ### Limitações conhecidas do ambiente de produção
 
 - **`psql` NÃO existe** no host nem nos containers — nunca tentar usar.
