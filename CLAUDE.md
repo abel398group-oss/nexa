@@ -5,6 +5,16 @@ Guidance for Claude Code (and other AI agents) working in this repository.
 > Communicate with the user in **Brazilian Portuguese**. Write documentation,
 > code comments, and commit messages in **English**.
 
+## Token efficiency — bash commands
+
+Always pipe/filter bash output to minimize tokens in context:
+- `git status` → `git status --short`
+- `git log` → `git log --oneline -10`
+- `git diff` → `git diff --stat` (full diff only when needed)
+- Long outputs → pipe through `head -50` or `grep` for relevant lines
+- Typecheck → capture only `error TS` lines, never full tsc output
+- Never print full file contents when only a section is needed
+
 ## What this is
 
 **Nexa** — a multi-tenant **AI commercial & support platform for SaaS**. It sells,
