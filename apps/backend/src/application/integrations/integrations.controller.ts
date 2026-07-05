@@ -7,6 +7,7 @@
  * POST /integrations/plan-sync   → update PlanLimit.plan for a tenant
  */
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -14,7 +15,7 @@ import {
   Logger,
   Post,
 } from '@nestjs/common';
-import { IsIn, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 /** Plans recognised by Nexa. Mirrors MONITOR_PLANS in monitor.controller.ts. */
@@ -22,8 +23,19 @@ const VALID_PLANS = ['free', 'starter', 'pro', 'enterprise', 'profissional', 'co
 type Plan = (typeof VALID_PLANS)[number];
 
 class PlanSyncDto {
+  /** ID do tenant NO NEXA. Opcional quando `tmsTenantId` é enviado. */
+  @IsOptional()
   @IsString()
-  tenantId!: string;
+  tenantId?: string;
+
+  /**
+   * ID do tenant NO TMS. O Nexa resolve para o tenant local via env
+   * TMS_TENANT_ID_<SLUG> — mesmo mapeamento do POST /monitor/ingest.
+   * Preferir este campo: o TMS não precisa conhecer IDs do Nexa.
+   */
+  @IsOptional()
+  @IsString()
+  tmsTenantId?: string;
 
   @IsIn(VALID_PLANS)
   plan!: Plan;
@@ -49,18 +61,43 @@ export class IntegrationsController {
   ) {
     const expected = process.env.TMS_SYNC_SECRET;
     if (!expected || !secret || secret !== expected) {
-      this.logger.warn(`plan-sync: tentativa com secret inválido para tenant ${dto.tenantId}`);
+      this.logger.warn(`plan-sync: tentativa com secret inválido para tenant ${dto.tenantId ?? dto.tmsTenantId}`);
       throw new ForbiddenException('Unauthorized');
     }
 
+    const tenantId = dto.tenantId ?? (dto.tmsTenantId ? await this.resolveTmsTenant(dto.tmsTenantId) : null);
+    if (!tenantId) {
+      throw new BadRequestException(
+        dto.tmsTenantId
+          ? `tmsTenantId "${dto.tmsTenantId}" não mapeado para nenhum tenant ativo do Nexa`
+          : 'Informe tenantId (Nexa) ou tmsTenantId (TMS)',
+      );
+    }
+
     const updated = await this.prisma.planLimit.upsert({
-      where:  { tenantId: dto.tenantId },
-      create: { tenantId: dto.tenantId, plan: dto.plan },
+      where:  { tenantId },
+      create: { tenantId, plan: dto.plan },
       update: { plan: dto.plan },
       select: { tenantId: true, plan: true, updatedAt: true },
     });
 
-    this.logger.log(`plan-sync: tenant=${dto.tenantId} plan=${dto.plan}`);
+    this.logger.log(`plan-sync: tenant=${tenantId} plan=${dto.plan}`);
     return { synced: true, ...updated };
+  }
+
+  /**
+   * tmsTenantId → tenant Nexa via env TMS_TENANT_ID_<SLUG> (mesmo mapeamento
+   * usado pelo monitor/ingest — fonte única do vínculo entre os dois sistemas).
+   */
+  private async resolveTmsTenant(tmsTenantId: string): Promise<string | null> {
+    const tenants = await this.prisma.tenant.findMany({
+      where: { status: 'active' },
+      select: { id: true, slug: true },
+    });
+    const match = tenants.find((t) => {
+      const key = `TMS_TENANT_ID_${t.slug.toUpperCase().replace(/-/g, '_')}`;
+      return process.env[key] === tmsTenantId;
+    });
+    return match?.id ?? null;
   }
 }

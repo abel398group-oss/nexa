@@ -14,10 +14,37 @@
  * Debug manual: POST /monitor/sync chama syncNow() sob demanda.
  * Notificação manual: POST /monitor/notify-now dispara ConsolidationService (legado).
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { HiperTmsConnector, TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
+
+/** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
+const EXTERNAL_CONFIG_SELECT = {
+  enabled: true,
+  sendHour: true,
+  sendMinute: true,
+  sendWeekends: true,
+  fiscalEnabled: true,
+  logisticEnabled: true,
+  frotaEnabled: true,
+  financeEnabled: true,
+  sectorConfig: true,
+} as const;
+
+export interface ExternalMonitorConfigInput {
+  enabled?: boolean;
+  sendHour?: number;
+  sendMinute?: number;
+  fiscalEnabled?: boolean;
+  logisticEnabled?: boolean;
+  frotaEnabled?: boolean;
+  financeEnabled?: boolean;
+  sectorConfig?: Record<
+    string,
+    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+  >;
+}
 
 @Injectable()
 export class MonitorService {
@@ -88,6 +115,62 @@ export class MonitorService {
 
   private async getActiveTenants() {
     return this.prisma.tenant.findMany({ where: { status: 'active' }, select: { id: true, slug: true } });
+  }
+
+  /** tmsTenantId → tenant Nexa via env TMS_TENANT_ID_<SLUG> (fonte única do mapeamento). */
+  async resolveTenantByTmsId(tmsTenantId: string): Promise<string | null> {
+    const tenants = await this.getActiveTenants();
+    const match = tenants.find((t) => {
+      const key = `TMS_TENANT_ID_${t.slug.toUpperCase().replace(/-/g, '_')}`;
+      return process.env[key] === tmsTenantId;
+    });
+    return match?.id ?? null;
+  }
+
+  // ─── Config externa (ADR 022 — o painel do TMS edita a config via proxy) ─────
+
+  /** Config de notificação exposta ao TMS. Defaults quando o tenant nunca configurou. */
+  async getExternalConfig(tmsTenantId: string) {
+    const tenantId = await this.resolveTenantByTmsId(tmsTenantId);
+    if (!tenantId) throw new NotFoundException(`tmsTenantId "${tmsTenantId}" não mapeado`);
+
+    const config = await this.prisma.tenantNotificationConfig.findUnique({
+      where: { tenantId },
+      select: EXTERNAL_CONFIG_SELECT,
+    });
+    return (
+      config ?? {
+        enabled: false,
+        sendHour: 18,
+        sendMinute: 0,
+        sendWeekends: false,
+        fiscalEnabled: true,
+        logisticEnabled: true,
+        frotaEnabled: true,
+        financeEnabled: true,
+        sectorConfig: null,
+      }
+    );
+  }
+
+  /** Upsert da config vinda do TMS. Mesma tabela usada pelo painel do Nexa — fonte única. */
+  async updateExternalConfig(tmsTenantId: string, input: ExternalMonitorConfigInput) {
+    const tenantId = await this.resolveTenantByTmsId(tmsTenantId);
+    if (!tenantId) throw new NotFoundException(`tmsTenantId "${tmsTenantId}" não mapeado`);
+
+    // Remove chaves undefined para não sobrescrever campos não enviados.
+    const data = Object.fromEntries(
+      Object.entries(input).filter(([, v]) => v !== undefined),
+    );
+
+    const updated = await this.prisma.tenantNotificationConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, ...data },
+      update: data,
+      select: EXTERNAL_CONFIG_SELECT,
+    });
+    this.logger.log(`external-config atualizada via TMS para tenant ${tenantId}`);
+    return updated;
   }
 
   /**

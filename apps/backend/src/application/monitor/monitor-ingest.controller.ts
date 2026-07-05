@@ -11,13 +11,17 @@
  *
  * Se `events` vier vazio, todos os alertas abertos do tenant são resolvidos.
  */
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { ServiceTokenGuard } from '@/shared/guards/service-token.guard';
@@ -43,6 +47,22 @@ export class IngestFromTmsDto {
   events!: TmsEventDto[];
 }
 
+export class ExternalConfigDto {
+  @IsString() tmsTenantId!: string;
+  @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(23) sendHour?: number;
+  @IsOptional() @IsInt() @IsIn([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]) sendMinute?: number;
+  @IsOptional() @IsBoolean() fiscalEnabled?: boolean;
+  @IsOptional() @IsBoolean() logisticEnabled?: boolean;
+  @IsOptional() @IsBoolean() frotaEnabled?: boolean;
+  @IsOptional() @IsBoolean() financeEnabled?: boolean;
+  /** { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute, sendDays[0..6] } } */
+  @IsOptional() sectorConfig?: Record<
+    string,
+    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+  >;
+}
+
 @Controller('monitor')
 @UseGuards(ServiceTokenGuard)
 export class MonitorIngestController {
@@ -51,5 +71,18 @@ export class MonitorIngestController {
   @Post('ingest')
   async ingest(@Body() dto: IngestFromTmsDto) {
     return this.monitor.ingestFromTms(dto.tmsTenantId, dto.events);
+  }
+
+  // ── Config editada de dentro do TMS (proxy server-to-server — ADR 022) ──────
+
+  @Get('external-config')
+  async getExternalConfig(@Query('tmsTenantId') tmsTenantId: string) {
+    return this.monitor.getExternalConfig(tmsTenantId);
+  }
+
+  @Put('external-config')
+  async updateExternalConfig(@Body() dto: ExternalConfigDto) {
+    const { tmsTenantId, ...config } = dto;
+    return this.monitor.updateExternalConfig(tmsTenantId, config);
   }
 }

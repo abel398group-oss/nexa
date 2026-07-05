@@ -250,10 +250,10 @@ export class MonitorController {
     }
     const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const msg =
-      `🧪 *Teste do Monitor Proativo — Hipervias*\n\n` +
+      `🧪 *Teste do Monitor Proativo — HiperTMS*\n\n` +
       `Se você recebeu esta mensagem, as notificações estão funcionando corretamente! ✅\n\n` +
       `_Enviado em: ${now}_\n\n` +
-      `Acesse o painel da Hipervias: https://www.hipertms.com.br`;
+      `Acesse o painel do HiperTMS: https://www.hipertms.com.br`;
     const result = await this.waha.sendText(phone, msg);
     return { sent: result.sent, phone, reason: result.reason ?? null };
   }

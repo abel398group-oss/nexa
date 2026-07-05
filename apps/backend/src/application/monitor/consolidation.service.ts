@@ -58,6 +58,13 @@ const SEVERITY_EMOJI: Record<string, string> = {
   DUE_SOON: '🟡',
   INFO:     '🔵',
 };
+
+const SEVERITY_LABEL_PT: Record<string, string> = {
+  CRITICAL: 'CRÍTICO',
+  OVERDUE:  'VENCIDO',
+  DUE_SOON: 'A VENCER',
+  INFO:     'INFO',
+};
 const ARCHIVE_AFTER_NOTIFICATIONS = 2;
 const ARCHIVE_AFTER_HOURS = 48;
 
@@ -331,12 +338,12 @@ export class ConsolidationService {
     for (const sev of SEVERITY_ORDER) {
       const group = grouped[sev];
       if (!group.length) continue;
-      lines.push(`${SEVERITY_EMOJI[sev]} *${sev}* (${group.length})`);
+      lines.push(`${SEVERITY_EMOJI[sev]} *${SEVERITY_LABEL_PT[sev] ?? sev}* (${group.length})`);
       group.slice(0, 5).forEach((a) => lines.push(`  • ${a.title}`));
       if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
 
-    lines.push('\nAcesse o painel da Hipervias para mais detalhes: https://www.hipertms.com.br');
+    lines.push('\nAcesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
   }
 
@@ -355,12 +362,12 @@ export class ConsolidationService {
     for (const sev of SEVERITY_ORDER) {
       const group = grouped[sev];
       if (!group.length) continue;
-      lines.push(`${SEVERITY_EMOJI[sev]} *${sev}* (${group.length})`);
+      lines.push(`${SEVERITY_EMOJI[sev]} *${SEVERITY_LABEL_PT[sev] ?? sev}* (${group.length})`);
       group.slice(0, 5).forEach((a) => lines.push(`  • ${a.title}`));
       if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
 
-    lines.push('\nAcesse o painel da Hipervias para mais detalhes: https://www.hipertms.com.br');
+    lines.push('\nAcesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
   }
 
