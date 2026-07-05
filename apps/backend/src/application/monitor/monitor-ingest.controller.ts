@@ -56,10 +56,10 @@ export class ExternalConfigDto {
   @IsOptional() @IsBoolean() logisticEnabled?: boolean;
   @IsOptional() @IsBoolean() frotaEnabled?: boolean;
   @IsOptional() @IsBoolean() financeEnabled?: boolean;
-  /** { fiscal|logistic|frota|finance: { phone, sendHour, sendMinute, sendDays[0..6] } } */
+  /** { fiscal|logistic|frota|finance: { phone, email, sendHour, sendMinute, sendDays[0..6] } } */
   @IsOptional() sectorConfig?: Record<
     string,
-    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+    { phone?: string; email?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
   >;
 }
 
