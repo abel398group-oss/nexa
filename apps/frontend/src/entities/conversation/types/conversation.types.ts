@@ -13,7 +13,7 @@ export interface Conversation {
   customerStage?: string | null;
   ticketCategory?: string | null;
   ticketPriority?: string | null;
-  contact?: { id?: string; name?: string | null; nameSource?: string | null; tags?: string[] } | null;
+  contact?: { id?: string; name?: string | null; nameSource?: string | null; company?: string | null; tags?: string[] } | null;
   campaign?: { id: string; name: string } | null;
 }
 

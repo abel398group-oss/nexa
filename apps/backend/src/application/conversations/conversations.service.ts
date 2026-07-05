@@ -37,7 +37,7 @@ export class ConversationsService {
         const phones = [...new Set(convs.map((c: any) => c.phone))];
         const contacts = await this.prisma.contact.findMany({
           where: { tenantId, phone: { in: phones } },
-          select: { id: true, phone: true, name: true, nameSource: true, tags: true },
+          select: { id: true, phone: true, name: true, nameSource: true, company: true, tags: true },
         });
         const contactMap = new Map(contacts.map((c: any) => [c.phone, c]));
 

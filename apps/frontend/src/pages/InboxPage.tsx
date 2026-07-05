@@ -585,6 +585,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                       {c.contact?.name && (
                         <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
                       )}
+                      {c.contact?.company && (
+                        <div className="flex items-center gap-1 truncate text-[11px] text-base-content/60 font-medium">
+                          <Icon name="building" className="h-3 w-3 shrink-0 text-base-content/40" />
+                          {c.contact.company}
+                        </div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
                         {g.convs.length > 1 && (
@@ -648,6 +654,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                   {active.contact?.name && (
                     <span className="text-xs text-base-content/50">{displayPhone(active.phone)}</span>
                   )}
+                  {active.contact?.company && (
+                    <span className="flex items-center gap-1 text-xs text-base-content/60 font-medium">
+                      <Icon name="building" className="h-3.5 w-3.5 text-base-content/40" />
+                      {active.contact.company}
+                    </span>
+                  )}
                 </div>
 
                 {/* campanha de origem da conversa */}
@@ -700,10 +712,14 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 )}
                 {tmsLookup?.found && tmsLookup.customer && (
                   <span
-                    title={`${tmsLookup.customer.name}${tmsLookup.customer.plan ? ` · Plano: ${tmsLookup.customer.plan}` : ''}`}
+                    title={`Cliente TMS${tmsLookup.customer.plan ? ` · Plano: ${tmsLookup.customer.plan}` : ''}`}
                     className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700"
                   >
-                    <Icon name="check" className="h-3 w-3" /> Cliente TMS{tmsLookup.customer.plan ? ` — ${tmsLookup.customer.plan}` : ''}
+                    <Icon name="building" className="h-3 w-3" />
+                    {tmsLookup.customer.name}
+                    {tmsLookup.customer.plan && (
+                      <span className="opacity-70">· {tmsLookup.customer.plan}</span>
+                    )}
                   </span>
                 )}
                 {tmsLookup !== null && !tmsLookup.found && (
