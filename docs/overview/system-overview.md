@@ -256,4 +256,12 @@ O Nexa não reimplementa o TMS: consome-o via **Connector** (ADR 008/010).
 ## 10. Documentos relacionados
 
 - **Código**: `CLAUDE.md` (raiz) — guia operacional para agentes de IA
-- **Decisões**: `docs/adr/` — 33 ADRs por domín
+- **Decisões**: `docs/adr/` — 33 ADRs por domínio
+- **IA**: `docs/ai/` — agentes, guardrails, RAG, contexto, memória, revisão
+- **Arquitetura**: `docs/architecture/` — codebase, frontend, C4
+- **API**: `docs/api/` — padrões, erros, nomenclatura
+- **Segurança**: `docs/security/` — visão geral, segredos
+- **Infra**: `docs/infra/` — deploy, CI/CD, migrations
+- **Schema**: `docs/schema/` — Prisma, migrations, runtime
+- **Features**: `docs/features/` e `docs/prd/` — PRDs por módulo
+- **Gaps & roadmap**: `docs/ANALISE_HIPERTMS_GAPS.md` (2026-06-18)

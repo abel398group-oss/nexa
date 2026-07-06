@@ -59,4 +59,8 @@ Ver [`migrations.md`](migrations.md) — regras do Prisma (migrate dev/deploy, n
 
 ## Pendências antes de rodar `prisma migrate`
 - Decidir módulo vs serviço (afeta tenantId/auth)
-- Co
+- Confirmar pgvector (ou remover embedding)
+- Validar em runtime os endpoints do TMS (webhook assinatura, liberação, reconcile cron)
+- Testar `Json @default("{}")` na versão Prisma/Postgres alvo (pode precisar `'{}'::jsonb`)
+- Foreign keys: hoje os `*Id` de expansão são texto puro (ex: AiEscalation.conversationId);
+  ligar como relação Prisma quando implementar a Fase 2 (intencional não ligar agora)

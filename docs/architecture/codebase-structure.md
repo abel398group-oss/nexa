@@ -94,4 +94,16 @@ src/
 ## Banco de dados
 
 Prisma + PostgreSQL 16 (pgvector). Schema e migrações em
-`apps/backend/prisma/` (espelhados em `docs/schema/`). Migrações versionadas 
+`apps/backend/prisma/` (espelhados em `docs/schema/`). Migrações versionadas por
+timestamp — ver `docs/infra/prisma-migrations.md`.
+
+## Convenções
+
+- TypeScript em todo o monorepo; importar pelos barrels dos packages.
+- Preferir estender módulos de feature existentes a criar estruturas paralelas.
+- Nomenclatura: ver `docs/api/naming-conventions.md`.
+
+## Relacionados
+
+- `docs/architecture/c4-container.md` · `docs/architecture/c4-component.md`
+- `docs/overview/system-overview.md` · `CLAUDE.md`

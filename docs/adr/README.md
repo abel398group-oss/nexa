@@ -60,4 +60,18 @@ e quais alternativas foram rejeitadas.
 # ADR NNN — Título
 
 - **Status**: Proposto | Aceito | Deprecado | Substituído por ADR NNN
--
+- **Data**: YYYY-MM-DD
+- **Autores**: ...
+
+## Contexto
+[Por que essa decisão precisou ser tomada?]
+
+## Decisão
+[O que foi decidido?]
+
+## Alternativas consideradas
+[O que foi rejeitado e por quê?]
+
+## Consequências
+[O que muda? Quais são os trade-offs?]
+```

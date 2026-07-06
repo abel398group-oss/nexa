@@ -57,4 +57,6 @@ O ADR 014 formalizou as decisões atualizadas:
 
 ## Consequências
 
-- Sem lock-in de biblioteca de compo
+- Sem lock-in de biblioteca de componentes externa
+- Stack mínima: bundle pequeno, build rápido (~1s dev HMR)
+- Responsabilidade de manter os átomos CSS é do time Nexa
