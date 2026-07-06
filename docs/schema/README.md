@@ -1,7 +1,14 @@
 # Schema Prisma — Sistema de Leads / IA Autônoma
 
-> **Artefato de design.** NÃO implementar ainda. Serve para consultar quando construir
-> o backend NestJS. Derivado de `prd/data-model-ia.md` + ADRs 003/004/007/008.
+> ⚠️ **DESATUALIZADO — REFERÊNCIA HISTÓRICA APENAS**
+>
+> Este arquivo é um artefato de design da fase de planejamento (2025). O schema real
+> do banco está em **`apps/backend/prisma/schema.prisma`** — essa é a fonte de verdade.
+> Modelos listados aqui (ex.: `AiAgentSession`, `BillingEvent`, `FeatureFlag`,
+> `AiBillingRequest`) nunca foram implementados e não existem no banco.
+> Consulte sempre o schema Prisma real antes de escrever código ou migrações.
+
+> *Artefato de design original (2025):* derivado de `prd/data-model-ia.md` + ADRs 003/004/007/008.
 
 ## Convenções aplicadas
 - `id String @id @default(uuid())` em todas as tabelas
@@ -52,8 +59,4 @@ Ver [`migrations.md`](migrations.md) — regras do Prisma (migrate dev/deploy, n
 
 ## Pendências antes de rodar `prisma migrate`
 - Decidir módulo vs serviço (afeta tenantId/auth)
-- Confirmar pgvector (ou remover embedding)
-- Validar em runtime os endpoints do TMS (webhook assinatura, liberação, reconcile cron)
-- Testar `Json @default("{}")` na versão Prisma/Postgres alvo (pode precisar `'{}'::jsonb`)
-- Foreign keys: hoje os `*Id` de expansão são texto puro (ex: AiEscalation.conversationId);
-  ligar como relação Prisma quando implementar a Fase 2 (intencional não ligar agora)
+- Co

@@ -79,8 +79,9 @@ Arquitetura em camadas (DDD-influenciada):
 
 ### 3.2 Frontend — React (`apps/frontend`)
 
-React 18 + Vite 5 + TypeScript + Tailwind 3. Páginas: Login, Landing, Dashboard (KPIs),
-Inbox (conversas em tempo real + socket.io), Suporte + Config de Suporte + Clientes,
+React 18 + Vite 5 + TypeScript + **Tailwind 4**. Páginas: Login, Landing, Dashboard (KPIs),
+Inbox (conversas em tempo real + socket.io), Suporte + Config + Dashboard de Suporte + Clientes,
+Monitor de Alertas Proativos, Oportunidades (pipeline), Canal de E-mail,
 Contatos (CRM + import CSV), Campanhas, Knowledge Base, Vendedores, Saúde dos Números,
 Usuários & Acessos, Playbook, Tokens Dev, Portal do Cliente.
 
@@ -89,11 +90,14 @@ Dark mode via `html.dark`. Auth via cookie HttpOnly.
 
 ### 3.3 Banco de dados — PostgreSQL 16
 
-Prisma ORM + pgvector. Schema e migrações em `apps/backend/prisma/`
-(espelhados em `docs/schema/`). Entidades principais: `User`, `Session`, `AuditLog`,
-`Tenant`, `Contact`, `AiConversation`, `AiMessage`, `AiKnowledgeBase`, `Seller`,
-`Campaign`, `CampaignTarget`, `SenderNumber`, `FollowUp`, `DomainEvent`, `Product`,
-`Credential`, `AiBillingRequest`, `Playbook`, `Portal*`.
+Prisma ORM + pgvector. Schema e migrações em `apps/backend/prisma/` — **fonte de verdade**.
+Entidades principais: `Tenant`, `User`, `Contact`, `AiConversation`, `AiMessage`,
+`AiKnowledgeBase`, `Seller`, `Campaign`, `CampaignTarget`, `SenderNumber`, `FollowUp`,
+`DomainEvent`, `Opportunity`, `AlertState`, `TenantNotificationConfig`, `PlanLimit`,
+`ProactiveRuleConfig`, `WebhookDelivery`, `WebhookSubscription`, `PortalSession`,
+`PortalTicket`, `AuditLog`, `AutonomySetting`.
+⚠️ `docs/schema/README.md` e `docs/schema/schema.prisma` são artefatos legados de design
+— o schema real está apenas em `apps/backend/prisma/schema.prisma`.
 
 ### 3.4 Cache — Redis `:6380`
 
@@ -242,7 +246,9 @@ O Nexa não reimplementa o TMS: consome-o via **Connector** (ADR 008/010).
 | Deploy DigitalOcean | ⏳ Em andamento |
 | Testes automatizados | 🔴 Parcial (70 testes; e2e ausente) |
 | Canal e-mail (além do SMTP) | ❌ Planejado (ADR 021 + ver ANALISE_HIPERTMS_GAPS) |
-| Motor proativo (Lia age sem trigger) | ❌ Planejado |
+| Monitor Proativo TMS (alertas automáticos) | ✅ Implementado (ADR 028/032) |
+| IntegrationsModule (plan-sync TMS→Nexa) | ✅ Implementado (ADR 033) |
+| Motor proativo autônomo (Lia age sem trigger) | ❌ Planejado |
 | Analytics / Relatórios | ❌ Planejado |
 
 ---
@@ -250,12 +256,4 @@ O Nexa não reimplementa o TMS: consome-o via **Connector** (ADR 008/010).
 ## 10. Documentos relacionados
 
 - **Código**: `CLAUDE.md` (raiz) — guia operacional para agentes de IA
-- **Decisões**: `docs/adr/` — 27 ADRs por domínio
-- **IA**: `docs/ai/` — agentes, guardrails, RAG, contexto, memória, revisão
-- **Arquitetura**: `docs/architecture/` — codebase, frontend, C4
-- **API**: `docs/api/` — padrões, erros, nomenclatura
-- **Segurança**: `docs/security/` — visão geral, segredos
-- **Infra**: `docs/infra/` — deploy, CI/CD, migrations
-- **Schema**: `docs/schema/` — Prisma, migrations, runtime
-- **Features**: `docs/features/` e `docs/prd/` — PRDs por módulo
-- **Gaps & roadmap**: `docs/ANALISE_HIPERTMS_GAPS.md` (2026-06-18)
+- **Decisões**: `docs/adr/` — 33 ADRs por domín

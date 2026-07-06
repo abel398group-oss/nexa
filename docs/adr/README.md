@@ -44,6 +44,8 @@ e quais alternativas foram rejeitadas.
 | [029](029-canal-status-whatsapp.md) | Canal WhatsApp Status — broadcast passivo em campanhas | Aceito (implementado) |
 | [030](030-monitor-frota-whatsapp.md) | Monitor de Frota via WhatsApp — CNH, CRLV, manutenção por km/data | Aceito |
 | [031](031-cotacao-whatsapp.md) | Cotação de Frete via WhatsApp — dois modos: público (prospect) e personalizado (cliente) | Aceito |
+| [032](032-monitor-dual-channel-plan-gate.md) | Monitor Proativo — Dual-channel (email + WhatsApp) e gate por plano | Aceito (implementado) |
+| [033](033-integrations-plan-sync.md) | IntegrationsModule — Sincronização de Planos TMS → Nexa | Aceito (implementado) |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.
@@ -58,18 +60,4 @@ e quais alternativas foram rejeitadas.
 # ADR NNN — Título
 
 - **Status**: Proposto | Aceito | Deprecado | Substituído por ADR NNN
-- **Data**: YYYY-MM-DD
-- **Autores**: ...
-
-## Contexto
-[Por que essa decisão precisou ser tomada?]
-
-## Decisão
-[O que foi decidido?]
-
-## Alternativas consideradas
-[O que foi rejeitado e por quê?]
-
-## Consequências
-[O que muda? Quais são os trade-offs?]
-```
+-

@@ -38,8 +38,9 @@ src/
     followup/ sellers/ sender/ email/ whatsapp/ metrics/ notifications/
     opportunities/        pipeline de vendas (estágios new→qualified→proposal→won/lost)
     portal/               sessão + chamados do cliente (Portal de Suporte)
-    monitor/              monitor de saúde do WAHA + alertas proativos
+    monitor/              monitor de saúde do WAHA + alertas proativos (dual-channel email+WhatsApp)
     proactive-engine/     engine de SLA, follow-up e alertas antecipados
+    integrations/         sync de planos TMS → Nexa (POST /integrations/plan-sync — ADR 033)
     webhooks/             recepção e roteamento de webhooks externos
     auth/ users/ admin/
   presentation/
@@ -72,9 +73,14 @@ Ver `docs/architecture/frontend-architecture.md`. Resumo:
 ```
 src/
   main.tsx App.tsx        roteamento (landing pública + área protegida)
-  pages/        uma página por rota (Landing, Login, Inbox, Support,
-                Support/Config, Support/Clients, Contacts, Campaigns, Knowledge,
-                Sellers, NumberHealth, Users, Playbook, Dashboard, portal/PortalPage, ...)
+  pages/        uma página por rota:
+                Landing, Login, Dashboard (KPIs), Inbox (conversas + tempo real),
+                SupportPage, SupportConfigPage, SupportDashboardPage, SupportClientsPage,
+                MonitorConfigPage (config de alertas proativos — ADR 028/032),
+                OpportunitiesPage (pipeline de vendas),
+                EmailChannelSettingsPage (SMTP/IMAP por tenant),
+                Contacts, Campaigns, Knowledge, Sellers, NumberHealth,
+                Users, Playbook, DevTokensPage, portal/PortalPage
   components/
     ui/         design system próprio (~30 componentes) + stories (Storybook)
     conversation/  compostos do inbox/suporte (timeline, badges, métricas)
@@ -88,16 +94,4 @@ src/
 ## Banco de dados
 
 Prisma + PostgreSQL 16 (pgvector). Schema e migrações em
-`apps/backend/prisma/` (espelhados em `docs/schema/`). Migrações versionadas por
-timestamp — ver `docs/infra/prisma-migrations.md`.
-
-## Convenções
-
-- TypeScript em todo o monorepo; importar pelos barrels dos packages.
-- Preferir estender módulos de feature existentes a criar estruturas paralelas.
-- Nomenclatura: ver `docs/api/naming-conventions.md`.
-
-## Relacionados
-
-- `docs/architecture/c4-container.md` · `docs/architecture/c4-component.md`
-- `docs/overview/system-overview.md` · `CLAUDE.md`
+`apps/backend/prisma/` (espelhados em `docs/schema/`). Migrações versionadas 

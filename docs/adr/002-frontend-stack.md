@@ -21,7 +21,7 @@ O frontend é o painel de operação da Lia (assistente de vendas/suporte via Wh
 | React | 18.3 | UI framework |
 | Vite | 5.4 | Build tool e dev server |
 | TypeScript | 5.5 | Tipagem estática |
-| Tailwind CSS | 3.4 | Utilitários CSS |
+| Tailwind CSS | **4.0** | Utilitários CSS (migrado de v3 em 2026-07 — usa `@tailwindcss/vite`, sem `postcss.config.js`) |
 | React Router DOM | 6.26 | Roteamento SPA |
 | Axios | 1.7 | Cliente HTTP |
 | Socket.io-client | 4.8 | Websocket para Inbox em tempo real |
@@ -30,13 +30,13 @@ O frontend é o painel de operação da Lia (assistente de vendas/suporte via Wh
 ### Design system
 
 Proprietário, espelhando o HiperTMS (referência visual do Uelder).
-Tokens CSS em `index.css` + extensões de tema em `tailwind.config.js`.
+Tokens CSS em `index.css` com sintaxe `@theme` do Tailwind v4 (sem `tailwind.config.js`).
 Não utiliza biblioteca de componentes externa.
 **Ver ADR 014 para inventário completo e regras de uso.**
 
 ### Dark mode
 
-Implementado via classe `html.dark` (Tailwind `darkMode: 'class'`).
+Implementado via classe `html.dark` (Tailwind v4: `@variant dark (&:where(html.dark, html.dark *))`).
 Tokens CSS em `:root` são sobrescritos em `html.dark` — componentes adaptam automaticamente.
 
 ---
@@ -57,6 +57,4 @@ O ADR 014 formalizou as decisões atualizadas:
 
 ## Consequências
 
-- Sem lock-in de biblioteca de componentes externa
-- Stack mínima: bundle pequeno, build rápido (~1s dev HMR)
-- Responsabilidade de manter os átomos CSS é do time Nexa
+- Sem lock-in de biblioteca de compo
