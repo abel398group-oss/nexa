@@ -957,6 +957,42 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     tags: ['plano', 'assinatura', 'upgrade', 'downgrade', 'cobranca', 'mudar plano'],
   },
 
+  // ─── CT-e RELATÓRIOS E CONSULTA ─────────────────────────────────────────────
+
+  {
+    topic: 'cte-rejeicao',
+    category: 'suporte',
+    title: 'Como visualizar todos os CT-e emitidos — lista e filtros',
+    content:
+      'Para consultar todos os CT-e da sua operação:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. A lista exibe todos os CT-e com: número, tomador, valor, data de emissão e situação fiscal.\n' +
+      'Status disponíveis para filtrar:\n' +
+      '• Autorizado — emitido e validado pela SEFAZ\n' +
+      '• Cancelado — cancelamento autorizado\n' +
+      '• Denegado — emissão negada pela SEFAZ\n' +
+      '• Em processamento — aguardando retorno da SEFAZ\n' +
+      'Para ver apenas um tipo: use o filtro de situação fiscal no topo da lista.\n' +
+      'Para buscar por período: use o filtro de data de emissão.\n' +
+      'Para ver os detalhes de um CT-e: clique no registro — abre o DANFE resumido e os dados completos.',
+    tags: ['cte', 'relatorio', 'lista', 'consultar', 'todos cte', 'emitidos', 'filtro', 'status', 'periodo', 'operacao'],
+  },
+  {
+    topic: 'cte-rejeicao',
+    category: 'suporte',
+    title: 'Como baixar o DACTE (PDF do CT-e autorizado)',
+    content:
+      'O DACTE é o documento impresso do CT-e, necessário para acompanhar a carga.\n' +
+      'Para baixar:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. Localize o CT-e desejado (status deve ser "Autorizado").\n' +
+      '3. Clique no CT-e para abrir os detalhes.\n' +
+      '4. Clique em Download DACTE.\n' +
+      'O PDF será gerado e baixado automaticamente.\n' +
+      'Atenção: só é possível baixar o DACTE de CT-e com status "Autorizado". CT-e cancelado, denegado ou em processamento não geram DACTE.',
+    tags: ['dacte', 'pdf', 'cte', 'imprimir', 'download', 'documento impresso', 'autorizado'],
+  },
+
   // ─── GAPS DOS MANUAIS ATUALIZADOS (jun/2026) ────────────────────────────────
 
   {
