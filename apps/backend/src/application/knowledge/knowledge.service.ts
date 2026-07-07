@@ -62,7 +62,7 @@ export class KnowledgeService {
           const exClause = ex.length ? ' AND NOT (category = ANY($4::text[]))' : '';
           const params: any[] = ex.length ? [lit, tenantId, topN, ex] : [lit, tenantId, topN];
           const rows = (await this.prisma.$queryRawUnsafe(
-            `SELECT id, title, content, category, 1 - (embedding <=> $1::vector) AS score
+            `SELECT id, title, content, category, topic, 1 - (embedding <=> $1::vector) AS score
                FROM ai_knowledge_base
               WHERE tenant_id = $2 AND embedding IS NOT NULL${exClause}
               ORDER BY embedding <=> $1::vector
@@ -75,6 +75,7 @@ export class KnowledgeService {
               title: r.title,
               content: r.content,
               category: r.category,
+              topic: r.topic ?? null,
               score: Number(r.score),
             }));
           }
@@ -135,6 +136,7 @@ export class KnowledgeService {
       title: x.kb.title,
       content: x.kb.content,
       category: x.kb.category,
+      topic: x.kb.topic ?? null,
       score: x.score,
     }));
   }

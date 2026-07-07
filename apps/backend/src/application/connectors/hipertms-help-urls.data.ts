@@ -1,0 +1,46 @@
+// Mapeamento topic → URL da Central de Ajuda do HiperTMS.
+// Fornecido pelo squad TMS em 2026-07-07.
+// Topics sem artigo específico ficam ausentes — o fallback é HELP_BASE_URL.
+export const HELP_BASE_URL = 'https://hipertms.com.br/ajuda';
+
+export const HELP_URLS: Record<string, string> = {
+  'acesso-login':               'https://hipertms.com.br/ajuda/primeiros-passos/como-fazer-login',
+  'cte-rejeicao':               'https://hipertms.com.br/ajuda/operacao/reemitir-cte',
+  'cte-cancelamento':           'https://hipertms.com.br/ajuda/operacao/cte',
+  'mdfe-problemas':             'https://hipertms.com.br/ajuda/operacao/encerrar-cancelar-mdfe',
+  'precificacao-erros':         'https://hipertms.com.br/ajuda/precificacao/tipos-tabela',
+  'embarques-problemas':        'https://hipertms.com.br/ajuda/vendas/embarque-a-partir-de-xml',
+  'frota-problemas':            'https://hipertms.com.br/ajuda/frota/status-veiculo',
+  'financeiro-problemas':       'https://hipertms.com.br/ajuda/financeiro/fatura-tomador',
+  'cadastros-problemas':        'https://hipertms.com.br/ajuda/cadastros/cadastrar-cliente',
+  'vendas-cotacoes':            'https://hipertms.com.br/ajuda/vendas/converter-cotacao',
+  'vendas-embarques':           'https://hipertms.com.br/ajuda/vendas/criar-embarque',
+  'vendas-oportunidades':       'https://hipertms.com.br/ajuda/vendas/funil-sdr',
+  'operacao-cargas':            'https://hipertms.com.br/ajuda/operacao/programacao-cargas',
+  'operacao-viagens':           'https://hipertms.com.br/ajuda/operacao/criar-viagem',
+  'operacao-cte':               'https://hipertms.com.br/ajuda/operacao/cte',
+  'operacao-mdfe':              'https://hipertms.com.br/ajuda/operacao/mdfe',
+  'operacao-gnre':              'https://hipertms.com.br/ajuda/operacao/gnre',
+  'cadastros-terceiros':        'https://hipertms.com.br/ajuda/cadastros/cadastrar-terceiro',
+  'cadastros-empresas':         'https://hipertms.com.br/ajuda/cadastros/remetentes-destinatarios',
+  'frota-abastecimento':        'https://hipertms.com.br/ajuda/frota/aprovar-abastecimento',
+  'frota-diarias':              'https://hipertms.com.br/ajuda/frota/registrar-diaria',
+  'frota-veiculos':             'https://hipertms.com.br/ajuda/frota/status-veiculo',
+  'financeiro-contas':          'https://hipertms.com.br/ajuda/financeiro/registrar-conta-pagar',
+  'financeiro-categorias':      'https://hipertms.com.br/ajuda/financeiro/plano-contas',
+  'financeiro-bancario':        'https://hipertms.com.br/ajuda/financeiro/contas-bancarias',
+  'equipes-tarefas':            'https://hipertms.com.br/ajuda/equipes/criar-tarefa',
+  'equipes-times':              'https://hipertms.com.br/ajuda/equipes/organizar-times',
+  'equipes-notificacoes':       'https://hipertms.com.br/ajuda/equipes/notificacoes',
+  'compras-pedidos':            'https://hipertms.com.br/ajuda/compras/pedido-compra',
+  'compras-estoque':            'https://hipertms.com.br/ajuda/compras/consultar-estoque',
+  'administracao-empresa':      'https://hipertms.com.br/ajuda/administracao/atualizar-empresa',
+  'administracao-configuracoes':'https://hipertms.com.br/ajuda/administracao/parametros-automacao',
+  'administracao-assinatura':   'https://hipertms.com.br/ajuda/administracao/assinatura',
+  'relatorios':                 'https://hipertms.com.br/ajuda/relatorios/hub-relatorios',
+  'relatorios-financeiro':      'https://hipertms.com.br/ajuda/relatorios/rel-aging',
+  'relatorios-logistica':       'https://hipertms.com.br/ajuda/relatorios/rel-quote-conversion',
+  'relatorios-frota':           'https://hipertms.com.br/ajuda/relatorios/rel-fuel',
+  'relatorios-fiscal':          'https://hipertms.com.br/ajuda/relatorios/rel-cte-summary',
+  // cte-carta-correcao e certificado-digital: sem artigo específico → usa HELP_BASE_URL como fallback
+};

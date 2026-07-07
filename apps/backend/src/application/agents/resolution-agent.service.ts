@@ -5,6 +5,7 @@ import { PlaybookService } from '@/application/playbook/playbook.service';
 import { SalesAgentService } from './sales-agent.service';
 import { DiagnosticResult } from './diagnostic-agent.service';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
+import { HELP_URLS, HELP_BASE_URL } from '@/application/connectors/hipertms-help-urls.data';
 
 export interface ResolutionResult {
   draft: string;                     // texto a enviar ao cliente
@@ -93,6 +94,14 @@ Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
       const parsed = JSON.parse(clean) as Omit<ResolutionResult, 'usedKnowledge' | 'allowedFacts'>;
       // Remove markdown residual
       parsed.draft = SalesAgentService.stripMarkdown(parsed.draft);
+
+      // Appenda link da Central de Ajuda quando resolvido via KB
+      if (parsed.resolved && kb.length > 0) {
+        const topic = (kb[0] as any).topic as string | null;
+        const helpUrl = (topic && HELP_URLS[topic]) ? HELP_URLS[topic] : HELP_BASE_URL;
+        parsed.draft = `${parsed.draft}\n\n📖 Central de Ajuda: ${helpUrl}`;
+      }
+
       return { ...parsed, usedKnowledge, allowedFacts };
     } catch (err: any) {
       this.logger.warn(`Resolução falhou (${err?.message})`);

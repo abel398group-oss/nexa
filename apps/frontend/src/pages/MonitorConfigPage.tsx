@@ -468,12 +468,16 @@ export function MonitorConfigPage() {
             <Button variant="ghost" onClick={() => syncNow.mutate()} loading={syncNow.isPending} title="Busca eventos atuais do TMS">
               <Icon name="refresh" className="h-4 w-4" /> Sincronizar
             </Button>
-            <Button variant="ghost" onClick={() => seedAlerts.mutate()} loading={seedAlerts.isPending} title="Cria alertas de teste em todos os setores">
-              <Icon name="pulse" className="h-4 w-4" /> Seed alertas
-            </Button>
-            <Button variant="ghost" onClick={() => notifyNow.mutate()} loading={notifyNow.isPending} title="Dispara notificações agora para todos os setores">
-              <Icon name="send" className="h-4 w-4" /> Notificar agora
-            </Button>
+            {isPlatformAdmin && (
+              <>
+                <Button variant="ghost" onClick={() => seedAlerts.mutate()} loading={seedAlerts.isPending} title="Cria alertas de teste em todos os setores">
+                  <Icon name="pulse" className="h-4 w-4" /> Seed alertas
+                </Button>
+                <Button variant="ghost" onClick={() => notifyNow.mutate()} loading={notifyNow.isPending} title="Dispara notificações agora para todos os setores">
+                  <Icon name="send" className="h-4 w-4" /> Notificar agora
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               onClick={() => testNotify.mutate()}
