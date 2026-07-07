@@ -1540,4 +1540,739 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'A integração com o Financeiro é automática: ao aprovar uma compra para pagamento, o sistema gera automaticamente uma conta a pagar no módulo Financeiro.',
     tags: ['kanban', 'board', 'compras', 'visualizacao', 'solicitacao compra', 'aprovacao compra', 'financeiro compras'],
   },
+
+  // ══════════════════════════════════════════════════════════
+  // VENDAS — Cotações, Embarques e Oportunidades
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'vendas-cotacoes',
+    category: 'suporte',
+    title: 'Como exportar cotações para CSV',
+    content:
+      'Problema: preciso levar a lista de cotações para uma planilha ou análise externa.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Cotações.\n' +
+      '2. Aplique os filtros desejados (data, cliente, status) — a exportação respeita os filtros ativos na tela.\n' +
+      '3. Clique no botão "Exportar CSV".\n' +
+      '4. O arquivo traz número, cliente, origem, destino, valor, status e data de cada cotação.\n' +
+      'Obs: só saem as cotações visíveis conforme o filtro. Para exportar tudo, limpe os filtros antes.',
+    tags: ['cotacoes', 'exportar', 'csv', 'vendas', 'planilha', 'relatorio'],
+  },
+  {
+    topic: 'vendas-cotacoes',
+    category: 'suporte',
+    title: 'Ações em lote: cancelar ou arquivar várias cotações de uma vez',
+    content:
+      'Problema: preciso cancelar ou arquivar muitas cotações e fazer uma a uma é lento.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Cotações.\n' +
+      '2. Marque o checkbox no início de cada linha desejada.\n' +
+      '3. Ao selecionar, aparece a barra de ações em lote.\n' +
+      '4. Escolha: Exportar selecionados, Cancelar em lote ou Arquivar em lote.\n' +
+      'Obs: cotações arquivadas saem da listagem padrão mas continuam no histórico. Use para limpar cotações antigas sem perder o registro.',
+    tags: ['cotacoes', 'acoes em lote', 'cancelar', 'arquivar', 'vendas', 'selecao'],
+  },
+  {
+    topic: 'vendas-cotacoes',
+    category: 'suporte',
+    title: 'Cotação aprovada não virou embarque',
+    content:
+      'Problema: o cliente aprovou a cotação mas o embarque não foi criado.\n' +
+      'Causa: a conversão em embarque não é automática — é uma ação manual.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Cotações e abra a cotação com status "Aprovada".\n' +
+      '2. Clique em "Converter em Embarque".\n' +
+      '3. O sistema cria o embarque com todos os dados já preenchidos (tomador, remetente, destinatário, carga, valor).\n' +
+      '4. A cotação passa para o status "Convertida".\n' +
+      'Obs: revise os dados antes de confirmar a conversão.',
+    tags: ['cotacao', 'converter embarque', 'aprovada', 'convertida', 'vendas'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Como gerar o e-mail de confirmação de coleta (Booking)',
+    content:
+      'Problema: preciso avisar o remetente sobre a coleta com os dados da operação.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Embarques e selecione o embarque.\n' +
+      '2. Use a função "Gerar E-mail de Booking" — o sistema monta a mensagem automaticamente com os dados da operação.\n' +
+      '3. Copie o texto gerado e envie ao remetente.\n' +
+      'Personalização: para ajustar o modelo, acesse Vendas → Modelo de E-mail de Booking.',
+    tags: ['booking', 'coleta', 'email', 'embarque', 'confirmacao', 'vendas'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Emitir CT-e direto a partir do embarque',
+    content:
+      'Problema: quero emitir o CT-e sem redigitar os dados do embarque.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Embarques e abra o embarque (deve estar aprovado).\n' +
+      '2. Clique no botão "Emitir CT-e".\n' +
+      '3. O fluxo de emissão abre pré-preenchido com remetente, destinatário, mercadoria e valor.\n' +
+      '4. Revise e confirme o envio à SEFAZ.\n' +
+      'Alternativa: também é possível emitir manualmente em Operação → CT-e → "Criar CT-e" quando não houver embarque.',
+    tags: ['cte', 'embarque', 'emitir', 'vendas', 'sefaz', 'fiscal'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Consolidar vários XMLs de NF-e em um único embarque',
+    content:
+      'Problema: recebi várias notas com mesma origem e destino e quero um único frete.\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → NFe XML e importe os XMLs (individual ou em lote).\n' +
+      '2. Quando houver NF-e com mesma origem e destino, o sistema sugere consolidar em um único embarque.\n' +
+      '3. Aceite a consolidação para reduzir custo de frete e emissão de CT-e.\n' +
+      'Obs: a consolidação agrupa as notas; o peso e o valor somados passam a compor um só embarque.',
+    tags: ['xml', 'nfe', 'consolidar', 'embarque', 'vendas', 'importacao'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Operação marcada como Redespacho automaticamente',
+    content:
+      'Problema: ao importar um XML, o sistema classificou a operação como "Redespacho".\n' +
+      'Causa: o CNPJ destinatário do XML é um transportador cadastrado, não o consumidor final. O sistema detecta isso e sinaliza redespacho, ajustando as regras de tributação do CT-e.\n' +
+      'O que fazer:\n' +
+      '1. Confirme se o destinatário é mesmo um transportador (redespacho legítimo).\n' +
+      '2. Se correto, siga a emissão normalmente — a tributação já foi ajustada.\n' +
+      '3. Se foi engano no cadastro, corrija o tipo da empresa em Cadastros antes de emitir o CT-e.',
+    tags: ['redespacho', 'xml', 'nfe', 'tributacao', 'cte', 'transportador'],
+  },
+  {
+    topic: 'vendas-oportunidades',
+    category: 'suporte',
+    title: 'Como usar o funil de Oportunidades (SDR)',
+    content:
+      'Dúvida: onde acompanho a prospecção de novos clientes?\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Oportunidades.\n' +
+      '2. Cada oportunidade é uma empresa em potencial e avança pelos estágios: Prospecção, Qualificação, Proposta, Negociação e Ganho/Perdido.\n' +
+      '3. Clique em uma oportunidade para registrar atividades, agendar follow-ups e ver o histórico de interações.\n' +
+      '4. Mova a oportunidade entre estágios conforme o avanço comercial.\n' +
+      'Obs: o histórico de prospecção também aparece na aba SDR do cadastro da empresa (Cadastros → Empresas).',
+    tags: ['oportunidades', 'funil', 'sdr', 'prospeccao', 'vendas', 'crm'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — Cargas, Viagens, CT-e, MDF-e e GNRE
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-cargas',
+    category: 'suporte',
+    title: 'Como agendar uma carga (programação de cargas)',
+    content:
+      'Dúvida: como programo os embarques do dia em cargas?\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → Cargas e clique em "Agendar Carga".\n' +
+      '2. O modal é multi-step: passo 1 escolha o Tipo — "Carga própria" (frota da empresa) ou "Terceirizado" (transportadora contratada).\n' +
+      '3. Passo 2: informe os embarques a incluir, volumes e peso.\n' +
+      '4. Passo 3: atribua o veículo (própria) ou a transportadora (terceirizado).\n' +
+      '5. Passo 4: revise o resumo e confirme.\n' +
+      'Dica: use a aba "Cargas" com os filtros Tipo de carga e Status para acompanhar cada agendamento.',
+    tags: ['cargas', 'agendar carga', 'programacao', 'operacao', 'embarques'],
+  },
+  {
+    topic: 'operacao-cargas',
+    category: 'suporte',
+    title: 'Como atribuir ou trocar a transportadora de uma carga terceirizada',
+    content:
+      'Problema: preciso definir ou mudar a transportadora de uma carga do tipo "Terceirizado".\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → Cargas e localize a carga terceirizada.\n' +
+      '2. No menu de ações, escolha "Atribuir transportadora".\n' +
+      '3. Use o modal de busca para selecionar a transportadora responsável.\n' +
+      '4. Salve — não é necessário recriar a carga.\n' +
+      'Obs: a transportadora precisa estar cadastrada em Cadastros → Terceiros para aparecer na busca.',
+    tags: ['cargas', 'transportadora', 'terceirizado', 'atribuir', 'operacao'],
+  },
+  {
+    topic: 'operacao-cargas',
+    category: 'suporte',
+    title: 'Diferença entre finalizar, reabrir e excluir uma carga',
+    content:
+      'Dúvida: quais ações existem para uma carga e quando usar cada uma?\n' +
+      'Ações (Operação → Cargas → menu de ações):\n' +
+      '1. Finalizar carga — marca como concluída.\n' +
+      '2. Cancelar carga — cancela; exige justificativa obrigatória.\n' +
+      '3. Reabrir carga — reabre uma carga finalizada para correções.\n' +
+      '4. Excluir carga — remove permanentemente; disponível apenas para cargas sem movimentação.\n' +
+      'Regra: se a carga já teve movimentação, ela não pode ser excluída — use cancelar ou reabrir.',
+    tags: ['cargas', 'finalizar', 'reabrir', 'excluir', 'cancelar', 'operacao'],
+  },
+  {
+    topic: 'operacao-viagens',
+    category: 'suporte',
+    title: 'Como gerar o PDF ou copiar os dados de uma viagem',
+    content:
+      'Dúvida: preciso do relatório da viagem em PDF ou copiar veículo/motorista/rota.\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → Viagens.\n' +
+      '2. Na linha da viagem, abra o menu de ações rápidas.\n' +
+      '3. "Gerar PDF" exporta o relatório completo da viagem.\n' +
+      '4. "Copiar dados" copia veículo, motorista e rota para a área de transferência.\n' +
+      'Obs: a coluna Progresso mostra o percentual de paradas concluídas e a coluna Financeiro mostra o valor total e o status de pagamento.',
+    tags: ['viagem', 'pdf', 'copiar dados', 'relatorio', 'operacao'],
+  },
+  {
+    topic: 'operacao-viagens',
+    category: 'suporte',
+    title: 'Não consigo excluir uma viagem',
+    content:
+      'Problema: a opção de excluir viagem está bloqueada.\n' +
+      'Causa: viagens que já têm CT-e emitido não podem ser excluídas nem canceladas diretamente.\n' +
+      'Solução:\n' +
+      '1. Verifique na aba Documentos da viagem se há CT-e emitido.\n' +
+      '2. Se houver, cancele primeiro o(s) CT-e em Operação → CT-e.\n' +
+      '3. Com os documentos fiscais cancelados, volte à viagem e use Excluir ou Cancelar viagem (justificativa obrigatória).\n' +
+      'Obs: a exclusão só está disponível para viagens sem CT-e emitido.',
+    tags: ['viagem', 'excluir', 'cancelar', 'cte', 'bloqueado', 'operacao'],
+  },
+  {
+    topic: 'operacao-viagens',
+    category: 'suporte',
+    title: 'Como confirmar coletas e entregas na Gestão de Paradas',
+    content:
+      'Dúvida: onde registro que uma coleta ou entrega foi realizada?\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → Gestão de Paradas para ver a sequência de coletas e entregas de todas as viagens ativas.\n' +
+      '2. Registre a confirmação de coleta ou entrega diretamente na tela, no ponto correspondente da rota.\n' +
+      '3. O status de cada parada é atualizado em tempo real.\n' +
+      'Alternativa: eventos e ocorrências (avarias, atrasos, tentativas de entrega) são registrados na aba Eventos do embarque ou da viagem.',
+    tags: ['gestao de paradas', 'coleta', 'entrega', 'confirmar', 'rota', 'operacao'],
+  },
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Status do CT-e diferente entre o sistema e a SEFAZ',
+    content:
+      'Problema: o CT-e aparece com um status no HiperTMS diferente do retorno da SEFAZ, ou a autorização está demorando.\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → CT-e e localize o documento.\n' +
+      '2. No menu de ações do registro, clique em "Atualizar status".\n' +
+      '3. O sistema consulta o status mais recente direto na SEFAZ e sincroniza o registro local.\n' +
+      'Quando usar: demora na resposta de autorização ou divergência de status. Se o serviço da SEFAZ estiver fora do ar, aguarde o restabelecimento antes de reemitir.',
+    tags: ['cte', 'atualizar status', 'sefaz', 'divergencia', 'processamento', 'operacao'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como baixar o DAMDFe para apresentar na fiscalização',
+    content:
+      'Dúvida: o motorista precisa do documento do MDF-e para a estrada.\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → MDF-e e localize o manifesto autorizado.\n' +
+      '2. No menu de ações do registro, clique em "Baixar DAMDFe".\n' +
+      '3. O sistema gera o PDF do Documento Auxiliar do MDF-e.\n' +
+      '4. Imprima ou disponibilize ao motorista — o DAMDFe deve acompanhar a carga e ser apresentado em fiscalizações nas rodovias.\n' +
+      'Dica: para guarda fiscal, baixe também o XML em "Baixar XML".',
+    tags: ['mdfe', 'damdfe', 'pdf', 'fiscalizacao', 'motorista', 'operacao'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como cancelar um MDF-e autorizado',
+    content:
+      'Problema: preciso cancelar um MDF-e emitido por engano.\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → MDF-e e localize o manifesto autorizado.\n' +
+      '2. No menu de ações do registro, clique em "Cancelar".\n' +
+      '3. Informe a justificativa respeitando o mínimo de caracteres exigido pela SEFAZ.\n' +
+      '4. O cancelamento é enviado e o status muda para "Cancelado".\n' +
+      'Atenção: só é possível cancelar ANTES do encerramento da viagem. Se o MDF-e já foi encerrado, o cancelamento não é permitido.',
+    tags: ['mdfe', 'cancelar', 'sefaz', 'justificativa', 'fiscal', 'operacao'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Gerar uma viagem a partir de um MDF-e',
+    content:
+      'Dúvida: emiti o MDF-e e quero criar a viagem sem redigitar os dados.\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → MDF-e e localize o manifesto autorizado.\n' +
+      '2. No menu de ações do registro, clique em "Gerar viagem".\n' +
+      '3. O sistema cria uma viagem vinculada, aproveitando veículo, motorista e percurso do manifesto.\n' +
+      '4. Complete embarques e paradas se necessário e salve.\n' +
+      'Obs: o caminho inverso também existe — no detalhe da viagem há a seção MDF-e com o botão "Emitir MDF-e".',
+    tags: ['mdfe', 'viagem', 'gerar viagem', 'vinculo', 'operacao'],
+  },
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'Quando a GNRE é obrigatória na operação',
+    content:
+      'Dúvida: o cliente cobrou GNRE ou não sei se preciso emitir.\n' +
+      'Regra: a GNRE (Guia Nacional de Recolhimento de Tributos Estaduais) é obrigatória para recolhimento de ICMS quando o destinatário está em UF diferente do emitente e não é contribuinte do ICMS — comum em entregas a consumidor final em outro estado.\n' +
+      'Como emitir:\n' +
+      '1. Acesse Operação → GNRE e clique em "Gerar GNRE".\n' +
+      '2. Vincule ao CT-e — o sistema preenche código da receita, valor do ICMS e vencimento.\n' +
+      '3. Baixe o PDF para pagamento na rede bancária ou via PIX.\n' +
+      'Acompanhe status (Pendente, Paga, Cancelada) e período na própria listagem.',
+    tags: ['gnre', 'icms', 'interestadual', 'obrigatoriedade', 'fiscal', 'operacao'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // CADASTROS — Terceiros e Empresas
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'cadastros-terceiros',
+    category: 'suporte',
+    title: 'Como cadastrar transportador parceiro (RNTRC/ANTT)',
+    content:
+      'Dúvida: onde cadastro transportadoras e agregados que eu contrato?\n' +
+      'Solução:\n' +
+      '1. Acesse Cadastros → Terceiros e clique para adicionar.\n' +
+      '2. Informe os dados cadastrais e a documentação: RNTRC e ANTT.\n' +
+      '3. Preencha os dados bancários para pagamento.\n' +
+      '4. Salve — o transportador fica disponível para seleção nos pedidos de frete de terceiros e ao atribuir transportadora em cargas terceirizadas.\n' +
+      'Obs: mantenha o RNTRC válido; ele é exigido em operações de transporte rodoviário de carga.',
+    tags: ['terceiros', 'transportador', 'rntrc', 'antt', 'agregado', 'cadastros'],
+  },
+  {
+    topic: 'cadastros-empresas',
+    category: 'suporte',
+    title: 'Diferença entre Cliente, Remetente/Destinatário, Terceiro e Fornecedor',
+    content:
+      'Dúvida: onde cadastro cada tipo de empresa e qual a diferença?\n' +
+      'Referência:\n' +
+      '1. Clientes (Cadastros → Clientes) — tomadores do serviço, quem contrata e paga o frete.\n' +
+      '2. Remetentes e Destinatários (Cadastros → Remetentes e Destinatários) — pontos de coleta e entrega; podem ser diferentes de quem paga.\n' +
+      '3. Terceiros (Cadastros → Terceiros) — transportadoras e autônomos parceiros que você contrata.\n' +
+      '4. Fornecedores (Cadastros → Fornecedores) — quem fornece insumos e serviços (combustível, peças, manutenção).\n' +
+      'Obs: sempre informe CNPJ/CPF para evitar duplicidade — o sistema alerta se o documento já existe.',
+    tags: ['cadastros', 'cliente', 'remetente', 'destinatario', 'fornecedor', 'terceiro'],
+  },
+  {
+    topic: 'cadastros-empresas',
+    category: 'suporte',
+    title: 'Como classificar empresas com tags e filtrar por elas',
+    content:
+      'Dúvida: quero segmentar clientes (ex: prioritário, inadimplente, lead quente).\n' +
+      'Solução:\n' +
+      '1. Acesse Cadastros → Empresas e abra o cadastro da empresa.\n' +
+      '2. No campo "Tags", adicione tags livres para segmentação.\n' +
+      '3. Na listagem, clique em "Filtros" para filtrar por tags, além de SDR responsável e UF.\n' +
+      '4. Combine filtros para resultados mais precisos.\n' +
+      'Dica: a listagem de empresas também tem "Exportar CSV" respeitando os filtros aplicados.',
+    tags: ['empresas', 'tags', 'filtros', 'segmentacao', 'cadastros'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FROTA — Abastecimento, Diárias e Veículos
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-abastecimento',
+    category: 'suporte',
+    title: 'Fluxo de aprovação de abastecimentos',
+    content:
+      'Dúvida: registrei um abastecimento mas ele não entrou no custo da frota.\n' +
+      'Causa: abastecimentos passam por aprovação antes de impactar os custos.\n' +
+      'Fluxo (Frota → Abastecimentos):\n' +
+      '1. Pendente — registrado, aguardando revisão.\n' +
+      '2. Em revisão — gestor abriu para análise.\n' +
+      '3. Aprovado — nas ações do registro clique em "Aprovar"; o consumo médio do veículo é atualizado e o valor lançado no centro de custo.\n' +
+      '4. Rejeitado — clique em "Rejeitar" e informe a justificativa obrigatória; o valor não entra no custo.\n' +
+      'Dica: filtre por status Pendente para processar as aprovações em lote.',
+    tags: ['abastecimento', 'aprovacao', 'pendente', 'consumo', 'frota', 'combustivel'],
+  },
+  {
+    topic: 'frota-diarias',
+    category: 'suporte',
+    title: 'Como configurar limites de diária por rota',
+    content:
+      'Dúvida: quero limitar o valor de diária que os motoristas recebem por destino.\n' +
+      'Solução:\n' +
+      '1. Acesse Frota → Configurações → Diárias de Motorista → Limites por Rota.\n' +
+      '2. Defina o valor máximo por dia por categoria de destino: capital, interior ou outro estado.\n' +
+      '3. Defina o número máximo de diárias por viagem.\n' +
+      '4. Configure a regra de arredondamento — fração de dia como diária completa ou proporcional.\n' +
+      'Obs: rotas internacionais podem ter limites específicos configurados separadamente.',
+    tags: ['diarias', 'motorista', 'limites', 'rota', 'frota', 'adiantamento'],
+  },
+  {
+    topic: 'frota-veiculos',
+    category: 'suporte',
+    title: 'Alertas de vencimento de CRLV e documentos do veículo',
+    content:
+      'Dúvida: como não perder o vencimento de CRLV, tacógrafo e extintor?\n' +
+      'Solução:\n' +
+      '1. Ao cadastrar o veículo em Frota → Veículos, preencha as datas de vencimento (CRLV, tacógrafo, extintor e outros).\n' +
+      '2. Faça upload dos arquivos na aba "Documentos" do veículo.\n' +
+      '3. O sistema alerta automaticamente quando um documento está próximo do vencimento.\n' +
+      '4. Providencie a renovação com antecedência para não bloquear a operação do veículo.\n' +
+      'Dica: revisões preventivas podem ser programadas na aba "Revisões" por km ou intervalo de tempo.',
+    tags: ['veiculo', 'crlv', 'vencimento', 'documentos', 'alerta', 'frota'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FINANCEIRO — Contas, Categorias e Bancário
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'financeiro-contas',
+    category: 'suporte',
+    title: 'Como lançar uma conta a pagar e registrar o pagamento',
+    content:
+      'Dúvida: como registro uma despesa e depois dou baixa?\n' +
+      'Solução:\n' +
+      '1. Acesse Financeiro → Contas a Pagar → "Nova Conta".\n' +
+      '2. Preencha fornecedor/credor, descrição, categoria, valor, vencimento, parcelas e conta bancária.\n' +
+      '3. Salve — a conta entra com status Pendente (Vencida se passar da data).\n' +
+      '4. Para pagar, localize a conta e clique em "Pagar"; confirme data, valor e conta bancária.\n' +
+      '5. O saldo da conta bancária é atualizado automaticamente e o status vira "Paga".\n' +
+      'Obs: contas geradas por aprovação de compras já entram automaticamente aqui.',
+    tags: ['contas a pagar', 'pagamento', 'financeiro', 'despesa', 'baixa', 'categoria'],
+  },
+  {
+    topic: 'financeiro-contas',
+    category: 'suporte',
+    title: 'Recebível não foi gerado automaticamente após embarque ou fatura',
+    content:
+      'Problema: realizei o embarque/fatura mas não há conta a receber correspondente.\n' +
+      'Causa: recebíveis são criados automaticamente a partir de embarques ou faturas; se a etapa não foi concluída, o recebível não é gerado.\n' +
+      'Solução:\n' +
+      '1. Confirme se a fatura do tomador foi realmente emitida (Financeiro → Faturas (tomador)).\n' +
+      '2. Verifique o vínculo do embarque à fatura.\n' +
+      '3. Se precisar de um recebível avulso, crie em Financeiro → Contas a Receber → "Nova Conta" com cliente, valor, vencimento e categoria.\n' +
+      '4. Para dar baixa, clique em "Receber", confirme data, valor e conta bancária de destino (informe desconto/juros se houver).',
+    tags: ['contas a receber', 'recebivel', 'financeiro', 'fatura', 'embarque'],
+  },
+  {
+    topic: 'financeiro-categorias',
+    category: 'suporte',
+    title: 'Como organizar o plano de contas (categorias financeiras)',
+    content:
+      'Dúvida: como classifico receitas e despesas para os relatórios?\n' +
+      'Solução:\n' +
+      '1. Acesse Financeiro → Categorias.\n' +
+      '2. Crie categorias de receita e de despesa conforme o seu plano de contas.\n' +
+      '3. Organize as categorias em grupos para facilitar a leitura nos relatórios de orçamento e DRE.\n' +
+      '4. Ao lançar contas a pagar/receber, selecione a categoria correspondente.\n' +
+      'Impacto: a categorização correta alimenta o DRE, o Orçamento vs. Realizado e as análises por tipo de custo.',
+    tags: ['categorias', 'plano de contas', 'financeiro', 'dre', 'orcamento'],
+  },
+  {
+    topic: 'financeiro-bancario',
+    category: 'suporte',
+    title: 'Configurações avançadas da conta bancária (conta padrão, saldo mínimo, Asaas)',
+    content:
+      'Dúvida: como uso as opções avançadas da conta bancária?\n' +
+      'Caminho: Financeiro → Contas Bancárias → criar ou editar conta → "Configurações avançadas" (restrito a administradores).\n' +
+      'Opções:\n' +
+      '1. Conta padrão — define o destino padrão de novos recebimentos, evitando seleção manual.\n' +
+      '2. Limite de saldo mínimo — emite alerta quando o saldo cair abaixo do valor configurado.\n' +
+      '3. Integração Asaas — vincula a conta à subconta Asaas para que boletos e PIX gerados sejam creditados corretamente.\n' +
+      '4. Centro de custo padrão — associa todas as movimentações da conta a um centro de custo automaticamente.',
+    tags: ['conta bancaria', 'asaas', 'saldo minimo', 'centro de custo', 'financeiro'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // EQUIPES — Tarefas, Times e Notificações
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'equipes-tarefas',
+    category: 'suporte',
+    title: 'Como criar e atribuir tarefas para a equipe',
+    content:
+      'Dúvida: como distribuo tarefas internas para o time?\n' +
+      'Solução:\n' +
+      '1. Acesse Equipes → Tarefas e clique em "Nova Tarefa".\n' +
+      '2. Preencha título, responsável, data de vencimento, descrição e prioridade.\n' +
+      '3. Salve — a tarefa nasce com status Pendente.\n' +
+      '4. Acompanhe pelos status: Pendente, Em andamento, Concluída e Atrasada (passou do prazo).\n' +
+      '5. Clique na tarefa para comentar ou marcar como concluída.\n' +
+      'Obs: o responsável recebe notificação da atribuição e um alerta 24h antes do vencimento.',
+    tags: ['tarefas', 'equipe', 'atribuir', 'responsavel', 'prazo', 'equipes'],
+  },
+  {
+    topic: 'equipes-tarefas',
+    category: 'suporte',
+    title: 'Diferença entre Minhas Tarefas e Todas as Tarefas',
+    content:
+      'Dúvida: por que só vejo algumas tarefas, ou por que vejo as de todo mundo?\n' +
+      'Explicação (Equipes → Tarefas):\n' +
+      '1. Aba "Minhas tarefas" — exibe somente as tarefas atribuídas ao usuário logado.\n' +
+      '2. Aba "Todas as tarefas" — exibe as tarefas de toda a equipe; visível para gestores e administradores.\n' +
+      'Se você não vê "Todas as tarefas", é porque seu perfil não tem essa permissão — normal para membros sem função de gestão. Solicite ao administrador se precisar dessa visão.',
+    tags: ['tarefas', 'minhas tarefas', 'permissao', 'gestor', 'equipes'],
+  },
+  {
+    topic: 'equipes-times',
+    category: 'suporte',
+    title: 'Como criar times e definir papéis dos membros',
+    content:
+      'Dúvida: como organizo a equipe por área e controlo o que cada um faz no time?\n' +
+      'Solução:\n' +
+      '1. Acesse Equipes → Equipes e clique em "Novo Time" (ex: Comercial, Operação, Financeiro).\n' +
+      '2. Adicione os membros.\n' +
+      '3. Na aba "Membros", defina o papel de cada um: Administrador do time (adiciona/remove membros e edita configurações), Membro (participa das atividades) ou Observador (só visualiza).\n' +
+      'Dica: a aba "Atividade" do time traz três feeds — atividades recentes, menções a você e notificações do sistema.',
+    tags: ['times', 'equipes', 'papeis', 'membros', 'administrador', 'observador'],
+  },
+  {
+    topic: 'equipes-times',
+    category: 'suporte',
+    title: 'Como arquivar um time sem perder o histórico',
+    content:
+      'Dúvida: um time não é mais usado; posso removê-lo sem perder os dados?\n' +
+      'Solução:\n' +
+      '1. Acesse Equipes → Equipes e abra o time.\n' +
+      '2. No menu de ações, escolha "Arquivar time".\n' +
+      '3. O time sai da listagem padrão, mas todo o histórico de atividades e tarefas é preservado para consulta futura.\n' +
+      'Obs: prefira arquivar em vez de recriar times a cada mudança — assim o histórico continua auditável.',
+    tags: ['times', 'arquivar', 'historico', 'equipes'],
+  },
+  {
+    topic: 'equipes-notificacoes',
+    category: 'suporte',
+    title: 'Como configurar quais eventos geram notificação',
+    content:
+      'Dúvida: quero escolher o que me notifica e por qual canal.\n' +
+      'Solução:\n' +
+      '1. Acesse Equipes → Configurações de Notificação.\n' +
+      '2. Ative os eventos desejados e o canal (in-app ou e-mail): nova tarefa atribuída, prazo de tarefa vencendo (24h antes), tarefa concluída por membro do time e menção em comentário.\n' +
+      '3. Salve as preferências.\n' +
+      'Se não recebe e-mails: confirme que o canal e-mail está ativo e verifique a caixa de spam. Notificações in-app aparecem em Equipes → Notificações.',
+    tags: ['notificacoes', 'alertas', 'configuracao', 'email', 'equipes'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // COMPRAS — Pedidos e Estoque
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'compras-pedidos',
+    category: 'suporte',
+    title: 'Como criar um pedido de compra e registrar o recebimento',
+    content:
+      'Dúvida: como transformo uma solicitação em pedido e dou entrada nos itens?\n' +
+      'Solução:\n' +
+      '1. Acesse Compras → Pedidos → "Novo Pedido" (ou converta uma solicitação aprovada em pedido pela tela de Solicitações).\n' +
+      '2. Informe fornecedor, itens e quantidades, valores unitários, condições de pagamento e data de entrega prevista.\n' +
+      '3. Confirme o pedido.\n' +
+      '4. Quando os itens chegarem, abra o pedido e clique em "Registrar Recebimento"; informe a quantidade recebida e a data.\n' +
+      '5. O estoque é atualizado automaticamente.',
+    tags: ['pedido de compra', 'recebimento', 'estoque', 'fornecedor', 'compras'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Campos NCM, SKU e código de barras no cadastro de produto',
+    content:
+      'Dúvida: para que servem NCM, SKU e código de barras no produto?\n' +
+      'Caminho: Compras → Produtos → criar ou editar produto.\n' +
+      'Campos:\n' +
+      '1. NCM — código da Nomenclatura Comum do Mercosul para classificação fiscal do produto.\n' +
+      '2. SKU — código interno para controle de estoque e identificação nas compras.\n' +
+      '3. Código de barras — EAN-13 ou outros padrões para leitura com leitor óptico.\n' +
+      'Dica: preencher esses campos facilita a integração com documentos fiscais e o controle de inventário.',
+    tags: ['produto', 'ncm', 'sku', 'codigo de barras', 'estoque', 'compras'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Ponto de reposição e alerta de estoque mínimo',
+    content:
+      'Dúvida: como sou avisado quando um item está acabando?\n' +
+      'Solução:\n' +
+      '1. Acesse Compras → Produtos → detalhe → campo "Ponto de reposição".\n' +
+      '2. Defina o estoque mínimo que dispara o alerta.\n' +
+      '3. Quando o saldo disponível cair abaixo do ponto de reposição, o sistema notifica automaticamente o responsável pelo setor de compras.\n' +
+      '4. Providencie um novo pedido para repor o item.\n' +
+      'Obs: o estoque inicial e o mínimo também podem ser definidos ao cadastrar o produto em Compras → Estoque.',
+    tags: ['ponto de reposicao', 'estoque minimo', 'alerta', 'produto', 'compras'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Como o custo médio do produto é calculado',
+    content:
+      'Dúvida: de onde vem o custo médio que aparece no produto?\n' +
+      'Explicação:\n' +
+      '1. Acesse Compras → Produtos → detalhe → campo "Custo médio".\n' +
+      '2. O sistema calcula o custo médio ponderado com base nas entradas registradas.\n' +
+      '3. O valor é recalculado automaticamente a cada novo recebimento de pedido.\n' +
+      '4. Use o custo médio como referência para análise de rentabilidade e formação de preço interno.\n' +
+      'Obs: entradas e saídas manuais também podem ser lançadas em "Nova Movimentação" dentro do produto.',
+    tags: ['custo medio', 'produto', 'estoque', 'movimentacao', 'compras'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // ADMINISTRAÇÃO — Empresa, Configurações e Assinatura
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'administracao-empresa',
+    category: 'suporte',
+    title: 'As 8 abas de Dados da Empresa — onde configurar cada coisa',
+    content:
+      'Dúvida: onde fica cada configuração da empresa?\n' +
+      'Caminho: Administração → Dados da Empresa. As 8 abas:\n' +
+      '1. Geral — razão social, CNPJ e endereço da sede.\n' +
+      '2. Fiscal — CT-e, MDF-e, NFS-e, série e numeração dos documentos.\n' +
+      '3. Certificado Digital — upload e gestão do certificado A1.\n' +
+      '4. E-mail — servidor SMTP para e-mails transacionais (faturas, cotações).\n' +
+      '5. Operação — padrões de viagens, tipos de frete e CIOT.\n' +
+      '6. Branding — logotipo, cores e personalização de documentos.\n' +
+      '7. Assinaturas e Planos — plano atual, limites e faturamento.\n' +
+      '8. Integrações — APIs e webhooks.\n' +
+      'Acesso restrito a administradores.',
+    tags: ['dados da empresa', 'configuracao', 'abas', 'administracao', 'fiscal', 'branding'],
+  },
+  {
+    topic: 'administracao-empresa',
+    category: 'suporte',
+    title: 'Como transferir a propriedade da conta',
+    content:
+      'Dúvida: o dono da conta mudou; como passo a titularidade para outra pessoa?\n' +
+      'Solução:\n' +
+      '1. Acesse Administração → Dados da Empresa → seção "Propriedade".\n' +
+      '2. Clique em "Transferir propriedade".\n' +
+      '3. Escolha outro usuário administrador da empresa como novo proprietário.\n' +
+      '4. A transferência exige confirmação por e-mail de ambas as partes antes de ser efetivada.\n' +
+      'Obs: o novo proprietário precisa já ser administrador. Só o proprietário atual pode iniciar a transferência.',
+    tags: ['propriedade', 'titularidade', 'transferir', 'administracao', 'proprietario'],
+  },
+  {
+    topic: 'administracao-empresa',
+    category: 'suporte',
+    title: 'Configurar o servidor de e-mail (SMTP) para envio de faturas e cotações',
+    content:
+      'Problema: faturas e cotações não estão sendo enviadas por e-mail aos clientes.\n' +
+      'Causa: o servidor SMTP da empresa não está configurado.\n' +
+      'Solução:\n' +
+      '1. Acesse Administração → Dados da Empresa → aba "E-mail".\n' +
+      '2. Configure o servidor SMTP responsável pelo envio dos e-mails transacionais (faturas, cotações).\n' +
+      '3. Salve e faça um envio de teste.\n' +
+      'Obs: sem o SMTP configurado, os e-mails automáticos do sistema (booking, fatura, cotação) não saem. Acesso restrito a administradores.',
+    tags: ['smtp', 'email', 'envio', 'faturas', 'cotacoes', 'administracao'],
+  },
+  {
+    topic: 'administracao-configuracoes',
+    category: 'suporte',
+    title: 'Guardrails financeiros: desconto máximo e limite de crédito',
+    content:
+      'Dúvida: como impedir descontos abusivos e vendas acima do limite do cliente?\n' +
+      'Caminho: Administração → Configurações → aba "Guardrails".\n' +
+      'Configurações:\n' +
+      '1. Desconto máximo por vendedor — percentual máximo que um vendedor concede sem aprovação de gestor.\n' +
+      '2. Limite de crédito por cliente — ao atingir o limite, novas cotações para o cliente são bloqueadas automaticamente.\n' +
+      '3. Prazo máximo de pagamento — prazo máximo permitido por perfil de cliente.\n' +
+      'Obs: se uma cotação está sendo bloqueada, verifique se o cliente atingiu o limite de crédito nos guardrails.',
+    tags: ['guardrails', 'desconto', 'limite de credito', 'bloqueio', 'administracao', 'vendas'],
+  },
+  {
+    topic: 'administracao-assinatura',
+    category: 'suporte',
+    title: 'Como fazer downgrade ou cancelar a assinatura',
+    content:
+      'Dúvida: quero reduzir o plano ou encerrar a assinatura do HiperTMS.\n' +
+      'Caminho: Administração → Assinaturas → ações do plano.\n' +
+      'Opções:\n' +
+      '1. Fazer downgrade — reduz para um plano menor; entra em vigor no próximo ciclo de faturamento e o plano atual permanece ativo até o fim do período já pago.\n' +
+      '2. Cancelar assinatura — inicia o cancelamento com pesquisa de motivo. Após cancelar, os dados da empresa são mantidos por 90 dias, prazo em que é possível reativar a conta.\n' +
+      'Dica: para consultar cobranças e baixar notas fiscais, use a aba "Extrato".',
+    tags: ['assinatura', 'downgrade', 'cancelamento', 'plano', 'administracao', 'faturamento'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // RELATÓRIOS — Painel, Financeiro, Logística, Frota e Fiscal
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'relatorios',
+    category: 'suporte',
+    title: 'Onde ficam os relatórios e como usar o painel executivo',
+    content:
+      'Dúvida: onde acompanho os indicadores da operação?\n' +
+      'Solução:\n' +
+      '1. Acesse Relatórios no menu lateral para abrir o painel executivo do mês corrente.\n' +
+      '2. No topo, os KPIs de destaque: Conversão de cotações, Pontualidade de entregas, A receber em aberto e Saldo projetado 30d (cada um com sinal verde/amarelo/vermelho).\n' +
+      '3. No meio, gráficos de cotações do mês, status de viagens e pontualidade por tipo.\n' +
+      '4. No rodapé, KPIs de frota (combustível, manutenção) e fiscal (CT-e/MDF-e autorizados).\n' +
+      'Dica: cada cartão é clicável e leva direto ao relatório detalhado correspondente.',
+    tags: ['relatorios', 'painel', 'kpi', 'dashboard', 'indicadores', 'executivo'],
+  },
+  {
+    topic: 'relatorios-financeiro',
+    category: 'suporte',
+    title: 'Relatório de Contas em Atraso — faixas de inadimplência',
+    content:
+      'Dúvida: como vejo quem está inadimplente e há quanto tempo?\n' +
+      'Solução:\n' +
+      '1. Acesse Relatórios → Financeiro → Contas em Atraso.\n' +
+      '2. Os recebíveis vencidos são agrupados por faixa: até 30 dias, 31–60 dias, 61–90 dias e acima de 90 dias (inadimplência crítica).\n' +
+      '3. Clique em uma faixa para filtrar a tabela e ver só aquele grupo.\n' +
+      '4. O rodapé mostra o valor total e a quantidade de contas por faixa.\n' +
+      'Dica: acompanhe as faixas de 61–90 e acima de 90 dias para priorizar a cobrança.',
+    tags: ['relatorios', 'contas em atraso', 'inadimplencia', 'financeiro', 'cobranca'],
+  },
+  {
+    topic: 'relatorios-financeiro',
+    category: 'suporte',
+    title: 'Fluxo de Caixa Projetado — antecipar déficit de caixa',
+    content:
+      'Dúvida: como saber se vou ficar sem caixa nos próximos dias?\n' +
+      'Solução:\n' +
+      '1. Acesse Relatórios → Financeiro → Fluxo de Caixa.\n' +
+      '2. O relatório projeta entradas e saídas dia a dia com base nos vencimentos cadastrados.\n' +
+      '3. Use o seletor de período: 15, 30 (padrão), 60 ou 90 dias.\n' +
+      '4. O saldo acumulado diário destaca em vermelho os dias com déficit projetado.\n' +
+      'Ação: os dias em vermelho indicam necessidade de capital de giro — antecipe cobranças ou renegocie pagamentos.',
+    tags: ['relatorios', 'fluxo de caixa', 'projecao', 'deficit', 'financeiro', 'capital de giro'],
+  },
+  {
+    topic: 'relatorios-financeiro',
+    category: 'suporte',
+    title: 'Relatório Orçamento vs. Realizado está vazio',
+    content:
+      'Problema: abri Relatórios → Financeiro → Orçamento vs. Realizado e não aparecem dados.\n' +
+      'Causa: o relatório compara o orçamento configurado com o realizado; sem orçamento definido, não há base de comparação.\n' +
+      'Solução:\n' +
+      '1. Acesse Financeiro → Orçamento e defina as metas de receita e limites de despesa por categoria.\n' +
+      '2. Para agilizar, use "Calcular sugestão" — o sistema propõe valores com base nos últimos 12 meses.\n' +
+      '3. Salve o orçamento.\n' +
+      '4. Volte ao relatório — a comparação mês a mês por categoria já aparecerá.',
+    tags: ['relatorios', 'orcamento', 'realizado', 'vazio', 'financeiro', 'categoria'],
+  },
+  {
+    topic: 'relatorios-logistica',
+    category: 'suporte',
+    title: 'Relatórios de Conversão de Cotações e Pontualidade',
+    content:
+      'Dúvida: como meço o desempenho comercial e de entregas?\n' +
+      'Conversão de Cotações (Relatórios → Logística → Conversão de Cotações): mostra total, ganhas, perdidas e a taxa de conversão do período. Use o filtro De/Até para comparar meses.\n' +
+      'Pontualidade (Relatórios → Logística → Pontualidade de Coletas e Entregas): taxa de conclusão no prazo por tipo — Coleta, Transferência e Entrega. As barras indicam desempenho: verde ≥ 90%, amarelo ≥ 70%, vermelho abaixo de 70%.\n' +
+      'Dica: pontualidade em vermelho aponta gargalos operacionais a investigar.',
+    tags: ['relatorios', 'conversao', 'cotacoes', 'pontualidade', 'logistica', 'kpi'],
+  },
+  {
+    topic: 'relatorios-logistica',
+    category: 'suporte',
+    title: 'Relatórios de NF-e: estatísticas e retrabalho de importação',
+    content:
+      'Dúvida: como monitoro a qualidade da importação de XML dos clientes?\n' +
+      'Estatísticas de NF-e (Relatórios → Logística → Estatísticas de NF-e): volume de XMLs importados no período, detalhado por situação — válidos, com erro e duplicados.\n' +
+      'Retrabalho de NF-e (Relatórios → Logística → Retrabalho de NF-e): lista as notas que precisaram de correção manual (dados inconsistentes, endereço não encontrado, itens sem correspondência no cadastro).\n' +
+      'Ação: identifique clientes ou padrões que geram mais retrabalho e corrija os cadastros de origem para reduzir erros futuros.',
+    tags: ['relatorios', 'nfe', 'xml', 'retrabalho', 'estatisticas', 'logistica'],
+  },
+  {
+    topic: 'relatorios-frota',
+    category: 'suporte',
+    title: 'Relatórios de Consumo de Combustível e Custo de Manutenção',
+    content:
+      'Dúvida: como comparo o desempenho e o custo dos veículos?\n' +
+      'Consumo de Combustível (Relatórios → Frota → Consumo de Combustível): litros abastecidos e custo total por veículo no período — alimentado pelos registros de Frota → Abastecimentos.\n' +
+      'Custo de Manutenção (Relatórios → Frota → Custo de Manutenção): total de manutenções por veículo no período — alimentado por Frota → Manutenções.\n' +
+      'Ação: veículos com consumo acima do esperado ou custo de manutenção elevado são candidatos a revisão ou renovação de frota.',
+    tags: ['relatorios', 'combustivel', 'consumo', 'manutencao', 'frota', 'custo'],
+  },
+  {
+    topic: 'relatorios-fiscal',
+    category: 'suporte',
+    title: 'Sumário CT-e e MDF-e — acompanhar a taxa de autorização',
+    content:
+      'Dúvida: como acompanho quantos documentos fiscais foram autorizados?\n' +
+      'Sumário CT-e (Relatórios → Fiscal → Sumário CT-e): total emitido, autorizados, pendentes e rejeitados/cancelados no período, com o percentual de autorização.\n' +
+      'Sumário MDF-e (Relatórios → Fiscal → Sumário MDF-e): mesmo formato, com distribuição por status (Autorizado, Encerrado, Cancelado).\n' +
+      'Ação: um percentual baixo de autorização indica problemas recorrentes de emissão — revise causas de rejeição em Operação → CT-e/MDF-e. Use o filtro De/Até para o período.',
+    tags: ['relatorios', 'sumario cte', 'sumario mdfe', 'autorizacao', 'fiscal'],
+  },
 ];

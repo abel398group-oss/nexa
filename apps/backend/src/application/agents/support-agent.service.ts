@@ -242,9 +242,6 @@ export class SupportAgentService {
     ]);
     if (exact.has(norm)) return true;
 
-    // Mensagens muito curtas (≤ 3 chars) que não formam uma pergunta
-    if (norm.length <= 3 && !norm.includes('?')) return true;
-
     return false;
   }
 
