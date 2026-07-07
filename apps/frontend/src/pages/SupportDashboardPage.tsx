@@ -6,6 +6,15 @@ import { Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
+interface EscalationGap {
+  id: string;
+  ticketCategory: string | null;
+  rootCause: string | null;
+  firstMessage: string | null;
+  createdAt: string;
+  frequency: number;
+}
+
 interface SupportOverview {
   total: number;
   resolvedWithoutEscalation: { count: number; pct: number };
@@ -80,6 +89,86 @@ function BarRow({ label, count, total, extra }: { label: string; count: number; 
   );
 }
 
+function GapsDoKb({ gaps }: { gaps: EscalationGap[] }) {
+  if (gaps.length === 0) {
+    return (
+      <Card className="p-5">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Gaps do KB — perguntas que a Lia não respondeu
+        </h3>
+        <div className="flex h-20 items-center justify-center text-xs text-base-content/40">
+          Nenhuma escalação no período. 🎉
+        </div>
+      </Card>
+    );
+  }
+
+  // Deduplica por rootCause para mostrar grupos
+  const seen = new Set<string>();
+  const deduped = gaps.filter((g) => {
+    const key = g.rootCause ?? g.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Gaps do KB — perguntas que a Lia não respondeu
+        </h3>
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+          {gaps.length} escalação{gaps.length !== 1 ? 'ões' : ''}
+        </span>
+      </div>
+      <div className="divide-y divide-base-200">
+        {deduped.map((gap) => (
+          <div key={gap.id} className="flex items-start gap-3 py-3">
+            {/* Frequência */}
+            <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-base-200 text-[11px] font-bold text-base-content/60">
+              {gap.frequency}×
+            </div>
+
+            {/* Conteúdo */}
+            <div className="min-w-0 flex-1">
+              {gap.firstMessage && (
+                <p className="truncate text-sm font-medium text-base-content">
+                  "{gap.firstMessage}"
+                </p>
+              )}
+              {gap.rootCause && (
+                <p className="mt-0.5 truncate text-xs text-base-content/50">
+                  Causa: {gap.rootCause}
+                </p>
+              )}
+              <div className="mt-1 flex items-center gap-2">
+                {gap.ticketCategory && (
+                  <span className="rounded bg-base-200 px-1.5 py-0.5 text-[10px] font-medium text-base-content/60">
+                    {CATEGORY_LABELS[gap.ticketCategory] ?? gap.ticketCategory}
+                  </span>
+                )}
+                <span className="text-[10px] text-base-content/40">
+                  {new Date(gap.createdAt).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+            </div>
+
+            {/* Ação */}
+            <Link
+              to={`/knowledge?title=${encodeURIComponent(gap.rootCause ?? gap.firstMessage ?? '')}&category=${gap.ticketCategory ?? ''}`}
+              className="flex-shrink-0 rounded-md border border-base-300 bg-base-100 px-2.5 py-1.5 text-[11px] font-medium hover:bg-base-200"
+              title="Criar artigo no KB para cobrir esta pergunta"
+            >
+              + KB
+            </Link>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export function SupportDashboardPage() {
@@ -93,6 +182,16 @@ export function SupportDashboardPage() {
       if (from) params.set('from', from);
       if (to) params.set('to', to);
       return api.get(`/metrics/support?${params}`).then((r) => r.data);
+    },
+  });
+
+  const { data: gaps = [] } = useQuery<EscalationGap[]>({
+    queryKey: ['support-gaps', from, to],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      return api.get(`/metrics/support/gaps?${params}`).then((r) => r.data);
     },
   });
 
@@ -269,6 +368,9 @@ export function SupportDashboardPage() {
               ))}
             </div>
           </Card>
+
+          {/* ── Gaps do KB ───────────────────────────────────────────────── */}
+          <GapsDoKb gaps={gaps} />
 
         </div>
       )}

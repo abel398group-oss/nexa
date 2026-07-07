@@ -561,4 +561,66 @@ export class MetricsService {
       scope: 'vendedor',
     };
   }
+
+  // ── Gaps do KB: tickets escalados com a pergunta original ────────────────
+  // Retorna os últimos `limit` tickets escalados com: primeira mensagem do
+  // cliente, categoria, causa-raiz e frequência do mesmo rootCause no período.
+  // Permite identificar o que a Lia não consegue responder.
+  async escalationGaps(
+    tenantId: string,
+    range?: { from?: string; to?: string },
+    limit = 30,
+  ) {
+    const dw: any =
+      range?.from || range?.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: new Date(range.from) } : {}),
+              ...(range.to ? { lte: new Date(`${range.to}T23:59:59.999`) } : {}),
+            },
+          }
+        : {};
+
+    const escalated = await this.prisma.aiConversation.findMany({
+      where: {
+        tenantId,
+        agentType: 'support' as any,
+        stageHistory: { some: { toStatus: 'escalated' } },
+        ...dw,
+      } as any,
+      select: {
+        id: true,
+        ticketCategory: true,
+        rootCause: true,
+        createdAt: true,
+        messages: {
+          where: { direction: 'inbound' } as any,
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+          select: { content: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit * 3,
+    });
+
+    // Conta frequência de cada rootCause no resultado
+    const freq = new Map<string, number>();
+    for (const t of escalated) {
+      const key = t.rootCause ?? `__sem_causa:${t.ticketCategory}`;
+      freq.set(key, (freq.get(key) ?? 0) + 1);
+    }
+
+    return escalated
+      .map((t) => ({
+        id: t.id,
+        ticketCategory: t.ticketCategory,
+        rootCause: t.rootCause,
+        firstMessage: ((t as any).messages as any[])[0]?.content?.slice(0, 300) ?? null,
+        createdAt: t.createdAt,
+        frequency: freq.get(t.rootCause ?? `__sem_causa:${t.ticketCategory}`) ?? 1,
+      }))
+      .sort((a, b) => b.frequency - a.frequency || b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
 }

@@ -55,6 +55,21 @@ export class MetricsController {
     return this.metrics.resolutionMetrics(tenantId, days ? Math.min(parseInt(days, 10), 90) : 7);
   }
 
+  // Gaps do KB: tickets escalados com pergunta original + frequência
+  @Get('support/gaps')
+  escalationGaps(
+    @CurrentTenant() tenantId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.metrics.escalationGaps(
+      tenantId,
+      { from, to },
+      limit ? Math.min(parseInt(limit, 10), 100) : 30,
+    );
+  }
+
   // A2: efetividade de uma campanha individual
   @Get('campaigns/:id')
   async campaignMetrics(

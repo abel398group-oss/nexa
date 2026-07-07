@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
@@ -19,8 +20,15 @@ interface KB {
 const PAGE = 50;
 
 export function KnowledgePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sel, setSel] = useState<KB | null>(null);
   const [msg, setMsg] = useState('');
+  // form de criação rápida
+  const [creating, setCreating] = useState(() => !!searchParams.get('title'));
+  const [newTitle, setNewTitle] = useState(() => searchParams.get('title') ?? '');
+  const [newCategory, setNewCategory] = useState(() => searchParams.get('category') ?? 'suporte');
+  const [newTopic, setNewTopic] = useState('suporte-cliente');
+  const [newContent, setNewContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [eTitle, setETitle] = useState('');
@@ -130,6 +138,34 @@ export function KnowledgePage() {
     }
   }
 
+  async function createArticle() {
+    if (!newTitle.trim() || !newContent.trim()) {
+      toast.error('Título e conteúdo são obrigatórios.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post('/knowledge', {
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        category: newCategory || 'suporte',
+        topic: newTopic || 'suporte-cliente',
+        productCode: 'hipertms',
+        tags: [],
+      });
+      toast.success('Artigo criado! A Lia já pode usar este conhecimento após o próximo reindex.');
+      setCreating(false);
+      setNewTitle('');
+      setNewContent('');
+      setSearchParams({});
+      await invalidate();
+    } catch {
+      toast.error('Erro ao criar artigo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function importTms() {
     setBusy(true);
     setMsg('');
@@ -157,10 +193,15 @@ export function KnowledgePage() {
             <h1 className="text-lg font-bold text-base-content">Conhecimento</h1>
             <p className="text-xs text-base-content/50">{total} itens · alimenta a Lia</p>
           </div>
-          <Button onClick={importTms} loading={busy} size="sm">
-            {!busy && <Icon name="download" className="h-4 w-4" />}
-            {busy ? 'Importando...' : 'Importar TMS'}
-          </Button>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" onClick={() => { setCreating(true); setSel(null); }}>
+              <Icon name="plus" className="h-4 w-4" /> Novo
+            </Button>
+            <Button onClick={importTms} loading={busy} size="sm">
+              {!busy && <Icon name="download" className="h-4 w-4" />}
+              {busy ? 'Importando...' : 'Importar TMS'}
+            </Button>
+          </div>
         </div>
         {msg && <div className="border-b bg-emerald-50 px-5 py-2 text-xs text-emerald-700" style={{ borderColor: 'var(--border)' }}>{msg}</div>}
 
@@ -236,8 +277,44 @@ export function KnowledgePage() {
 
       {/* detalhe */}
       <div className="flex-1 overflow-y-auto p-8">
-        {!sel ? (
-          <div className="flex h-full items-center justify-center text-base-content/40">Selecione um item</div>
+        {creating ? (
+          <div className="mx-auto max-w-2xl">
+            <h2 className="mb-6 text-xl font-bold text-base-content">Novo artigo de conhecimento</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-base-content/60">Título</label>
+                <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Ex: Como emitir boleto para o cliente" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">Categoria</label>
+                  <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="suporte" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-base-content/60">Tópico</label>
+                  <Input value={newTopic} onChange={(e) => setNewTopic(e.target.value)} placeholder="suporte-cliente" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-base-content/60">Conteúdo (o que a Lia vai ler)</label>
+                <Textarea
+                  className="h-64 leading-relaxed"
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  placeholder="Descreva o procedimento passo a passo. Inclua termos que o cliente usaria ao perguntar..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={createArticle} loading={busy}>{busy ? 'Salvando...' : 'Criar artigo'}</Button>
+                <Button variant="ghost" onClick={() => { setCreating(false); setSearchParams({}); }}>Cancelar</Button>
+              </div>
+            </div>
+          </div>
+        ) : !sel ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-base-content/40">
+            <Icon name="knowledge" className="h-10 w-10" />
+            <span className="text-sm">Selecione um item ou crie um novo artigo</span>
+          </div>
         ) : (
           <div className="mx-auto max-w-2xl">
             <div className="mb-2 flex items-center justify-between">
