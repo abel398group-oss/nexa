@@ -962,20 +962,22 @@ export const SUPORTE_KB: KnowledgeItem[] = [
   {
     topic: 'cte-rejeicao',
     category: 'suporte',
-    title: 'Como visualizar todos os CT-e emitidos — lista e filtros',
+    title: 'Como visualizar e exportar relatório de CT-e emitidos',
     content:
-      'Para consultar todos os CT-e da sua operação:\n' +
+      'Para consultar e exportar os CT-e da sua operação:\n' +
       '1. Acesse Operação → CT-e.\n' +
       '2. A lista exibe todos os CT-e com: número, tomador, valor, data de emissão e situação fiscal.\n' +
-      'Status disponíveis para filtrar:\n' +
-      '• Autorizado — emitido e validado pela SEFAZ\n' +
-      '• Cancelado — cancelamento autorizado\n' +
-      '• Denegado — emissão negada pela SEFAZ\n' +
-      '• Em processamento — aguardando retorno da SEFAZ\n' +
-      'Para ver apenas um tipo: use o filtro de situação fiscal no topo da lista.\n' +
-      'Para buscar por período: use o filtro de data de emissão.\n' +
-      'Para ver os detalhes de um CT-e: clique no registro — abre o DANFE resumido e os dados completos.',
-    tags: ['cte', 'relatorio', 'lista', 'consultar', 'todos cte', 'emitidos', 'filtro', 'status', 'periodo', 'operacao'],
+      'Filtros disponíveis:\n' +
+      '• Status: Autorizado | Cancelado | Denegado | Em processamento\n' +
+      '• Período: use os presets "Hoje", "Esta semana", "Este mês" ou informe intervalo personalizado (De / Até)\n' +
+      '• Tomador: busca por razão social ou CNPJ\n' +
+      'Para exportar (relatório CSV):\n' +
+      '1. Aplique os filtros desejados (período, status, tomador).\n' +
+      '2. Clique no botão "Exportar CSV" no topo da lista.\n' +
+      '3. O arquivo gerado contém apenas os CT-e filtrados.\n' +
+      'Para ver os detalhes de um CT-e específico: clique na linha — abre painel lateral com dados principais e ações.\n' +
+      'Para abrir o DANFE sem sair da lista: clique no expansor na linha do CT-e.',
+    tags: ['cte', 'relatorio cte', 'exportar csv', 'lista cte', 'consultar', 'todos cte', 'emitidos', 'filtro', 'periodo', 'operacao', 'relatorio', 'exportar'],
   },
   {
     topic: 'cte-rejeicao',
