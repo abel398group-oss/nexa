@@ -68,6 +68,16 @@ const SEVERITY_LABEL_PT: Record<string, string> = {
 const ARCHIVE_AFTER_NOTIFICATIONS = 2;
 const ARCHIVE_AFTER_HOURS = 48;
 
+/** Escapes special HTML characters to prevent injection in the email template. */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ─── Serviço ─────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -246,7 +256,8 @@ export class ConsolidationService {
       // E-mail — envia se endereço configurado (canal dual)
       if (sc.email) {
         const subject = `${sector.emoji} Alertas ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
-        const result = await this.emailReply.sendAlertEmail(sc.email, subject, message, tenantId);
+        const html = this.buildSectorEmailHtml(sector, alerts, now);
+        const result = await this.emailReply.sendAlertEmail(sc.email, subject, message, tenantId, html);
         if (result.sent) {
           this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${sc.email}`);
         } else {
@@ -369,6 +380,140 @@ export class ConsolidationService {
 
     lines.push('\nAcesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
+  }
+
+  // ─── Email HTML (Opção 1 — Executivo com tabela) ────────────────────────────
+
+  private readonly SEVERITY_BG: Record<string, string> = {
+    CRITICAL: '#fef2f2',
+    OVERDUE:  '#fff7ed',
+    DUE_SOON: '#fefce8',
+    INFO:     '#eff6ff',
+  };
+
+  private readonly SEVERITY_COLOR: Record<string, string> = {
+    CRITICAL: '#dc2626',
+    OVERDUE:  '#ea580c',
+    DUE_SOON: '#ca8a04',
+    INFO:     '#2563eb',
+  };
+
+  private readonly SECTOR_ACCENT: Record<string, string> = {
+    fiscal:   '#3b82f6',
+    logistic: '#f97316',
+    frota:    '#a855f7',
+    finance:  '#10b981',
+  };
+
+  /**
+   * Monta o template HTML "Executivo com tabela" para e-mails de alerta.
+   * Usa somente estilos inline e layout table-based para máxima compatibilidade
+   * com clientes de e-mail corporativo (Outlook, Apple Mail, Gmail).
+   */
+  private buildSectorEmailHtml(
+    sector: SectorMeta,
+    alerts: Array<{ severity: string; title: string; description?: string | null }>,
+    now: Date,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const accent = this.SECTOR_ACCENT[sector.key] ?? '#3b82f6';
+
+    // ── Chips de resumo por severidade ────────────────────────────────────────
+    const chipRows = SEVERITY_ORDER.map((sev) => {
+      const count = alerts.filter((a) => a.severity === sev).length;
+      if (!count) return '';
+      const color = this.SEVERITY_COLOR[sev] ?? '#71717a';
+      const label = SEVERITY_LABEL_PT[sev] ?? sev;
+      return `
+        <td style="padding:0 6px 0 0">
+          <span style="display:inline-block;background:${color}1a;color:${color};border:1px solid ${color}40;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap">
+            ${SEVERITY_EMOJI[sev]} ${label} &nbsp;${count}
+          </span>
+        </td>`;
+    }).join('');
+
+    // ── Linhas da tabela de alertas ───────────────────────────────────────────
+    const tableRows = alerts.map((a) => {
+      const bg = this.SEVERITY_BG[a.severity] ?? '#ffffff';
+      const color = this.SEVERITY_COLOR[a.severity] ?? '#71717a';
+      const label = SEVERITY_LABEL_PT[a.severity] ?? a.severity;
+      const descHtml = a.description
+        ? `<br><span style="font-size:12px;color:#71717a">${escapeHtml(a.description)}</span>`
+        : '';
+      return `
+        <tr style="background:${bg}">
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;white-space:nowrap;vertical-align:top">
+            <span style="color:${color};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">
+              ${SEVERITY_EMOJI[a.severity]} ${label}
+            </span>
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;color:#18181b;font-size:13px">
+            ${escapeHtml(a.title)}${descHtml}
+          </td>
+        </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Alertas ${sector.label} — HiperTMS</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:24px 16px">
+  <tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e4e4e7">
+
+    <!-- Cabeçalho -->
+    <tr>
+      <td style="background:#18181b;padding:24px 28px;border-bottom:4px solid ${accent}">
+        <p style="margin:0;color:#a1a1aa;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase">MONITOR PROATIVO · HIPERTMS</p>
+        <p style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.2">${sector.emoji} Alertas ${sector.label}</p>
+        <p style="margin:6px 0 0;color:#a1a1aa;font-size:13px">${date} &nbsp;·&nbsp; ${alerts.length} ocorrência${alerts.length !== 1 ? 's' : ''}</p>
+      </td>
+    </tr>
+
+    <!-- Resumo de severidades -->
+    <tr>
+      <td style="padding:14px 28px;background:#fafafa;border-bottom:1px solid #e4e4e7">
+        <table cellpadding="0" cellspacing="0"><tr>${chipRows}</tr></table>
+      </td>
+    </tr>
+
+    <!-- Tabela de alertas -->
+    <tr>
+      <td style="padding:20px 28px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e4e4e7;border-radius:6px;overflow:hidden">
+          <tr style="background:#f4f4f5">
+            <th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px;width:110px;border-bottom:1px solid #e4e4e7">Severidade</th>
+            <th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e4e4e7">Ocorrência</th>
+          </tr>
+          ${tableRows}
+        </table>
+      </td>
+    </tr>
+
+    <!-- CTA -->
+    <tr>
+      <td style="padding:4px 28px 24px;text-align:center">
+        <a href="https://www.hipertms.com.br" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:700">Ver no HiperTMS →</a>
+      </td>
+    </tr>
+
+    <!-- Rodapé -->
+    <tr>
+      <td style="padding:14px 28px;background:#fafafa;border-top:1px solid #e4e4e7">
+        <p style="margin:0;color:#a1a1aa;font-size:11px">Lia · Monitor Proativo HiperTMS &nbsp;|&nbsp; <a href="https://www.hipertms.com.br" style="color:#a1a1aa;text-decoration:none">hipertms.com.br</a></p>
+        <p style="margin:4px 0 0;color:#a1a1aa;font-size:11px">Este e-mail foi gerado automaticamente. Gerencie suas notificações no painel do HiperTMS.</p>
+      </td>
+    </tr>
+
+  </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────

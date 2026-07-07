@@ -318,4 +318,50 @@ export class MonitorController {
     return {
       seeded: created.length,
       message: 'Alertas de teste criados. Agora chame POST /monitor/notify-now para disparar as notificações.',
-      alerts: created.map(
+      alerts: created.map((a) => ({ id: a.id, category: a.category, severity: a.severity, title: a.title })),
+    };
+  }
+
+  /**
+   * Retorna o histórico das últimas notificações enviadas para o tenant.
+   * Útil para confirmar que o Monitor Proativo está funcionando sem precisar
+   * checar o e-mail ou o WhatsApp — equivalente ao "inbox" para notificações enviadas.
+   *
+   * GET /monitor/notification-logs?limit=30&sector=fiscal|logistic|frota|finance
+   *
+   * Quando `sector` é fornecido, filtra apenas notificações do setor correspondente
+   * (ex: sector=fiscal → content contains 'Alertas Fiscal').
+   */
+  @RequirePerm('admin')
+  @Get('notification-logs')
+  async getNotificationLogs(
+    @CurrentTenant() tenantId: string,
+    @Query('limit') limitStr?: string,
+    @Query('sector') sector?: string,
+  ) {
+    const limit = Math.min(Math.max(parseInt(limitStr ?? '30', 10) || 30, 1), 100);
+    const sectorLabelMap: Record<string, string> = {
+      fiscal: 'Fiscal',
+      logistic: 'Logística',
+      frota: 'Frota',
+      finance: 'Financeiro',
+    };
+    const where: { tenantId: string; content?: { contains: string } } = { tenantId };
+    if (sector && sectorLabelMap[sector]) {
+      where.content = { contains: `Alertas ${sectorLabelMap[sector]}` };
+    }
+    return this.prisma.notificationLog.findMany({
+      where,
+      orderBy: { sentAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        channel: true,
+        content: true,
+        sentAt: true,
+        success: true,
+        error: true,
+      },
+    });
+  }
+}

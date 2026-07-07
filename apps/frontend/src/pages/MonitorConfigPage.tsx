@@ -149,57 +149,87 @@ const CATEGORY_LABEL: Record<string, string> = {
   fiscal: 'Fiscal', logistic: 'Logística', frota: 'Frota', finance: 'Financeiro',
 };
 
-// ─── NotifLogRow ─────────────────────────────────────────────────────────────
+// ─── SectorNotifStrip ────────────────────────────────────────────────────────
+// Strip colapsável no rodapé de cada card de setor.
+// Collapsed: ponto de status + "último envio: hoje HH:mm".
+// Expanded: lista compacta dos últimos envios daquele setor.
 
-function NotifLogRow({ log }: { log: NotificationLog }) {
+function SectorNotifStrip({ sectorKey }: { sectorKey: SectorKey }) {
   const [expanded, setExpanded] = useState(false);
 
-  const time = new Date(log.sentAt).toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+  const { data: logs = [], isLoading } = useQuery<NotificationLog[]>({
+    queryKey: ['monitor-notif-strip', sectorKey],
+    queryFn: () =>
+      api.get(`/monitor/notification-logs?sector=${sectorKey}&limit=5`).then((r) => r.data),
+    refetchInterval: 30_000,
   });
 
-  const channelIcon = log.channel === 'whatsapp' ? '💬' : '📧';
-  const channelLabel = log.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail';
-  const preview = log.content.split('\n').find((l) => l.trim()) ?? log.content.slice(0, 60);
+  if (isLoading) return null;
+
+  const last = logs[0];
+
+  const dotClass = !last
+    ? 'bg-base-300'
+    : last.success
+    ? 'bg-success'
+    : 'bg-error';
+
+  const lastLabel = last
+    ? (() => {
+        const d = new Date(last.sentAt);
+        const now = new Date();
+        const sameDay = d.toDateString() === now.toDateString();
+        return sameDay
+          ? `hoje ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+          : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      })()
+    : 'nenhum envio';
 
   return (
-    <div className="px-5 py-3">
-      <div className="flex items-center justify-between gap-3 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-base shrink-0">{channelIcon}</span>
-          <div className="min-w-0">
-            <p className="text-sm text-base-content truncate leading-snug">
-              {preview}
-            </p>
-            <p className="text-xs text-base-content/40 mt-0.5">
-              {channelLabel} · {time}
-            </p>
-          </div>
+    <div className="border-t border-base-200">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-5 py-2.5 hover:bg-base-200/50 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+        title={expanded ? 'Fechar histórico' : 'Ver histórico de envios'}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+          <span className="text-xs text-base-content/50">
+            último envio:{' '}
+            <span className="text-base-content/70">{lastLabel}</span>
+          </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {log.success ? (
-            <span className="badge badge-success badge-sm">enviado</span>
-          ) : (
-            <span className="badge badge-error badge-sm" title={log.error ?? ''}>falhou</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="btn btn-ghost btn-xs text-base-content/40"
-            title={expanded ? 'Fechar' : 'Ver mensagem completa'}
-          >
-            {expanded ? '▲' : '▼'}
-          </button>
-        </div>
-      </div>
+        <span className="text-base-content/30 text-[10px]">{expanded ? '▲' : '▼'}</span>
+      </button>
+
       {expanded && (
-        <pre className="mt-3 text-xs text-base-content/70 bg-base-200 rounded-lg px-4 py-3 whitespace-pre-wrap break-words font-sans">
-          {log.content}
-        </pre>
-      )}
-      {!log.success && log.error && !expanded && (
-        <p className="mt-1 text-xs text-error/70 truncate">{log.error}</p>
+        <div className="divide-y divide-base-200">
+          {logs.length === 0 ? (
+            <p className="px-5 py-3 text-xs text-base-content/40">
+              Nenhum envio registrado para este setor.
+            </p>
+          ) : (
+            logs.map((log) => {
+              const time = new Date(log.sentAt).toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+              });
+              const channelIcon = log.channel === 'whatsapp' ? '💬' : '📧';
+              const preview =
+                log.content.split('\n').find((l) => l.trim()) ?? log.content.slice(0, 60);
+              return (
+                <div key={log.id} className="flex items-center gap-2.5 px-5 py-2.5">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${log.success ? 'bg-success' : 'bg-error'}`}
+                  />
+                  <span className="text-xs shrink-0">{channelIcon}</span>
+                  <p className="text-xs text-base-content/60 truncate flex-1">{preview}</p>
+                  <span className="text-[10px] text-base-content/40 shrink-0">{time}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
       )}
     </div>
   );
@@ -291,12 +321,6 @@ export function MonitorConfigPage() {
     queryKey: ['monitor-alerts'],
     queryFn: () => api.get('/monitor/alerts').then((r) => r.data),
     refetchInterval: 60_000,
-  });
-
-  const { data: notifLogs = [], isLoading: loadingLogs } = useQuery<NotificationLog[]>({
-    queryKey: ['monitor-notification-logs'],
-    queryFn: () => api.get('/monitor/notification-logs?limit=30').then((r) => r.data),
-    refetchInterval: 30_000,
   });
 
   // ── Mutations ────────────────────────────────────────────────────────────────
@@ -585,7 +609,7 @@ export function MonitorConfigPage() {
                       </label>
                     </div>
 
-                    {/* Corpo: horário + telefone + e-mail + dias */}
+                    {/* Corpo: horário + telefone + e-mail + dias + histórico */}
                     <div className={`px-5 py-5 space-y-4 transition-opacity ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
 
                       {/* Horário */}
@@ -687,36 +711,13 @@ export function MonitorConfigPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Histórico de envios do setor */}
+                    <SectorNotifStrip sectorKey={sector.key} />
                   </div>
                 );
               })}
             </div>
-          </div>
-
-          {/* Historico de envios */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
-              Histórico de envios
-              {notifLogs.length > 0 && (
-                <span className="badge badge-neutral badge-sm ml-2 normal-case tracking-normal">
-                  {notifLogs.length}
-                </span>
-              )}
-            </p>
-
-            {loadingLogs ? (
-              <SkeletonList />
-            ) : notifLogs.length === 0 ? (
-              <div className="card px-6 py-10 text-center text-base-content/40 text-sm">
-                Nenhuma notificação enviada ainda — configure o monitor e aguarde o próximo ciclo.
-              </div>
-            ) : (
-              <div className="card divide-y divide-base-200">
-                {notifLogs.map((log) => (
-                  <NotifLogRow key={log.id} log={log} />
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Alertas ativos */}

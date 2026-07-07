@@ -160,12 +160,16 @@ export class EmailReplyService {
   /**
    * Envia e-mail operacional (alerta do Monitor Proativo) sem opt-out link e sem rastreamento de contato.
    * Usado para notificações admin-para-admin, não para marketing.
+   *
+   * Quando `html` é fornecido, o e-mail é enviado como multipart (text/plain fallback + text/html).
+   * Clientes que não suportam HTML recebem o `text` simples; os demais veem o template rico.
    */
   async sendAlertEmail(
     to: string,
     subject: string,
     text: string,
     tenantId: string,
+    html?: string,
   ): Promise<{ sent: boolean; reason?: string }> {
     const config = await this.resolveConfig(tenantId);
     if (!config) {
@@ -187,6 +191,7 @@ export class EmailReplyService {
         to,
         subject,
         text: `${text}\n\n--\n${SIGNATURE}`,
+        ...(html ? { html } : {}),
         replyTo: config.replyTo,
       });
       this.logger.log(`sendAlertEmail: enviado para ${to} (tenant=${tenantId})`);

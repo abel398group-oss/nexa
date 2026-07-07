@@ -1114,4 +1114,428 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Para executar a revisão quando chegar o prazo: crie uma Ordem de Manutenção em Frota → Manutenções.',
     tags: ['revisao preventiva', 'manutencao preventiva', 'quilometragem', 'vencimento', 'frota', 'veiculo', 'alerta manutencao'],
   },
+
+  // ══════════════════════════════════════════════════════════
+  // FINANCEIRO — COBRANÇA E FATURA (ASAAS)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como emitir boleto bancário para o cliente',
+    content:
+      'O HiperTMS integra com a plataforma Asaas para emissão de boletos registrados.\n' +
+      'Pré-requisito: a integração com o Asaas deve estar configurada em Administração → Dados da Empresa → aba Integrações. Sem isso o botão ficará inativo.\n' +
+      'Passo a passo:\n' +
+      '1. Acesse Financeiro → Faturas (tomador).\n' +
+      '2. Abra a fatura desejada.\n' +
+      '3. Clique na aba "Cobrança".\n' +
+      '4. Clique em "Emitir Boleto".\n' +
+      '5. Confirme o vencimento e clique em emitir.\n' +
+      'O sistema retorna a linha digitável, código de barras e PDF do boleto prontos para envio ao cliente.\n' +
+      'O status da fatura muda automaticamente para "Em cobrança".',
+    tags: ['boleto', 'emitir boleto', 'cobrança', 'asaas', 'fatura', 'cliente', 'pagamento', 'boleto bancario'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como gerar cobrança PIX para o cliente',
+    content:
+      'O HiperTMS gera cobranças PIX via Asaas com QR Code e código Copia e Cola.\n' +
+      'Pré-requisito: integração Asaas configurada em Administração → Dados da Empresa → aba Integrações.\n' +
+      'Passo a passo:\n' +
+      '1. Acesse Financeiro → Faturas (tomador).\n' +
+      '2. Abra a fatura desejada.\n' +
+      '3. Clique na aba "Cobrança".\n' +
+      '4. Clique em "Gerar PIX".\n' +
+      '5. O QR Code e o código Copia e Cola são gerados imediatamente.\n' +
+      'Quando o pagamento é confirmado no Asaas, o status da fatura atualiza automaticamente para "Paga" — sem intervenção manual.',
+    tags: ['pix', 'qr code', 'copia cola', 'cobrança pix', 'asaas', 'fatura', 'pagamento instantaneo', 'cliente'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como registrar recebimento por TED, depósito ou dinheiro',
+    content:
+      'Para pagamentos recebidos fora da plataforma (TED, depósito bancário, dinheiro):\n' +
+      '1. Acesse Financeiro → Faturas (tomador).\n' +
+      '2. Abra a fatura correspondente.\n' +
+      '3. Clique em "Registrar Pagamento".\n' +
+      '4. Informe: data do recebimento, valor, banco de origem e observações (opcional).\n' +
+      '5. Confirme — o status da fatura muda para "Paga" e um lançamento é gerado no contas a receber.\n' +
+      'Se houver desconto ou juros, informe a diferença no campo correspondente.',
+    tags: ['ted', 'deposito', 'dinheiro', 'registrar pagamento', 'recebimento manual', 'fatura', 'financeiro'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Ciclo de vida da fatura — entendendo os 9 status possíveis',
+    content:
+      'Uma fatura no HiperTMS pode passar por até 9 status ao longo da sua vida:\n' +
+      '1. Rascunho — criada mas não enviada ao cliente.\n' +
+      '2. Emitida — enviada ao cliente, aguardando pagamento.\n' +
+      '3. Visualizada — o cliente abriu a fatura (rastreio de leitura).\n' +
+      '4. Vencida — data de vencimento ultrapassada sem pagamento registrado.\n' +
+      '5. Em cobrança — boleto ou PIX emitidos via Asaas.\n' +
+      '6. Paga parcialmente — valor parcial recebido.\n' +
+      '7. Paga — valor total quitado.\n' +
+      '8. Cancelada — fatura cancelada.\n' +
+      '9. Contestada — cliente abriu disputa sobre o valor.\n' +
+      'Todas as transições ficam registradas no histórico de auditoria com o usuário responsável e horário.',
+    tags: ['status fatura', 'ciclo vida fatura', 'fatura vencida', 'fatura paga', 'em cobrança', 'contestada', 'financeiro'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como parcelar uma fatura em até 36 vezes',
+    content:
+      'O HiperTMS permite parcelamento de faturas de 1 a 36 vezes.\n' +
+      'Para configurar o parcelamento:\n' +
+      '1. Acesse Financeiro → Faturas (tomador).\n' +
+      '2. Ao criar ou editar uma fatura, localize a seção "Parcelamento".\n' +
+      '3. Informe a quantidade de parcelas (1 a 36).\n' +
+      '4. O sistema calcula automaticamente as datas de vencimento e os valores de cada parcela.\n' +
+      'Cada parcela gera uma entrada separada no contas a receber.\n' +
+      'Boleto ou PIX podem ser emitidos individualmente para cada parcela na aba "Cobrança" da parcela.',
+    tags: ['parcelar', 'parcelas', 'parcelamento', 'fatura parcelada', '36 vezes', 'financeiro', 'recebivel'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FINANCEIRO — DRE E ORÇAMENTO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como consultar o DRE (Demonstrativo de Resultado do Exercício)',
+    content:
+      'Caminho: Financeiro → DRE.\n' +
+      'O DRE consolida todas as receitas e despesas do período em um demonstrativo estruturado:\n' +
+      '• Receitas brutas → Deduções → Receita líquida\n' +
+      '• Custos operacionais (combustível, manutenção, motoristas, pedágios)\n' +
+      '• Despesas administrativas\n' +
+      '• EBITDA\n' +
+      '• Resultado líquido (lucro ou prejuízo)\n' +
+      'Filtros disponíveis: período (mês, trimestre ou ano livre), centro de custo, comparativo com período anterior.\n' +
+      'O comparativo exibe a variação percentual entre os dois períodos lado a lado.',
+    tags: ['dre', 'demonstrativo resultado', 'lucro', 'prejuizo', 'ebitda', 'financeiro', 'relatorio financeiro', 'resultado'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Como definir o orçamento anual e usar a sugestão automática',
+    content:
+      'Caminho: Financeiro → Orçamento.\n' +
+      'Para definir o orçamento:\n' +
+      '1. Acesse Financeiro → Orçamento.\n' +
+      '2. Clique em "Calcular sugestão" para que o sistema analise os últimos 12 meses e proponha valores por categoria automaticamente.\n' +
+      '3. Revise a sugestão, ajuste categoria a categoria se necessário e clique em Salvar.\n' +
+      'Com o orçamento configurado, o sistema compara os valores realizados com os planejados em tempo real, sinalizando desvios.\n' +
+      'Dica: refaça a sugestão no início de cada ano ou quando houver mudança significativa na operação.',
+    tags: ['orcamento', 'budget', 'sugestao automatica', 'meta receita', 'limite despesa', 'financeiro', 'planejamento'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — GNRE E NFS-e
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'GNRE — como gerar e registrar pagamento',
+    content:
+      'Caminho: Operação → GNRE.\n' +
+      'A GNRE (Guia Nacional de Recolhimento de Tributos Estaduais) é obrigatória em operações interestaduais onde o destinatário está em UF diferente do emitente e não é contribuinte do ICMS.\n' +
+      'Para gerar uma GNRE:\n' +
+      '1. Acesse Operação → GNRE.\n' +
+      '2. Clique em "Gerar GNRE".\n' +
+      '3. Vincule ao CT-e correspondente — o sistema preenche automaticamente código da receita, valor do ICMS e vencimento.\n' +
+      '4. Baixe o PDF para pagamento na rede bancária ou via PIX.\n' +
+      'Para registrar o pagamento: abra a GNRE e clique em "Registrar Pagamento" após quitação.\n' +
+      'Status disponíveis: Pendente, Paga, Cancelada.',
+    tags: ['gnre', 'guia recolhimento', 'icms interestadual', 'uf destino', 'operacao', 'fiscal', 'tributario'],
+  },
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'NFS-e — como emitir e cancelar nota fiscal de serviço',
+    content:
+      'Caminho: Operação → NFS-e.\n' +
+      'Utilizado por transportadoras que prestam serviços sujeitos a ISS (imposto municipal).\n' +
+      'Para emitir uma NFS-e:\n' +
+      '1. Acesse Operação → NFS-e.\n' +
+      '2. Clique em "Emitir NFS-e".\n' +
+      '3. Preencha: tomador, descrição do serviço, valor, alíquota ISS e código do serviço municipal.\n' +
+      '4. Confirme — o documento é enviado à prefeitura do município configurado na empresa.\n' +
+      'Para cancelar: acesse Operação → NFS-e → ações → Cancelar. Informe a justificativa obrigatória.\n' +
+      'Atenção: verifique o prazo de cancelamento permitido pelo município antes de prosseguir.\n' +
+      'PDF e XML ficam disponíveis para download após autorização.',
+    tags: ['nfse', 'nota fiscal servico', 'iss', 'imposto municipal', 'nfs-e', 'emitir', 'cancelar', 'prefeitura'],
+  },
+  {
+    topic: 'cte-rejeicao',
+    category: 'suporte',
+    title: 'Como reemitir um CT-e rejeitado ou com erro',
+    content:
+      'Para CT-e com status Rejeitado ou Erro:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. Localize o CT-e com status Rejeitado ou Erro.\n' +
+      '3. Clique no menu ⋮ (três pontos) e selecione "Reemitir".\n' +
+      '4. O sistema reabre o formulário com os dados originais pré-preenchidos.\n' +
+      '5. Corrija as informações que causaram a rejeição (verifique o código de erro para saber o que corrigir).\n' +
+      '6. Clique em emitir para reenviar à SEFAZ.\n' +
+      'Se o status não atualizou após a emissão: use a opção "Atualizar status" no menu ⋮ para consultar o retorno da SEFAZ.',
+    tags: ['reemitir cte', 'cte rejeitado', 'cte erro', 'reenviar sefaz', 'corrigir cte', 'operacao', 'fiscal'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FROTA — OCORRÊNCIAS, FIPE E MANUTENÇÃO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Como registrar uma ocorrência de motorista (infração, acidente, advertência)',
+    content:
+      'Caminho: Frota → Motoristas → detalhe do motorista → aba "Ocorrências".\n' +
+      'Para registrar uma ocorrência:\n' +
+      '1. Acesse Frota → Motoristas e abra o cadastro do motorista.\n' +
+      '2. Clique na aba "Ocorrências".\n' +
+      '3. Clique em "Nova Ocorrência".\n' +
+      '4. Preencha:\n' +
+      '   • Tipo: infração, acidente, advertência ou elogio\n' +
+      '   • Data e descrição detalhada\n' +
+      '   • Gravidade: leve, média ou grave\n' +
+      '   • Documentos comprobatórios (foto, boletim, etc.)\n' +
+      '5. Salve — a ocorrência fica no histórico permanente do motorista.\n' +
+      'Atenção: ocorrências graves podem impactar a elegibilidade do motorista para determinadas rotas.',
+    tags: ['ocorrencia motorista', 'infracao', 'acidente', 'advertencia', 'historico motorista', 'frota', 'motorista'],
+  },
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Consulta FIPE automática ao cadastrar veículo',
+    content:
+      'Ao cadastrar ou editar um veículo, o HiperTMS consulta automaticamente a Tabela FIPE.\n' +
+      'Como funciona:\n' +
+      '1. Acesse Frota → Veículos → criar ou editar veículo.\n' +
+      '2. Preencha marca, modelo e ano do veículo.\n' +
+      '3. O campo "Valor FIPE" é preenchido automaticamente com o valor de referência.\n' +
+      '4. O valor pode ser usado para cálculo de seguro e depreciação.\n' +
+      'Dica: atualize o valor FIPE periodicamente (recomendado mensalmente) para manter os cálculos de custo de capital atualizados.\n' +
+      'Se o valor FIPE não carregou: verifique se marca/modelo/ano estão corretos e salve novamente.',
+    tags: ['fipe', 'tabela fipe', 'valor veiculo', 'seguro', 'depreciacao', 'frota', 'veiculo', 'cadastro veiculo'],
+  },
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Status do ciclo de vida de uma manutenção',
+    content:
+      'Uma ordem de manutenção no HiperTMS percorre os seguintes status:\n' +
+      '• Agendada — manutenção programada para data futura.\n' +
+      '• Em execução — veículo na oficina, manutenção iniciada.\n' +
+      '• Aguardando peças — execução pausada por falta de peça.\n' +
+      '• Concluída — finalizada, veículo liberado e status muda para Disponível.\n' +
+      '• Cancelada — cancelada antes da execução.\n' +
+      'Para abrir as peças e serviços de uma manutenção: edite a ordem e acesse a aba "Peças e serviços".\n' +
+      'Para anexar notas fiscais e laudos: acesse a aba "Anexos" na edição da manutenção.',
+    tags: ['manutencao status', 'ordem manutencao', 'aguardando pecas', 'em execucao', 'manutencao concluida', 'frota', 'veiculo'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // VENDAS — COTAÇÕES E EMBARQUES
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'Como revalidar uma cotação vencida',
+    content:
+      'Cotações têm prazo de validade. Quando expiram, não podem ser convertidas em embarque sem revalidação.\n' +
+      'Para revalidar:\n' +
+      '1. Acesse Vendas → Cotações.\n' +
+      '2. Localize a cotação com status "Vencida".\n' +
+      '3. Abra o detalhe da cotação.\n' +
+      '4. Clique no botão "Revalidar".\n' +
+      'A validade é estendida por mais 15 dias sem necessidade de recriar o orçamento.\n' +
+      'Útil para clientes que voltam depois do prazo original.',
+    tags: ['cotacao vencida', 'revalidar', 'validade cotacao', 'cotacao expirada', 'vendas', 'cotacao'],
+  },
+  {
+    topic: 'operacao-problemas',
+    category: 'suporte',
+    title: 'Como importar XML de NF-e do cliente no embarque',
+    content:
+      'O HiperTMS permite importar o XML da Nota Fiscal Eletrônica do cliente para pré-preencher os dados do embarque.\n' +
+      'Dois caminhos:\n' +
+      'Opção 1 — direto no embarque:\n' +
+      '1. Acesse Vendas → Embarques → botão "Importar XML NF-e".\n' +
+      '2. Faça upload do arquivo XML.\n' +
+      '3. Os dados de remetente, destinatário, produtos, peso e valor são preenchidos automaticamente.\n' +
+      'Opção 2 — via menu NFe XML:\n' +
+      '1. Acesse Vendas → NFe XML e importe o XML.\n' +
+      '2. Selecione a nota importada e clique em "Criar Embarque".\n' +
+      'Ao importar múltiplos XMLs com mesma origem e destino, o sistema sugere consolidar em um único embarque.',
+    tags: ['xml nfe', 'importar xml', 'nota fiscal', 'nf-e', 'embarque', 'vendas', 'remetente destinatario'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // PRECIFICAÇÃO — REAJUSTE E CONTRATOS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Como reajustar percentualmente uma tabela de preços',
+    content:
+      'Caminho: Precificação → Tabelas → ações da tabela → Reajustar preços.\n' +
+      'O reajuste percentual aplica um aumento ou desconto sobre todos os valores de uma tabela de uma só vez.\n' +
+      'Passo a passo:\n' +
+      '1. Acesse Precificação → Tabelas de Frete.\n' +
+      '2. Localize a tabela desejada e clique em "Reajustar preços".\n' +
+      '3. Informe o percentual (positivo para aumento, negativo para desconto).\n' +
+      '4. O sistema exibe um preview com os valores antigos e novos lado a lado antes de confirmar.\n' +
+      '5. Revise e clique em Salvar.\n' +
+      'Útil para repassar variações de combustível e pedágio sem editar cada valor manualmente.',
+    tags: ['reajuste tabela', 'reajuste percentual', 'aumentar preco', 'tabela frete', 'precificacao', 'preview reajuste'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Tipos de regra disponíveis em contratos comerciais',
+    content:
+      'Caminho: Precificação → Contratos Comerciais → criar contrato → seção "Regras".\n' +
+      'Os contratos suportam 5 tipos de regra:\n' +
+      '1. Tabela fixa — aplica uma tabela de preços específica para o cliente.\n' +
+      '2. Desconto percentual — desconto calculado sobre a tabela padrão.\n' +
+      '3. Frete mínimo — valor mínimo garantido por embarque.\n' +
+      '4. Ad valorem — percentual calculado sobre o valor declarado da mercadoria.\n' +
+      '5. Combinada — combina múltiplas regras com ordem de prioridade definida.\n' +
+      'Atenção: apenas contratos com status ATIVO são aplicados automaticamente nas cotações.\n' +
+      'Fluxo de status: Rascunho → Em análise → Aprovado → Ativo → Suspenso → Encerrado.',
+    tags: ['contrato comercial', 'regra contrato', 'tabela fixa', 'desconto percentual', 'ad valorem', 'frete minimo', 'precificacao'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'CBS e IBS — reforma tributária no HiperTMS',
+    content:
+      'O HiperTMS contempla os novos tributos da reforma tributária brasileira:\n' +
+      '• CBS — Contribuição sobre Bens e Serviços (federal)\n' +
+      '• IBS — Imposto sobre Bens e Serviços (estadual/municipal)\n' +
+      'Caminho para configurar: Precificação → Configurações → aba "Tributação".\n' +
+      'Informe as alíquotas correspondentes para que sejam aplicadas automaticamente nos cálculos de precificação conforme as novas regras entrarem em vigor.\n' +
+      'Dica: consulte o contador da empresa para obter as alíquotas vigentes de CBS e IBS aplicáveis ao regime tributário.',
+    tags: ['cbs', 'ibs', 'reforma tributaria', 'tributacao', 'aliquota', 'precificacao', 'imposto', 'fiscal'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // CADASTROS — EMPRESAS E ENDEREÇOS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'cadastro-problemas',
+    category: 'suporte',
+    title: 'Como cadastrar múltiplos endereços para uma empresa',
+    content:
+      'No HiperTMS cada empresa pode ter múltiplos endereços cadastrados (matriz, filiais, centros de distribuição).\n' +
+      'Para adicionar um endereço:\n' +
+      '1. Acesse Cadastros → Empresas (ou Clientes).\n' +
+      '2. Abra o cadastro da empresa desejada.\n' +
+      '3. Acesse a aba "Endereços".\n' +
+      '4. Clique em "Adicionar Endereço" e preencha o endereço completo com CEP.\n' +
+      'Ao criar embarques, o usuário escolhe qual endereço usar como origem ou destino.\n' +
+      'Dica: mantenha os endereços com CEP completo para garantir a correta geração de documentos fiscais.',
+    tags: ['multiplos enderecos', 'filial', 'endereço empresa', 'matriz', 'cadastros', 'empresa', 'origem destino'],
+  },
+  {
+    topic: 'cadastro-problemas',
+    category: 'suporte',
+    title: 'Como importar empresas em lote (CSV) com validação de CNPJ',
+    content:
+      'Caminho: Cadastros → Empresas → botão "Importar".\n' +
+      'Para importar múltiplas empresas de uma vez:\n' +
+      '1. Acesse Cadastros → Empresas e clique em "Importar".\n' +
+      '2. Baixe o modelo de importação disponível na tela.\n' +
+      '3. Preencha o arquivo com os dados das empresas.\n' +
+      '4. Faça o upload — o sistema valida automaticamente o CNPJ/CPF de cada linha.\n' +
+      '5. Documentos inválidos são sinalizados; linhas válidas são importadas mesmo que outras tenham erros.\n' +
+      'Dica: sempre use o modelo oficial para garantir que o arquivo esteja no formato correto.',
+    tags: ['importar empresas', 'importacao lote', 'csv', 'cnpj', 'cadastros', 'empresa', 'bulk import', 'planilha'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // ADMINISTRAÇÃO — CERTIFICADO, PERMISSÕES E AUTOMAÇÃO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'acesso-login',
+    category: 'suporte',
+    title: 'Como fazer upload do certificado digital A1 para emissão fiscal',
+    content:
+      'Caminho: Administração → Dados da Empresa → aba "Certificado Digital".\n' +
+      'Para instalar ou renovar o certificado digital:\n' +
+      '1. Acesse Administração → Dados da Empresa.\n' +
+      '2. Clique na aba "Certificado Digital".\n' +
+      '3. Faça o upload do arquivo .pfx ou .p12.\n' +
+      '4. Informe a senha do certificado.\n' +
+      '5. Salve — o certificado será usado para assinar CT-e, MDF-e e NFS-e.\n' +
+      'O sistema emite um alerta 30 dias antes do vencimento.\n' +
+      'Atenção: nunca compartilhe a senha do certificado. Ele é armazenado de forma segura e criptografada.',
+    tags: ['certificado digital', 'a1', 'pfx', 'p12', 'certificado vencido', 'administracao', 'fiscal', 'upload certificado'],
+  },
+  {
+    topic: 'acesso-login',
+    category: 'suporte',
+    title: 'Como ver as permissões efetivas de um usuário',
+    content:
+      'Caminho: Administração → Usuários → detalhe do usuário → aba "Permissões efetivas".\n' +
+      'A aba Permissões efetivas exibe as permissões reais do usuário, considerando:\n' +
+      '• O papel (role) atribuído ao usuário\n' +
+      '• Permissões extras ou restrições individuais aplicadas\n' +
+      'Use esta visão para auditar o que um usuário pode ou não fazer — especialmente em situações de troubleshooting de acesso.\n' +
+      'Exemplo: se o usuário diz que não consegue acessar um módulo, verifique nesta aba se a permissão está habilitada.\n' +
+      'Apenas administradores podem acessar esta tela.',
+    tags: ['permissoes efetivas', 'auditoria permissao', 'usuario sem acesso', 'role', 'permissao modulo', 'administracao'],
+  },
+  {
+    topic: 'cadastro-problemas',
+    category: 'suporte',
+    title: 'Automação no HiperTMS — 3 níveis de complexidade',
+    content:
+      'Caminho: Administração → Automação.\n' +
+      'O módulo de automação suporta 3 níveis:\n' +
+      '• L1 — Gatilho simples: uma condição dispara uma ação. Ex: CT-e autorizado → enviar e-mail ao cliente.\n' +
+      '• L2 — Gatilho com condições: condição com filtros adicionais dispara uma ou mais ações. Ex: embarque com valor acima de R$ 10.000 → notificar o gerente.\n' +
+      '• L3 — Fluxo complexo: sequência de etapas com suporte a aguardar, ramificações e loops para cenários avançados.\n' +
+      'Para criar uma automação: Administração → Automação → Nova Automação → selecione o nível e configure o gatilho e as ações.\n' +
+      'Apenas administradores podem criar e editar automações.',
+    tags: ['automacao', 'gatilho', 'l1 l2 l3', 'workflow', 'notificacao automatica', 'administracao', 'regra automatica'],
+  },
+  {
+    topic: 'acesso-login',
+    category: 'suporte',
+    title: 'Como configurar alertas automáticos por WhatsApp',
+    content:
+      'Caminho: Administração → Configurações → aba "Notificações" → WhatsApp.\n' +
+      'O HiperTMS pode enviar alertas automáticos via WhatsApp para motoristas e clientes.\n' +
+      'Eventos disponíveis: confirmação de coleta, entrega realizada, CT-e emitido, fatura próxima do vencimento, entre outros.\n' +
+      'Pré-requisito: a integração com o provedor de WhatsApp Business deve estar configurada em Administração → Dados da Empresa → aba Integrações.\n' +
+      'Para ativar:\n' +
+      '1. Acesse Administração → Configurações → aba "Notificações".\n' +
+      '2. Na seção WhatsApp, ative os eventos desejados.\n' +
+      '3. Salve as configurações.\n' +
+      'Apenas administradores podem configurar estas notificações.',
+    tags: ['whatsapp', 'alerta whatsapp', 'notificacao whatsapp', 'motorista', 'cliente', 'administracao', 'integracao whatsapp'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // COMPRAS — KANBAN E INTEGRAÇÃO FINANCEIRO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'cadastro-problemas',
+    category: 'suporte',
+    title: 'Visualização kanban no módulo de Compras',
+    content:
+      'Caminho: Compras → botão de visualização → Board.\n' +
+      'A listagem de compras pode ser alternada entre lista e visualização kanban (Board).\n' +
+      'No kanban os itens são agrupados por status em colunas. Funcionalidades:\n' +
+      '• Arraste e solte um cartão para outra coluna para mudar o status sem abrir o detalhe.\n' +
+      '• Passe o mouse sobre um item para ver os botões de ação inline (aprovar, rejeitar, solicitar revisão) sem precisar abrir o registro.\n' +
+      '• Útil em reuniões de revisão para visualizar rapidamente o que está pendente, em análise ou aprovado.\n' +
+      'A integração com o Financeiro é automática: ao aprovar uma compra para pagamento, o sistema gera automaticamente uma conta a pagar no módulo Financeiro.',
+    tags: ['kanban', 'board', 'compras', 'visualizacao', 'solicitacao compra', 'aprovacao compra', 'financeiro compras'],
+  },
 ];
