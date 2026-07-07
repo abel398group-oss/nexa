@@ -99,7 +99,7 @@ Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
       if (parsed.resolved && kb.length > 0) {
         const topic = (kb[0] as any).topic as string | null;
         const helpUrl = (topic && HELP_URLS[topic]) ? HELP_URLS[topic] : HELP_BASE_URL;
-        parsed.draft = `${parsed.draft}\n\n📖 Central de Ajuda: ${helpUrl}`;
+        parsed.draft = `${parsed.draft}\n\n📖 <a href="${helpUrl}" target="_blank">Central de Ajuda</a>`;
       }
 
       return { ...parsed, usedKnowledge, allowedFacts };

@@ -59,7 +59,7 @@ describe('ResolutionAgentService', () => {
 
     const result = await svc.resolve(baseInput);
 
-    expect(result.draft).toBe('Veja o passo a passo\n\n📖 Central de Ajuda: https://hipertms.com.br/ajuda/operacao/cte');
+    expect(result.draft).toBe('Veja o passo a passo\n\n📖 <a href="https://hipertms.com.br/ajuda/operacao/cte" target="_blank">Central de Ajuda</a>');
     expect(result.resolved).toBe(true);
     expect(result.usedKnowledge).toEqual([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9 }]);
   });
