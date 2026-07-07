@@ -5,7 +5,7 @@ function mockAi(response: string) {
   return { complete: vi.fn().mockResolvedValue(response) } as any;
 }
 
-function mockKnowledge(rows: { id: string; title: string; score: number; content: string }[] = []) {
+function mockKnowledge(rows: { id: string; title: string; score: number; content: string; topic?: string }[] = []) {
   return { retrieve: vi.fn().mockResolvedValue(rows) } as any;
 }
 
@@ -53,13 +53,13 @@ describe('ResolutionAgentService', () => {
   // ─── Caminho feliz ───────────────────────────────────────────────────────
   it('returns the parsed resolution with the retrieved knowledge mapped into usedKnowledge', async () => {
     const ai = mockAi(aiJson({ draft: 'Veja o passo a passo', resolved: true }));
-    const knowledge = mockKnowledge([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9, content: 'conteúdo' }]);
+    const knowledge = mockKnowledge([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9, content: 'conteúdo', topic: 'operacao-cte' }]);
     const playbook = mockPlaybook('');
     const svc = new ResolutionAgentService(ai, knowledge, playbook);
 
     const result = await svc.resolve(baseInput);
 
-    expect(result.draft).toBe('Veja o passo a passo');
+    expect(result.draft).toBe('Veja o passo a passo\n\n📖 Central de Ajuda: https://hipertms.com.br/ajuda/operacao/cte');
     expect(result.resolved).toBe(true);
     expect(result.usedKnowledge).toEqual([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9 }]);
   });
