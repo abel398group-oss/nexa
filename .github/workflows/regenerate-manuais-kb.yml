@@ -1,0 +1,73 @@
+name: Regenerar Manuais KB da Lia
+
+# Disparo automático quando os manuais do TMS mudam OU manual via botão
+on:
+  workflow_dispatch:
+    inputs:
+      force_commit:
+        description: 'Forçar commit mesmo sem mudanças'
+        required: false
+        default: 'false'
+
+  # Para disparo automático pelo repo do TMS:
+  # No repo hipertms_v12, adicione um workflow que faça:
+  #   curl -X POST \
+  #     -H "Authorization: token ${{ secrets.NEXA_PAT }}" \
+  #     -H "Accept: application/vnd.github.v3+json" \
+  #     https://api.github.com/repos/<org>/nexa/actions/workflows/regenerate-manuais-kb.yml/dispatches \
+  #     -d '{"ref":"main"}'
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Nexa
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout TMS (manuais)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/hipertms_v12
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: tms-repo
+          sparse-checkout: |
+            docs/manuais tecnicos
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Regenerar hipertms-manuais.data.ts
+        run: |
+          node apps/backend/scripts/generate-manuais-kb.mjs \
+            "tms-repo/docs/manuais tecnicos" \
+            "apps/backend/src/application/connectors/hipertms-manuais.data.ts"
+
+      - name: Verificar se houve mudanças
+        id: diff
+        run: |
+          if git diff --quiet apps/backend/src/application/connectors/hipertms-manuais.data.ts; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            CHUNKS=$(grep -c "  topic:" apps/backend/src/application/connectors/hipertms-manuais.data.ts)
+            echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit e push
+        if: steps.diff.outputs.changed == 'true' || inputs.force_commit == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/backend/src/application/connectors/hipertms-manuais.data.ts
+          git commit -m "chore(lia): regenerar MANUAIS_KB — ${{ steps.diff.outputs.chunks }} chunks [auto]"
+          git push
+
+      - name: Resumo
+        run: |
+          echo "### Resultado" >> $GITHUB_STEP_SUMMARY
+          echo "- Chunks gerados: ${{ steps.diff.outputs.chunks }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Mudanças detectadas: ${{ steps.diff.outputs.changed }}" >> $GITHUB_STEP_SUMMARY

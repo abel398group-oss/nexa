@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:kb": "node scripts/generate-manuais-kb.mjs \"../../hipertms_v12/docs/manuais tecnicos\" src/application/connectors/hipertms-manuais.data.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
