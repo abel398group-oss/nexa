@@ -61,6 +61,17 @@ export class SupportAgentService {
           .join('\n')
       : '';
 
+    // ── 0. SMALL TALK — curto-circuita o pipeline p/ saudações ─────────────
+    if (this.isSmallTalk(input.question)) {
+      await this.persistTicketFields(input.conversationId, 'treinamento', 'low', null);
+      return this.buildReply(
+        'Olá! 👋 Estou aqui para ajudar com dúvidas sobre o HiperTMS. O que você precisa?',
+        [], '', 'high', false,
+        { category: 'treinamento', priority: 'low' },
+        null, true,
+      );
+    }
+
     // ── 1. CLASSIFICAÇÃO ────────────────────────────────────────────────────
     const classification = await this.classifier.classify(input.question, history);
     this.logger.debug(`[Support] classificação: ${classification.category}/${classification.priority}`);
@@ -208,6 +219,33 @@ export class SupportAgentService {
     } catch (e: any) {
       this.logger.warn(`persistTicketFields falhou: ${e?.message}`);
     }
+  }
+
+  // Detecta saudações e mensagens de small talk para curto-circuitar o pipeline.
+  // Evita que "oi", "bom dia", "obrigado" escalem desnecessariamente.
+  private isSmallTalk(message: string): boolean {
+    const norm = message
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[!?.]+$/, '') // remove pontuação final
+      .trim();
+
+    const exact = new Set([
+      'oi', 'ola', 'hello', 'hi', 'hey', 'e ai', 'eai',
+      'bom dia', 'boa tarde', 'boa noite',
+      'tudo bem', 'tudo bom', 'tudo certo',
+      'obrigado', 'obrigada', 'valeu', 'vlw',
+      'ok', 'certo', 'entendido', 'entendi', 'perfeito',
+      'ate logo', 'ate mais', 'tchau', 'flw',
+    ]);
+    if (exact.has(norm)) return true;
+
+    // Mensagens muito curtas (≤ 3 chars) que não formam uma pergunta
+    if (norm.length <= 3 && !norm.includes('?')) return true;
+
+    return false;
   }
 
   private async markResolved(conversationId: string | undefined) {

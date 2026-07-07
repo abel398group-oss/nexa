@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
@@ -780,19 +781,40 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
                 {/* suporte: resolver / reabrir o chamado */}
                 {scope === 'support' && (
-                  <button
-                    onClick={() => resolveTicket(active.status !== 'closed')}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      active.status === 'closed'
-                        ? 'border border-base-300 text-base-content/70 hover:bg-base-100'
-                        : 'bg-emerald-600 text-white'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      <Icon name={active.status === 'closed' ? 'undo' : 'check'} className="h-3.5 w-3.5" />
-                      {active.status === 'closed' ? 'Reabrir' : 'Resolver'}
-                    </span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => resolveTicket(active.status !== 'closed')}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        active.status === 'closed'
+                          ? 'border border-base-300 text-base-content/70 hover:bg-base-100'
+                          : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        <Icon name={active.status === 'closed' ? 'undo' : 'check'} className="h-3.5 w-3.5" />
+                        {active.status === 'closed' ? 'Reabrir' : 'Resolver'}
+                      </span>
+                    </button>
+
+                    {/* Botão "Documentar no KB" — aparece em tickets escalados para fechar o feedback loop */}
+                    {(active.status === 'escalated' || (active as any).rootCause) && (() => {
+                      const kbTitle = (active as any).rootCause
+                        ?? `Como resolver: ${active.ticketCategory ?? 'dúvida'}`;
+                      const kbParams = new URLSearchParams({
+                        title: kbTitle,
+                        ...(active.ticketCategory ? { category: active.ticketCategory } : {}),
+                      });
+                      return (
+                        <Link
+                          to={`/knowledge?${kbParams}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-base-300 bg-base-100 px-2.5 py-1 text-xs font-medium text-base-content/70 transition-colors hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700"
+                          title="Documentar esta pergunta na Base de Conhecimento para a Lia aprender"
+                        >
+                          <Icon name="knowledge" className="h-3.5 w-3.5" /> + KB
+                        </Link>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             </div>
