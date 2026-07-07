@@ -126,6 +126,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [liaBusy, setLiaBusy] = useState(false);
   const [liaInfo, setLiaInfo] = useState('');
   const [tmsLookup, setTmsLookup] = useState<TmsLookup | null>(null);
@@ -344,8 +345,15 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       if (g) g.convs.push(c);
       else map.set(key, { key, rep: c, convs: [c] });
     }
-    return Array.from(map.values());
-  }, [filtered]);
+    const all = Array.from(map.values());
+    if (!searchQuery.trim()) return all;
+    const q = searchQuery.toLowerCase();
+    return all.filter(({ rep: c }) =>
+      c.contact?.name?.toLowerCase().includes(q) ||
+      c.contact?.company?.toLowerCase().includes(q) ||
+      c.phone.includes(q),
+    );
+  }, [filtered, searchQuery]);
 
   function openGroup(g: { rep: Conversation; convs: { id: string }[] }) {
     const c = g.rep;
@@ -461,6 +469,24 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
             Conversas
           </div>
         )}
+
+        {/* busca inline */}
+        <div className="border-b px-3 py-2" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor: 'var(--border-input)', background: 'var(--surface-input)' }}>
+            <Icon name="knowledge" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nome, empresa ou número…"
+              className="flex-1 bg-transparent text-xs text-base-content outline-none placeholder:text-base-content/35"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="text-base-content/40 hover:text-base-content transition-colors" title="Limpar busca">
+                <Icon name="close" className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* filtros rápidos */}
         {!loadingConvs && convs.length > 0 && (
@@ -859,7 +885,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                             </span>
                           </div>
                         )}
-                        <div className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex flex-col ${m.direction === 'outbound' ? 'items-end' : 'items-start'}`}>
                           <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${
                             m.direction === 'outbound'
                               ? 'rounded-tr-sm bg-brand-500 text-white'
@@ -876,6 +902,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                               {m.direction === 'outbound' && <Recibo ack={m.ack} />}
                             </div>
                           </div>
+                          {/* badge IA vs Humano — exibido abaixo de toda mensagem outbound */}
+                          {m.direction === 'outbound' && (
+                            <span className="mt-0.5 text-[10px] text-base-content/35 select-none">
+                              {(m.metadata as any)?.senderType === 'human' ? '👤 Você' : '✨ Lia'}
+                            </span>
+                          )}
                         </div>
                       </Fragment>
                     );

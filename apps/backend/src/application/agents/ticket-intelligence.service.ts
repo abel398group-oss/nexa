@@ -16,6 +16,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { KnowledgeService } from '@/application/knowledge/knowledge.service';
+import { AnthropicService } from '@/shared/ai/anthropic.service';
 
 // Quantas ocorrências do mesmo rootCause (nos últimos WINDOW_DAYS) disparam o alerta.
 const RECURRENCE_THRESHOLD = Number(process.env.TICKET_RECURRENCE_THRESHOLD ?? 3);
@@ -27,6 +29,7 @@ const LOOK_BACK_HOURS = 2;
 type TicketRow = {
   id: string;
   tenantId: string;
+  status: string | null;
   ticketCategory: string | null;
   ticketPriority: string | null;
   rootCause: string | null;
@@ -42,6 +45,8 @@ export class TicketIntelligenceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly knowledge: KnowledgeService,
+    private readonly ai: AnthropicService,
   ) {}
 
   // ── @Interval: analisa tickets fechados nas últimas LOOK_BACK_HOURS ────────
@@ -58,6 +63,7 @@ export class TicketIntelligenceService {
       select: {
         id: true,
         tenantId: true,
+        status: true,
         ticketCategory: true,
         ticketPriority: true,
         rootCause: true,
@@ -106,6 +112,17 @@ export class TicketIntelligenceService {
     // D1-C: Candidato a artigo de KB (resolvido pela IA sem precisar de humano)
     if (wasResolved && !wasEscalated && ticket.rootCause) {
       await this.suggestKbArticle(
+        ticket.tenantId,
+        ticket.id,
+        ticket.ticketCategory,
+        ticket.rootCause,
+      );
+    }
+
+    // D1-D: Lúcio automático — gera draft de artigo KB para tickets escalados
+    // que foram fechados pelo humano (status='closed' + was escalated + tem rootCause)
+    if (wasEscalated && (ticket.status as string) === 'closed' && ticket.rootCause) {
+      await this.generateKbDraft(
         ticket.tenantId,
         ticket.id,
         ticket.ticketCategory,
@@ -190,6 +207,103 @@ export class TicketIntelligenceService {
     this.logger.log(
       `Bug provável: conv ${conversationId.slice(0, 8)} (tenant=${tenantId})`,
     );
+  }
+
+  // ── D1-D: Lúcio — gera draft de artigo KB automaticamente ─────────────────
+  // Roda quando um ticket escalado é fechado pelo humano. Usa Claude para gerar
+  // título + conteúdo a partir do transcript. Cria o artigo como rascunho
+  // (approved=false) — admin revisa em /knowledge antes de ativar.
+  private async generateKbDraft(
+    tenantId: string,
+    conversationId: string,
+    category: string | null,
+    rootCause: string,
+  ): Promise<void> {
+    // Dedup: não regera se já existe notificação de kb_draft para este ticket
+    const existing = await this.prisma.notification.findFirst({
+      where: {
+        tenantId,
+        type: 'kb_draft',
+        body: { contains: conversationId.slice(0, 8) },
+      },
+    });
+    if (existing) return;
+
+    // Busca transcript (últimas 30 mensagens)
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      take: 30,
+      select: { direction: true, content: true },
+    });
+    if (!messages.length) return;
+
+    const transcript = messages
+      .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
+      .join('\n');
+
+    // Pede ao Claude para gerar o artigo
+    const userPrompt = `Analise esta conversa de suporte HiperTMS e crie um artigo para a Base de Conhecimento que ajude a Lia (IA de suporte) a responder perguntas similares no futuro.
+
+Causa-raiz identificada: "${rootCause}"
+Categoria: ${category ?? 'suporte'}
+
+TRANSCRIÇÃO:
+${transcript.slice(0, 3000)}
+
+Responda APENAS com JSON válido (sem markdown):
+{
+  "title": "<título claro, escrito como o cliente perguntaria. Ex: 'Como emitir boleto para o cliente'>",
+  "content": "<resposta direta e completa. Use passos numerados se for procedural. Máximo 400 palavras.>"
+}`;
+
+    let title = '';
+    let content = '';
+    try {
+      const text = await this.ai.complete(
+        'Você é Lúcio, especialista em documentação de suporte técnico do HiperTMS. Gere artigos KB claros, diretos e úteis para uma IA de suporte.',
+        userPrompt,
+        { maxTokens: 700 },
+      );
+      const clean = text.replace(/```(?:json)?/g, '').trim();
+      const parsed = JSON.parse(clean);
+      title = (parsed.title as string)?.slice(0, 200) ?? '';
+      content = (parsed.content as string)?.slice(0, 2000) ?? '';
+    } catch (err: any) {
+      this.logger.warn(`Lúcio: Claude falhou ao gerar draft (${err?.message})`);
+      return;
+    }
+
+    if (!title || !content) return;
+
+    // Cria o artigo como rascunho — não aprovado, passa pela curadoria humana
+    try {
+      await this.knowledge.create(
+        tenantId,
+        {
+          title,
+          content,
+          topic: 'suporte-cliente',
+          category: category ?? 'suporte',
+          productCode: 'hipertms',
+          tags: [category ?? 'suporte', 'lucio', 'auto-draft'],
+        },
+        'lucio',
+      );
+
+      await this.notifications.create(tenantId, {
+        type: 'kb_draft',
+        title: '🧠 Lúcio gerou um rascunho de artigo KB',
+        body: `Ticket ${conversationId.slice(0, 8)} (${category ?? 'suporte'}): "${title.slice(0, 80)}". Revise e aprove em Conhecimento.`,
+        link: '/knowledge',
+      });
+
+      this.logger.log(
+        `Lúcio: draft KB gerado "${title.slice(0, 60)}" (conv=${conversationId.slice(0, 8)}, tenant=${tenantId})`,
+      );
+    } catch (err: any) {
+      this.logger.warn(`Lúcio: criação do draft falhou (${err?.message})`);
+    }
   }
 
   // ── D1-C: Candidato a KB ────────────────────────────────────────────────────

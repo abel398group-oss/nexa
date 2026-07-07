@@ -104,7 +104,7 @@ export class ConversationsController {
   addMessage(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { direction: 'inbound' | 'outbound'; content: string; intent?: string },
+    @Body() dto: { direction: 'inbound' | 'outbound'; content: string; intent?: string; metadata?: Record<string, unknown> },
   ) {
     return this.conversations.addMessage(tenantId, id, dto);
   }

@@ -15,7 +15,11 @@ export async function getConversationMessages(id: string): Promise<Message[]> {
 }
 
 export async function sendMessage(id: string, content: string): Promise<void> {
-  await api.post(`/conversations/${id}/messages`, { direction: 'outbound', content });
+  await api.post(`/conversations/${id}/messages`, {
+    direction: 'outbound',
+    content,
+    metadata: { senderType: 'human' },
+  });
 }
 
 // Vendas: marcar o resultado do lead (ganho/perdido) ou limpar.
