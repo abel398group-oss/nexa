@@ -11,7 +11,8 @@ export interface CreateNotification {
     // Intelligence loop (ADR 019)
     | 'recurrence'
     | 'bug_probable'
-    | 'kb_candidate';
+    | 'kb_candidate'
+    | 'kb_draft';
   title: string;
   body?: string;
   link?: string;
