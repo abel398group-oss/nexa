@@ -68,6 +68,15 @@ interface AlertState {
   notifyCount: number;
 }
 
+interface NotificationLog {
+  id: string;
+  channel: 'whatsapp' | 'email';
+  content: string;
+  sentAt: string;
+  success: boolean;
+  error: string | null;
+}
+
 // ─── Setores ─────────────────────────────────────────────────────────────────
 
 const SECTORS: Array<{
@@ -139,6 +148,64 @@ const SEVERITY_LABEL: Record<string, string> = {
 const CATEGORY_LABEL: Record<string, string> = {
   fiscal: 'Fiscal', logistic: 'Logística', frota: 'Frota', finance: 'Financeiro',
 };
+
+// ─── NotifLogRow ─────────────────────────────────────────────────────────────
+
+function NotifLogRow({ log }: { log: NotificationLog }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const time = new Date(log.sentAt).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  const channelIcon = log.channel === 'whatsapp' ? '💬' : '📧';
+  const channelLabel = log.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail';
+  const preview = log.content.split('\n').find((l) => l.trim()) ?? log.content.slice(0, 60);
+
+  return (
+    <div className="px-5 py-3">
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-base shrink-0">{channelIcon}</span>
+          <div className="min-w-0">
+            <p className="text-sm text-base-content truncate leading-snug">
+              {preview}
+            </p>
+            <p className="text-xs text-base-content/40 mt-0.5">
+              {channelLabel} · {time}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {log.success ? (
+            <span className="badge badge-success badge-sm">enviado</span>
+          ) : (
+            <span className="badge badge-error badge-sm" title={log.error ?? ''}>falhou</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="btn btn-ghost btn-xs text-base-content/40"
+            title={expanded ? 'Fechar' : 'Ver mensagem completa'}
+          >
+            {expanded ? '▲' : '▼'}
+          </button>
+        </div>
+      </div>
+      {expanded && (
+        <pre className="mt-3 text-xs text-base-content/70 bg-base-200 rounded-lg px-4 py-3 whitespace-pre-wrap break-words font-sans">
+          {log.content}
+        </pre>
+      )}
+      {!log.success && log.error && !expanded && (
+        <p className="mt-1 text-xs text-error/70 truncate">{log.error}</p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -224,6 +291,12 @@ export function MonitorConfigPage() {
     queryKey: ['monitor-alerts'],
     queryFn: () => api.get('/monitor/alerts').then((r) => r.data),
     refetchInterval: 60_000,
+  });
+
+  const { data: notifLogs = [], isLoading: loadingLogs } = useQuery<NotificationLog[]>({
+    queryKey: ['monitor-notification-logs'],
+    queryFn: () => api.get('/monitor/notification-logs?limit=30').then((r) => r.data),
+    refetchInterval: 30_000,
   });
 
   // ── Mutations ────────────────────────────────────────────────────────────────
@@ -620,7 +693,33 @@ export function MonitorConfigPage() {
             </div>
           </div>
 
-          {/* ─── Alertas ativos ──────────────────────────────────────────── */}
+          {/* Historico de envios */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
+              Histórico de envios
+              {notifLogs.length > 0 && (
+                <span className="badge badge-neutral badge-sm ml-2 normal-case tracking-normal">
+                  {notifLogs.length}
+                </span>
+              )}
+            </p>
+
+            {loadingLogs ? (
+              <SkeletonList />
+            ) : notifLogs.length === 0 ? (
+              <div className="card px-6 py-10 text-center text-base-content/40 text-sm">
+                Nenhuma notificação enviada ainda — configure o monitor e aguarde o próximo ciclo.
+              </div>
+            ) : (
+              <div className="card divide-y divide-base-200">
+                {notifLogs.map((log) => (
+                  <NotifLogRow key={log.id} log={log} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Alertas ativos */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-4">
               Alertas ativos

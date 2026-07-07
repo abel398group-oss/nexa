@@ -1,11 +1,12 @@
 /**
- * MonitorController — 5 endpoints REST de config e gerenciamento de alertas.
+ * MonitorController — endpoints REST de config e gerenciamento de alertas.
  *
- * GET  /monitor/config           → configuração do tenant
- * PUT  /monitor/config           → atualiza preferências
- * GET  /monitor/alerts           → lista alertas abertos
- * POST /monitor/alerts/:id/snooze  → snooze 24h
- * POST /monitor/alerts/:id/resolve → resolve manualmente
+ * GET  /monitor/config              → configuração do tenant
+ * PUT  /monitor/config              → atualiza preferências
+ * GET  /monitor/alerts              → lista alertas abertos
+ * POST /monitor/alerts/:id/snooze   → snooze 24h
+ * POST /monitor/alerts/:id/resolve  → resolve manualmente
+ * GET  /monitor/notification-logs   → histórico de notificações enviadas
  */
 import {
   Body,
@@ -16,6 +17,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
@@ -316,7 +318,4 @@ export class MonitorController {
     return {
       seeded: created.length,
       message: 'Alertas de teste criados. Agora chame POST /monitor/notify-now para disparar as notificações.',
-      alerts: created.map((a) => ({ id: a.id, category: a.category, severity: a.severity, title: a.title })),
-    };
-  }
-}
+      alerts: created.map(
