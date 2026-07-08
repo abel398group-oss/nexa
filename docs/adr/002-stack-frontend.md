@@ -1,6 +1,0 @@
-# [ARQUIVO DUPLICADO — IGNORAR]
-
-Este arquivo é um duplicado criado por engano. O ADR 002 real está em
-[`002-frontend-stack.md`](002-frontend-stack.md).
-
-**Apagar este arquivo do repositório** com `git rm docs/adr/002-stack-frontend.md`.
