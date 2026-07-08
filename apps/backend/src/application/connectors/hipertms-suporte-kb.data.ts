@@ -2270,45 +2270,44 @@ export const SUPORTE_KB: KnowledgeItem[] = [
   {
     topic: 'operacao-cte',
     category: 'suporte',
-    title: 'Como exportar lista de CT-e em CSV ou Excel',
+    title: 'Como exportar lista de CT-e em CSV',
     content:
-      'Dúvida: como baixar um relatório/planilha com os CT-e emitidos?\\n' +
-      'Solução:\\n' +
-      '1. Acesse Operação → CT-e.\\n' +
-      '2. Use os filtros de período (De/Até), status ou tomador para selecionar os documentos desejados.\\n' +
-      '3. Clique no botão \"Exportar\" (ícone de download) no canto superior direito da lista.\\n' +
-      '4. Selecione o formato: CSV ou Excel (.xlsx).\\n' +
-      '5. O arquivo é gerado e baixado automaticamente com: número do CT-e, data, tomador, valor, status e chave de acesso.\\n' +
-      'Se o botão Exportar não aparecer: verifique se sua permissão inclui acesso a exportações (Administração → Perfis de Acesso).\\n' +
+      'Dúvida: como baixar um relatório/planilha com os CT-e emitidos?\n' +
+      'Solução:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. Use os filtros de período (De/Até), status ou tomador para selecionar os documentos desejados.\n' +
+      '3. Clique no botão \"Exportar CSV\" no canto superior direito da lista.\n' +
+      '4. O arquivo é baixado automaticamente com: número do CT-e, data, tomador, valor, status e chave de acesso.\n' +
+      'Se o botão Exportar não aparecer: verifique se sua permissão inclui acesso a exportações (Administração → Perfis de Acesso).\n' +
       'Para exportar apenas CT-e autorizados: filtre por Status = \"Autorizado\" antes de exportar.',
     tags: ['exportar', 'csv', 'excel', 'relatorio cte', 'download', 'planilha', 'cte', 'operacao'],
   },
   {
     topic: 'operacao-cte',
     category: 'suporte',
-    title: 'Como baixar o DANFE do CT-e',
+    title: 'Como baixar o DACTE do CT-e (documento auxiliar)',
     content:
-      'O DANFE (Documento Auxiliar do CT-e) é o PDF impresso do conhecimento de transporte.\\n' +
-      'Como baixar:\\n' +
-      '1. Acesse Operação → CT-e.\\n' +
-      '2. Localize o CT-e desejado e clique para abrir.\\n' +
-      '3. Clique em \"Imprimir DANFE\" ou no ícone de PDF.\\n' +
-      '4. O PDF é gerado para impressão ou download.\\n' +
-      'Para baixar em lote: selecione vários CT-e na lista (checkbox) → Ações → Baixar DANFE.\\n' +
-      'Se o DANFE não gera: verifique se o CT-e está com status \"Autorizado\" — documentos rejeitados ou cancelados não têm DANFE válido.',
-    tags: ['danfe', 'pdf', 'imprimir', 'baixar', 'cte', 'documento auxiliar', 'download'],
+      'O DACTE (Documento Auxiliar do CT-e) é o PDF impresso do conhecimento de transporte.\n' +
+      'Como baixar:\n' +
+      '1. Acesse Operação → CT-e.\n' +
+      '2. Localize o CT-e desejado e clique para abrir.\n' +
+      '3. Clique em \"Imprimir DACTE\" ou no ícone de PDF.\n' +
+      '4. O PDF é gerado para impressão ou download.\n' +
+      'Para baixar em lote: selecione vários CT-e na lista (checkbox) → Ações → Baixar DACTE.\n' +
+      'Se o DACTE não gera: verifique se o CT-e está com status \"Autorizado\" — documentos rejeitados ou cancelados não têm DACTE válido.',
+    tags: ['dacte', 'danfe', 'pdf', 'imprimir', 'baixar', 'cte', 'documento auxiliar cte', 'download dacte'],
   },
   {
     topic: 'vendas-cotacoes',
     category: 'suporte',
     title: 'Como exportar cotações em CSV',
     content:
-      'Dúvida: como baixar uma planilha com as cotações de frete?\\n' +
-      'Solução:\\n' +
-      '1. Acesse Vendas → Cotações.\\n' +
-      '2. Aplique os filtros desejados (período, status, cliente).\\n' +
-      '3. Clique em \"Exportar CSV\" no canto superior direito.\\n' +
-      '4. O arquivo baixado contém: número, data, cliente, origem, destino, valor calculado e status.\\n' +
+      'Dúvida: como baixar uma planilha com as cotações de frete?\n' +
+      'Solução:\n' +
+      '1. Acesse Vendas → Cotações.\n' +
+      '2. Aplique os filtros desejados (período, status, cliente).\n' +
+      '3. Clique em \"Exportar CSV\" no canto superior direito.\n' +
+      '4. O arquivo baixado contém: número, data, cliente, origem, destino, valor calculado e status.\n' +
       'Para exportar todas as cotações do mês: filtre por Data de criação = mês desejado, depois exporte.',
     tags: ['exportar', 'csv', 'cotacoes', 'relatorio', 'download', 'planilha', 'vendas'],
   },
@@ -2322,5 +2321,673 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Sumário MDF-e (Relatórios → Fiscal → Sumário MDF-e): mesmo formato, com distribuição por status (Autorizado, Encerrado, Cancelado).\n' +
       'Ação: um percentual baixo de autorização indica problemas recorrentes de emissão — revise causas de rejeição em Operação → CT-e/MDF-e. Use o filtro De/Até para o período.',
     tags: ['relatorios', 'sumario cte', 'sumario mdfe', 'autorizacao', 'fiscal'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — CT-e avançado
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como baixar o XML do CT-e',
+    content:
+      'Individual: Operação → CT-e → abra o CT-e → botão "Baixar XML".\n' +
+      'Em lote: selecione vários CT-e (checkbox) → Ações → Baixar XML → recebe um arquivo ZIP com todos os XMLs.\n' +
+      'O XML é o arquivo eletrônico oficial enviado à SEFAZ. Guarde-o para fins fiscais.\n' +
+      'Apenas CT-e com status "Autorizado" possuem XML válido para download.',
+    tags: ['xml', 'baixar xml', 'download xml', 'cte', 'operacao', 'arquivo xml', 'lote zip'],
+  },
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como reemitir (reprocessar) um CT-e rejeitado',
+    content:
+      'Quando um CT-e é rejeitado pela SEFAZ, corrija a causa e reemita.\n' +
+      '1. Operação → CT-e → localize o CT-e com status "Rejeitado".\n' +
+      '2. Abra o documento e leia a mensagem de rejeição (código + descrição).\n' +
+      '3. Corrija os dados que causaram a rejeição (ex: CFOP, valores, dados do tomador).\n' +
+      '4. Clique em "Reemitir" para reenviar à SEFAZ com os dados corrigidos.\n' +
+      'Atenção: cada rejeição gera um novo número de série — o CT-e rejeitado não pode ser editado, apenas reemitido.',
+    tags: ['reemitir', 'reprocessar', 'cte rejeitado', 'rejeicao sefaz', 'corrigir cte', 'operacao', 'reprocessar cte'],
+  },
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como cancelar um CT-e autorizado',
+    content:
+      'Condições: CT-e com status "Autorizado" e prazo SEFAZ não expirado (geralmente 24h após autorização).\n' +
+      '1. Operação → CT-e → abra o CT-e autorizado.\n' +
+      '2. Clique em "Cancelar" e informe o motivo do cancelamento.\n' +
+      '3. O sistema envia o pedido de cancelamento à SEFAZ — status muda para "Cancelado".\n' +
+      'Se o prazo expirou: não é possível cancelar. Para erro nos dados, emita uma Carta de Correção (CC-e) pelo sistema.',
+    tags: ['cancelar cte', 'cancelamento', 'cte autorizado', 'prazo cancelamento', 'sefaz', 'carta correcao'],
+  },
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como atualizar o status de um CT-e junto à SEFAZ',
+    content:
+      'Use quando o CT-e está "Pendente" ou "Em processamento" há mais tempo que o esperado.\n' +
+      '1. Operação → CT-e → localize o CT-e.\n' +
+      '2. Clique em "Atualizar Status SEFAZ" (ou ícone de sincronização).\n' +
+      '3. O sistema consulta a SEFAZ e atualiza o status automaticamente.\n' +
+      'Se permanecer pendente: verifique a integração em Administração → Dados da Empresa → Integrações.',
+    tags: ['atualizar status', 'consultar sefaz', 'cte pendente', 'sincronizar', 'status sefaz', 'consulta sefaz'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — MDF-e
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como emitir um MDF-e (Manifesto Eletrônico)',
+    content:
+      'O MDF-e é obrigatório em viagens interestaduais ou quando há mais de um CT-e no veículo.\n' +
+      '1. Operação → MDF-e → Nova Emissão (ou gere automaticamente ao criar a viagem).\n' +
+      '2. Informe: veículo, motorista, CT-e(s) vinculados, UFs de percurso e UF de descarregamento.\n' +
+      '3. Clique em "Emitir" — o MDF-e é enviado à SEFAZ e fica com status "Autorizado".\n' +
+      'Pré-requisito: certificado digital A1 configurado em Administração → Dados da Empresa → Certificado.',
+    tags: ['mdfe', 'manifesto', 'emitir mdfe', 'manifesto eletronico', 'viagem interestadual', 'mdf-e'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como encerrar um MDF-e',
+    content:
+      'O encerramento deve ser feito ao terminar a viagem (todas as entregas realizadas).\n' +
+      '1. Operação → MDF-e → localize o MDF-e com status "Autorizado".\n' +
+      '2. Clique em "Encerrar" e confirme a UF e município de encerramento.\n' +
+      '3. O sistema envia o evento de encerramento à SEFAZ — status muda para "Encerrado".\n' +
+      'Em lote: selecione vários MDF-e → Ações → Encerrar.',
+    tags: ['encerrar mdfe', 'encerramento mdfe', 'fim viagem', 'mdfe encerrado', 'lote mdfe'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como cancelar um MDF-e',
+    content:
+      'O cancelamento só é possível antes do encerramento e dentro do prazo SEFAZ.\n' +
+      '1. Operação → MDF-e → abra o MDF-e com status "Autorizado".\n' +
+      '2. Clique em "Cancelar" e informe o motivo.\n' +
+      '3. O sistema envia o pedido de cancelamento à SEFAZ — status muda para "Cancelado".\n' +
+      'Após o encerramento, não é possível cancelar o MDF-e.',
+    tags: ['cancelar mdfe', 'cancelamento mdfe', 'mdfe cancelado', 'mdf-e cancelar'],
+  },
+  {
+    topic: 'operacao-mdfe',
+    category: 'suporte',
+    title: 'Como baixar o DAMDFe e o XML do MDF-e',
+    content:
+      'DAMDFe (PDF) individual: Operação → MDF-e → abra o MDF-e → "Imprimir DAMDFe".\n' +
+      'XML individual: Operação → MDF-e → abra o MDF-e → "Baixar XML".\n' +
+      'Em lote (ZIP): Operação → MDF-e → selecione vários (checkbox) → Ações → Baixar DAMDFe ou Baixar XML.\n' +
+      'O DAMDFe é o documento impresso que o motorista deve portar durante o trajeto.',
+    tags: ['damdfe', 'pdf mdfe', 'xml mdfe', 'baixar damdfe', 'imprimir mdfe', 'download mdfe', 'mdf-e pdf'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — GNRE
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'O que é GNRE e como emitir',
+    content:
+      'GNRE (Guia Nacional de Recolhimento de Tributos Estaduais) é necessária em fretes interestaduais quando o ICMS é devido à UF de destino.\n' +
+      'O sistema identifica automaticamente os CT-e que exigem GNRE com base no CFOP e UFs envolvidas.\n' +
+      'Como emitir:\n' +
+      '1. Operação → GNRE.\n' +
+      '2. Selecione o CT-e relacionado e clique em "Emitir GNRE".\n' +
+      '3. A guia é gerada com código de barras para pagamento no banco.\n' +
+      'Após pagar: registre o pagamento no sistema para manter o controle tributário.',
+    tags: ['gnre', 'icms interestadual', 'guia recolhimento', 'emitir gnre', 'frete interestadual', 'tributo estadual'],
+  },
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'Como registrar o pagamento de uma GNRE',
+    content:
+      '1. Operação → GNRE → localize a guia emitida.\n' +
+      '2. Clique em "Registrar Pagamento".\n' +
+      '3. Informe: data do pagamento, valor pago e comprovante (opcional).\n' +
+      '4. A GNRE muda para status "Paga".\n' +
+      'Isso mantém o controle tributário correto e permite auditoria futura.',
+    tags: ['registrar pagamento gnre', 'gnre paga', 'comprovante gnre', 'baixar gnre', 'pagamento gnre'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — NFS-e
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-nfse',
+    category: 'suporte',
+    title: 'Como emitir uma NFS-e (Nota Fiscal de Serviço)',
+    content:
+      'Pré-requisito: credenciais da prefeitura configuradas em Administração → Dados da Empresa → Fiscal.\n' +
+      '1. Operação → NFS-e → Nova NFS-e.\n' +
+      '2. Preencha: tomador do serviço, descrição, valor, alíquota ISS e competência.\n' +
+      '3. Clique em "Emitir" — a nota é enviada à prefeitura e fica com status "Autorizada".\n' +
+      'Se a emissão falhar: verifique as credenciais fiscais e se o certificado digital está válido.',
+    tags: ['nfse', 'nota fiscal servico', 'emitir nfse', 'iss', 'prefeitura', 'nota servico', 'nf servico'],
+  },
+  {
+    topic: 'operacao-nfse',
+    category: 'suporte',
+    title: 'Como cancelar uma NFS-e',
+    content:
+      '1. Operação → NFS-e → localize a nota com status "Autorizada".\n' +
+      '2. Clique em "Cancelar" e informe o motivo.\n' +
+      '3. O sistema envia o cancelamento à prefeitura — status muda para "Cancelada".\n' +
+      'Atenção: o prazo e as regras de cancelamento variam por município. Algumas prefeituras só permitem cancelamento no mesmo dia da emissão.',
+    tags: ['cancelar nfse', 'cancelamento nfse', 'nota servico cancelada', 'nfse cancelar'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — Viagens
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-viagens',
+    category: 'suporte',
+    title: 'Como criar uma viagem e ciclo de vida',
+    content:
+      'Uma viagem agrupa CT-e emitidos e controla o ciclo de transporte.\n' +
+      '1. Operação → Viagens → Nova Viagem.\n' +
+      '2. Informe: veículo, motorista, rota (origem/destino), data de saída e CT-e vinculados.\n' +
+      '3. Salve — a viagem fica com status "Rascunho".\n' +
+      'Ciclo de vida:\n' +
+      '- Rascunho → "Iniciar" → Em Execução\n' +
+      '- Em Execução → "Concluir" (após entrega) → Concluída\n' +
+      '- Concluída → "Encerrar" (fechamento financeiro) → Encerrada\n' +
+      'A criação da viagem pode gerar o MDF-e automaticamente, se configurado.',
+    tags: ['criar viagem', 'viagem', 'ciclo viagem', 'status viagem', 'motorista', 'veiculo', 'rota', 'operacao viagem'],
+  },
+  {
+    topic: 'operacao-viagens',
+    category: 'suporte',
+    title: 'Como gerar o PDF da viagem',
+    content:
+      '1. Operação → Viagens → abra a viagem desejada.\n' +
+      '2. Clique em "Gerar PDF" ou no ícone de impressão.\n' +
+      '3. O PDF é gerado com: dados da viagem, veículo, motorista, CT-e vinculados e valores.\n' +
+      'O PDF da viagem serve como documento interno de controle — não é um documento fiscal.',
+    tags: ['pdf viagem', 'imprimir viagem', 'gerar pdf viagem', 'relatorio viagem', 'download viagem'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // OPERAÇÃO — Cargas
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-cargas',
+    category: 'suporte',
+    title: 'Como agendar uma carga e ações disponíveis',
+    content:
+      'Cargas são solicitações de coleta recebidas antes da emissão do CT-e.\n' +
+      'Agendar:\n' +
+      '1. Operação → Cargas → Nova Carga.\n' +
+      '2. Preencha: remetente, destinatário, mercadoria, peso/volume, data de coleta.\n' +
+      '3. Salve — a carga fica com status "Agendada".\n' +
+      'Ações disponíveis:\n' +
+      '- Finalizar: marca como coletada e pode gerar o CT-e.\n' +
+      '- Cancelar: cancela o agendamento.\n' +
+      '- Reabrir: volta uma carga cancelada/finalizada para "Agendada".\n' +
+      '- Excluir: remove permanentemente (somente cargas sem vínculo com CT-e).',
+    tags: ['agendar carga', 'carga', 'coleta', 'finalizar carga', 'cancelar carga', 'reabrir carga', 'operacao cargas'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // VENDAS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'vendas-cotacoes',
+    category: 'suporte',
+    title: 'Como revalidar uma cotação vencida',
+    content:
+      'Cotações têm prazo de validade. Após o vencimento, a cotação fica com status "Vencida" e o cliente não consegue mais aceitar.\n' +
+      'Para revalidar:\n' +
+      '1. Vendas → Cotações → localize a cotação vencida.\n' +
+      '2. Clique em "Revalidar" e informe a nova data de validade.\n' +
+      '3. O sistema recalcula os valores (se houver tabela de frete atualizada) e a cotação volta para "Válida".\n' +
+      'Você pode reenviar a cotação ao cliente por e-mail após revalidar.',
+    tags: ['revalidar cotacao', 'cotacao vencida', 'prazo validade cotacao', 'recalcular frete', 'vendas cotacao'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Como gerar booking (confirmação de coleta para o cliente)',
+    content:
+      'O booking é o e-mail de confirmação de coleta enviado ao remetente.\n' +
+      '1. Vendas → Embarques → abra o embarque.\n' +
+      '2. Clique em "Gerar Booking".\n' +
+      '3. O sistema envia automaticamente e-mail ao remetente com dados da coleta: data, endereço, mercadoria e transportadora.\n' +
+      'Pré-requisito: e-mail configurado em Administração → Dados da Empresa → E-mail.',
+    tags: ['booking', 'confirmacao coleta', 'email coleta', 'embarque', 'vendas', 'remetente booking'],
+  },
+  {
+    topic: 'vendas-embarques',
+    category: 'suporte',
+    title: 'Como importar XMLs de NF-e e fazer redespacho',
+    content:
+      'A consolidação agrupa NF-e de clientes em um único embarque.\n' +
+      '1. Vendas → Embarques → Importar XML.\n' +
+      '2. Faça upload de múltiplos arquivos XML de NF-e.\n' +
+      '3. O sistema valida os XMLs e os agrupa no embarque.\n' +
+      '4. Para redespacho: marque a opção de redespacho e informe a transportadora de destino.\n' +
+      'O CT-e de redespacho é gerado automaticamente com os dados das NF-e importadas.',
+    tags: ['consolidar xml', 'importar xml nfe', 'nfe xml', 'redespacho', 'embarque xml', 'vendas xml'],
+  },
+  {
+    topic: 'vendas-oportunidades',
+    category: 'suporte',
+    title: 'Como usar o funil de oportunidades (SDR)',
+    content:
+      'O funil SDR é para prospecção de novos clientes de frete.\n' +
+      '1. Vendas → Oportunidades.\n' +
+      '2. O funil tem etapas: Prospecção → Qualificação → Proposta → Negociação → Fechado.\n' +
+      '3. Adicione uma oportunidade com: empresa prospectada, valor estimado, responsável e prazo.\n' +
+      '4. Arraste o card entre etapas conforme o andamento.\n' +
+      'No cadastro de empresa, a aba SDR registra interações e histórico de prospecção com o lead.',
+    tags: ['funil vendas', 'oportunidades', 'sdr', 'prospeccao', 'leads', 'pipeline vendas', 'funil oportunidades'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // FINANCEIRO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'financeiro-faturas',
+    category: 'suporte',
+    title: 'Ciclo de vida das faturas — 9 estágios',
+    content:
+      'As faturas percorrem até 9 estágios:\n' +
+      '1. Rascunho — criada mas não enviada ao cliente.\n' +
+      '2. Emitida — enviada ao cliente.\n' +
+      '3. Visualizada — cliente abriu o link da fatura.\n' +
+      '4. Vencida — passou da data sem pagamento.\n' +
+      '5. Em cobrança — enviada para régua de cobrança automática.\n' +
+      '6. Paga parcialmente — recebeu parte do valor.\n' +
+      '7. Paga — quitada integralmente.\n' +
+      '8. Cancelada — cancelada pelo usuário.\n' +
+      '9. Contestada — cliente abriu contestação.\n' +
+      'Para avançar o status: abra a fatura → clique na ação correspondente (Emitir, Cancelar, Registrar Pagamento, etc.).',
+    tags: ['fatura', 'ciclo fatura', 'status fatura', 'estagio fatura', 'financeiro', 'cobranca fatura', 'fatura vencida'],
+  },
+  {
+    topic: 'financeiro-faturas',
+    category: 'suporte',
+    title: 'Como emitir boleto bancário (integração Asaas)',
+    content:
+      'Pré-requisito: conta Asaas configurada em Administração → Dados da Empresa → Integrações → Asaas.\n' +
+      '1. Financeiro → Faturas → abra a fatura com status "Emitida".\n' +
+      '2. Clique em "Emitir Boleto".\n' +
+      '3. O Asaas gera o boleto com código de barras e envia por e-mail ao cliente.\n' +
+      '4. O link do boleto também fica disponível na própria fatura.\n' +
+      'Boleto vencido: pode ser reemitido (o Asaas cobra uma tarifa por emissão — confirme na sua conta Asaas).',
+    tags: ['boleto', 'asaas', 'emitir boleto', 'cobranca boleto', 'financeiro', 'integracao asaas', 'boleto bancario'],
+  },
+  {
+    topic: 'financeiro-faturas',
+    category: 'suporte',
+    title: 'Como gerar cobrança via PIX',
+    content:
+      'Pré-requisito: conta Asaas configurada com chave PIX ativa.\n' +
+      '1. Financeiro → Faturas → abra a fatura.\n' +
+      '2. Clique em "Gerar PIX".\n' +
+      '3. O sistema gera um QR Code PIX e disponibiliza o código copia-e-cola para o cliente.\n' +
+      '4. O pagamento é confirmado automaticamente via webhook do Asaas — a fatura passa para "Paga".',
+    tags: ['pix', 'qr code pix', 'cobranca pix', 'asaas pix', 'financeiro', 'pagamento pix', 'chave pix'],
+  },
+  {
+    topic: 'financeiro-faturas',
+    category: 'suporte',
+    title: 'Como registrar pagamento manual (TED, depósito, dinheiro)',
+    content:
+      'Use esta opção para pagamentos recebidos fora da integração Asaas (TED, DOC, depósito, dinheiro).\n' +
+      '1. Financeiro → Faturas → abra a fatura.\n' +
+      '2. Clique em "Registrar Pagamento".\n' +
+      '3. Informe: data do pagamento, valor recebido e forma de pagamento.\n' +
+      '4. A fatura muda para "Paga" (ou "Paga parcialmente" se o valor for menor que o total).',
+    tags: ['registrar pagamento', 'pagamento manual', 'ted', 'deposito', 'baixa fatura', 'financeiro', 'dar baixa fatura'],
+  },
+  {
+    topic: 'financeiro-faturas',
+    category: 'suporte',
+    title: 'Como parcelar uma fatura',
+    content:
+      '1. Financeiro → Faturas → abra a fatura com status "Rascunho" ou "Emitida".\n' +
+      '2. Clique em "Parcelar".\n' +
+      '3. Selecione o número de parcelas (1 a 36 parcelas).\n' +
+      '4. O sistema divide o valor total em parcelas iguais com vencimentos mensais.\n' +
+      '5. Cada parcela vira uma cobrança individual que pode ter boleto ou PIX gerado separadamente.',
+    tags: ['parcelar fatura', 'parcelas', 'parcelamento', '1 a 36', 'financeiro', 'fatura parcelada', 'dividir fatura'],
+  },
+  {
+    topic: 'financeiro-relatorios',
+    category: 'suporte',
+    title: 'Como usar o DRE (Demonstrativo de Resultado)',
+    content:
+      'O DRE mostra o resultado financeiro da empresa num período.\n' +
+      '1. Financeiro → DRE.\n' +
+      '2. Selecione o período desejado (mês/trimestre/ano).\n' +
+      '3. Veja: receitas por categoria, despesas por categoria, margem bruta e resultado líquido.\n' +
+      'Use o DRE para identificar quais categorias de custo estão acima do esperado e ajustar o orçamento.',
+    tags: ['dre', 'demonstrativo resultado', 'financeiro', 'resultado empresa', 'receitas despesas', 'lucro prejuizo'],
+  },
+  {
+    topic: 'financeiro-orcamento',
+    category: 'suporte',
+    title: 'Como usar o Orçamento e a sugestão automática',
+    content:
+      'O módulo de Orçamento permite definir metas de receita/despesa por categoria e acompanhar a execução.\n' +
+      '1. Financeiro → Orçamento.\n' +
+      '2. Clique em "Calcular Sugestão" — o sistema analisa o histórico dos últimos meses e sugere valores por categoria.\n' +
+      '3. Ajuste os valores conforme necessário e salve.\n' +
+      '4. Acompanhe o desvio em Relatórios → Financeiro → Orçamento vs Realizado.',
+    tags: ['orcamento', 'calcular sugestao', 'meta financeira', 'orcamento vs realizado', 'financeiro', 'planejamento financeiro'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // FROTA
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-veiculos',
+    category: 'suporte',
+    title: 'Como consultar o valor FIPE de um veículo',
+    content:
+      '1. Frota → Veículos → abra o veículo desejado.\n' +
+      '2. Clique em "Consultar FIPE".\n' +
+      '3. O sistema busca na tabela FIPE o valor de mercado com base na marca, modelo e ano.\n' +
+      '4. O valor é exibido e pode ser salvo no cadastro para fins de seguro.\n' +
+      'Pré-requisito: veículo cadastrado com marca, modelo e ano corretos.',
+    tags: ['fipe', 'valor veiculo', 'tabela fipe', 'seguro veiculo', 'frota', 'valor mercado veiculo'],
+  },
+  {
+    topic: 'frota-motoristas',
+    category: 'suporte',
+    title: 'Como registrar ocorrências de motorista',
+    content:
+      'Ocorrências registram eventos disciplinares ou de segurança vinculados ao motorista.\n' +
+      '1. Frota → Motoristas → abra o motorista.\n' +
+      '2. Aba "Ocorrências" → "+ Nova Ocorrência".\n' +
+      '3. Selecione o tipo: Infração de trânsito, Acidente, Advertência ou Outro.\n' +
+      '4. Preencha data, descrição e, se aplicável, valor da multa.\n' +
+      '5. Salve — a ocorrência fica no histórico permanente do motorista.',
+    tags: ['ocorrencia motorista', 'infracao', 'acidente', 'advertencia', 'motorista', 'frota', 'historico motorista', 'multa motorista'],
+  },
+  {
+    topic: 'frota-abastecimentos',
+    category: 'suporte',
+    title: 'Como aprovar ou rejeitar um abastecimento',
+    content:
+      'Motoristas lançam abastecimentos que ficam aguardando aprovação do gestor.\n' +
+      '1. Frota → Abastecimentos → filtrar por status "Aguardando aprovação".\n' +
+      '2. Clique no abastecimento → revise: litros, valor, posto, veículo, motorista.\n' +
+      '3. Clique em "Aprovar" (confirma e lança no financeiro) ou "Rejeitar" (descarta com motivo).\n' +
+      'Abastecimentos aprovados são exportáveis para relatório de consumo de combustível.',
+    tags: ['aprovar abastecimento', 'rejeitar abastecimento', 'abastecimento', 'combustivel', 'frota', 'gestor frota'],
+  },
+  {
+    topic: 'frota-manutencoes',
+    category: 'suporte',
+    title: 'Ciclo de vida de uma manutenção de veículo',
+    content:
+      'O módulo controla reparos e revisões preventivas.\n' +
+      '1. Frota → Manutenções → Nova Manutenção.\n' +
+      '2. Selecione: veículo, tipo (preventiva/corretiva), data prevista e descrição.\n' +
+      'Ciclo de status:\n' +
+      '- Agendada → "Iniciar" → Em Execução\n' +
+      '- Em Execução → "Aguardar peças" → Aguardando Peças\n' +
+      '- Aguardando Peças → "Retomar" → Em Execução\n' +
+      '- Em Execução → "Concluir" → Concluída\n' +
+      'Abas na manutenção: Peças (itens + custo), Serviços (mão de obra) e Anexos (notas fiscais, fotos).',
+    tags: ['manutencao veiculo', 'revisao', 'frota', 'ciclo manutencao', 'preventiva', 'corretiva', 'pecas manutencao'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // CADASTROS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'cadastros-empresas',
+    category: 'suporte',
+    title: 'Como usar tags para segmentar clientes e fornecedores',
+    content:
+      'Tags permitem categorizar empresas para facilitar filtros e relatórios.\n' +
+      'Criar e aplicar:\n' +
+      '1. Cadastros → Empresas → abra a empresa.\n' +
+      '2. Clique em "Tags" → crie uma nova tag ou selecione existente.\n' +
+      '3. Salve — a tag fica vinculada à empresa.\n' +
+      'Filtrar por tag: na lista de Empresas, use o filtro "Tag" para ver apenas empresas com aquela marcação.\n' +
+      'Exemplos: "Cliente VIP", "Inadimplente", "Parceiro", "Região Sul".',
+    tags: ['tags', 'segmentar clientes', 'filtrar por tag', 'cadastros', 'empresa tag', 'categorizar empresa'],
+  },
+  {
+    topic: 'cadastros-empresas',
+    category: 'suporte',
+    title: 'Como cadastrar múltiplos endereços em uma empresa',
+    content:
+      'Uma empresa pode ter vários endereços (matriz, filiais, depósitos, cobrança).\n' +
+      '1. Cadastros → Empresas → abra a empresa.\n' +
+      '2. Aba "Endereços" → "+ Adicionar Endereço".\n' +
+      '3. Preencha: tipo (principal, cobrança, entrega, filial), CEP, logradouro, número, complemento.\n' +
+      '4. Salve — o endereço fica disponível para seleção na emissão de CT-e e cotações.',
+    tags: ['multiplos enderecos', 'endereco empresa', 'filial', 'deposito', 'cadastros', 'endereco entrega empresa'],
+  },
+  {
+    topic: 'cadastros-importacao',
+    category: 'suporte',
+    title: 'Como importar empresas em lote via planilha CSV',
+    content:
+      '1. Cadastros → Empresas → "Importar".\n' +
+      '2. Clique em "Baixar modelo" para obter o template CSV correto.\n' +
+      '3. Preencha o modelo com os dados das empresas (CNPJ/CPF, razão social, endereço, etc.).\n' +
+      '4. Faça upload do arquivo preenchido.\n' +
+      '5. O sistema valida CNPJ/CPF e exibe erros linha a linha antes de confirmar.\n' +
+      '6. Confirme a importação — as empresas são criadas.\n' +
+      'Campos obrigatórios: CNPJ ou CPF e Razão Social/Nome.',
+    tags: ['importar empresas', 'importacao csv', 'planilha importacao', 'template importacao', 'cadastros lote', 'cnpj importar'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // EQUIPES
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'equipes-tarefas',
+    category: 'suporte',
+    title: 'Como criar e gerenciar tarefas da equipe',
+    content:
+      'Tarefas permitem atribuir atividades a membros com prazo e prioridade.\n' +
+      '1. Equipes → Tarefas → "Nova Tarefa".\n' +
+      '2. Preencha: título, descrição, responsável, data de vencimento e prioridade.\n' +
+      '3. Salve — a tarefa aparece em "Minhas Tarefas" para o responsável.\n' +
+      'Visões:\n' +
+      '- "Minhas Tarefas": tarefas atribuídas ao usuário logado.\n' +
+      '- "Todas as Tarefas": visão gerencial com tarefas de toda a equipe.',
+    tags: ['tarefas', 'criar tarefa', 'atribuir tarefa', 'minhas tarefas', 'equipes', 'prazo tarefa', 'todas tarefas'],
+  },
+  {
+    topic: 'equipes-times',
+    category: 'suporte',
+    title: 'Como criar times e gerenciar membros',
+    content:
+      'Times agrupam usuários para colaboração em projetos ou operações.\n' +
+      '1. Equipes → Times → "+ Novo Time".\n' +
+      '2. Dê um nome e descrição ao time.\n' +
+      '3. Clique em "+ Adicionar Membro" → busque pelo nome → defina o papel (líder ou membro).\n' +
+      '4. O feed de atividade registra todas as ações dos membros do time.\n' +
+      'Para arquivar: abra o time → "Arquivar" → ele sai das listagens ativas mas pode ser restaurado.',
+    tags: ['times', 'criar time', 'membros equipe', 'papeis equipe', 'arquivar time', 'equipes', 'lider time'],
+  },
+  {
+    topic: 'equipes-notificacoes',
+    category: 'suporte',
+    title: 'Como configurar notificações e alertas',
+    content:
+      'Você escolhe quais eventos geram notificação para você.\n' +
+      '1. Ícone do seu perfil (canto superior direito) → "Notificações" ou "Configurações".\n' +
+      '2. Selecione os eventos: nova tarefa atribuída, vencimento de fatura, CT-e rejeitado, etc.\n' +
+      '3. Escolha o canal: na plataforma, por e-mail ou ambos.\n' +
+      '4. Salve as preferências.\n' +
+      'Alertas críticos via WhatsApp: Administração → Alertas (requer número de WhatsApp cadastrado).',
+    tags: ['notificacoes', 'configurar notificacoes', 'alertas', 'email notificacao', 'equipes', 'preferencias notificacao'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // COMPRAS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'compras-solicitacoes',
+    category: 'suporte',
+    title: 'Como criar e aprovar solicitações de compra',
+    content:
+      'Solicitações são pedidos internos que passam por aprovação antes de virarem pedidos formais.\n' +
+      'Criar:\n' +
+      '1. Compras → Solicitações → "Nova Solicitação".\n' +
+      '2. Informe: item, quantidade, justificativa, fornecedor sugerido e centro de custo.\n' +
+      '3. Salve — fica pendente de aprovação.\n' +
+      'Aprovar (gestor):\n' +
+      '- Passe o mouse sobre a solicitação → ações aparecem: "Aprovar" ou "Rejeitar".\n' +
+      '- Ao aprovar, o sistema pode criar automaticamente a conta a pagar no Financeiro.',
+    tags: ['solicitacao compra', 'aprovar compra', 'rejeitar compra', 'compras', 'requisicao', 'gestor compras', 'hover actions'],
+  },
+  {
+    topic: 'compras-pedidos',
+    category: 'suporte',
+    title: 'Como criar pedido de compra e registrar recebimento',
+    content:
+      'Pedidos formalizam compras com fornecedor.\n' +
+      'Criar:\n' +
+      '1. Compras → Pedidos → "Novo Pedido".\n' +
+      '2. Selecione o fornecedor, adicione itens (NCM, SKU, quantidade, valor unitário).\n' +
+      '3. Defina prazo de entrega e condições de pagamento → Salve.\n' +
+      'Registrar recebimento:\n' +
+      '1. Abra o pedido → "Registrar Recebimento".\n' +
+      '2. Informe quantidade recebida e data.\n' +
+      '3. O estoque é atualizado e a conta a pagar gerada no Financeiro automaticamente.',
+    tags: ['pedido compra', 'registrar recebimento', 'fornecedor', 'compras', 'ncm', 'sku pedido', 'entrada estoque'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Como gerenciar o estoque (NCM, SKU, ponto de reposição)',
+    content:
+      'O estoque registra itens usados na operação (peças, materiais, insumos).\n' +
+      '1. Compras → Estoque.\n' +
+      '2. Cadastre itens com: código NCM, SKU interno, código de barras, unidade de medida.\n' +
+      '3. Configure o "Ponto de Reposição": quantidade mínima que aciona alerta de reposição.\n' +
+      '4. O custo médio é calculado automaticamente com base nas entradas registradas.\n' +
+      '5. Aba "Movimentações": histórico completo de entradas e saídas por item.',
+    tags: ['estoque', 'ncm', 'sku', 'codigo barras estoque', 'ponto reposicao', 'custo medio', 'compras', 'movimentacoes estoque'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // ADMINISTRAÇÃO
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'administracao-empresa',
+    category: 'suporte',
+    title: 'Abas de Dados da Empresa — o que configura em cada uma',
+    content:
+      'Administração → Dados da Empresa tem 8 abas:\n' +
+      '1. Geral: razão social, CNPJ, endereço, telefone, e-mail da empresa.\n' +
+      '2. Fiscal: série, ambiente (Produção/Homologação), CFOP padrão, regime tributário.\n' +
+      '3. Certificado: upload e senha do certificado digital A1 (obrigatório para CT-e, MDF-e, NFS-e).\n' +
+      '4. E-mail: SMTP para envio de faturas, cotações e bookings (host, porta, usuário, senha).\n' +
+      '5. Operação: configurações de CT-e (numeração, RNTRC, CIOT).\n' +
+      '6. Branding: logo e cores para customização visual.\n' +
+      '7. Assinaturas: plano atual, histórico de pagamentos e download de NF.\n' +
+      '8. Integrações: Asaas (boleto/PIX) e outras APIs.',
+    tags: ['dados empresa', 'configuracao empresa', 'administracao', 'abas empresa', 'certificado digital', 'smtp email', 'integracao empresa'],
+  },
+  {
+    topic: 'administracao-permissoes',
+    category: 'suporte',
+    title: 'Como verificar as permissões efetivas de um usuário',
+    content:
+      'Útil para diagnosticar por que um usuário não consegue acessar uma funcionalidade.\n' +
+      '1. Administração → Perfis de Acesso.\n' +
+      '2. Localize o perfil do usuário.\n' +
+      '3. Clique em "Permissões Efetivas" — veja exatamente quais ações estão liberadas.\n' +
+      '4. Ajuste e salve se necessário.\n' +
+      'Permissões são granulares por módulo: visualizar, criar, editar, excluir e exportar são configuráveis separadamente.',
+    tags: ['permissoes', 'perfil acesso', 'usuario sem acesso', 'permissoes efetivas', 'administracao', 'acesso negado usuario'],
+  },
+  {
+    topic: 'administracao-guardrails',
+    category: 'suporte',
+    title: 'Como configurar guardrails financeiros (desconto máximo, limite de crédito)',
+    content:
+      'Guardrails são limites automáticos que protegem as operações financeiras.\n' +
+      '1. Administração → Guardrails.\n' +
+      '2. Configure:\n' +
+      '   - Desconto máximo (%): limite de desconto que um vendedor pode dar em cotações.\n' +
+      '   - Limite de crédito: valor máximo de faturamento em aberto por cliente.\n' +
+      '   - Prazo máximo de pagamento: dias máximos para vencimento de fatura.\n' +
+      '3. Salve — o sistema bloqueia automaticamente operações que excedam os limites definidos.',
+    tags: ['guardrails', 'desconto maximo', 'limite credito', 'prazo pagamento', 'administracao', 'controles financeiros', 'limite desconto'],
+  },
+  {
+    topic: 'administracao-alertas',
+    category: 'suporte',
+    title: 'Como configurar alertas automáticos por WhatsApp',
+    content:
+      'O sistema envia alertas automáticos para um número WhatsApp cadastrado.\n' +
+      '1. Administração → Alertas.\n' +
+      '2. Informe o número de WhatsApp que receberá os alertas.\n' +
+      '3. Selecione os gatilhos: CT-e rejeitado, fatura vencida, abastecimento aguardando aprovação, etc.\n' +
+      '4. Salve — os alertas são enviados automaticamente quando o evento ocorre.',
+    tags: ['alertas whatsapp', 'whatsapp alerta', 'notificacao whatsapp', 'alerta automatico', 'administracao', 'gatilho alerta whatsapp'],
+  },
+  {
+    topic: 'administracao-assinatura',
+    category: 'suporte',
+    title: 'Como baixar a nota fiscal da assinatura do sistema',
+    content:
+      '1. Administração → Dados da Empresa → aba "Assinaturas".\n' +
+      '2. Veja o histórico de cobranças do plano.\n' +
+      '3. Clique em "Download NF" ao lado do mês desejado.\n' +
+      '4. A nota fiscal em PDF é baixada para o seu computador.\n' +
+      'Se não encontrar a NF: ela é emitida após confirmação do pagamento — aguarde ou entre em contato com o suporte.',
+    tags: ['nota fiscal assinatura', 'nf assinatura', 'fatura sistema', 'administracao', 'download nf', 'extrato assinatura', 'nota plano'],
+  },
+  // ══════════════════════════════════════════════════════════
+  // RELATÓRIOS
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'relatorios-executivo',
+    category: 'suporte',
+    title: 'Painel Executivo — KPIs disponíveis',
+    content:
+      'O Painel Executivo (Relatórios → Executivo) mostra os principais KPIs da operação:\n' +
+      '- Conversão de cotações: % de cotações que viraram CT-e emitido.\n' +
+      '- Pontualidade de entregas: % de entregas realizadas dentro do prazo.\n' +
+      '- Contas a receber: total de faturas em aberto.\n' +
+      '- Saldo projetado: caixa atual + receitas previstas − despesas previstas.\n' +
+      'Todos os KPIs filtram por período (De/Até) e atualizam em tempo real.',
+    tags: ['painel executivo', 'kpi', 'dashboard', 'conversao cotacao kpi', 'pontualidade kpi', 'contas receber kpi', 'relatorios executivo'],
+  },
+  {
+    topic: 'relatorios-financeiro',
+    category: 'suporte',
+    title: 'Relatórios financeiros disponíveis no sistema',
+    content:
+      'Relatórios → Financeiro oferece:\n' +
+      '- Contas em Atraso: faturas vencidas agrupadas por cliente e tempo de atraso.\n' +
+      '- Fluxo de Caixa: entradas e saídas projetadas por período.\n' +
+      '- Orçamento vs Realizado: desvio entre meta e resultado real por categoria.\n' +
+      '- Status de Faturas: distribuição por status (emitida, paga, cancelada, vencida, etc.).\n' +
+      '- Ticket Médio: valor médio de fatura por cliente ou período.\n' +
+      'Todos os relatórios permitem filtro por período e exportação.',
+    tags: ['relatorio financeiro', 'contas atraso', 'fluxo caixa', 'orcamento realizado', 'ticket medio', 'relatorios financeiros'],
+  },
+  {
+    topic: 'relatorios-logistico',
+    category: 'suporte',
+    title: 'Relatórios logísticos disponíveis no sistema',
+    content:
+      'Relatórios → Logística oferece:\n' +
+      '- Conversão: cotações abertas vs. CT-e emitidos no período.\n' +
+      '- Pontualidade: entregas no prazo vs. atrasadas com motivo detalhado.\n' +
+      '- NF-e: estatísticas de notas fiscais vinculadas aos fretes.\n' +
+      '- Rotas com Pendências: rotas com entregas não concluídas.\n' +
+      '- Ciclo de Viagens: tempo médio de cada etapa (saída → entrega → encerramento).\n' +
+      '- Motivos de Cancelamento: ranking dos motivos mais frequentes de cancelamento de CT-e.',
+    tags: ['relatorio logistica', 'conversao logistica', 'pontualidade entrega', 'ciclo viagens relatorio', 'motivos cancelamento', 'relatorios logisticos'],
+  },
+  {
+    topic: 'relatorios-frota',
+    category: 'suporte',
+    title: 'Relatórios de frota disponíveis no sistema',
+    content:
+      'Relatórios → Frota oferece:\n' +
+      '- Consumo de Combustível: litros consumidos e custo por veículo/período, com gráfico de evolução.\n' +
+      '- Histórico de Manutenções: manutenções realizadas por veículo, custo total e tipo (preventiva/corretiva).\n' +
+      'Use esses relatórios para identificar veículos com consumo acima da média ou com alto custo de manutenção.',
+    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 'custo veiculo', 'relatorios frota'],
   },
 ];
