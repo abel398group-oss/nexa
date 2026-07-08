@@ -75,11 +75,17 @@ export function NotificationBell() {
       <button
         onClick={openMenu}
         title="Notificações"
+        aria-label={unread > 0 ? `Notificações — ${unread} não lida${unread > 1 ? 's' : ''}` : 'Notificações'}
+        aria-haspopup="true"
+        aria-expanded={open}
         className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/70 transition-colors hover:bg-base-200"
       >
-        <Icon name="bell" className="h-5 w-5" />
+        <Icon name="bell" className="h-5 w-5" aria-hidden />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
+          >
             {unread > 9 ? '9+' : unread}
           </span>
         )}

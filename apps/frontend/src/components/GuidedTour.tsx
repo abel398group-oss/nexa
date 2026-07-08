@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useId, useState, useCallback } from 'react';
 
 export interface TourStep { selector: string; title: string; text: string; }
 
 // Tour guiado leve: destaca o elemento + mostra um cartão. Sem dependências.
 export function GuidedTour({ steps, onClose }: { steps: TourStep[]; onClose: () => void }) {
   const [idx, setIdx] = useState(0);
+  const titleId = useId();
 
   // resolve os passos cujos elementos existem na tela
   const resolved = steps.filter((s) => document.querySelector(s.selector));
@@ -35,19 +36,19 @@ export function GuidedTour({ steps, onClose }: { steps: TourStep[]; onClose: () 
   const last = idx === resolved.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50" onClick={finish}>
+    <div className="fixed inset-0 z-[60] bg-black/50" onClick={finish} aria-hidden>
       {/* cartão do tour (rodapé central) */}
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Tour guiado"
+        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         className="absolute bottom-8 left-1/2 w-[22rem] -translate-x-1/2 rounded-xl bg-white p-5 shadow-xl"
       >
         <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-600">
           Tour · {idx + 1}/{resolved.length}
         </div>
-        <h3 className="mb-1 text-base font-bold text-base-content">{step.title}</h3>
+        <h3 id={titleId} className="mb-1 text-base font-bold text-base-content">{step.title}</h3>
         <p className="mb-4 text-sm text-base-content/75">{step.text}</p>
         <div className="flex items-center justify-between">
           <button onClick={finish} className="text-xs text-base-content/50 hover:text-base-content">Pular</button>

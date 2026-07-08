@@ -164,7 +164,7 @@ export function HelpDrawer({ pathname, onClose }: { pathname: string; onClose: (
             <div className="text-xs font-semibold uppercase tracking-wide text-brand-600">Como usar</div>
             <h2 className="text-lg font-bold text-base-content">{doc.title}</h2>
           </div>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200"><Icon name="close" className="h-4 w-4" /></button>
+          <button onClick={onClose} aria-label="Fechar ajuda" className="rounded-md px-2 py-1 text-base-content/50 hover:bg-base-200"><Icon name="close" className="h-4 w-4" aria-hidden /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <p className="mb-4 text-sm text-base-content/70">{doc.intro}</p>

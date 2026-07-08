@@ -46,11 +46,14 @@ export function DateRangePicker() {
       <button
         onClick={() => setOpen((o) => !o)}
         title="Período dos indicadores"
+        aria-label={`Filtrar por período — ${range.label}`}
+        aria-haspopup="true"
+        aria-expanded={open}
         className="inline-flex h-8 items-center gap-2 rounded-md border border-base-300 bg-white px-3 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-100"
       >
-        <Icon name="calendar" className="h-4 w-4 text-base-content/50" />
+        <Icon name="calendar" className="h-4 w-4 text-base-content/50" aria-hidden />
         {range.label}
-        <Icon name="chevronDown" className="h-3.5 w-3.5 text-base-content/40" />
+        <Icon name="chevronDown" className="h-3.5 w-3.5 text-base-content/40" aria-hidden />
       </button>
 
       {open && (
@@ -73,9 +76,9 @@ export function DateRangePicker() {
               Período personalizado
             </div>
             <div className="flex items-center gap-1.5 px-1">
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input flex-1 px-2 py-1 text-xs" />
-              <span className="text-base-content/40">–</span>
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input flex-1 px-2 py-1 text-xs" />
+              <input type="date" aria-label="Data inicial" value={from} onChange={(e) => setFrom(e.target.value)} className="input flex-1 px-2 py-1 text-xs" />
+              <span aria-hidden className="text-base-content/40">–</span>
+              <input type="date" aria-label="Data final" value={to} onChange={(e) => setTo(e.target.value)} className="input flex-1 px-2 py-1 text-xs" />
             </div>
             <button onClick={applyCustom} className="btn-primary mt-2 w-full py-1.5 text-xs">
               Aplicar

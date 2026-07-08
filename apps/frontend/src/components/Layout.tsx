@@ -91,15 +91,18 @@ function ToggleRow({
   const active = on && !disabled;
   return (
     <button
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
       onClick={onClick}
       disabled={disabled || busy}
       className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-base-100 disabled:opacity-50"
     >
-      <span className="min-w-0">
+      <span className="min-w-0" aria-hidden>
         <span className="block text-sm text-base-content">{label}</span>
         {hint && <span className="block text-[10px] text-base-content/45">{hint}</span>}
       </span>
-      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${active ? 'bg-brand-600' : 'bg-base-300'}`}>
+      <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${active ? 'bg-brand-600' : 'bg-base-300'}`}>
         <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
       </span>
     </button>
@@ -145,11 +148,14 @@ function KillSwitch() {
         onClick={() => setOpen((o) => !o)}
         disabled={st === null}
         title="Controle da Lia (autonomia por canal)"
+        aria-label="Controle da Lia — autonomia por canal"
+        aria-haspopup="true"
+        aria-expanded={open}
         className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors ${
           masterOn ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-base-300 bg-white text-base-content hover:bg-base-100'
         }`}
       >
-        <Icon name="bot" className="h-4 w-4" />
+        <Icon name="bot" className="h-4 w-4" aria-hidden />
         IA {st === null ? '...' : masterOn ? 'ON' : 'OFF'}
       </button>
       {open && st && (
@@ -208,9 +214,12 @@ function AccountMenu() {
       <button
         onClick={() => setOpen((o) => !o)}
         title="Minha conta"
+        aria-label={`Minha conta — ${name}`}
+        aria-haspopup="true"
+        aria-expanded={open}
         className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white transition-transform hover:scale-105"
       >
-        {initials}
+        <span aria-hidden>{initials}</span>
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
@@ -252,9 +261,12 @@ function MoreMenu({ dark, onToggleTheme, onTour }: { dark: boolean; onToggleThem
       <button
         onClick={() => setOpen((o) => !o)}
         title="Mais opções"
+        aria-label="Mais opções"
+        aria-haspopup="true"
+        aria-expanded={open}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
       >
-        <Icon name="dots" className="h-5 w-5" />
+        <Icon name="dots" className="h-5 w-5" aria-hidden />
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-base-200 bg-white shadow-elevated dark:bg-sidebar">
@@ -376,16 +388,26 @@ export function Layout() {
   return (
     <DateRangeProvider>
     <div className="h-full">
+      {/* Skip link — WCAG 2.4.1: permite pular direto para o conteúdo principal */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-md focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-elevated focus:outline-none"
+      >
+        Ir para o conteúdo principal
+      </a>
+
       {/* overlay mobile — fecha ao clicar fora */}
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/50 sm:hidden"
           onClick={() => setMobileNavOpen(false)}
+          aria-hidden
         />
       )}
 
       {/* ===== SIDEBAR — rail+hover no desktop / off-canvas no mobile ===== */}
       <aside
+        aria-label="Navegação principal"
         className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-all duration-200 ease-layout ${
           mobileNavOpen ? 'translate-x-0 w-60 shadow-elevated' : '-translate-x-full'
         } sm:translate-x-0 sm:w-16 sm:hover:w-60 sm:hover:shadow-elevated`}
@@ -436,16 +458,19 @@ export function Layout() {
                 {g.label && (
                   <button
                     onClick={() => toggleGroup(g.label!)}
+                    aria-expanded={isOpen}
+                    aria-label={`${isOpen ? 'Recolher' : 'Expandir'} grupo ${g.label}`}
                     className={`w-full flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:bg-white/[0.07] ${isExpandedMode ? 'flex' : 'hidden'}`}
                   >
                     {g.icon && (
-                      <Icon name={g.icon} className="h-4 w-4 shrink-0 text-white/50" />
+                      <Icon name={g.icon} className="h-4 w-4 shrink-0 text-white/50" aria-hidden />
                     )}
-                    <span className="flex-1 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                    <span aria-hidden className="flex-1 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
                       {g.label}
                     </span>
                     <Icon
                       name="chevronDown"
+                      aria-hidden
                       className={`h-3.5 w-3.5 shrink-0 text-white/30 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
                     />
                   </button>
@@ -539,9 +564,10 @@ export function Layout() {
             <button
               onClick={toggleTheme}
               title="Alternar tema claro/escuro"
+              aria-label={dark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-base-content/60 transition-colors hover:bg-base-200"
             >
-              <Icon name={dark ? 'sun' : 'moon'} className="h-[18px] w-[18px]" />
+              <Icon name={dark ? 'sun' : 'moon'} className="h-[18px] w-[18px]" aria-hidden />
             </button>
             {/* notificações */}
             <NotificationBell />
@@ -551,8 +577,8 @@ export function Layout() {
             <AccountMenu />
           </div>
         </header>
-        {/* conteúdo */}
-        <div className="min-h-0 flex-1 overflow-auto">
+        {/* conteúdo — id="main-content" é o destino do skip link */}
+        <div id="main-content" className="min-h-0 flex-1 overflow-auto" tabIndex={-1}>
           <Outlet />
         </div>
       </div>
