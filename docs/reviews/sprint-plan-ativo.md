@@ -1,7 +1,13 @@
 # Sprint Plan Detalhado — Plataforma de IA Comercial (Leads)
 
+> ⚠️ **Documento histórico de planejamento.** O projeto está em **Fase 4 (em produção)**
+> desde 2026-07. Fases 0–4 concluídas. Ver `docs/overview/roadmap.md` para o estado atual.
+> Este arquivo descreve o plano original de sprints para referência; as tasks abaixo
+> **NÃO refletem o estado do código** — tudo que estava previsto nos Sprints 1–10 foi
+> implementado. Backlog ativo está na Fase 5 do roadmap.
+
 > Passo a passo de implementação por sprint. Deriva do IMPLEMENTATION_ROADMAP e dos ADRs/schema.
-> **Nada implementado ainda** — guia para o dia de construir.
+> ~~**Nada implementado ainda** — guia para o dia de construir.~~ (desatualizado — ver nota acima)
 
 **Premissas (ajustar conforme realidade):**
 - 1 dev fullstack dedicado · sprints de 2 semanas (sprints de integração podem estourar)

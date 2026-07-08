@@ -4,7 +4,7 @@
 > via WhatsApp, com IA (a **Lia**) e arquitetura de conectores multi-produto.
 > Primeiro conector: HiperTMS.
 
-**Estágio:** Sprint 1 (fundação de dados). Nome interno `nexa` (marca a definir).
+**Estágio:** Fase 4 — em produção. Ver [`docs/overview/roadmap.md`](docs/overview/roadmap.md) para o histórico de fases. Nome interno `nexa` (marca a definir).
 
 ---
 
@@ -38,57 +38,62 @@ A arquitetura completa (ADRs, PRDs, schema, roadmap, sprint plan) está em:
 ---
 
 ## Stack
-- Monorepo pnpm: `apps/backend` (NestJS), `apps/frontend` (React+Vite), `packages/*`
-- PostgreSQL 16 + pgvector · Redis · Prisma
-- IA: Claude (a "Lia"). Orquestração de agentes: Flowise (Sprint 11)
+- Monorepo pnpm 9: `apps/backend` (NestJS 10 + Prisma 5), `apps/frontend` (React 18 + Vite 5), `packages/*`
+- PostgreSQL 16 gerenciado DigitalOcean + pgvector · Redis (local: :6388) · Prisma 5
+- IA: Claude Haiku/Sonnet (a "Lia"). Agentes implementados em NestJS (sem Flowise).
 
 ## Estrutura
 ```
 apps/
-  backend/   NestJS + Prisma   (Prisma já no Sprint 1; NestJS no Sprint 2)
-  frontend/  React + Vite      (Sprint 7)
+  backend/   NestJS 10 + Prisma 5 (API REST + WebSocket + agentes de IA + conectores)
+  frontend/  React 18 + Vite 5   (painel: inbox, suporte, campanhas, dashboard, admin)
 packages/
   shared/    utils comuns
   types/     tipos compartilhados
   sdk/       cliente da API
-docker-compose.yml             PostgreSQL + Redis
+docker-compose.yml             Redis :6388 + WAHA :3018 (Postgres é gerenciado DO — externo)
 ```
+
+> Ver `CLAUDE.md` para guia completo de dev (ports, commands, regras de banco, deploy).
 
 ---
 
-## Como rodar (Sprint 1 — fundação de dados)
+## Como rodar (dev local)
 
 ```bash
-# 1. Subir banco e redis
-pnpm db:up                 # docker compose up -d (Postgres :5433, Redis :6380)
+# 1. Redis (necessário para backend)
+docker compose up -d redis     # Redis :6388
 
-# 2. Configurar env
-cp .env.example .env       # ajustar se necessário
-
-# 3. Instalar deps
+# 2. Instalar deps
 pnpm install
 
-# 4. Gerar client + migrar
+# 3. Gerar client Prisma
 pnpm db:generate
-pnpm db:migrate            # cria as tabelas (Fase 1)
 
-# 5. Seed inicial (produto HiperTMS + KB exemplo)
+# 4. Aplicar migrations (banco gerenciado DO — requer DATABASE_URL em apps/backend/.env)
+pnpm db:migrate                # nunca migrate reset/push em produção
+
+# 5. Seed
 pnpm db:seed
 
-# 6. Ver o banco
-pnpm db:studio
+# 6. Subir backend e frontend
+cd apps/backend && pnpm start:dev      # :3001
+cd apps/frontend && pnpm dev           # :5174
 ```
 
-> Portas 5433/6380 para NÃO conflitar com o MVP n8n (5432/6379), que continua rodando.
+> ⚠️ `DATABASE_URL` em `apps/backend/.env` aponta para o banco gerenciado DO (produção).
+> Ver `CLAUDE.md` para regras detalhadas de DB, PowerShell e produção.
 
 ---
 
-## Próximos passos (ver SPRINT_PLAN nos docs)
-- Sprint 2: NestJS + Auth + logger/correlationId + backup
-- Sprint 3: Conversas/Mensagens
-- Sprint 4: Ações + Eventos
-- Sprint 5-6: Conector HiperTMS + Billing
-- Sprint 7+: Frontend, Suporte, Agentes
+## Fase 5 — backlog (próximas entregas)
+- Testes de frontend (Vitest + Playwright)
+- Rotação de segredos (ANTHROPIC_API_KEY)
+- InboxPage — paginação com socket real-time
+- Lint bloqueante no CI
+- Reconhecimento de áudio (Whisper)
+- Agendamento de reuniões (Google Calendar)
+- Multi-tenant SaaS (outros conectores além do HiperTMS)
 
 ## Princípios (não violar)
 - IA conversa e recomenda; **backend decide e executa**
