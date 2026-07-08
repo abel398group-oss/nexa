@@ -2264,6 +2264,54 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Ação: veículos com consumo acima do esperado ou custo de manutenção elevado são candidatos a revisão ou renovação de frota.',
     tags: ['relatorios', 'combustivel', 'consumo', 'manutencao', 'frota', 'custo'],
   },
+  // ══════════════════════════════════════════════════════════
+  // EXPORTAÇÃO / DOWNLOAD DE DADOS (perguntas frequentes)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como exportar lista de CT-e em CSV ou Excel',
+    content:
+      'Dúvida: como baixar um relatório/planilha com os CT-e emitidos?\\n' +
+      'Solução:\\n' +
+      '1. Acesse Operação → CT-e.\\n' +
+      '2. Use os filtros de período (De/Até), status ou tomador para selecionar os documentos desejados.\\n' +
+      '3. Clique no botão \"Exportar\" (ícone de download) no canto superior direito da lista.\\n' +
+      '4. Selecione o formato: CSV ou Excel (.xlsx).\\n' +
+      '5. O arquivo é gerado e baixado automaticamente com: número do CT-e, data, tomador, valor, status e chave de acesso.\\n' +
+      'Se o botão Exportar não aparecer: verifique se sua permissão inclui acesso a exportações (Administração → Perfis de Acesso).\\n' +
+      'Para exportar apenas CT-e autorizados: filtre por Status = \"Autorizado\" antes de exportar.',
+    tags: ['exportar', 'csv', 'excel', 'relatorio cte', 'download', 'planilha', 'cte', 'operacao'],
+  },
+  {
+    topic: 'operacao-cte',
+    category: 'suporte',
+    title: 'Como baixar o DANFE do CT-e',
+    content:
+      'O DANFE (Documento Auxiliar do CT-e) é o PDF impresso do conhecimento de transporte.\\n' +
+      'Como baixar:\\n' +
+      '1. Acesse Operação → CT-e.\\n' +
+      '2. Localize o CT-e desejado e clique para abrir.\\n' +
+      '3. Clique em \"Imprimir DANFE\" ou no ícone de PDF.\\n' +
+      '4. O PDF é gerado para impressão ou download.\\n' +
+      'Para baixar em lote: selecione vários CT-e na lista (checkbox) → Ações → Baixar DANFE.\\n' +
+      'Se o DANFE não gera: verifique se o CT-e está com status \"Autorizado\" — documentos rejeitados ou cancelados não têm DANFE válido.',
+    tags: ['danfe', 'pdf', 'imprimir', 'baixar', 'cte', 'documento auxiliar', 'download'],
+  },
+  {
+    topic: 'vendas-cotacoes',
+    category: 'suporte',
+    title: 'Como exportar cotações em CSV',
+    content:
+      'Dúvida: como baixar uma planilha com as cotações de frete?\\n' +
+      'Solução:\\n' +
+      '1. Acesse Vendas → Cotações.\\n' +
+      '2. Aplique os filtros desejados (período, status, cliente).\\n' +
+      '3. Clique em \"Exportar CSV\" no canto superior direito.\\n' +
+      '4. O arquivo baixado contém: número, data, cliente, origem, destino, valor calculado e status.\\n' +
+      'Para exportar todas as cotações do mês: filtre por Data de criação = mês desejado, depois exporte.',
+    tags: ['exportar', 'csv', 'cotacoes', 'relatorio', 'download', 'planilha', 'vendas'],
+  },
   {
     topic: 'relatorios-fiscal',
     category: 'suporte',
