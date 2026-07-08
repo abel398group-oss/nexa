@@ -51,6 +51,30 @@ export class PortalTicketsService {
     return { items, total };
   }
 
+  // Scope empresa: todos os chamados do tenant (só gestores).
+  async listByTenant(
+    customer: PortalCustomer,
+    q: PaginationQueryDto,
+    filters: { status?: string; category?: string },
+  ): Promise<Paginated<any>> {
+    const where: any = { tenantId: customer.tenantId };
+    if (filters.status) where.status = filters.status;
+    if (filters.category) where.ticketCategory = filters.category;
+    if (q.search) where.rootCause = { contains: q.search, mode: 'insensitive' };
+
+    const [items, total] = await Promise.all([
+      this.prisma.aiConversation.findMany({
+        where,
+        take: q.limit,
+        skip: q.offset,
+        orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
+        select: this.listFields,
+      }),
+      this.prisma.aiConversation.count({ where }),
+    ]);
+    return { items, total };
+  }
+
   async detail(customer: PortalCustomer, id: string) {
     const ticket = await this.prisma.aiConversation.findFirst({
       where: { id, tenantId: customer.tenantId, externalId: customer.externalId },

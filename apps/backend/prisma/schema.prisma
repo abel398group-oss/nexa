@@ -657,6 +657,7 @@ model HandoffToken {
   name       String?   @map("user_name")   // nome do usuário LOGADO no TMS (identidade segura — vem do token, nunca do WhatsApp)
   page       String?                       // página de origem (ex: "fiscal/cte")
   errorCode  String?   @map("error_code")  // código de erro visível na tela, se houver
+  isManager  Boolean   @default(false) @map("is_manager") // gestor pode ver chamados de toda a empresa
   usedAt     DateTime? @map("used_at")     // null = ainda não usado
   expiresAt  DateTime  @map("expires_at")  // TTL 5 minutos
   createdAt  DateTime  @default(now()) @map("created_at")
