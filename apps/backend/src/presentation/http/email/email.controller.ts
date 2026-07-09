@@ -91,9 +91,9 @@ export class EmailController {
   <div class="card">
     <h1>Confirmar descadastro</h1>
     <p>Deseja parar de receber mensagens da Lia / HiperTMS para:</p>
-    <span class="email">${ctx.email}</span>
+    <span class="email">${this.escapeHtml(ctx.email)}</span>
     <form method="POST" action="/api/email/optout">
-      <input type="hidden" name="token" value="${token}">
+      <input type="hidden" name="token" value="${this.escapeHtml(token)}">
       <button type="submit">Sim, quero me descadastrar</button>
     </form>
     <a class="cancel" href="/">Cancelar — voltar ao site</a>
@@ -127,10 +127,23 @@ export class EmailController {
     return res.status(200).send(
       this.renderPage(
         'Descadastro confirmado ✅',
-        `O endereço <strong>${result.email}</strong> foi descadastrado com sucesso.<br>
+        `O endereço <strong>${this.escapeHtml(result.email)}</strong> foi descadastrado com sucesso.<br>
          Você não receberá mais mensagens automáticas da Lia.`,
       ),
     );
+  }
+
+  // M1 (auditoria 2026-07-08): escapa HTML antes de interpolar valores vindos do
+  // usuário (o e-mail vem do header From do inbound Mailgun, que é spoofável). Sem
+  // isso, um From com "<img src=x onerror=...>" executaria no navegador de quem abrisse
+  // o link. Aplicado a todo valor não-constante interpolado nas páginas abaixo.
+  private escapeHtml(v: string): string {
+    return String(v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // Página HTML simples para erros / confirmação
