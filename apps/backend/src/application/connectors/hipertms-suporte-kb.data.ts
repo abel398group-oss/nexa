@@ -2276,10 +2276,10 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Solução:\n' +
       '1. Acesse Operação → CT-e.\n' +
       '2. Use os filtros de período (De/Até), status ou tomador para selecionar os documentos desejados.\n' +
-      '3. Clique no botão \"Exportar CSV\" no canto superior direito da lista.\n' +
+      '3. Clique no botão "Exportar CSV" no canto superior direito da lista.\n' +
       '4. O arquivo é baixado automaticamente com: número do CT-e, data, tomador, valor, status e chave de acesso.\n' +
       'Se o botão Exportar não aparecer: verifique se sua permissão inclui acesso a exportações (Administração → Perfis de Acesso).\n' +
-      'Para exportar apenas CT-e autorizados: filtre por Status = \"Autorizado\" antes de exportar.',
+      'Para exportar apenas CT-e autorizados: filtre por Status = "Autorizado" antes de exportar.',
     tags: ['exportar', 'csv', 'excel', 'relatorio cte', 'download', 'planilha', 'cte', 'operacao'],
   },
   {
@@ -2291,10 +2291,10 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Como baixar:\n' +
       '1. Acesse Operação → CT-e.\n' +
       '2. Localize o CT-e desejado e clique para abrir.\n' +
-      '3. Clique em \"Imprimir DACTE\" ou no ícone de PDF.\n' +
+      '3. Clique em "Imprimir DACTE" ou no ícone de PDF.\n' +
       '4. O PDF é gerado para impressão ou download.\n' +
       'Para baixar em lote: selecione vários CT-e na lista (checkbox) → Ações → Baixar DACTE.\n' +
-      'Se o DACTE não gera: verifique se o CT-e está com status \"Autorizado\" — documentos rejeitados ou cancelados não têm DACTE válido.',
+      'Se o DACTE não gera: verifique se o CT-e está com status "Autorizado" — documentos rejeitados ou cancelados não têm DACTE válido.',
     tags: ['dacte', 'danfe', 'pdf', 'imprimir', 'baixar', 'cte', 'documento auxiliar cte', 'download dacte'],
   },
   {
@@ -2306,7 +2306,7 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Solução:\n' +
       '1. Acesse Vendas → Cotações.\n' +
       '2. Aplique os filtros desejados (período, status, cliente).\n' +
-      '3. Clique em \"Exportar CSV\" no canto superior direito.\n' +
+      '3. Clique em "Exportar CSV" no canto superior direito.\n' +
       '4. O arquivo baixado contém: número, data, cliente, origem, destino, valor calculado e status.\n' +
       'Para exportar todas as cotações do mês: filtre por Data de criação = mês desejado, depois exporte.',
     tags: ['exportar', 'csv', 'cotacoes', 'relatorio', 'download', 'planilha', 'vendas'],
