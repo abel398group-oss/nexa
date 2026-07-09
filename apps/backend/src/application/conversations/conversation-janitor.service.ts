@@ -37,6 +37,11 @@ const SLA_ESCALATION_HOURS = Number(process.env.SLA_ESCALATION_HOURS ?? 4);
 // LGPD: prazo de retenção de dados pessoais (padrão 2 anos = 730 dias).
 // Após esse prazo, contatos opt-out e conversas encerradas são anonimizados.
 const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
+// A2 (auditoria 2026-07-08): expurgo de tabelas de alto volume sem valor histórico.
+// ProcessedMessage só serve para dedup de reentrega (janela de minutos/horas) — 48h sobra.
+const PROCESSED_MSG_RETENTION_HOURS = Number(process.env.PROCESSED_MSG_RETENTION_HOURS ?? 48);
+// Sessões expiradas/revogadas: mantém 30 dias como janela de auditoria e depois apaga.
+const SESSION_RETENTION_DAYS = Number(process.env.SESSION_RETENTION_DAYS ?? 30);
 
 @Injectable()
 export class ConversationJanitorService {
@@ -124,6 +129,45 @@ export class ConversationJanitorService {
     for (const conv of unalerted) {
       this.slaAlerted.set(conv.id, now);
       setTimeout(() => this.slaAlerted.delete(conv.id), dedup24h + 60 * 60 * 1000);
+    }
+  }
+
+  // A2 — expurgo de tabelas de alto volume (ProcessedMessage, Session) sem valor
+  // histórico. Roda 1x/dia. Sem isso, ambas crescem para sempre: processed_messages
+  // ganha 1 linha por mensagem recebida e sessions acumula todas as sessões revogadas/
+  // expiradas — inchando índice e disco em escala (10k+ tenants).
+  @Interval(24 * 60 * 60 * 1000) // roda uma vez por dia
+  async purgeEphemeralData() {
+    // 1) Dedup de inbound: só precisamos das últimas horas (reentrega/reconexão do WAHA).
+    const msgCutoff = new Date(Date.now() - PROCESSED_MSG_RETENTION_HOURS * 60 * 60 * 1000);
+    const msgs = await this.prisma.processedMessage
+      .deleteMany({ where: { createdAt: { lt: msgCutoff } } })
+      .catch((e: any) => {
+        this.logger.warn(`purge ProcessedMessage falhou: ${e?.message}`);
+        return { count: 0 };
+      });
+
+    // 2) Sessões já expiradas OU revogadas há mais de SESSION_RETENTION_DAYS.
+    const sessCutoff = new Date(Date.now() - SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const sessions = await this.prisma.session
+      .deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lt: sessCutoff } },
+            { revokedAt: { not: null, lt: sessCutoff } },
+          ],
+        },
+      })
+      .catch((e: any) => {
+        this.logger.warn(`purge Session falhou: ${e?.message}`);
+        return { count: 0 };
+      });
+
+    if (msgs.count || sessions.count) {
+      this.logger.log(
+        `A2 purge: ${msgs.count} processed_messages (>${PROCESSED_MSG_RETENTION_HOURS}h), ` +
+          `${sessions.count} sessions (>${SESSION_RETENTION_DAYS}d)`,
+      );
     }
   }
 
