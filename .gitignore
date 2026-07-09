@@ -33,5 +33,9 @@ uploads/
 # backend runtime/debug output (nunca versionar)
 apps/backend/.be.*
 apps/backend/.studio*
+apps/backend/.chk/
 apps/backend/err.txt
 *.tmp
+
+# TypeScript incremental build cache (artefato de build, não versionar)
+*.tsbuildinfo
