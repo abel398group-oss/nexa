@@ -377,4 +377,16 @@ export class KnowledgeService {
     }
     const where = force ? `tenant_id = $1` : `tenant_id = $1 AND embedding IS NULL`;
     const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT id, title, cont
+      `SELECT id, title, content FROM ai_knowledge_base WHERE ${where}`,
+      tenantId,
+    )) as any[];
+    let indexed = 0;
+    for (const r of rows) {
+      await this.storeEmbedding(r.id, r.title, r.content);
+      indexed++;
+    }
+    this.invalidateCache(tenantId);
+    this.logger.log(`reindex(${tenantId}): ${indexed} itens vetorizados (force=${force})`);
+    return { ok: true, indexed };
+  }
+}

@@ -350,6 +350,11 @@ export class ConversationsService {
     },
   ) {
     const conv = await this.findOne(tenantId, conversationId);
+    // C3: espelha metadata.campaignId numa coluna dedicada indexada (evita filtrar JSON
+    // sem índice em ai_messages). Derivado aqui → nenhum chamador precisa mudar.
+    const campaignId = typeof (dto.metadata as any)?.campaignId === 'string'
+      ? ((dto.metadata as any).campaignId as string)
+      : null;
     const message = await this.prisma.aiMessage.create({
       data: {
         conversationId: conv.id,
@@ -359,6 +364,7 @@ export class ConversationsService {
         content: dto.content,
         intent: dto.intent,
         metadata: (dto.metadata ?? {}) as any,
+        campaignId,
         tokensIn: dto.tokensIn,
         tokensOut: dto.tokensOut,
         estimatedCostUsd: dto.estimatedCostUsd,
