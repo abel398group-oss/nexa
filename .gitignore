@@ -11,7 +11,8 @@ build/
 .env
 .env.*
 !.env.example
-!.env.production.example  # template de produção (só placeholders) — deve ser versionado
+# template de produção (só placeholders) — deve ser versionado
+!.env.production.example
 
 # prisma
 *.db
