@@ -767,6 +767,24 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Se a diária não aparece no financeiro: verifique se o registro está vinculado à viagem correta.',
     tags: ['diaria', 'adiantamento', 'motorista', 'viagem', 'pagamento', 'frota', 'financeiro viagem'],
   },
+  {
+    topic: 'frota-abastecimento',
+    category: 'suporte',
+    title: 'Como consultar o preço médio de combustível',
+    content:
+      'A tela de Preço Médio de Combustível (Frota → Preço Médio de Combustível) mostra os preços de referência por tipo de combustível usados nos cálculos de custo de viagem.\n' +
+      'Para consultar:\n' +
+      '1. Acesse Frota → Preço Médio de Combustível.\n' +
+      '2. A tela exibe o preço médio vigente por tipo (Diesel S-10, Diesel S-500, Gasolina, Etanol, GNV).\n' +
+      '3. Os valores são usados automaticamente no cálculo de custo por km das viagens.\n' +
+      'Para atualizar o preço médio:\n' +
+      '1. Clique em "Editar" ao lado do combustível desejado.\n' +
+      '2. Informe o novo preço médio (R$/litro) com base nos abastecimentos recentes.\n' +
+      '3. Salve — o novo valor é aplicado nos próximos cálculos.\n' +
+      'Dica: atualize mensalmente com a média dos abastecimentos do período para manter o custo de viagem preciso.\n' +
+      'Se o custo de combustível da viagem parecer errado: verifique se o preço médio está atualizado e se o consumo do veículo (km/litro) está correto em Frota → Veículos.',
+    tags: ['preco combustivel', 'media combustivel', 'diesel', 'gasolina', 'etanol', 'frota', 'custo viagem', 'km litro'],
+  },
 
   // ══════════════════════════════════════════════════════════
   // FINANCEIRO — PRESTADOR E ORÇAMENTO (gaps)

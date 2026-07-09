@@ -198,6 +198,19 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
           'XMLs do cliente (NF-e) podem ser importados e vinculados ao embarque para suporte fiscal.',
         tags: ['embarque', 'shipment', 'operacao', 'nfe', 'eventos', 'timeline'],
       },
+      {
+        topic: 'embarques', category: 'modulo',
+        title: 'Modelo de Embarque — templates para operações recorrentes',
+        content:
+          'O HiperTMS permite criar Modelos de Embarque (templates) para rotas e operações recorrentes. ' +
+          'Um modelo salva as configurações de um embarque (rota, partes, modalidade, tipo de carga) para reutilização rápida. ' +
+          'Como criar um modelo: abra um embarque existente e clique em "Salvar como Modelo". Dê um nome ao modelo e confirme. ' +
+          'Como usar um modelo: ao criar um novo embarque, clique em "Usar Modelo", selecione o modelo desejado — os campos são preenchidos automaticamente. ' +
+          'Modelos são gerenciados em Operação → Modelos de Embarque (booking-template). ' +
+          'Ideal para rotas fixas (ex: sempre SP → RJ com o mesmo cliente e tipo de carga). ' +
+          'O modelo não inclui datas nem documentos fiscais — apenas a estrutura operacional.',
+        tags: ['modelo embarque', 'template', 'recorrente', 'booking-template', 'rota fixa', 'reaproveitar'],
+      },
 
       // ── MÓDULO: VIAGENS ───────────────────────────────────────────────────────
       {
@@ -320,9 +333,9 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         title: 'Planos disponíveis — preços e limites',
         content:
           'O HiperTMS oferece três planos: ' +
-          'Básico R$89/mês: 1 usuário, 500 documentos/mês — ideal para autônomos e pequenas transportadoras. ' +
-          'Essencial R$299/mês: 5 usuários, 5 filiais, 1.000 documentos/mês — para transportadoras em crescimento. ' +
-          'Profissional R$599/mês: 15 usuários, suporte prioritário, 5.000 documentos/mês — para operações maiores. ' +
+          'Básico R$89/mês: 5 usuários — ideal para pequenas transportadoras. ' +
+          'Essencial R$199/mês: 8 usuários — para transportadoras em crescimento. ' +
+          'Profissional R$299/mês: 15 usuários, suporte prioritário — para operações maiores. ' +
           'Todos os planos incluem: CT-e, MDF-e, precificação, frota, financeiro e suporte por e-mail.',
         tags: ['plano', 'preco', 'valor', 'basico', 'essencial', 'profissional', 'quanto custa'],
       },
