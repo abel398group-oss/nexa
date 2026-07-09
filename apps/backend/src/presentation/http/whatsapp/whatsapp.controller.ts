@@ -1,10 +1,17 @@
 import { Body, Controller, ForbiddenException, Headers, Logger, Post, Query } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
 import { WahaHealthService } from '@/application/whatsapp/waha-health.service';
 
 // Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token OBRIGATÓRIO.
 // Aceita token no header X-Waha-Token (preferido) OU query string ?token= (legacy).
 // Migração: configurar WAHA para enviar X-Waha-Token e remover o fallback de query string.
+//
+// C2 (auditoria 2026-07-08): isento do ThrottlerGuard global (100 req/min por IP).
+// O WAHA entrega TODOS os eventos (message, message.ack, session.status) de um único
+// IP — sob rajada de campanha/ACKs o rate-limit global devolvia 429 e mensagens de
+// clientes eram perdidas silenciosamente. A autenticação aqui é o WAHA_WEBHOOK_TOKEN.
+@SkipThrottle()
 @Controller('webhooks')
 export class WhatsappController {
   private readonly logger = new Logger('WahaWebhook');

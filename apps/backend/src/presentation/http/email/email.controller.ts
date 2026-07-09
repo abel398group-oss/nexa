@@ -15,6 +15,7 @@ import {
   HttpCode,
   Logger,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { EmailService } from '@/application/email/email.service';
 import { EmailOptOutService } from '@/application/email/email-optout.service';
@@ -31,6 +32,12 @@ export class EmailController {
   // ── Mailgun Inbound Route ───────────────────────────────────────────────────
   // Mailgun POST o payload como multipart/form-data ou application/x-www-form-urlencoded.
   // Configurar em Mailgun: Receiving → Routes → Forward to: <base_url>/api/webhooks/email
+  //
+  // C2 (auditoria 2026-07-08): webhook server-to-server (Mailgun) isento do
+  // ThrottlerGuard global — um lote de e-mails inbound não pode ser descartado por
+  // 429. As páginas de opt-out (GET/POST abaixo) NÃO são isentas de propósito:
+  // são públicas e voltadas ao usuário, então mantêm o throttle como anti-abuso.
+  @SkipThrottle()
   @Post('webhooks/email')
   @HttpCode(200)
   async inbound(@Body() body: Record<string, string>) {

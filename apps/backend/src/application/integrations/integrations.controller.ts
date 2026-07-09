@@ -15,6 +15,7 @@ import {
   Logger,
   Post,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
@@ -41,6 +42,10 @@ class PlanSyncDto {
   plan!: Plan;
 }
 
+// C2 (auditoria 2026-07-08): endpoint server-to-server (TMS → Nexa), autenticado por
+// x-tms-secret. Isento do ThrottlerGuard global para não descartar sincronizações de
+// plano sob rajada — o TMS pode disparar vários plan-sync em sequência.
+@SkipThrottle()
 @Controller('integrations')
 export class IntegrationsController {
   private readonly logger = new Logger(IntegrationsController.name);
