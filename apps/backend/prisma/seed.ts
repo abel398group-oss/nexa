@@ -6,8 +6,15 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Usuário admin inicial (para login). Trocar a senha depois!
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  // M3 (auditoria 2026-07-08): senha do admin vem do env, nunca hardcoded.
+  // Em produção é OBRIGATÓRIA (aborta se ausente) — evita subir com senha pública.
+  // Em dev, cai num default local só para não travar o setup.
+  const isProd = process.env.NODE_ENV === 'production';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (isProd && !adminPassword) {
+    throw new Error('SEED_ADMIN_PASSWORD é obrigatória em produção — defina antes de rodar o seed.');
+  }
+  const passwordHash = await bcrypt.hash(adminPassword ?? 'admin123', 10);
   await prisma.user.upsert({
     where: { email: 'admin@nexa.local' },
     update: {},
