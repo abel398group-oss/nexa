@@ -106,6 +106,142 @@ export class ConversationAgentService {
       .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
       .join('\n');
 
+    // Gera o rascunho: anti-loop → gate de confiança → despacho ao agente (optout/human/
+    // sales/support) → limpeza de saudação repetida. Pode ajustar a rota (anti-loop). (A3)
+    const resp = await this.generateResponse(tenantId, input, route, {
+      agentMessage,
+      history,
+      priorHistory,
+      msgs,
+      liaAlreadyTalked,
+      handoffContext,
+      tmsCustomer,
+      hasPanel,
+    });
+    route = resp.route;
+    const { draft, suggestedAction, usedKnowledge, confidence, allowedFacts, scripted, usage } = resp;
+    let needsHuman = resp.needsHuman;
+
+    // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
+    let supervisor: SupervisorVerdict | null = null;
+    if (!scripted) {
+      supervisor = await this.supervisor.review({
+        customerMessage: agentMessage,
+        draft,
+        allowedFacts,
+        history,
+        context: route.agent === 'support' ? 'support' : 'sales',
+      });
+    }
+
+    // AUTO-ENVIO: com a autonomia LIGADA, a Lia NUNCA fica em silêncio (é um bot de vendas).
+    // - kill switch OFF → não envia (rascunho aguarda humano).
+    // - rascunho reprovado pela supervisora OU confiança baixa → envia um ACENO SEGURO
+    //   (nunca o conteúdo suspeito, mas também nunca silêncio).
+    // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
+    let autoSent = false;
+    let blockedReason: string | undefined;
+    const supervisorOk = scripted || supervisor?.approved === true;
+    // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
+    // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
+    // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
+    const SAFE_FALLBACK = route.agent === 'support' ? SAFE_FALLBACK_SUPPORT : SAFE_FALLBACK_SALES;
+
+    if (input.conversationId) {
+      if (!this.autonomy.isEnabled()) {
+        blockedReason = 'autonomia desligada (kill switch) — rascunho aguardando humano';
+      } else if (await this.isOverMonthlyLimit(tenantId)) {
+        // A6 (auditoria 2026-07-08): teto de mensagens/mês do plano atingido → pausa o
+        // auto-envio da Lia (o rascunho fica para um humano). Opt-out/transacional não passa
+        // por aqui, então continua funcionando. Alerta o time uma vez por mês.
+        blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
+        await this.notifyPlanLimitReached(tenantId).catch(() => null);
+      } else {
+        let outbound = draft;
+        if (!supervisorOk) {
+          outbound = SAFE_FALLBACK;
+          if (route.agent === 'support') needsHuman = true;
+          blockedReason = `rascunho reprovado pela supervisora (enviado aceno seguro): ${supervisor?.issues.join(', ') || 'reprovado'}`;
+        } else if (confidence !== 'high') {
+          outbound = SAFE_FALLBACK;
+          if (route.agent === 'support') needsHuman = true;
+          blockedReason = 'confiança baixa (enviado aceno seguro)';
+        }
+        // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
+        const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
+        await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
+        await this.conversations.addMessage(tenantId, input.conversationId, {
+          direction: 'outbound',
+          content: outbound,
+          intent: route.intent,
+          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk, fallback: outbound !== draft },
+          tokensIn: usage?.tokensIn,
+          tokensOut: usage?.tokensOut,
+          estimatedCostUsd: usage?.costUsd,
+        });
+        autoSent = true;
+      }
+    }
+
+    // Efeitos colaterais pós-resposta: reclamação, opt-out, handoff de lead quente e
+    // escalação de suporte. Isolado do fluxo de decisão da resposta (A3).
+    const handoff = await this.applyPostResponseEffects(tenantId, route, input, needsHuman);
+
+    // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
+    const elapsed = Date.now() - _t0;
+    ConversationAgentService.latency.record(elapsed);
+    const { p95Ms } = ConversationAgentService.latency.percentiles();
+    if (p95Ms !== null && p95Ms > LATENCY_WARN_MS) {
+      this.logger.warn(`[MON-009] latência p95=${p95Ms}ms acima de ${LATENCY_WARN_MS}ms`);
+    }
+    this.logger.debug(`[MON-009] handle() ${elapsed}ms conv=${input.conversationId?.slice(0, 8) ?? '-'}`);
+
+    return {
+      route,
+      draft,
+      suggestedAction,
+      usedKnowledge,
+      confidence,
+      needsHuman,
+      supervisor,
+      autonomyEnabled: this.autonomy.isEnabled(),
+      autoSent,
+      blockedReason,
+      handoff,
+    };
+  }
+
+  // A3: gera o rascunho de resposta. Aplica o anti-loop (pode trocar a rota para 'human'),
+  // o gate de confiança (pede esclarecimento em 1º contato ambíguo) e despacha para o
+  // agente certo (optout/human scripted, sales, support). Faz a limpeza de saudação repetida.
+  // Devolve a rota (possivelmente ajustada) + o rascunho final e seus metadados.
+  private async generateResponse(
+    tenantId: string,
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
+    route: RouteDecision,
+    ctx: {
+      agentMessage: string;
+      history: string;
+      priorHistory: string;
+      msgs: any[];
+      liaAlreadyTalked: boolean;
+      handoffContext: unknown;
+      tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+      hasPanel: boolean;
+    },
+  ): Promise<{
+    route: RouteDecision;
+    draft: string;
+    suggestedAction: string;
+    usedKnowledge: { id: string; title: string }[];
+    confidence: 'high' | 'low';
+    needsHuman: boolean;
+    allowedFacts: string;
+    scripted: boolean;
+    usage: { tokensIn: number; tokensOut: number; costUsd: number } | undefined;
+  }> {
+    const { agentMessage, history, priorHistory, msgs, liaAlreadyTalked, handoffContext, tmsCustomer, hasPanel } = ctx;
+
     let draft = '';
     let suggestedAction = 'none';
     let usedKnowledge: { id: string; title: string }[] = [];
@@ -223,93 +359,7 @@ export class ConversationAgentService {
       if (draft && draft !== before) draft = draft.charAt(0).toUpperCase() + draft.slice(1);
     }
 
-    // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
-    let supervisor: SupervisorVerdict | null = null;
-    if (!scripted) {
-      supervisor = await this.supervisor.review({
-        customerMessage: agentMessage,
-        draft,
-        allowedFacts,
-        history,
-        context: route.agent === 'support' ? 'support' : 'sales',
-      });
-    }
-
-    // AUTO-ENVIO: com a autonomia LIGADA, a Lia NUNCA fica em silêncio (é um bot de vendas).
-    // - kill switch OFF → não envia (rascunho aguarda humano).
-    // - rascunho reprovado pela supervisora OU confiança baixa → envia um ACENO SEGURO
-    //   (nunca o conteúdo suspeito, mas também nunca silêncio).
-    // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
-    let autoSent = false;
-    let blockedReason: string | undefined;
-    const supervisorOk = scripted || supervisor?.approved === true;
-    // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
-    // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
-    // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
-    const SAFE_FALLBACK = route.agent === 'support' ? SAFE_FALLBACK_SUPPORT : SAFE_FALLBACK_SALES;
-
-    if (input.conversationId) {
-      if (!this.autonomy.isEnabled()) {
-        blockedReason = 'autonomia desligada (kill switch) — rascunho aguardando humano';
-      } else if (await this.isOverMonthlyLimit(tenantId)) {
-        // A6 (auditoria 2026-07-08): teto de mensagens/mês do plano atingido → pausa o
-        // auto-envio da Lia (o rascunho fica para um humano). Opt-out/transacional não passa
-        // por aqui, então continua funcionando. Alerta o time uma vez por mês.
-        blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
-        await this.notifyPlanLimitReached(tenantId).catch(() => null);
-      } else {
-        let outbound = draft;
-        if (!supervisorOk) {
-          outbound = SAFE_FALLBACK;
-          if (route.agent === 'support') needsHuman = true;
-          blockedReason = `rascunho reprovado pela supervisora (enviado aceno seguro): ${supervisor?.issues.join(', ') || 'reprovado'}`;
-        } else if (confidence !== 'high') {
-          outbound = SAFE_FALLBACK;
-          if (route.agent === 'support') needsHuman = true;
-          blockedReason = 'confiança baixa (enviado aceno seguro)';
-        }
-        // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
-        const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
-        await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
-        await this.conversations.addMessage(tenantId, input.conversationId, {
-          direction: 'outbound',
-          content: outbound,
-          intent: route.intent,
-          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk, fallback: outbound !== draft },
-          tokensIn: usage?.tokensIn,
-          tokensOut: usage?.tokensOut,
-          estimatedCostUsd: usage?.costUsd,
-        });
-        autoSent = true;
-      }
-    }
-
-    // Efeitos colaterais pós-resposta: reclamação, opt-out, handoff de lead quente e
-    // escalação de suporte. Isolado do fluxo de decisão da resposta (A3).
-    const handoff = await this.applyPostResponseEffects(tenantId, route, input, needsHuman);
-
-    // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
-    const elapsed = Date.now() - _t0;
-    ConversationAgentService.latency.record(elapsed);
-    const { p95Ms } = ConversationAgentService.latency.percentiles();
-    if (p95Ms !== null && p95Ms > LATENCY_WARN_MS) {
-      this.logger.warn(`[MON-009] latência p95=${p95Ms}ms acima de ${LATENCY_WARN_MS}ms`);
-    }
-    this.logger.debug(`[MON-009] handle() ${elapsed}ms conv=${input.conversationId?.slice(0, 8) ?? '-'}`);
-
-    return {
-      route,
-      draft,
-      suggestedAction,
-      usedKnowledge,
-      confidence,
-      needsHuman,
-      supervisor,
-      autonomyEnabled: this.autonomy.isEnabled(),
-      autoSent,
-      blockedReason,
-      handoff,
-    };
+    return { route, draft, suggestedAction, usedKnowledge, confidence, needsHuman, allowedFacts, scripted, usage };
   }
 
   // A3: resolve a identidade do remetente antes do roteamento e limpa os marcadores da
