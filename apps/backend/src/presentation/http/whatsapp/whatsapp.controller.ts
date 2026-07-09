@@ -2,6 +2,7 @@ import { Body, Controller, ForbiddenException, Headers, Logger, Post, Query } fr
 import { SkipThrottle } from '@nestjs/throttler';
 import { WhatsappService } from '@/application/whatsapp/whatsapp.service';
 import { WahaHealthService } from '@/application/whatsapp/waha-health.service';
+import { safeEqual } from '@/shared/utils/safe-compare';
 
 // Webhook do WAHA (inbound WhatsApp). PÚBLICO (sem JWT), protegido por token OBRIGATÓRIO.
 // Aceita token no header X-Waha-Token (preferido) OU query string ?token= (legacy).
@@ -33,7 +34,8 @@ export class WhatsappController {
     if (!expected) {
       throw new ForbiddenException('WAHA_WEBHOOK_TOKEN não configurado — configure a variável de ambiente');
     }
-    if (token !== expected) {
+    // B1 (auditoria 2026-07-08): comparação em tempo constante (evita timing attack no token).
+    if (!safeEqual(token, expected)) {
       throw new ForbiddenException('token inválido');
     }
     const event = body?.event ?? body?.body?.event;

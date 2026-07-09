@@ -18,6 +18,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { safeEqual } from '@/shared/utils/safe-compare';
 
 /** Plans recognised by Nexa. Mirrors MONITOR_PLANS in monitor.controller.ts. */
 const VALID_PLANS = ['free', 'starter', 'pro', 'enterprise', 'profissional', 'corporativo'] as const;
@@ -65,7 +66,8 @@ export class IntegrationsController {
     @Body() dto: PlanSyncDto,
   ) {
     const expected = process.env.TMS_SYNC_SECRET;
-    if (!expected || !secret || secret !== expected) {
+    // B1 (auditoria 2026-07-08): comparação em tempo constante (evita timing attack no secret).
+    if (!expected || !safeEqual(secret, expected)) {
       this.logger.warn(`plan-sync: tentativa com secret inválido para tenant ${dto.tenantId ?? dto.tmsTenantId}`);
       throw new ForbiddenException('Unauthorized');
     }
