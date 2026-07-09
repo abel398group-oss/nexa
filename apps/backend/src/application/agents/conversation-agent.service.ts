@@ -51,7 +51,15 @@ const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
 // anti-loop (ia-autonoma §9.8): nº de perguntas seguidas da Lia antes de parar e escalar p/ humano.
 const MAX_AI_QUESTIONS = Number(process.env.MAX_AI_QUESTIONS ?? 3);
 // Filtro de conteúdo ofensivo/teste — usado ao reaproveitar contexto de conversas anteriores.
-const PROFANITY_RE = /puteiro|vaca|puta|traveco/i;
+// B3: configurável via env PROFANITY_WORDS (lista separada por vírgula); default abaixo.
+const PROFANITY_RE = new RegExp(
+  (process.env.PROFANITY_WORDS ?? 'puteiro,vaca,puta,traveco')
+    .split(',')
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .join('|'),
+  'i',
+);
 
 @Injectable()
 export class ConversationAgentService {
