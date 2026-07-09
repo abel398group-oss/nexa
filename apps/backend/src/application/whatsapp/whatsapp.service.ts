@@ -49,8 +49,8 @@ export class WhatsappService {
     const p = rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {};
     const id = p.id?._serialized ?? p.id ?? p._data?.id?._serialized ?? p._data?.Info?.ID ?? null;
     const ack = Number(p.ack ?? p._data?.ack ?? 0);
-    // DEBUG temporário: ver se os recibos de ACK estão chegando do WAHA + estrutura do id
-    this.logger.log(`[ack] recebido id=${id} ack=${ack} payload=${JSON.stringify(p).slice(0, 300)}`);
+    // B4 (auditoria 2026-07-08): payload contém dados pessoais → nível debug (off em produção).
+    this.logger.debug(`[ack] recebido id=${id} ack=${ack}`);
     if (!id || !ack || ack < 1) return { ignored: true, reason: 'sem id/ack' };
 
     // 1) match exato pela externalId salva no envio
@@ -193,10 +193,11 @@ export class WhatsappService {
       const data = (await res.json()) as any;
       // WAHA returns { id: "5512988073788@c.us", number: "234754356076551" (LID user, sem código país) }
       // The real phone (with country code) lives in 'id'; 'number' is the LID user portion — not a valid BR phone.
+      // M7 (auditoria 2026-07-08): usa SÓ o 'id' e só devolve se for um telefone BR plausível.
+      // O antigo fallback para 'number' podia carimbar a conversa com um número inválido/errado.
       const fromId = String(data?.id ?? '').split('@')[0].replace(/\D/g, '');
-      const fromNum = String(data?.number ?? data?.id?.user ?? '').replace(/\D/g, '');
-      const num = fromId || fromNum;
-      return num || null;
+      const isValidBR = fromId.startsWith('55') && fromId.length >= 12 && fromId.length <= 13;
+      return isValidBR ? fromId : null;
     } catch (e: any) {
       this.logger.warn(`resolveLidToPhone falhou para ${lid}: ${e?.message}`); // SEC-002: log errors
       return null;
@@ -293,7 +294,8 @@ export class WhatsappService {
       // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
       const r = await this.transcribeInboundAudio(rawBody).catch(() => ({ transcript: null, audioUrl: null }));
       if (r.transcript) {
-        this.logger.log(`Áudio transcrito de ${n.phone}: "${r.transcript.slice(0, 80)}"`);
+        // B4: telefone + conteúdo transcrito são dados pessoais → debug (off em produção).
+        this.logger.debug(`Áudio transcrito de ${n.phone}`);
         n.text = r.transcript;
         n.normalizedText = r.transcript.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
         n.isOptOut = STOP_WORDS.some((w) => n.normalizedText.includes(w.normalize('NFD').replace(/\p{Diacritic}/gu, '')));
