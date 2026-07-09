@@ -379,7 +379,7 @@ export class MetricsService {
       this.prisma.aiMessage.groupBy({
         by: ['ack'],
         where: { tenantId, direction: 'outbound', intent: 'outbound_campaign',
-          metadata: { path: ['campaignId'], equals: campaignId } },
+          campaignId }, // C3: coluna dedicada indexada (era metadata->>'campaignId')
         _count: { _all: true },
       }),
     ]);
@@ -398,7 +398,7 @@ export class MetricsService {
     // Conversas que receberam esta campanha
     const campConvRows = await this.prisma.aiMessage.findMany({
       where: { tenantId, direction: 'outbound', intent: 'outbound_campaign',
-        metadata: { path: ['campaignId'], equals: campaignId } },
+        campaignId }, // C3: coluna dedicada indexada (era metadata->>'campaignId')
       select: { conversationId: true },
       distinct: ['conversationId'],
     });
