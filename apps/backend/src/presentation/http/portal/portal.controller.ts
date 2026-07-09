@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
+  Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MinLength } from 'class-validator';
@@ -40,6 +40,7 @@ class TicketsQueryDto {
   @IsOptional() @Type(() => Number) offset?: number;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() scope?: string; // 'company' = todos os chamados do tenant (gestores)
 }
 
 const COOKIE = 'portal_session';
@@ -90,6 +91,7 @@ export class PortalController {
       externalId: ctx.externalId,
       tenantId:   ctx.tenantId,
       name:       ctx.name ?? null,
+      isManager:  ctx.isManager ?? false,
     });
     res.cookie(COOKIE, jwt, {
       httpOnly: true,
@@ -153,14 +155,21 @@ export class PortalController {
   }
 
   // GET /portal/tickets — lista chamados. Retorna array plano conforme contrato TMS.
+  // ?scope=company → todos os chamados do tenant (somente gestores).
   @UseGuards(PortalSessionGuard)
   @Get('tickets')
   async listTickets(@Req() req: any, @Query() q: TicketsQueryDto) {
-    const result = await this.tickets.list(
-      req.portalCustomer,
-      { limit: q.limit ?? 50, offset: q.offset ?? 0 } as any,
-      { status: q.status, category: q.category },
-    );
+    const customer = req.portalCustomer;
+    const pagination = { limit: q.limit ?? 50, offset: q.offset ?? 0 } as any;
+    const filters = { status: q.status, category: q.category };
+
+    if (q.scope === 'company') {
+      if (!customer.isManager) throw new ForbiddenException('Acesso restrito a gestores.');
+      const result = await this.tickets.listByTenant(customer, pagination, filters);
+      return result.items.map(mapTicket);
+    }
+
+    const result = await this.tickets.list(customer, pagination, filters);
     return result.items.map(mapTicket);
   }
 
