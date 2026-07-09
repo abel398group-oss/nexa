@@ -50,6 +50,8 @@ const HUMANIZE_MIN_MS = Number(process.env.HUMANIZE_MIN_MS ?? 3000);
 const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
 // anti-loop (ia-autonoma §9.8): nº de perguntas seguidas da Lia antes de parar e escalar p/ humano.
 const MAX_AI_QUESTIONS = Number(process.env.MAX_AI_QUESTIONS ?? 3);
+// Filtro de conteúdo ofensivo/teste — usado ao reaproveitar contexto de conversas anteriores.
+const PROFANITY_RE = /puteiro|vaca|puta|traveco/i;
 
 @Injectable()
 export class ConversationAgentService {
@@ -88,53 +90,8 @@ export class ConversationAgentService {
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
 
-    // Sempre busca a conversa anterior mais relevante do mesmo número para manter contexto entre sessões.
-    // Usa a conversa prévia com mais dados reais (≥2 msgs inbound com conteúdo de negócio).
-    let priorHistory = '';
-    if (input.conversationId) {
-      const convPhone = await this.prisma.aiConversation
-        .findUnique({ where: { id: input.conversationId }, select: { phone: true } })
-        .catch(() => null);
-      if (convPhone?.phone) {
-        // Busca conversas anteriores com mensagens em uma única query (evita N+1)
-        const priorConvs = await this.prisma.aiConversation.findMany({
-          where: { tenantId, phone: convPhone.phone, id: { not: input.conversationId } },
-          orderBy: { startedAt: 'desc' },
-          take: 5,
-          include: {
-            messages: {
-              orderBy: { createdAt: 'asc' },
-              select: { direction: true, content: true },
-            },
-          },
-        }).catch(() => []);
-
-        for (const pc of priorConvs) {
-          const pcMsgs = pc.messages ?? [];
-
-          // Só aproveita conversa com ≥2 inbound com conteúdo real (>10 chars, sem palavrão/teste)
-          const realInbound = pcMsgs.filter((m: any) =>
-            m.direction === 'inbound' &&
-            m.content.length > 10 &&
-            !/puteiro|vaca|puta|traveco/i.test(m.content),
-          );
-          if (realInbound.length < 2) continue;
-
-          const filtered = pcMsgs.filter((m: any) =>
-            !m.content.startsWith('Pronto! ✅') &&
-            !/puteiro|vaca|puta|traveco/i.test(m.content),
-          );
-          priorHistory =
-            '[Contexto de conversa anterior — use estes dados sem repetir as perguntas já respondidas]\n' +
-            filtered
-              .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content.slice(0, 200)}`)
-              .join('\n') +
-            '\n[Fim do contexto anterior]\n';
-          this.logger.log(`Contexto anterior carregado para ${convPhone.phone}: conv ${pc.id.slice(0, 8)}, ${filtered.length} msgs`);
-          break; // usa só a conversa anterior mais recente com dados reais
-        }
-      }
-    }
+    // Contexto de conversas anteriores do mesmo número (mantém memória entre sessões).
+    const priorHistory = await this.loadPriorHistory(tenantId, input.conversationId);
 
     // ── ADR 022: detecção de marcador e token de handoff ───────────────────
     // Modalidade A: [via-painel-tms] → vai direto para suporte sem lookup
@@ -405,14 +362,91 @@ export class ConversationAgentService {
       }
     }
 
-    // BUG-08 fix: busca a conversa UMA vez e reutiliza nos três blocos abaixo.
-    // Antes havia 3 findOne independentes para o mesmo conversationId (3 queries extras por mensagem).
+    // Efeitos colaterais pós-resposta: reclamação, opt-out, handoff de lead quente e
+    // escalação de suporte. Isolado do fluxo de decisão da resposta (A3).
+    const handoff = await this.applyPostResponseEffects(tenantId, route, input, needsHuman);
+
+    // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
+    const elapsed = Date.now() - _t0;
+    ConversationAgentService.latency.record(elapsed);
+    const { p95Ms } = ConversationAgentService.latency.percentiles();
+    if (p95Ms !== null && p95Ms > LATENCY_WARN_MS) {
+      this.logger.warn(`[MON-009] latência p95=${p95Ms}ms acima de ${LATENCY_WARN_MS}ms`);
+    }
+    this.logger.debug(`[MON-009] handle() ${elapsed}ms conv=${input.conversationId?.slice(0, 8) ?? '-'}`);
+
+    return {
+      route,
+      draft,
+      suggestedAction,
+      usedKnowledge,
+      confidence,
+      needsHuman,
+      supervisor,
+      autonomyEnabled: this.autonomy.isEnabled(),
+      autoSent,
+      blockedReason,
+      handoff,
+    };
+  }
+
+  // A3: contexto da conversa anterior mais relevante do mesmo número — memória entre
+  // sessões. Retorna '' quando não há conversationId ou nenhuma conversa prévia útil
+  // (precisa de ≥2 inbound com conteúdo real). Uma única query com include (evita N+1).
+  private async loadPriorHistory(tenantId: string, conversationId?: string): Promise<string> {
+    if (!conversationId) return '';
+    const convPhone = await this.prisma.aiConversation
+      .findUnique({ where: { id: conversationId }, select: { phone: true } })
+      .catch(() => null);
+    if (!convPhone?.phone) return '';
+
+    const priorConvs = await this.prisma.aiConversation
+      .findMany({
+        where: { tenantId, phone: convPhone.phone, id: { not: conversationId } },
+        orderBy: { startedAt: 'desc' },
+        take: 5,
+        include: { messages: { orderBy: { createdAt: 'asc' }, select: { direction: true, content: true } } },
+      })
+      .catch(() => []);
+
+    for (const pc of priorConvs) {
+      const pcMsgs = pc.messages ?? [];
+      // Só aproveita conversa com ≥2 inbound com conteúdo real (>10 chars, sem palavrão/teste)
+      const realInbound = pcMsgs.filter(
+        (m: any) => m.direction === 'inbound' && m.content.length > 10 && !PROFANITY_RE.test(m.content),
+      );
+      if (realInbound.length < 2) continue;
+
+      const filtered = pcMsgs.filter(
+        (m: any) => !m.content.startsWith('Pronto! ✅') && !PROFANITY_RE.test(m.content),
+      );
+      this.logger.log(`Contexto anterior carregado para ${convPhone.phone}: conv ${pc.id.slice(0, 8)}, ${filtered.length} msgs`);
+      return (
+        '[Contexto de conversa anterior — use estes dados sem repetir as perguntas já respondidas]\n' +
+        filtered.map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content.slice(0, 200)}`).join('\n') +
+        '\n[Fim do contexto anterior]\n'
+      );
+    }
+    return '';
+  }
+
+  // A3: efeitos colaterais que acontecem DEPOIS de decidir/enviar a resposta — registrar
+  // reclamação, persistir opt-out, escalar lead quente/pedido de humano ao vendedor e
+  // escalar suporte não-resolvido. Independem da autonomia. Busca a conversa UMA vez
+  // (BUG-08) e devolve o handoff (usado na resposta do handle()).
+  private async applyPostResponseEffects(
+    tenantId: string,
+    route: RouteDecision,
+    input: { message: string; conversationId?: string },
+    needsHuman: boolean,
+  ): Promise<HandleResult['handoff']> {
     const conv = input.conversationId
       ? await this.conversations.findOne(tenantId, input.conversationId).catch(() => null)
       : null;
+    if (!conv) return undefined;
 
     // MONITORAMENTO INTERNO DE RECLAMAÇÕES (G4) — só registra, não muda a resposta ao cliente.
-    if (conv && route.isComplaint) {
+    if (route.isComplaint) {
       await this.prisma.complaint.create({
         data: {
           tenantId,
@@ -431,7 +465,7 @@ export class ConversationAgentService {
     }
 
     // OPT-OUT detectado pela IA (ex.: "exit", "me remove daqui") → persiste o descadastro (LGPD).
-    if (conv && route.agent === 'optout') {
+    if (route.agent === 'optout') {
       await this.prisma.contact
         .updateMany({ where: { tenantId, phone: conv.phone }, data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() } })
         .catch(() => null);
@@ -445,7 +479,7 @@ export class ConversationAgentService {
     const isHot =
       route.agent === 'sales' &&
       (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
-    if (conv && (isHot || route.agent === 'human')) {
+    if (isHot || route.agent === 'human') {
       if (isHot) {
         await this.opportunities
           .createFromLead(tenantId, {
@@ -475,7 +509,7 @@ export class ConversationAgentService {
     // SUPORTE: a Lia tentou e NÃO resolveu (needsHuman) → marca o chamado p/ humano e avisa
     // o time. O humano assume no inbox e liga pro cliente (modelo de callback do suporte).
     // Dedup: só escala uma vez por conversa (não renotifica a cada mensagem).
-    if (conv && needsHuman && route.agent === 'support' && (conv.status as string) !== 'escalated') {
+    if (needsHuman && route.agent === 'support' && (conv.status as string) !== 'escalated') {
       await this.prisma.aiConversation
         .update({ where: { id: conv.id }, data: { status: 'escalated' as any } })
         .catch(() => null);
@@ -497,28 +531,7 @@ export class ConversationAgentService {
       this.logger.log(`Suporte escalado p/ humano: conv=${conv.id} tel=${conv.phone}`);
     }
 
-    // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
-    const elapsed = Date.now() - _t0;
-    ConversationAgentService.latency.record(elapsed);
-    const { p95Ms } = ConversationAgentService.latency.percentiles();
-    if (p95Ms !== null && p95Ms > LATENCY_WARN_MS) {
-      this.logger.warn(`[MON-009] latência p95=${p95Ms}ms acima de ${LATENCY_WARN_MS}ms`);
-    }
-    this.logger.debug(`[MON-009] handle() ${elapsed}ms conv=${input.conversationId?.slice(0, 8) ?? '-'}`);
-
-    return {
-      route,
-      draft,
-      suggestedAction,
-      usedKnowledge,
-      confidence,
-      needsHuman,
-      supervisor,
-      autonomyEnabled: this.autonomy.isEnabled(),
-      autoSent,
-      blockedReason,
-      handoff,
-    };
+    return handoff;
   }
 
   // A6: mês corrente no formato 'YYYY-MM' (UTC) — janela do teto de mensagens do plano.
