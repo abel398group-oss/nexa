@@ -59,6 +59,10 @@ export class ConversationAgentService {
   // Estático para acessar de HealthController sem acoplamento de DI.
   static readonly latency = new RollingStats(100);
 
+  // A6: dedup do alerta de limite de plano — notifica o time uma vez por mês por tenant.
+  // Key: tenantId, Value: 'YYYY-MM' já notificado.
+  private planLimitNotified = new Map<string, string>();
+
   constructor(
     private readonly router: RouterAgentService,
     private readonly sales: SalesAgentService,
@@ -368,6 +372,12 @@ export class ConversationAgentService {
     if (input.conversationId) {
       if (!this.autonomy.isEnabled()) {
         blockedReason = 'autonomia desligada (kill switch) — rascunho aguardando humano';
+      } else if (await this.isOverMonthlyLimit(tenantId)) {
+        // A6 (auditoria 2026-07-08): teto de mensagens/mês do plano atingido → pausa o
+        // auto-envio da Lia (o rascunho fica para um humano). Opt-out/transacional não passa
+        // por aqui, então continua funcionando. Alerta o time uma vez por mês.
+        blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
+        await this.notifyPlanLimitReached(tenantId).catch(() => null);
       } else {
         let outbound = draft;
         if (!supervisorOk) {
@@ -509,6 +519,46 @@ export class ConversationAgentService {
       blockedReason,
       handoff,
     };
+  }
+
+  // A6: mês corrente no formato 'YYYY-MM' (UTC) — janela do teto de mensagens do plano.
+  private currentMonthStamp(): string {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // A6: true se o tenant já bateu o teto de mensagens do mês (PlanLimit.maxMessagesMonth).
+  // Sem PlanLimit ou com maxMessagesMonth null → ilimitado (não faz a contagem, custo zero
+  // para a maioria dos tenants). Conta só as mensagens outbound (a saída que gera custo).
+  private async isOverMonthlyLimit(tenantId: string): Promise<boolean> {
+    const plan = await this.prisma.planLimit
+      .findUnique({ where: { tenantId }, select: { maxMessagesMonth: true } })
+      .catch(() => null);
+    const cap = plan?.maxMessagesMonth;
+    if (cap == null) return false; // sem teto configurado
+
+    const d = new Date();
+    const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    const used = await this.prisma.aiMessage
+      .count({ where: { tenantId, direction: 'outbound', createdAt: { gte: monthStart } } })
+      .catch(() => 0);
+    return used >= cap;
+  }
+
+  // A6: alerta o time que o teto do plano foi atingido — uma vez por mês por tenant.
+  private async notifyPlanLimitReached(tenantId: string): Promise<void> {
+    const stamp = this.currentMonthStamp();
+    if (this.planLimitNotified.get(tenantId) === stamp) return; // já avisou neste mês
+    this.planLimitNotified.set(tenantId, stamp);
+    this.logger.warn(`A6: tenant ${tenantId} atingiu o limite mensal de mensagens do plano`);
+    await this.notifications
+      .create(tenantId, {
+        type: 'info',
+        title: '⚠️ Limite do plano atingido',
+        body: 'O teto mensal de mensagens do plano foi atingido — a Lia pausou o envio automático. Faça upgrade para reativar.',
+        link: '/inbox',
+      })
+      .catch(() => null);
   }
 
   // IA-3 (complemento): com a autonomia OFF, a Lia NÃO responde, mas ainda escala

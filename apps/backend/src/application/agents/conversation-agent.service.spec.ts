@@ -61,6 +61,8 @@ const mockPrisma         = {
   contact:       { updateMany: vi.fn() },
   complaint:     { create: vi.fn() },
   salesPlaybook: { findUnique: vi.fn() },
+  planLimit:     { findUnique: vi.fn() },   // A6: teto de mensagens/mês do plano
+  aiMessage:     { count: vi.fn() },        // A6: contagem de outbound do mês
 };
 const mockAutonomy      = { isEnabled: vi.fn() };
 const mockNotifications = { create: vi.fn() };
@@ -100,6 +102,8 @@ beforeEach(() => {
   mockConversations.addMessage.mockResolvedValue(undefined);
 
   mockPrisma.aiConversation.findUnique.mockResolvedValue(null);
+  mockPrisma.planLimit.findUnique.mockResolvedValue(null); // A6: sem teto por padrão (ilimitado)
+  mockPrisma.aiMessage.count.mockResolvedValue(0);
   mockPrisma.aiConversation.findMany.mockResolvedValue([]);
   mockPrisma.aiConversation.update.mockResolvedValue({});
   mockPrisma.aiConversation.updateMany.mockResolvedValue({});
@@ -273,6 +277,23 @@ describe('ConversationAgentService.handle()', () => {
 
       expect(res.autoSent).toBe(true);
       expect(mockConversations.addMessage).toHaveBeenCalledOnce();
+    });
+
+    // A6: teto de mensagens/mês do plano pausa o auto-envio (mesmo com a autonomia ON).
+    it('does NOT auto-send when the monthly plan limit is reached', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.planLimit.findUnique.mockResolvedValue({ maxMessagesMonth: 100 });
+      mockPrisma.aiMessage.count.mockResolvedValue(100); // já no teto
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/limite mensal/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      expect(mockNotifications.create).toHaveBeenCalled();
     });
 
     it('sends SAFE_FALLBACK_SALES when supervisor rejects', async () => {
