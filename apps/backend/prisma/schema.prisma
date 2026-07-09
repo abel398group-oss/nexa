@@ -272,6 +272,7 @@ model AiMessage {
   @@index([externalId])
   @@index([tenantId, intent]) // PERF-004: filtros de campanha e analytics
   @@index([campaignId]) // C3: engajamento/conversão por campanha sem full scan
+  @@index([tenantId, direction, createdAt]) // A6: contagem mensal de outbound por tenant (cap de plano)
   @@map("ai_messages")
 }
 
