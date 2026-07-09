@@ -304,7 +304,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             conversationId: { in: convIds },
             direction: 'outbound',
             intent: 'outbound_campaign',
-            metadata: { path: ['campaignId'], equals: id },
+            campaignId: id, // C3: coluna dedicada indexada (era metadata->>'campaignId')
           },
           select: { conversationId: true, ack: true, createdAt: true },
         });
@@ -358,7 +358,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
     // CAMP-1: conversão — conversas originadas por ESTA campanha (msg carimbada com campaignId) + outcome
     const campMsgs = await this.prisma.aiMessage.findMany({
-      where: { tenantId, intent: 'outbound_campaign', metadata: { path: ['campaignId'], equals: id } },
+      where: { tenantId, intent: 'outbound_campaign', campaignId: id }, // C3: coluna indexada
       select: { conversationId: true },
       distinct: ['conversationId'],
     });

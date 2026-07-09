@@ -150,8 +150,8 @@ export class KnowledgeService {
     return kb;
   }
 
-  // cria KB + versão 1 (não aprovada — passa pela curadoria humana)
-  async create(tenantId: string, dto: CreateKnowledgeDto, author = 'system') {
+  // cria KB + versão 1. autoApprove=true para fontes confiáveis (connector TMS).
+  async create(tenantId: string, dto: CreateKnowledgeDto, author = 'system', autoApprove = false) {
     this.invalidateCache(tenantId);
     const created = await this.prisma.aiKnowledgeBase.create({
       data: {
@@ -163,7 +163,7 @@ export class KnowledgeService {
         content: dto.content,
         tags: dto.tags ?? [],
         versions: {
-          create: { version: 1, content: dto.content, approved: false, author },
+          create: { version: 1, content: dto.content, approved: autoApprove, author },
         },
       },
       include: { versions: true },
@@ -240,26 +240,33 @@ export class KnowledgeService {
     for (const it of items) {
       const existing = existingMap.get(it.title);
       if (existing) {
-        // novo conteúdo → nova versão (não aprovada) se mudou
+        // novo conteúdo → aprova imediatamente (fonte TMS é confiável — sem curadoria manual)
         if (existing.content !== it.content) {
           const last = await this.prisma.aiKnowledgeVersion.findFirst({
             where: { knowledgeId: existing.id },
             orderBy: { version: 'desc' },
           });
-          await this.prisma.aiKnowledgeVersion.create({
-            data: {
-              knowledgeId: existing.id,
-              version: (last?.version ?? 0) + 1,
-              content: it.content,
-              approved: false,
-              author: `connector:${productCode}`,
-            },
-          });
+          await this.prisma.$transaction([
+            this.prisma.aiKnowledgeVersion.create({
+              data: {
+                knowledgeId: existing.id,
+                version: (last?.version ?? 0) + 1,
+                content: it.content,
+                approved: true,
+                author: `connector:${productCode}`,
+              },
+            }),
+            this.prisma.aiKnowledgeBase.update({
+              where: { id: existing.id },
+              data: { content: it.content },
+            }),
+          ]);
+          await this.storeEmbedding(existing.id, existing.title, it.content);
           updated++;
         }
         continue;
       }
-      await this.create(tenantId, { ...it, productCode }, `connector:${productCode}`);
+      await this.create(tenantId, { ...it, productCode }, `connector:${productCode}`, true);
       created++;
     }
     this.invalidateCache(tenantId);

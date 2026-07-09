@@ -178,11 +178,6 @@ export function KnowledgePage() {
     }
   }
 
-  async function approve(versionId: string) {
-    await api.post(`/knowledge/versions/${versionId}/approve`, { reviewer: 'admin' });
-    if (sel) await open(sel);
-  }
-
   return (
     <div className="flex h-full bg-base-100">
       {/* lista */}
@@ -344,23 +339,9 @@ export function KnowledgePage() {
                 </Card>
               </>
             )}
-            <h3 className="mb-2 text-sm font-semibold text-base-content/70">Versões (curadoria)</h3>
-            <div className="space-y-2">
-              {sel.versions?.map((v) => (
-                <Card key={v.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                  <span className="text-base-content/70">v{v.version}</span>
-                  {v.approved ? (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-                      aprovada {v.reviewer && `· ${v.reviewer}`}
-                    </span>
-                  ) : (
-                    <Button onClick={() => approve(v.id)} size="sm">
-                      Aprovar
-                    </Button>
-                  )}
-                </Card>
-              ))}
-            </div>
+            {sel.versions && sel.versions.length > 1 && (
+              <p className="text-xs text-base-content/40">{sel.versions.length} versões · atualizado automaticamente via TMS</p>
+            )}
           </div>
         )}
       </div>
