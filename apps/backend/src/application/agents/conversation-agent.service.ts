@@ -93,89 +93,11 @@ export class ConversationAgentService {
     // Contexto de conversas anteriores do mesmo número (mantém memória entre sessões).
     const priorHistory = await this.loadPriorHistory(tenantId, input.conversationId);
 
-    // ── ADR 022: detecção de marcador e token de handoff ───────────────────
-    // Modalidade A: [via-painel-tms] → vai direto para suporte sem lookup
-    const hasPanel = VIA_PANEL_MARKER.test(input.message);
-    // Modalidade B: HANDOFF:token → resolve contexto rico e vai direto para suporte
-    const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
-    let handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null = null;
-    // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
-    let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
-
-    if (handoffMatch) {
-      handoffContext = await this.handoff.consume(handoffMatch[1]);
-      if (handoffContext) {
-        route = { ...route, agent: 'support' };
-        // identidade segura: o nome vem do token (TMS autenticado), então a Lia já sabe quem é
-        if (handoffContext.name) {
-          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false };
-        }
-        this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} nome=${handoffContext.name ?? '-'} page=${handoffContext.page ?? '-'}`);
-      } else {
-        this.logger.warn(`HANDOFF token inválido/expirado: ${handoffMatch[1]}`);
-      }
-    } else if (hasPanel) {
-      route = { ...route, agent: 'support' };
-      this.logger.log('Marcador [via-painel-tms] detectado → rota suporte direto');
-    }
-    // Portal do cliente: identidade vem da SESSAO (token), nao do telefone -> forca suporte.
-    if (input.portalIdentity) {
-      route = { ...route, agent: 'support' };
-      tmsCustomer = { externalId: input.portalIdentity.externalId, name: input.portalIdentity.name ?? 'Cliente', isAdmin: false };
-      this.logger.log(`Portal: identidade da sessao ext=${input.portalIdentity.externalId} -> rota suporte`);
-    }
-    // Remove marcadores da mensagem antes de processar (não aparecem na resposta)
-    const cleanMessage = input.message
-      .replace(VIA_PANEL_MARKER, '')
-      .replace(HANDOFF_TOKEN_RE, '')
-      .trim();
-    // Mensagem que os agentes "leem": sem marcador/token. Se sobrar vazio (ex.: o cliente
-    // só clicou no botão e mandou apenas "HANDOFF:token"), usa uma saudação neutra para a Lia
-    // cumprimentar e perguntar a dúvida — em vez de processar o token cru.
-    const agentMessage = cleanMessage || 'Olá, preciso de ajuda com o HiperTMS.';
-
-    // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
-    // Busca o telefone da conversa para consultar o TMS antes de rotear
-    // Roda tanto p/ 'sales' (redireciona cliente → suporte) quanto p/ 'support'
-    // (precisamos saber se é cliente DE VERDADE; se não for, é prospect e tratamos abaixo).
-    if (input.conversationId && !handoffContext && !hasPanel && !input.portalIdentity && (route.agent === 'sales' || route.agent === 'support')) {
-      const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
-      if (convForPhone?.phone) {
-        const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]).catch((e: any) => {
-          // BUG-FIX: lookup falhou — mantém rota atual mas loga o erro (não deixa cliente cair em vendas silenciosamente)
-          this.logger.warn(`TMS lookup falhou para ${convForPhone.phone}: ${e?.message} — mantendo rota=${route.agent}`);
-          return new Map();
-        });
-        const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
-        if (tmsInfo) {
-          // É cliente TMS: garante rota suporte + identidade
-          route = { ...route, agent: 'support' };
-          tmsCustomer = {
-            name: tmsInfo.name,
-            role: tmsInfo.role,
-            tenantName: tmsInfo.tenantName,
-            isAdmin: tmsInfo.role?.toUpperCase() === 'ADMIN',
-          };
-          this.logger.log(`TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — roteado para suporte`);
-
-          // BUG-FIX: atualiza customerStage para 'cliente_ativo' na conversa se ainda for 'lead'.
-          // Isso garante que a conversa apareça no inbox de Suporte (isSupportTicket usa customerStage).
-          if (convForPhone.customerStage !== 'cliente_ativo') {
-            await this.prisma.aiConversation
-              .update({ where: { id: input.conversationId }, data: { customerStage: 'cliente_ativo' as any } })
-              .catch((e: any) => this.logger.warn(`Falha ao atualizar customerStage: ${e?.message}`));
-          }
-        }
-      }
-    }
-    // Omnichannel (portal S5): persiste o externalId na conversa quando a identidade e
-    // conhecida (handoff/portal), para o chamado aparecer no portal do cliente.
-    const knownExternalId = handoffContext?.externalId ?? input.portalIdentity?.externalId ?? null;
-    if (input.conversationId && knownExternalId) {
-      await this.prisma.aiConversation
-        .update({ where: { id: input.conversationId }, data: { externalId: knownExternalId } })
-        .catch(() => null);
-    }
+    // Resolve a identidade do remetente (handoff token / marcador de painel / portal /
+    // lookup no TMS), podendo forçar rota 'support', e limpa a mensagem dos marcadores (A3).
+    const identity = await this.resolveIdentity(tenantId, input, route);
+    route = identity.route;
+    const { handoffContext, tmsCustomer, hasPanel, agentMessage } = identity;
 
     // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
     const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
@@ -388,6 +310,108 @@ export class ConversationAgentService {
       blockedReason,
       handoff,
     };
+  }
+
+  // A3: resolve a identidade do remetente antes do roteamento e limpa os marcadores da
+  // mensagem. Ordem: handoff token (ADR 022 modalidade B) → marcador [via-painel-tms]
+  // (modalidade A) → portal (sessão) → lookup no TMS por telefone. Qualquer um força rota
+  // 'support'. Persiste externalId/customerStage na conversa quando a identidade é conhecida.
+  // Devolve a rota (possivelmente ajustada) + a identidade + a mensagem limpa que os agentes leem.
+  private async resolveIdentity(
+    tenantId: string,
+    input: { message: string; conversationId?: string; portalIdentity?: { externalId: string; name?: string | null } },
+    route: RouteDecision,
+  ): Promise<{
+    route: RouteDecision;
+    handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null;
+    tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+    hasPanel: boolean;
+    agentMessage: string;
+  }> {
+    // Modalidade A: [via-painel-tms] → vai direto para suporte sem lookup
+    const hasPanel = VIA_PANEL_MARKER.test(input.message);
+    // Modalidade B: HANDOFF:token → resolve contexto rico e vai direto para suporte
+    const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
+    let handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null = null;
+    // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
+    let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+
+    if (handoffMatch) {
+      handoffContext = await this.handoff.consume(handoffMatch[1]);
+      if (handoffContext) {
+        route = { ...route, agent: 'support' };
+        // identidade segura: o nome vem do token (TMS autenticado), então a Lia já sabe quem é
+        if (handoffContext.name) {
+          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false };
+        }
+        this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} nome=${handoffContext.name ?? '-'} page=${handoffContext.page ?? '-'}`);
+      } else {
+        this.logger.warn(`HANDOFF token inválido/expirado: ${handoffMatch[1]}`);
+      }
+    } else if (hasPanel) {
+      route = { ...route, agent: 'support' };
+      this.logger.log('Marcador [via-painel-tms] detectado → rota suporte direto');
+    }
+    // Portal do cliente: identidade vem da SESSAO (token), nao do telefone -> forca suporte.
+    if (input.portalIdentity) {
+      route = { ...route, agent: 'support' };
+      tmsCustomer = { externalId: input.portalIdentity.externalId, name: input.portalIdentity.name ?? 'Cliente', isAdmin: false };
+      this.logger.log(`Portal: identidade da sessao ext=${input.portalIdentity.externalId} -> rota suporte`);
+    }
+    // Remove marcadores da mensagem antes de processar (não aparecem na resposta)
+    const cleanMessage = input.message
+      .replace(VIA_PANEL_MARKER, '')
+      .replace(HANDOFF_TOKEN_RE, '')
+      .trim();
+    // Mensagem que os agentes "leem": sem marcador/token. Se sobrar vazio (ex.: o cliente
+    // só clicou no botão e mandou apenas "HANDOFF:token"), usa uma saudação neutra para a Lia
+    // cumprimentar e perguntar a dúvida — em vez de processar o token cru.
+    const agentMessage = cleanMessage || 'Olá, preciso de ajuda com o HiperTMS.';
+
+    // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
+    // Busca o telefone da conversa para consultar o TMS antes de rotear
+    // Roda tanto p/ 'sales' (redireciona cliente → suporte) quanto p/ 'support'
+    // (precisamos saber se é cliente DE VERDADE; se não for, é prospect e tratamos abaixo).
+    if (input.conversationId && !handoffContext && !hasPanel && !input.portalIdentity && (route.agent === 'sales' || route.agent === 'support')) {
+      const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
+      if (convForPhone?.phone) {
+        const tmsMap = await this.tmsLookup.batchLookup([convForPhone.phone]).catch((e: any) => {
+          // BUG-FIX: lookup falhou — mantém rota atual mas loga o erro (não deixa cliente cair em vendas silenciosamente)
+          this.logger.warn(`TMS lookup falhou para ${convForPhone.phone}: ${e?.message} — mantendo rota=${route.agent}`);
+          return new Map();
+        });
+        const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
+        if (tmsInfo) {
+          // É cliente TMS: garante rota suporte + identidade
+          route = { ...route, agent: 'support' };
+          tmsCustomer = {
+            name: tmsInfo.name,
+            role: tmsInfo.role,
+            tenantName: tmsInfo.tenantName,
+            isAdmin: tmsInfo.role?.toUpperCase() === 'ADMIN',
+          };
+          this.logger.log(`TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — roteado para suporte`);
+
+          // BUG-FIX: atualiza customerStage para 'cliente_ativo' na conversa se ainda for 'lead'.
+          // Isso garante que a conversa apareça no inbox de Suporte (isSupportTicket usa customerStage).
+          if (convForPhone.customerStage !== 'cliente_ativo') {
+            await this.prisma.aiConversation
+              .update({ where: { id: input.conversationId }, data: { customerStage: 'cliente_ativo' as any } })
+              .catch((e: any) => this.logger.warn(`Falha ao atualizar customerStage: ${e?.message}`));
+          }
+        }
+      }
+    }
+    // Omnichannel (portal S5): persiste o externalId na conversa quando a identidade e
+    // conhecida (handoff/portal), para o chamado aparecer no portal do cliente.
+    const knownExternalId = handoffContext?.externalId ?? input.portalIdentity?.externalId ?? null;
+    if (input.conversationId && knownExternalId) {
+      await this.prisma.aiConversation
+        .update({ where: { id: input.conversationId }, data: { externalId: knownExternalId } })
+        .catch(() => null);
+    }
+
+    return { route, handoffContext, tmsCustomer, hasPanel, agentMessage };
   }
 
   // A3: contexto da conversa anterior mais relevante do mesmo número — memória entre
