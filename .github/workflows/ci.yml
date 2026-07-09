@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Roda em qualquer branch enviada (feedback imediato ao sincronizar pelo VS Code),
+  # e em PRs mirando as branches principais.
   push:
-    branches: [main, master, develop]
+    branches: ['**']
   pull_request:
     branches: [main, master, develop]
 

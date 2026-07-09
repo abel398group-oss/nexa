@@ -9,8 +9,13 @@ describe('PortalSessionService', () => {
   const svc = new PortalSessionService(portalJwt);
 
   it('assina e verifica (roundtrip)', async () => {
-    const token = await svc.sign({ externalId: 'ext1', tenantId: 't1', name: 'Ana' });
-    expect(await svc.verify(token)).toEqual({ externalId: 'ext1', tenantId: 't1', name: 'Ana' });
+    const token = await svc.sign({ externalId: 'ext1', tenantId: 't1', name: 'Ana', isManager: false });
+    expect(await svc.verify(token)).toEqual({ externalId: 'ext1', tenantId: 't1', name: 'Ana', isManager: false });
+  });
+
+  it('preserva isManager=true no roundtrip (gestor vê chamados da empresa)', async () => {
+    const token = await svc.sign({ externalId: 'ext2', tenantId: 't1', name: 'Bia', isManager: true });
+    expect(await svc.verify(token)).toEqual({ externalId: 'ext2', tenantId: 't1', name: 'Bia', isManager: true });
   });
 
   it('token invalido -> null', async () => {
