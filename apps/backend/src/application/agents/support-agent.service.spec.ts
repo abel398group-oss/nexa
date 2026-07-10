@@ -13,6 +13,8 @@ function makeDeps() {
       update: vi.fn().mockResolvedValue({}),
     },
     conversationStageHistory: { create: vi.fn().mockResolvedValue({}) },
+    // C2: mock do $queryRaw para assignTicketNumberIfNeeded (não acionado nos cenários de confirmação/CSAT)
+    $queryRaw: vi.fn().mockResolvedValue([{ last_number: 1 }]),
   } as any;
 
   const notifications = { create: vi.fn().mockResolvedValue({}) } as any;

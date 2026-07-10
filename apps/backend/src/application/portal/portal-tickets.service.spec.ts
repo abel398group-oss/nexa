@@ -208,76 +208,67 @@ describe('PortalTicketsService — N2 submitCsat', () => {
   });
 });
 
-// ─── N3: Número de chamado + subject separado ─────────────────────────────────
+// ─── C2: TicketCounter atômico ────────────────────────────────────────────────
 
-describe('PortalTicketsService — N3 assignTicketNumber', () => {
+describe('PortalTicketsService — C2 assignTicketNumber (TicketCounter atômico)', () => {
   let prisma: any;
   let svc: PortalTicketsService;
 
-  function makePrismaWithAggregate() {
+  function makePrismaC2() {
     return {
       aiConversation: {
         findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn(),
-        findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(),
-        create: vi.fn(), aggregate: vi.fn(),
+        findUnique: vi.fn(), update: vi.fn(), create: vi.fn(),
       },
       aiMessage: { findMany: vi.fn() },
       conversationStageHistory: { create: vi.fn() },
+      $queryRaw: vi.fn().mockResolvedValue([{ last_number: 1 }]),
     } as any;
   }
 
   beforeEach(() => {
-    prisma = makePrismaWithAggregate();
+    prisma = makePrismaC2();
     svc = new PortalTicketsService(prisma, {} as any, {} as any);
   });
 
-  it('atribui numero 1 ao primeiro chamado do tenant', async () => {
+  it('chama $queryRaw (INSERT ON CONFLICT) e persiste o numero retornado', async () => {
     prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: 'fiscal' });
-    prisma.aiConversation.aggregate.mockResolvedValue({ _max: { ticketNumber: null } });
-    prisma.aiConversation.updateMany.mockResolvedValue({ count: 1 });
+    prisma.$queryRaw.mockResolvedValue([{ last_number: 7 }]);
 
     await svc.assignTicketNumber('t1', 'c1');
 
-    expect(prisma.aiConversation.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { ticketNumber: 1 } }),
+    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ticketNumber: 7 }) }),
     );
   });
 
-  it('incrementa a partir do MAX existente no tenant', async () => {
-    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: 'cte' });
-    prisma.aiConversation.aggregate.mockResolvedValue({ _max: { ticketNumber: 42 } });
-    prisma.aiConversation.updateMany.mockResolvedValue({ count: 1 });
+  it('converte BigInt do Prisma para Number antes de gravar', async () => {
+    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: 'fiscal' });
+    // Prisma retorna BigInt em $queryRaw — Number() deve normalizar
+    prisma.$queryRaw.mockResolvedValue([{ last_number: BigInt(42) }]);
+
+    await svc.assignTicketNumber('t1', 'c1');
+
+    const updateCall = prisma.aiConversation.update.mock.calls[0][0];
+    expect(typeof updateCall.data.ticketNumber).toBe('number');
+    expect(updateCall.data.ticketNumber).toBe(42);
+  });
+
+  it('nao chama $queryRaw se chamado ja tem ticketNumber', async () => {
+    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: 7, ticketCategory: 'cte' });
 
     await svc.assignTicketNumber('t1', 'c2');
 
-    expect(prisma.aiConversation.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { ticketNumber: 43 } }),
-    );
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(prisma.aiConversation.update).not.toHaveBeenCalled();
   });
 
-  it('nao atribui se chamado ja tem ticketNumber', async () => {
-    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: 7, ticketCategory: 'cte' });
+  it('nao chama $queryRaw se ticketCategory ainda nao foi definido', async () => {
+    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: null });
 
     await svc.assignTicketNumber('t1', 'c3');
 
-    expect(prisma.aiConversation.aggregate).not.toHaveBeenCalled();
-    expect(prisma.aiConversation.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('nao atribui se chamado nao tem ticketCategory ainda', async () => {
-    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: null });
-
-    await svc.assignTicketNumber('t1', 'c4');
-
-    expect(prisma.aiConversation.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('race condition: updateMany retorna count=0, nao lanca excecao', async () => {
-    prisma.aiConversation.findUnique.mockResolvedValue({ ticketNumber: null, ticketCategory: 'fiscal' });
-    prisma.aiConversation.aggregate.mockResolvedValue({ _max: { ticketNumber: 5 } });
-    prisma.aiConversation.updateMany.mockResolvedValue({ count: 0 }); // outro processo ganhou
-
-    // Não deve lançar — apenas loga warn internamente
-    await expect(svc.assignTicketNumber('t1', 'c5')).resolves.toBeUndefined();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 });

@@ -907,3 +907,14 @@ model ProactiveRuleConfig {
   @@index([tenantId])
   @@map("proactive_rule_configs")
 }
+
+// C2: contador atômico de tickets por tenant (substitui MAX+1 com race condition).
+// INSERT ... ON CONFLICT DO UPDATE SET last_number = last_number + 1 RETURNING last_number
+// é atômico no PostgreSQL — sem race condition sob alta concorrência ou múltiplas réplicas.
+model TicketCounter {
+  tenantId   String   @id @map("tenant_id")
+  lastNumber Int      @default(0) @map("last_number")
+  updatedAt  DateTime @updatedAt  @map("updated_at")
+
+  @@map("ticket_counters")
+}

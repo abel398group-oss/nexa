@@ -272,37 +272,34 @@ export class PortalTicketsService {
     });
   }
 
-  // N3: Atribui ticketNumber sequencial por tenant ao chamado, se ainda não tiver.
-  // Usa MAX(ticket_number)+1 dentro de um update atômico para evitar colisão sob concorrência.
+  // C2: Atribui ticketNumber sequencial por tenant via contador atômico (TicketCounter).
+  // INSERT ... ON CONFLICT DO UPDATE SET last_number = last_number + 1 RETURNING last_number
+  // é atômico no PostgreSQL — sem race condition independente de concorrência ou réplicas.
   // Só atribui quando ticketCategory está definido (chamado já classificado como ticket).
   async assignTicketNumber(tenantId: string, conversationId: string): Promise<void> {
-    // Verifica se já tem número (evita re-atribuição)
+    // Verifica se já tem número (evita re-atribuição idempotente)
     const existing = await this.prisma.aiConversation.findUnique({
       where: { id: conversationId },
       select: { ticketNumber: true, ticketCategory: true },
     });
     if (!existing || existing.ticketNumber !== null || !existing.ticketCategory) return;
 
-    // MAX(ticket_number) do tenant → próximo número (1 se nenhum existir ainda)
-    const agg = await (this.prisma.aiConversation as any).aggregate({
-      where: { tenantId, ticketNumber: { not: null } },
-      _max: { ticketNumber: true },
-    });
-    const next = ((agg._max?.ticketNumber as number | null) ?? 0) + 1;
+    // C2: operação atômica — o banco retorna o próximo número já reservado
+    const rows = await this.prisma.$queryRaw<{ last_number: number }[]>`
+      INSERT INTO ticket_counters (tenant_id, last_number, updated_at)
+      VALUES (${tenantId}, 1, now())
+      ON CONFLICT (tenant_id) DO UPDATE
+        SET last_number = ticket_counters.last_number + 1,
+            updated_at  = now()
+      RETURNING last_number
+    `;
+    const next = Number(rows[0].last_number);
 
-    // updateMany com filtro ticketNumber=null garante idempotência em race condition:
-    // se dois processos calcularem o mesmo next, apenas um vai atualizar (o outro acha 0 linhas e reprocessa).
-    const result = await (this.prisma.aiConversation as any).updateMany({
-      where: { id: conversationId, tenantId, ticketNumber: null },
-      data: { ticketNumber: next },
+    await this.prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: { ticketNumber: next } as any,
     });
-
-    if (result.count === 0) {
-      // Race condition: outro processo atribuiu antes. Log para observabilidade.
-      this.logger.warn(`N3: ticketNumber race conv=${conversationId} next=${next} — outro processo ganhou`);
-    } else {
-      this.logger.log(`N3: ticketNumber=${next} atribuído a conv=${conversationId}`);
-    }
+    this.logger.log(`C2: ticketNumber=${next} atribuído a conv=${conversationId}`);
   }
 
   // N2: Registra nota CSAT via token público (1x por chamado).

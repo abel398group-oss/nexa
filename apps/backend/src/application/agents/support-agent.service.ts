@@ -272,8 +272,8 @@ export class SupportAgentService {
     }
   }
 
-  // N3: atribui ticketNumber sequencial por tenant (MAX+1) ao chamado, se ainda não tiver.
-  // updateMany com ticketNumber=null garante idempotência sob race condition.
+  // C2: atribui ticketNumber via TicketCounter atômico — INSERT ... ON CONFLICT DO UPDATE RETURNING.
+  // Sem race condition sob concorrência ou múltiplas réplicas (substitui MAX+1).
   private async assignTicketNumberIfNeeded(conversationId: string): Promise<void> {
     const conv = await this.prisma.aiConversation.findUnique({
       where: { id: conversationId },
@@ -281,22 +281,22 @@ export class SupportAgentService {
     });
     if (!conv || conv.ticketNumber !== null || !conv.ticketCategory) return;
 
-    const agg = await (this.prisma.aiConversation as any).aggregate({
-      where: { tenantId: conv.tenantId, ticketNumber: { not: null } },
-      _max: { ticketNumber: true },
-    });
-    const next = ((agg._max?.ticketNumber as number | null) ?? 0) + 1;
+    // C2: operação atômica — o banco retorna o próximo número já reservado
+    const rows = await this.prisma.$queryRaw<{ last_number: number }[]>`
+      INSERT INTO ticket_counters (tenant_id, last_number, updated_at)
+      VALUES (${conv.tenantId}, 1, now())
+      ON CONFLICT (tenant_id) DO UPDATE
+        SET last_number = ticket_counters.last_number + 1,
+            updated_at  = now()
+      RETURNING last_number
+    `;
+    const next = Number(rows[0].last_number);
 
-    const result = await (this.prisma.aiConversation as any).updateMany({
-      where: { id: conversationId, tenantId: conv.tenantId, ticketNumber: null },
-      data: { ticketNumber: next },
+    await this.prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: { ticketNumber: next } as any,
     });
-
-    if (result.count === 0) {
-      this.logger.warn(`N3: ticketNumber race conv=${conversationId} next=${next}`);
-    } else {
-      this.logger.log(`N3: ticketNumber=${next} conv=${conversationId}`);
-    }
+    this.logger.log(`C2: ticketNumber=${next} conv=${conversationId}`);
   }
 
   // Detecta saudações e mensagens de small talk para curto-circuitar o pipeline.
