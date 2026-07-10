@@ -55,12 +55,16 @@ const isProd = () => process.env.NODE_ENV === 'production';
 
 // Adapta a shape interna do Nexa para o contrato esperado pelo TMS.
 // N3: expõe subject (campo próprio) e ticketNumber; mantém rootCause para compatibilidade.
+// T2 (2026-07-10): expõe outcome, csatScore e csatToken para o bloco de avaliação do widget TMS.
 function mapTicket(t: any) {
   return {
     id:           t.id,
     ticketNumber: t.ticketNumber ?? null,  // N3: número sequencial (null até ser classificado)
     subject:      t.subject ?? t.rootCause ?? null, // N3: subject próprio; fallback rootCause para legado
     status:       t.status,
+    outcome:      t.outcome ?? null,       // T2: 'resolved' | 'escalated' | null
+    csatScore:    t.csatScore ?? null,     // T2: nota 1–5 (null = não avaliado ainda)
+    csatToken:    t.csatToken ?? null,     // T2: token público para POST /portal/csat/:token
     createdAt:    t.createdAt,
     updatedAt:    t.lastActivityAt ?? t.createdAt,
   };
