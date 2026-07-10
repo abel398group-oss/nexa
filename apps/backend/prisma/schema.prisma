@@ -215,6 +215,8 @@ model AiConversation {
   csatScore        Int?      @map("csat_score")    // N2: nota de satisfação 1–5 enviada pelo cliente
   csatComment      String?   @map("csat_comment")  // N2: comentário opcional do CSAT
   csatToken        String?   @unique @map("csat_token") // N2: token único para endpoint público de CSAT (1x)
+  ticketNumber     Int?      @map("ticket_number") // N3: número sequencial por tenant (gerado ao classificar)
+  subject          String?   @map("subject")       // N3: assunto digitado pelo cliente (separado do rootCause da IA)
 
   messages      AiMessage[]
   actions       AiAction[]

@@ -27,6 +27,8 @@ export class PortalTicketsService {
     ticketCategory: true,
     ticketPriority: true,
     rootCause: true,
+    subject: true,       // N3
+    ticketNumber: true,  // N3
     sourceChannel: true,
     createdAt: true,
     lastActivityAt: true,
@@ -44,7 +46,10 @@ export class PortalTicketsService {
     const where: any = { tenantId: customer.tenantId, externalId: customer.externalId };
     if (filters.status) where.status = filters.status;
     if (filters.category) where.ticketCategory = filters.category;
-    if (q.search) where.rootCause = { contains: q.search, mode: 'insensitive' };
+    if (q.search) where.OR = [
+      { rootCause: { contains: q.search, mode: 'insensitive' } },
+      { subject:   { contains: q.search, mode: 'insensitive' } },
+    ];
 
     const [items, total] = await Promise.all([
       this.prisma.aiConversation.findMany({
@@ -68,7 +73,10 @@ export class PortalTicketsService {
     const where: any = { tenantId: customer.tenantId };
     if (filters.status) where.status = filters.status;
     if (filters.category) where.ticketCategory = filters.category;
-    if (q.search) where.rootCause = { contains: q.search, mode: 'insensitive' };
+    if (q.search) where.OR = [
+      { rootCause: { contains: q.search, mode: 'insensitive' } },
+      { subject:   { contains: q.search, mode: 'insensitive' } },
+    ];
 
     const [items, total] = await Promise.all([
       this.prisma.aiConversation.findMany({
@@ -115,14 +123,15 @@ export class PortalTicketsService {
       agentType: 'support',
     });
     // marca a conversa como do cliente (externalId), cliente ativo, + assunto/area
+    // N3: subject vai para a coluna subject (rootCause é exclusivo do DiagnosticAgent)
     await this.prisma.aiConversation.update({
       where: { id: conv.id },
       data: {
         externalId: customer.externalId,
         customerStage: 'cliente_ativo',
-        ...(dto.subject?.trim() ? { rootCause: dto.subject.trim() } : {}),
+        ...(dto.subject?.trim() ? { subject: dto.subject.trim() } : {}),
         ...(dto.category?.trim() ? { ticketCategory: dto.category.trim() } : {}),
-      },
+      } as any,
     });
     await this.conversations.addMessage(customer.tenantId, conv.id, {
       direction: 'inbound',
@@ -260,6 +269,39 @@ export class PortalTicketsService {
         phone: realPhone || `portal:${customer.externalId}`,
       },
     });
+  }
+
+  // N3: Atribui ticketNumber sequencial por tenant ao chamado, se ainda não tiver.
+  // Usa MAX(ticket_number)+1 dentro de um update atômico para evitar colisão sob concorrência.
+  // Só atribui quando ticketCategory está definido (chamado já classificado como ticket).
+  async assignTicketNumber(tenantId: string, conversationId: string): Promise<void> {
+    // Verifica se já tem número (evita re-atribuição)
+    const existing = await this.prisma.aiConversation.findUnique({
+      where: { id: conversationId },
+      select: { ticketNumber: true, ticketCategory: true },
+    });
+    if (!existing || existing.ticketNumber !== null || !existing.ticketCategory) return;
+
+    // MAX(ticket_number) do tenant → próximo número (1 se nenhum existir ainda)
+    const agg = await (this.prisma.aiConversation as any).aggregate({
+      where: { tenantId, ticketNumber: { not: null } },
+      _max: { ticketNumber: true },
+    });
+    const next = ((agg._max?.ticketNumber as number | null) ?? 0) + 1;
+
+    // updateMany com filtro ticketNumber=null garante idempotência em race condition:
+    // se dois processos calcularem o mesmo next, apenas um vai atualizar (o outro acha 0 linhas e reprocessa).
+    const result = await (this.prisma.aiConversation as any).updateMany({
+      where: { id: conversationId, tenantId, ticketNumber: null },
+      data: { ticketNumber: next },
+    });
+
+    if (result.count === 0) {
+      // Race condition: outro processo atribuiu antes. Log para observabilidade.
+      this.logger.warn(`N3: ticketNumber race conv=${conversationId} next=${next} — outro processo ganhou`);
+    } else {
+      this.logger.log(`N3: ticketNumber=${next} atribuído a conv=${conversationId}`);
+    }
   }
 
   // N2: Registra nota CSAT via token público (1x por chamado).

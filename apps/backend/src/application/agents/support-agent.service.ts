@@ -238,8 +238,39 @@ export class SupportAgentService {
           ...(rootCause ? { rootCause } : {}),
         },
       });
+      // N3: atribui ticketNumber sequencial por tenant na primeira vez que a categoria é definida.
+      await this.assignTicketNumberIfNeeded(conversationId).catch((e: any) =>
+        this.logger.warn(`N3: assignTicketNumber falhou: ${e?.message}`),
+      );
     } catch (e: any) {
       this.logger.warn(`persistTicketFields falhou: ${e?.message}`);
+    }
+  }
+
+  // N3: atribui ticketNumber sequencial por tenant (MAX+1) ao chamado, se ainda não tiver.
+  // updateMany com ticketNumber=null garante idempotência sob race condition.
+  private async assignTicketNumberIfNeeded(conversationId: string): Promise<void> {
+    const conv = await this.prisma.aiConversation.findUnique({
+      where: { id: conversationId },
+      select: { tenantId: true, ticketNumber: true, ticketCategory: true },
+    });
+    if (!conv || conv.ticketNumber !== null || !conv.ticketCategory) return;
+
+    const agg = await (this.prisma.aiConversation as any).aggregate({
+      where: { tenantId: conv.tenantId, ticketNumber: { not: null } },
+      _max: { ticketNumber: true },
+    });
+    const next = ((agg._max?.ticketNumber as number | null) ?? 0) + 1;
+
+    const result = await (this.prisma.aiConversation as any).updateMany({
+      where: { id: conversationId, tenantId: conv.tenantId, ticketNumber: null },
+      data: { ticketNumber: next },
+    });
+
+    if (result.count === 0) {
+      this.logger.warn(`N3: ticketNumber race conv=${conversationId} next=${next}`);
+    } else {
+      this.logger.log(`N3: ticketNumber=${next} conv=${conversationId}`);
     }
   }
 

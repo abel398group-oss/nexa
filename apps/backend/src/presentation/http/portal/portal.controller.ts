@@ -54,13 +54,15 @@ const SESSION_TTL_MS = 45 * 60 * 1000;
 const isProd = () => process.env.NODE_ENV === 'production';
 
 // Adapta a shape interna do Nexa para o contrato esperado pelo TMS.
+// N3: expõe subject (campo próprio) e ticketNumber; mantém rootCause para compatibilidade.
 function mapTicket(t: any) {
   return {
-    id:        t.id,
-    subject:   t.rootCause ?? null,
-    status:    t.status,
-    createdAt: t.createdAt,
-    updatedAt: t.lastActivityAt ?? t.createdAt,
+    id:           t.id,
+    ticketNumber: t.ticketNumber ?? null,  // N3: número sequencial (null até ser classificado)
+    subject:      t.subject ?? t.rootCause ?? null, // N3: subject próprio; fallback rootCause para legado
+    status:       t.status,
+    createdAt:    t.createdAt,
+    updatedAt:    t.lastActivityAt ?? t.createdAt,
   };
 }
 
