@@ -32,8 +32,17 @@ import { NotificationsService } from '@/application/notifications/notifications.
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
 const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
-// MON-006: ticket escalado sem atendimento humano após N horas → alerta ao time
-const SLA_ESCALATION_HOURS = Number(process.env.SLA_ESCALATION_HOURS ?? 4);
+// N4: SLA por prioridade (env-configurável). Defaults: urgente 1h, alta 4h, normal 8h, baixa 24h.
+const SLA_HOURS: Record<string, number> = {
+  urgente: Number(process.env.SLA_HOURS_URGENT ?? 1),
+  alta:    Number(process.env.SLA_HOURS_HIGH   ?? 4),
+  normal:  Number(process.env.SLA_HOURS_NORMAL ?? 8),
+  baixa:   Number(process.env.SLA_HOURS_LOW    ?? 24),
+};
+// Fallback quando ticketPriority não está definido → normal (8h)
+const SLA_HOURS_DEFAULT = Number(process.env.SLA_HOURS_NORMAL ?? 8);
+// SLA mínimo dentre todos os níveis → pre-filter do banco (captura todos os potencialmente violados)
+const SLA_MIN_HOURS = Math.min(...Object.values(SLA_HOURS));
 // LGPD: prazo de retenção de dados pessoais (padrão 2 anos = 730 dias).
 // Após esse prazo, contatos opt-out e conversas encerradas são anonimizados.
 const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
@@ -48,9 +57,6 @@ export class ConversationJanitorService {
   private readonly logger = new Logger('ConversationJanitor');
   // MON-007: timestamp do último run — consumido pelo HealthController.
   static lastRunAt: Date | null = null;
-  // BUG-003: dedup de alertas SLA — evita spam a cada hora para o mesmo ticket escalado.
-  // Key: conversationId, Value: timestamp do último alerta. Entries removidas após 25h.
-  private slaAlerted = new Map<string, number>();
 
   getStats() {
     return { lastRunAt: ConversationJanitorService.lastRunAt?.toISOString() ?? null };
@@ -63,10 +69,10 @@ export class ConversationJanitorService {
   ) {}
 
   // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
-  // Só envia para phones reais (não para contatos via e-mail ex: "email:foo@bar.com").
+  // N4: pula phones sintéticos: 'email:' e 'portal:' nunca chegam ao WAHA.
   private notifyClose(phones: string[], message: string): void {
     for (const phone of phones) {
-      if (!phone || phone.startsWith('email:')) continue;
+      if (!phone || phone.startsWith('email:') || phone.startsWith('portal:')) continue;
       this.waha.sendText(phone, message).catch((e) =>
         this.logger.warn(`Falha ao notificar fechamento para ${phone}: ${e?.message}`),
       );
@@ -86,26 +92,44 @@ export class ConversationJanitorService {
     await this.alertSlaEscalated();
   }
 
-  // MON-006: detecta tickets escalados a humano há mais de SLA_ESCALATION_HOURS sem atendimento.
-  // "Sem atendimento" = status ainda 'escalated' E lastActivityAt não avançou desde a escalação.
-  // BUG-003 fix: usa slaAlerted Map para não re-alertar o mesmo ticket a cada hora (dedup 24h).
+  // MON-006 / N4: detecta tickets escalados sem atendimento humano além do SLA da sua prioridade.
+  // N4 melhorias vs implementação anterior:
+  //   - SLA por prioridade (urgente 1h / alta 4h / normal 8h / baixa 24h) via env
+  //   - Dedup persistente via slaAlertedAt no banco (substitui Map em memória que morria no restart)
+  //   - Log inclui prioridade + prazo aplicado para cada batch
   private async alertSlaEscalated() {
-    const cutoff = new Date(Date.now() - SLA_ESCALATION_HOURS * 60 * 60 * 1000);
-    const dedup24h = 24 * 60 * 60 * 1000;
+    const now = new Date();
+    const dedup24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const overdue = await this.prisma.aiConversation.findMany({
-      where: { status: 'escalated' as any, lastActivityAt: { lt: cutoff } } as any,
-      select: { id: true, phone: true, tenantId: true, lastActivityAt: true },
+    // Pre-filter: lastActivityAt < now - SLA_MIN_HOURS captura qualquer ticket que poderia ter
+    // violado o SLA mais restritivo (urgente=1h). A filtragem por prioridade exata é feita em JS.
+    const outerCutoff = new Date(now.getTime() - SLA_MIN_HOURS * 60 * 60 * 1000);
+
+    const candidates = await this.prisma.aiConversation.findMany({
+      where: {
+        status: 'escalated' as any,
+        lastActivityAt: { lt: outerCutoff },
+        // N4 dedup persistente: só alerta se nunca alertou OU se já passaram 24h do último alerta
+        OR: [{ slaAlertedAt: null }, { slaAlertedAt: { lt: dedup24h } }],
+      } as any,
+      select: { id: true, phone: true, tenantId: true, lastActivityAt: true, ticketPriority: true },
     });
 
-    if (!overdue.length) return;
+    if (!candidates.length) return;
 
-    // BUG-003: filtra os que já foram alertados nas últimas 24h
-    const now = Date.now();
-    const unalerted = overdue.filter((c) => now - (this.slaAlerted.get(c.id) ?? 0) > dedup24h);
+    // Filtra por SLA da prioridade específica do ticket
+    const slaHours = (priority: string | null): number =>
+      priority ? (SLA_HOURS[priority] ?? SLA_HOURS_DEFAULT) : SLA_HOURS_DEFAULT;
+
+    const unalerted = candidates.filter((c) => {
+      const hours = slaHours(c.ticketPriority);
+      const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
+      return c.lastActivityAt && new Date(c.lastActivityAt) < cutoff;
+    });
+
     if (!unalerted.length) return;
 
-    // Agrupa por tenant para enviar uma notificação resumida por empresa
+    // Agrupa por tenant para notificação resumida
     const byTenant = new Map<string, typeof unalerted>();
     for (const conv of unalerted) {
       const list = byTenant.get(conv.tenantId) ?? [];
@@ -114,22 +138,27 @@ export class ConversationJanitorService {
     }
 
     for (const [tenantId, convs] of byTenant) {
+      // Determina o SLA mais restritivo (menor) do lote para exibir no título
+      const minSla = Math.min(...convs.map((c) => slaHours(c.ticketPriority)));
       await this.notifications.create(tenantId, {
         type: 'info',
-        title: `⚠️ SLA: ${convs.length} chamado(s) escalado(s) sem atendimento há >${SLA_ESCALATION_HOURS}h`,
-        body: convs.map((c) => c.phone).join(', '),
+        title: `⚠️ SLA: ${convs.length} chamado(s) escalado(s) sem atendimento`,
+        body: convs
+          .map((c) => `${c.phone} [${c.ticketPriority ?? 'normal'} / ${slaHours(c.ticketPriority)}h]`)
+          .join(', '),
         link: '/inbox',
       });
       this.logger.warn(
-        `MON-006 SLA breach: tenantId=${tenantId} convs=${convs.length} sla=${SLA_ESCALATION_HOURS}h`,
+        `MON-006 SLA breach: tenantId=${tenantId} convs=${convs.length} min_sla=${minSla}h ` +
+        `priorities=${[...new Set(convs.map((c) => c.ticketPriority ?? 'normal'))].join(',')}`,
       );
     }
 
-    // Marca como alertados e agenda limpeza após 25h (janela > 24h para evitar alerta no próximo ciclo)
-    for (const conv of unalerted) {
-      this.slaAlerted.set(conv.id, now);
-      setTimeout(() => this.slaAlerted.delete(conv.id), dedup24h + 60 * 60 * 1000);
-    }
+    // N4: persiste slaAlertedAt no banco (dedup survives restart + multi-replica)
+    await (this.prisma.aiConversation as any).updateMany({
+      where: { id: { in: unalerted.map((c) => c.id) } },
+      data: { slaAlertedAt: now },
+    });
   }
 
   // A2 — expurgo de tabelas de alto volume (ProcessedMessage, Session) sem valor

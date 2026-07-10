@@ -217,6 +217,7 @@ model AiConversation {
   csatToken        String?   @unique @map("csat_token") // N2: token único para endpoint público de CSAT (1x)
   ticketNumber     Int?      @map("ticket_number") // N3: número sequencial por tenant (gerado ao classificar)
   subject          String?   @map("subject")       // N3: assunto digitado pelo cliente (separado do rootCause da IA)
+  slaAlertedAt     DateTime? @map("sla_alerted_at") // N4: timestamp do último alerta SLA (dedup persistente, substitui Map em memória)
 
   messages      AiMessage[]
   actions       AiAction[]
