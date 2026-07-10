@@ -42,10 +42,11 @@ const NAV_GROUPS: NavGroup[] = [
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
   { label: 'Suporte', icon: 'support', items: [
-    { to: '/support',           label: 'Inbox de Suporte', ic: 'support',   perm: 'inbox' },
-    { to: '/support/dashboard', label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
-    { to: '/support/clients',   label: 'Clientes',         ic: 'contacts',  perm: 'inbox' },
-    { to: '/support/config',    label: 'Configurações',    ic: 'bot',       perm: 'ai_control' },
+    { to: '/support',                  label: 'Inbox de Suporte', ic: 'support',   perm: 'inbox' },
+    { to: '/support/dashboard',        label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
+    { to: '/support/clients',          label: 'Clientes',         ic: 'contacts',  perm: 'inbox' },
+    { to: '/support/config',           label: 'Configurações',    ic: 'bot',       perm: 'ai_control' },
+    { to: '/settings/support-email',   label: 'E-mail de Suporte', ic: 'mail',    perm: 'admin' },
   ] },
 
   // ── Serviço 3: Monitoramento ───────────────────────────────────────────────
@@ -58,9 +59,8 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
   ] },
   { label: 'Administração', icon: 'users', items: [
-    { to: '/users',                   label: 'Usuários',          ic: 'users', perm: 'users' },
-    { to: '/settings/email-channel',  label: 'Canal de E-mail',   ic: 'mail',  perm: 'admin' },
-    { to: '/settings/support-email',  label: 'E-mail de Suporte', ic: 'mail',  perm: 'admin' },
+    { to: '/users',                   label: 'Usuários',        ic: 'users', perm: 'users' },
+    { to: '/settings/email-channel',  label: 'Canal de E-mail', ic: 'mail',  perm: 'admin' },
   ] },
 ];
 

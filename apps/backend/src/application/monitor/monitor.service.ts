@@ -14,10 +14,10 @@
  * Debug manual: POST /monitor/sync chama syncNow() sob demanda.
  * Notificação manual: POST /monitor/notify-now dispara ConsolidationService (legado).
  */
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { HiperTmsConnector, TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
+import { NOTIFICATION_CHANNEL, NotificationChannel } from './notification-channel.interface';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
 const EXTERNAL_CONFIG_SELECT = {
@@ -42,8 +42,42 @@ export interface ExternalMonitorConfigInput {
   financeEnabled?: boolean;
   sectorConfig?: Record<
     string,
-    { phone?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+    {
+      phone?: string;
+      email?: string;
+      /** A1: lista de destinatários (até 10) — prioridade sobre phone/email. */
+      recipients?: Array<{ label?: string; contact: string; channel: 'whatsapp' | 'email' }>;
+      sendHour?: number;
+      sendMinute?: number;
+      sendDays?: number[];
+    }
   >;
+}
+
+/** A1: saneia o sectorConfig antes de persistir — cap de 10 destinatários,
+ *  descarta entradas sem contato ou com canal desconhecido. Shape legado passa intacto. */
+function sanitizeSectorConfig(
+  sc: ExternalMonitorConfigInput['sectorConfig'],
+): ExternalMonitorConfigInput['sectorConfig'] {
+  if (!sc) return sc;
+  const out: NonNullable<ExternalMonitorConfigInput['sectorConfig']> = {};
+  for (const [key, cfg] of Object.entries(sc)) {
+    if (!cfg || typeof cfg !== 'object') continue;
+    const recipients = Array.isArray(cfg.recipients)
+      ? cfg.recipients
+          .filter(
+            (r) =>
+              r &&
+              typeof r.contact === 'string' &&
+              r.contact.trim().length > 0 &&
+              (r.channel === 'whatsapp' || r.channel === 'email'),
+          )
+          .slice(0, 10)
+          .map((r) => ({ label: r.label?.slice(0, 60), contact: r.contact.trim(), channel: r.channel }))
+      : undefined;
+    out[key] = { ...cfg, ...(recipients !== undefined ? { recipients } : {}) };
+  }
+  return out;
 }
 
 @Injectable()
@@ -53,7 +87,8 @@ export class MonitorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tms: HiperTmsConnector,
-    private readonly waha: WahaClientService,
+    // A2: canal agnóstico de provedor — sendAlertsToAdmins usa o channel, não o WAHA direto
+    @Inject(NOTIFICATION_CHANNEL) private readonly channel: NotificationChannel,
   ) {}
 
   /**
@@ -83,7 +118,7 @@ export class MonitorService {
     const { synced, resolved, newEvents } = await this.syncAlertStates(tenant.id, events);
 
     // Notifica apenas eventos novos (ou CRITICAL reaberto) — evita spam em re-envios
-    const notified = await this.sendAlertsToAdmins(newEvents);
+    const notified = await this.sendAlertsToAdmins(tenant.id, newEvents);
 
     return { synced, resolved, notified };
   }
@@ -159,8 +194,15 @@ export class MonitorService {
     if (!tenantId) throw new NotFoundException(`tmsTenantId "${tmsTenantId}" não mapeado`);
 
     // Remove chaves undefined para não sobrescrever campos não enviados.
+    // A1: saneia recipients do sectorConfig (cap 10, entradas válidas).
+    const sanitized: ExternalMonitorConfigInput = {
+      ...input,
+      ...(input.sectorConfig !== undefined
+        ? { sectorConfig: sanitizeSectorConfig(input.sectorConfig) }
+        : {}),
+    };
     const data = Object.fromEntries(
-      Object.entries(input).filter(([, v]) => v !== undefined),
+      Object.entries(sanitized).filter(([, v]) => v !== undefined),
     );
 
     const updated = await this.prisma.tenantNotificationConfig.upsert({
@@ -258,7 +300,7 @@ export class MonitorService {
    *
    * Retorna o número de phones notificados com sucesso.
    */
-  private async sendAlertsToAdmins(events: TmsProactivityEvent[]): Promise<number> {
+  private async sendAlertsToAdmins(tenantId: string, events: TmsProactivityEvent[]): Promise<number> {
     if (!events.length) return 0;
 
     // Agrupa por phone
@@ -276,7 +318,8 @@ export class MonitorService {
     let notified = 0;
     for (const [phone, phoneEvents] of byPhone) {
       const msg = this.buildAlertMessage(phoneEvents);
-      const r = await this.waha.sendText(phone, msg);
+      // A2: envio via canal agnóstico (WAHA ou Cloud API), não mais waha direto
+      const r = await this.channel.sendTo(tenantId, phone, msg);
       if (r.sent) {
         this.logger.log(`Monitor: ${phoneEvents.length} alerta(s) enviado(s) para ${phone}`);
         notified++;

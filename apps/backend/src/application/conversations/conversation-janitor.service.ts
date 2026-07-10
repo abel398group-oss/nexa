@@ -52,6 +52,9 @@ const RETENTION_DAYS = Number(process.env.DATA_RETENTION_DAYS ?? 730);
 const PROCESSED_MSG_RETENTION_HOURS = Number(process.env.PROCESSED_MSG_RETENTION_HOURS ?? 48);
 // Sessões expiradas/revogadas: mantém 30 dias como janela de auditoria e depois apaga.
 const SESSION_RETENTION_DAYS = Number(process.env.SESSION_RETENTION_DAYS ?? 30);
+// A3 (alertas em escala): logs de envio de notificação — 1 linha por envio,
+// cresce para sempre sem expurgo. 90 dias cobre auditoria operacional.
+const NOTIFICATION_LOG_RETENTION_DAYS = Number(process.env.NOTIFICATION_LOG_RETENTION_DAYS ?? 90);
 
 @Injectable()
 export class ConversationJanitorService {
@@ -193,10 +196,20 @@ export class ConversationJanitorService {
         return { count: 0 };
       });
 
-    if (msgs.count || sessions.count) {
+    // 3) A3: logs de notificação mais antigos que NOTIFICATION_LOG_RETENTION_DAYS.
+    const notifCutoff = new Date(Date.now() - NOTIFICATION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const notifLogs = await (this.prisma as any).notificationLog
+      .deleteMany({ where: { sentAt: { lt: notifCutoff } } })
+      .catch((e: any) => {
+        this.logger.warn(`purge NotificationLog falhou: ${e?.message}`);
+        return { count: 0 };
+      });
+
+    if (msgs.count || sessions.count || notifLogs.count) {
       this.logger.log(
         `A2 purge: ${msgs.count} processed_messages (>${PROCESSED_MSG_RETENTION_HOURS}h), ` +
-          `${sessions.count} sessions (>${SESSION_RETENTION_DAYS}d)`,
+          `${sessions.count} sessions (>${SESSION_RETENTION_DAYS}d), ` +
+          `${notifLogs.count} notification_logs (>${NOTIFICATION_LOG_RETENTION_DAYS}d)`,
       );
     }
   }

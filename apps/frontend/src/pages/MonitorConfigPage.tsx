@@ -22,13 +22,33 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
 
 interface SectorDetail {
+  /** Telefones WhatsApp — aceita VÁRIOS separados por vírgula (A1: viram recipients[]). */
   phone: string;
-  /** E-mail para canal dual (WhatsApp + e-mail). */
+  /** E-mails para canal dual — aceita VÁRIOS separados por vírgula (A1). */
   email: string;
   sendHour: number;
   sendMinute: number;
   /** Dias da semana de envio (0=dom … 6=sáb). */
   sendDays: number[];
+}
+
+/** A1: destinatário individual persistido no sectorConfig do backend. */
+interface SectorRecipient {
+  label?: string;
+  contact: string;
+  channel: 'whatsapp' | 'email';
+}
+
+/** A1: converte os campos CSV da tela em recipients[] (máx. 10) mantendo
+ *  phone/email legados preenchidos com o primeiro de cada (retrocompat). */
+function sectorToPayload(d: SectorDetail): SectorDetail & { recipients: SectorRecipient[] } {
+  const phones = d.phone.split(',').map((s) => s.trim()).filter(Boolean);
+  const emails = d.email.split(',').map((s) => s.trim()).filter(Boolean);
+  const recipients: SectorRecipient[] = [
+    ...phones.map((contact) => ({ contact, channel: 'whatsapp' as const })),
+    ...emails.map((contact) => ({ contact, channel: 'email' as const })),
+  ].slice(0, 10);
+  return { ...d, phone: phones[0] ?? '', email: emails[0] ?? '', recipients };
 }
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -301,14 +321,19 @@ export function MonitorConfigPage() {
     const m = config.sendMinute ?? 0;
     // Legado: sem sectorConfig → deriva dias do sendWeekends (ou Dom-Sáb como novo default)
     const legacyDays = (config.sendWeekends ?? true) ? ALL_DAYS : WEEKDAYS;
-    const withDays = (detail?: Partial<SectorDetail>): SectorDetail => ({
-      phone: '',
-      email: '',
-      sendHour: h,
-      sendMinute: m,
-      ...detail,
-      sendDays: detail?.sendDays?.length ? detail.sendDays : legacyDays,
-    });
+    const withDays = (detail?: Partial<SectorDetail> & { recipients?: SectorRecipient[] }): SectorDetail => {
+      // A1: se o backend tem recipients[], exibe como CSV nos campos (N contatos).
+      const recips = Array.isArray(detail?.recipients) ? detail!.recipients! : [];
+      const phoneCsv = recips.filter((r) => r?.channel === 'whatsapp').map((r) => r.contact).join(', ');
+      const emailCsv = recips.filter((r) => r?.channel === 'email').map((r) => r.contact).join(', ');
+      return {
+        phone: phoneCsv || detail?.phone || '',
+        email: emailCsv || detail?.email || '',
+        sendHour: detail?.sendHour ?? h,
+        sendMinute: detail?.sendMinute ?? m,
+        sendDays: detail?.sendDays?.length ? detail.sendDays : legacyDays,
+      };
+    };
     setSectors({
       fiscal:   withDays(sc?.fiscal),
       logistic: withDays(sc?.logistic),
@@ -340,7 +365,13 @@ export function MonitorConfigPage() {
             !['sectorConfig', 'planAllowed', 'monitorOverride'].includes(k),
           ),
         ),
-        sectorConfig: sectors,
+        // A1: campos CSV viram recipients[] por setor (retrocompat com phone/email).
+        sectorConfig: {
+          fiscal: sectorToPayload(sectors.fiscal),
+          logistic: sectorToPayload(sectors.logistic),
+          frota: sectorToPayload(sectors.frota),
+          finance: sectorToPayload(sectors.finance),
+        },
       };
       await api.put('/monitor/config', payload);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });
@@ -646,12 +677,12 @@ export function MonitorConfigPage() {
                       {/* WhatsApp */}
                       <div>
                         <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                          <span>📱</span> WhatsApp (com DDI)
+                          <span>📱</span> WhatsApp (com DDI) — vários separados por vírgula
                         </p>
                         <input
                           type="text"
                           className="input input-bordered input-sm w-full"
-                          placeholder="5511999999999"
+                          placeholder="5511999999999, 5511888888888"
                           value={sc.phone}
                           onChange={(e) => setSector(sector.key, 'phone', e.target.value)}
                         />
@@ -660,12 +691,12 @@ export function MonitorConfigPage() {
                       {/* E-mail */}
                       <div>
                         <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                          <span>✉️</span> E-mail (opcional — canal dual)
+                          <span>✉️</span> E-mail (opcional — canal dual) — vários separados por vírgula
                         </p>
                         <input
-                          type="email"
+                          type="text"
                           className="input input-bordered input-sm w-full"
-                          placeholder="financeiro@empresa.com.br"
+                          placeholder="financeiro@empresa.com.br, gerente@empresa.com.br"
                           value={sc.email}
                           onChange={(e) => setSector(sector.key, 'email', e.target.value)}
                         />

@@ -1,120 +1,132 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SupportEscalationListener } from './support-escalation.listener';
 
-// ─── SupportEscalationListener — resolução do destinatário ───────────────────
-// Cobre os 3 cenários de resolução do destinatário:
-//   1. tenant.supportEmail configurado  → usa o valor do DB
-//   2. tenant.supportEmail null         → fallback para SUPPORT_EMAIL env
-//   3. Nenhum configurado               → loga debug e não envia
+// SupportEscalationListener - roteamento por categoria (SupportEmailRoute)
+// Cenarios:
+//   1. Rota especifica da categoria -> usa email da rota
+//   2. Sem rota de categoria, tem rota padrao (null) -> usa padrao
+//   3. Sem rotas DB -> fallback SUPPORT_EMAIL env
+//   4. Sem nada -> nao envia
+//   5. Erro no findMany -> ainda usa env (fail-safe)
+//   6. Chamado sem categoria -> usa rota padrao
 
-function makeDeps(tenantSupportEmail: string | null = null) {
+const baseConv = {
+  ticketNumber: 42,
+  subject: 'CT-e rejeitado',
+  ticketCategory: 'fiscal',
+  ticketPriority: 'alta',
+  phone: '5511999999999',
+  contactId: 'contact-1',
+};
+
+function makeDeps(
+  routes: Array<{ category: string | null; email: string }> = [],
+  convOverrides: Record<string, unknown> = {},
+) {
   const prisma = {
-    tenant: {
-      findUnique: vi.fn().mockResolvedValue({ supportEmail: tenantSupportEmail }),
+    supportEmailRoute: {
+      findMany: vi.fn().mockResolvedValue(routes),
     },
     aiConversation: {
-      findUnique: vi.fn().mockResolvedValue({
-        ticketNumber: 42,
-        subject: 'CT-e rejeitado',
-        ticketCategory: 'fiscal',
-        ticketPriority: 'alta',
-        phone: '5511999999999',
-        contactId: 'contact-1',
-      }),
+      findUnique: vi.fn().mockResolvedValue({ ...baseConv, ...convOverrides }),
     },
     contact: {
-      findUnique: vi.fn().mockResolvedValue({ name: 'João Silva' }),
+      findUnique: vi.fn().mockResolvedValue({ name: 'Joao Silva' }),
     },
   } as any;
 
-  const email = {
-    sendAlertEmail: vi.fn().mockResolvedValue(undefined),
-  } as any;
-
+  const email = { sendAlertEmail: vi.fn().mockResolvedValue(undefined) } as any;
   return { prisma, email };
 }
 
-function makeListener(deps: ReturnType<typeof makeDeps>) {
-  return new SupportEscalationListener(deps.prisma, deps.email);
-}
+const makeListener = (deps: ReturnType<typeof makeDeps>) =>
+  new SupportEscalationListener(deps.prisma, deps.email);
 
 const event = { tenantId: 't1', conversationId: 'conv-1', origin: 'portal' as const };
 
-describe('SupportEscalationListener — resolução do e-mail de destino', () => {
+describe('SupportEscalationListener - roteamento por categoria', () => {
   const origEnv = process.env.SUPPORT_EMAIL;
 
   afterEach(() => {
-    process.env.SUPPORT_EMAIL = origEnv;
+    if (origEnv === undefined) delete process.env.SUPPORT_EMAIL;
+    else process.env.SUPPORT_EMAIL = origEnv;
   });
 
-  it('cenário 1: usa tenant.supportEmail quando configurado (ignora env)', async () => {
-    delete process.env.SUPPORT_EMAIL; // garante que env não interfere
-    const deps = makeDeps('suporte@cliente.com.br');
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
+  it('usa rota especifica da categoria quando existe', async () => {
+    delete process.env.SUPPORT_EMAIL;
+    const deps = makeDeps([
+      { category: 'fiscal', email: 'fiscal@empresa.com.br' },
+      { category: null,     email: 'padrao@empresa.com.br' },
+    ]);
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
-      'suporte@cliente.com.br',
+      'fiscal@empresa.com.br',
       expect.any(String),
       expect.any(String),
       't1',
     );
   });
 
-  it('cenário 1b: tenant.supportEmail tem prioridade sobre SUPPORT_EMAIL env', async () => {
-    process.env.SUPPORT_EMAIL = 'env@suporte.com';
-    const deps = makeDeps('tenant@especifico.com.br');
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
+  it('rota da categoria tem prioridade sobre rota padrao', async () => {
+    const deps = makeDeps([
+      { category: 'fiscal',     email: 'fiscal@empresa.com.br' },
+      { category: 'financeiro', email: 'fin@empresa.com.br' },
+      { category: null,         email: 'padrao@empresa.com.br' },
+    ]);
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
-      'tenant@especifico.com.br',
+      'fiscal@empresa.com.br',
       expect.any(String),
       expect.any(String),
       't1',
     );
     expect(deps.email.sendAlertEmail).not.toHaveBeenCalledWith(
-      'env@suporte.com',
+      'padrao@empresa.com.br',
       expect.any(String),
       expect.any(String),
       expect.any(String),
     );
   });
 
-  it('cenário 2: fallback para SUPPORT_EMAIL env quando tenant não tem e-mail', async () => {
-    process.env.SUPPORT_EMAIL = 'fallback@env.com';
-    const deps = makeDeps(null); // tenant sem supportEmail
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
+  it('usa rota padrao quando categoria nao tem rota especifica', async () => {
+    delete process.env.SUPPORT_EMAIL;
+    const deps = makeDeps([
+      { category: 'financeiro', email: 'fin@empresa.com.br' },
+      { category: null,         email: 'padrao@empresa.com.br' },
+    ]); // chamado fiscal mas so ha rota financeiro + padrao
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
-      'fallback@env.com',
+      'padrao@empresa.com.br',
       expect.any(String),
       expect.any(String),
       't1',
     );
   });
 
-  it('cenário 3: nenhum configurado → não envia e-mail (sem exceção)', async () => {
+  it('fallback para SUPPORT_EMAIL env quando nao ha rotas no DB', async () => {
+    process.env.SUPPORT_EMAIL = 'env@suporte.com';
+    const deps = makeDeps([]);
+    await makeListener(deps).handle(event);
+    expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
+      'env@suporte.com',
+      expect.any(String),
+      expect.any(String),
+      't1',
+    );
+  });
+
+  it('sem rotas e sem env -> nao envia (sem excecao)', async () => {
     delete process.env.SUPPORT_EMAIL;
-    const deps = makeDeps(null);
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
+    const deps = makeDeps([]);
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).not.toHaveBeenCalled();
   });
 
-  it('cenário 3b: string vazia no tenant equivale a não configurado → cai no env', async () => {
+  it('erro no findMany de rotas -> ainda usa env (fail-safe)', async () => {
     process.env.SUPPORT_EMAIL = 'env@suporte.com';
-    const deps = makeDeps(''); // string vazia deve ser tratada como null
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
+    const deps = makeDeps([]);
+    deps.prisma.supportEmailRoute.findMany.mockRejectedValue(new Error('DB timeout'));
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
       'env@suporte.com',
       expect.any(String),
@@ -123,17 +135,15 @@ describe('SupportEscalationListener — resolução do e-mail de destino', () =>
     );
   });
 
-  it('falha no findUnique do tenant não impede o e-mail via env', async () => {
-    process.env.SUPPORT_EMAIL = 'env@suporte.com';
-    const deps = makeDeps(null);
-    deps.prisma.tenant.findUnique.mockRejectedValue(new Error('DB timeout'));
-    const listener = makeListener(deps);
-
-    await listener.handle(event);
-
-    // catch() no findUnique retorna null → cai no env
+  it('chamado sem categoria usa rota padrao', async () => {
+    delete process.env.SUPPORT_EMAIL;
+    const deps = makeDeps(
+      [{ category: null, email: 'padrao@empresa.com.br' }],
+      { ticketCategory: null },
+    );
+    await makeListener(deps).handle(event);
     expect(deps.email.sendAlertEmail).toHaveBeenCalledWith(
-      'env@suporte.com',
+      'padrao@empresa.com.br',
       expect.any(String),
       expect.any(String),
       't1',

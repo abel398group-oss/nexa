@@ -13,12 +13,12 @@ export interface SupportEscalatedEvent {
 /**
  * P2 — E-mail ao suporte humano quando um chamado entra na fila.
  *
- * Ouve o evento 'support.escalated' (emitido pelo portal-tickets.open e pelo
- * conversation-agent na escalação da Lia) e envia e-mail operacional para
- * SUPPORT_EMAIL (env). Vive no módulo de e-mail para evitar dependência circular
- * (EmailModule já importa AgentsModule — agentes não podem importar e-mail).
+ * Resolução do destinatário (por tenant):
+ *   1. Rota específica da categoria do chamado (ex: 'fiscal' → fiscal@empresa.com)
+ *   2. Rota padrão do tenant (category = null)
+ *   3. SUPPORT_EMAIL env (global)
+ *   4. Nenhum → loga debug e não envia
  *
- * Sem SUPPORT_EMAIL configurado → loga em debug e não envia (dev mode).
  * Falha de SMTP nunca derruba o fluxo do chamado (try/catch + fire-and-forget).
  */
 @Injectable()
@@ -32,16 +32,11 @@ export class SupportEscalationListener {
 
   @OnEvent('support.escalated', { async: true })
   async handle(event: SupportEscalatedEvent): Promise<void> {
-    // Resolução do destinatário: DB do tenant tem prioridade sobre env.
-    // Garante que cada cliente pode configurar seu próprio e-mail sem alterar .env.
-    const tenant = await this.prisma.tenant
-      .findUnique({ where: { id: event.tenantId }, select: { supportEmail: true } as any })
-      .catch(() => null);
-    const to = (tenant as any)?.supportEmail || process.env.SUPPORT_EMAIL;
-    if (!to) {
-      this.logger.debug(`support.escalated tenant=${event.tenantId} — sem e-mail de suporte configurado, notificação não enviada`);
-      return;
-    }
+    // Carrega todas as rotas do tenant de uma vez (fail-safe: erro → array vazio).
+    const routes: Array<{ category: string | null; email: string }> = await (this.prisma as any)
+      .supportEmailRoute.findMany({ where: { tenantId: event.tenantId } })
+      .catch(() => []);
+
     try {
       const conv = await this.prisma.aiConversation.findUnique({
         where: { id: event.conversationId },
@@ -58,7 +53,23 @@ export class SupportEscalationListener {
         this.logger.warn(`support.escalated para conversa inexistente: ${event.conversationId}`);
         return;
       }
+
       const c = conv as any;
+      const category: string | null = c.ticketCategory ?? null;
+
+      // Resolução: rota por categoria → rota padrão (null) → env.
+      const to =
+        routes.find((r) => r.category !== null && r.category === category)?.email ||
+        routes.find((r) => r.category === null)?.email ||
+        process.env.SUPPORT_EMAIL;
+
+      if (!to) {
+        this.logger.debug(
+          `support.escalated tenant=${event.tenantId} categoria=${category ?? 'null'} — sem e-mail configurado, notificação não enviada`,
+        );
+        return;
+      }
+
       const contact = c.contactId
         ? await this.prisma.contact.findUnique({ where: { id: c.contactId }, select: { name: true } })
         : null;
@@ -74,7 +85,7 @@ export class SupportEscalationListener {
         '',
         `Cliente: ${contact?.name ?? '-'} (${phone})`,
         `Assunto: ${c.subject ?? '-'}`,
-        `Categoria: ${c.ticketCategory ?? '-'} | Prioridade: ${c.ticketPriority ?? 'normal'}`,
+        `Categoria: ${category ?? '-'} | Prioridade: ${c.ticketPriority ?? 'normal'}`,
         `Origem: ${origem}`,
         '',
         `Atenda no Inbox: ${base}/inbox/${event.conversationId}`,

@@ -22,8 +22,12 @@ export class ServiceTokenGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest();
     const expected = process.env.TMS_SERVICE_TOKEN;
+    // A3/G5: alias DEPRECADO — o TMS historicamente usa NEXA_SERVICE_TOKEN em
+    // algumas chamadas (alert-config). Aceito temporariamente para permitir a
+    // rotação de segredo sem quebra. Remover após o TMS migrar (plano AT2).
+    const legacyAlias = process.env.NEXA_SERVICE_TOKEN;
 
-    if (!expected) {
+    if (!expected && !legacyAlias) {
       this.logger.error('TMS_SERVICE_TOKEN não configurado — endpoint de serviço bloqueado');
       throw new ServiceUnavailableException('Integração de serviço não configurada');
     }
@@ -31,11 +35,21 @@ export class ServiceTokenGuard implements CanActivate {
     const authHeader: string | undefined = req.headers?.['authorization'];
     const provided = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
 
-    if (!provided || provided !== expected) {
+    if (!provided) {
       throw new UnauthorizedException('Bearer token inválido');
     }
 
-    req.serviceClient = { name: 'tms', at: new Date() };
-    return true;
+    if (expected && provided === expected) {
+      req.serviceClient = { name: 'tms', at: new Date() };
+      return true;
+    }
+
+    if (legacyAlias && provided === legacyAlias) {
+      this.logger.warn('Autenticado via NEXA_SERVICE_TOKEN (DEPRECADO) — padronize em TMS_SERVICE_TOKEN');
+      req.serviceClient = { name: 'tms', at: new Date() };
+      return true;
+    }
+
+    throw new UnauthorizedException('Bearer token inválido');
   }
 }

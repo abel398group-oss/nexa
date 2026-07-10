@@ -25,15 +25,28 @@ import { EmailReplyService } from '@/application/email/email-reply.service';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
+/** A1: destinatário individual de um setor (canal por destinatário). */
+interface SectorRecipient {
+  label?: string;
+  contact: string;
+  channel: 'whatsapp' | 'email';
+}
+
 interface SectorCfg {
+  /** LEGADO: telefone único do setor — aceito na leitura, prioridade menor que recipients. */
   phone?: string;
-  /** E-mail do responsável pelo setor (opcional — canal dual). */
+  /** LEGADO: e-mail único do responsável pelo setor (canal dual). */
   email?: string;
+  /** A1: lista de destinatários (até 10), cada um com seu canal. Prioridade sobre phone/email. */
+  recipients?: SectorRecipient[];
   sendHour?: number;
   sendMinute?: number;
   /** Dias da semana de envio (0=dom … 6=sáb). Ausente → deriva do sendWeekends global. */
   sendDays?: number[];
 }
+
+/** A1: máximo de destinatários por setor. */
+const MAX_RECIPIENTS_PER_SECTOR = 10;
 
 interface SectorMeta {
   key: string;
@@ -138,7 +151,10 @@ export class ConsolidationService {
     const currentMinute = now.getMinutes();
 
     const sectorConfig = config?.sectorConfig as Record<string, SectorCfg> | null | undefined;
-    const hasSectorConfig = sectorConfig && Object.values(sectorConfig).some((sc) => sc?.phone);
+    // A1: modo per-sector ativa com phone legado OU recipients[]
+    const hasSectorConfig =
+      sectorConfig &&
+      Object.values(sectorConfig).some((sc) => sc?.phone || (Array.isArray(sc?.recipients) && sc.recipients.length > 0));
 
     if (hasSectorConfig) {
       // Modo per-sector: cada setor decide seus dias via sendDays (fallback: sendWeekends global).
@@ -153,6 +169,29 @@ export class ConsolidationService {
       return 0;
     }
     return this.processLegacy(tenantId, config as any, now, currentHour, currentMinute, force);
+  }
+
+  /**
+   * A1: resolve os destinatários efetivos de um setor.
+   * recipients[] tem prioridade; phone/email legados são o fallback.
+   * Cap de MAX_RECIPIENTS_PER_SECTOR; normalização de telefone fica no notifyPhone.
+   */
+  private resolveSectorRecipients(sc: SectorCfg | undefined): { phones: string[]; emails: string[] } {
+    if (!sc) return { phones: [], emails: [] };
+    const rec = Array.isArray(sc.recipients) ? sc.recipients.slice(0, MAX_RECIPIENTS_PER_SECTOR) : [];
+    if (rec.length > 0) {
+      const phones = rec
+        .filter((r) => r?.channel === 'whatsapp' && typeof r.contact === 'string' && r.contact.trim())
+        .map((r) => r.contact.trim());
+      const emails = rec
+        .filter((r) => r?.channel === 'email' && typeof r.contact === 'string' && r.contact.includes('@'))
+        .map((r) => r.contact.trim());
+      if (phones.length || emails.length) return { phones, emails };
+    }
+    return {
+      phones: sc.phone?.trim() ? [sc.phone.trim()] : [],
+      emails: sc.email?.trim() ? [sc.email.trim()] : [],
+    };
   }
 
   /**
@@ -184,8 +223,10 @@ export class ConsolidationService {
 
     for (const sector of SECTORS) {
       const sc = sectorConfig[sector.key];
-      if (!sc?.phone && !sc?.email) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem telefone nem e-mail configurado — pulando`);
+      // A1: resolve a lista de destinatários (recipients[] > phone/email legados)
+      const { phones, emails } = this.resolveSectorRecipients(sc);
+      if (!phones.length && !emails.length) {
+        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem destinatário configurado — pulando`);
         continue;
       }
 
@@ -247,21 +288,24 @@ export class ConsolidationService {
 
       const message = this.buildSectorMessage(sector, alerts, now);
 
-      // WhatsApp — envia se telefone configurado
-      if (sc.phone) {
-        await this.notification.notifyPhone(tenantId, sc.phone, message);
-        this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → WhatsApp ${sc.phone}`);
+      // WhatsApp — A1: todos os destinatários do canal; A4: enfileira com jitter
+      // de até 2min (força = sem jitter, o admin está esperando na tela).
+      for (const phone of phones) {
+        await this.notification.notifyPhone(tenantId, phone, message, force ? 0 : 120_000);
+        this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → WhatsApp ${phone} (enfileirado)`);
       }
 
-      // E-mail — envia se endereço configurado (canal dual)
-      if (sc.email) {
+      // E-mail — A1: todos os destinatários do canal (dual)
+      if (emails.length) {
         const subject = `${sector.emoji} Alertas ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
         const html = this.buildSectorEmailHtml(sector, alerts, now);
-        const result = await this.emailReply.sendAlertEmail(sc.email, subject, message, tenantId, html);
-        if (result.sent) {
-          this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${sc.email}`);
-        } else {
-          this.logger.warn(`[${tenantId}] setor ${sector.key}: falha e-mail → ${sc.email}: ${result.reason}`);
+        for (const email of emails) {
+          const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
+          if (result.sent) {
+            this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${email}`);
+          } else {
+            this.logger.warn(`[${tenantId}] setor ${sector.key}: falha e-mail → ${email}: ${result.reason}`);
+          }
         }
       }
 

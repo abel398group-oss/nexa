@@ -409,9 +409,11 @@ model Tenant {
   slug         String   @unique // "hipertms"
   status       String   @default("active") // active | suspended
   productId    String?  @map("product_id") // opcional: vincula ao conector/produto
-  supportEmail String?  @map("support_email") // e-mail de escalonamento (UI configurável; fallback: SUPPORT_EMAIL env)
+  supportEmail String?  @map("support_email") // legado — migrado para SupportEmailRoute default; mantido para rollback
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+  supportEmailRoutes SupportEmailRoute[]
 
   @@map("tenants")
 }
@@ -918,4 +920,23 @@ model TicketCounter {
   updatedAt  DateTime @updatedAt  @map("updated_at")
 
   @@map("ticket_counters")
+}
+
+// ===================== ROTEAMENTO DE E-MAIL DE SUPORTE =====================
+// Mapeia categoria de chamado para destinatario do e-mail de escalacao por tenant.
+// category = null = rota padrao (fallback quando nao ha rota especifica).
+// Listener: busca por (tenantId, ticketCategory) -> (tenantId, null) -> SUPPORT_EMAIL env.
+model SupportEmailRoute {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  category  String?  @map("category")  // null = rota padrao
+  email     String
+  label     String?  // rotulo exibido na UI (ex: "Fiscal", "Financeiro")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt       @map("updated_at")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+  @@map("support_email_routes")
 }

@@ -56,10 +56,18 @@ export class ExternalConfigDto {
   @IsOptional() @IsBoolean() logisticEnabled?: boolean;
   @IsOptional() @IsBoolean() frotaEnabled?: boolean;
   @IsOptional() @IsBoolean() financeEnabled?: boolean;
-  /** { fiscal|logistic|frota|finance: { phone, email, sendHour, sendMinute, sendDays[0..6] } } */
+  /** { fiscal|logistic|frota|finance: { phone, email, recipients[], sendHour, sendMinute, sendDays[0..6] } }
+   *  A1: recipients[] (até 10, canal por destinatário) tem prioridade sobre phone/email legados. */
   @IsOptional() sectorConfig?: Record<
     string,
-    { phone?: string; email?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
+    {
+      phone?: string;
+      email?: string;
+      recipients?: Array<{ label?: string; contact: string; channel: 'whatsapp' | 'email' }>;
+      sendHour?: number;
+      sendMinute?: number;
+      sendDays?: number[];
+    }
   >;
 }
 

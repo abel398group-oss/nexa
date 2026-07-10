@@ -120,22 +120,36 @@ export class EmailChannelService {
     });
   }
 
-  // Support e-mail settings — stored on the Tenant record (not EmailChannel).
-  // GET: returns current value (null = not set, falls back to SUPPORT_EMAIL env).
-  // PUT: clears when null/empty string.
-  async getSupportEmail(tenantId: string): Promise<{ supportEmail: string | null }> {
-    const t = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { supportEmail: true } as any,
-    });
-    return { supportEmail: (t as any)?.supportEmail ?? null };
+  // ── Support e-mail routing — SupportEmailRoute table ──────────────────────
+  // category = null  →  default/fallback route
+  // category = 'fiscal' | 'financeiro' | ...  →  category-specific route
+  // Listener resolves: category-route → default-route → SUPPORT_EMAIL env → no-send.
+
+  async listSupportRoutes(tenantId: string) {
+    return this.prisma.supportEmailRoute.findMany({
+      where: { tenantId },
+      orderBy: [{ category: 'asc' }],
+      select: { id: true, category: true, email: true, label: true, updatedAt: true },
+    } as any);
   }
 
-  async setSupportEmail(tenantId: string, email: string | null): Promise<{ supportEmail: string | null }> {
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { supportEmail: email || null } as any,
+  async upsertSupportRoute(
+    tenantId: string,
+    category: string | null,
+    email: string,
+    label?: string,
+  ) {
+    return (this.prisma as any).supportEmailRoute.upsert({
+      where: { tenantId_category: { tenantId, category: category ?? null } },
+      update: { email, label: label ?? null, updatedAt: new Date() },
+      create: { tenantId, category: category ?? null, email, label: label ?? null },
+      select: { id: true, category: true, email: true, label: true, updatedAt: true },
     });
-    return { supportEmail: email || null };
+  }
+
+  async deleteSupportRoute(id: string, tenantId: string): Promise<void> {
+    await (this.prisma as any).supportEmailRoute.deleteMany({
+      where: { id, tenantId },
+    });
   }
 }

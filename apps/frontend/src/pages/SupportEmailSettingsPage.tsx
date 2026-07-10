@@ -1,118 +1,225 @@
 /**
- * SupportEmailSettingsPage — E-mail de suporte configurável por tenant.
+ * SupportEmailSettingsPage — Roteamento de e-mail de suporte por categoria.
  * Rota: /settings/support-email
  *
- * Quando preenchido, o Nexa envia notificações de escalação para este endereço
- * em vez de usar a variável de ambiente SUPPORT_EMAIL (fallback global).
+ * Cada rota mapeia uma categoria de chamado a um destinatario.
+ * Rota sem categoria = padrao (fallback para chamados sem categoria especifica).
+ * Prioridade: rota da categoria -> rota padrao -> SUPPORT_EMAIL env -> nao envia.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/shared/lib/api';
 import { Button, Input, PageContainer, PageHeader, Breadcrumb } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 
-const schema = z.object({
-  supportEmail: z
-    .string()
-    .trim()
-    .email('Informe um e-mail válido')
-    .or(z.literal(''))
-    .optional(),
+interface Route {
+  id: string;
+  category: string | null;
+  email: string;
+  label: string | null;
+  updatedAt: string;
+}
+
+const addSchema = z.object({
+  category: z.string().trim().max(80).optional(),
+  email: z.string().trim().email('Informe um e-mail valido'),
+  label: z.string().trim().max(80).optional(),
 });
-type Form = z.infer<typeof schema>;
+type AddForm = z.infer<typeof addSchema>;
+
+const SUGGESTED_CATEGORIES = [
+  { value: 'fiscal', label: 'Fiscal (CT-e, NF-e)' },
+  { value: 'financeiro', label: 'Financeiro' },
+  { value: 'tecnico', label: 'Tecnico / Sistema' },
+  { value: 'treinamento', label: 'Treinamento' },
+  { value: 'outro', label: 'Outro' },
+];
 
 export function SupportEmailSettingsPage() {
+  const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
   const toast = useToast();
+  const confirm = useConfirm();
 
   const {
     register,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, isSubmitting },
-  } = useForm<Form>({ resolver: zodResolver(schema), defaultValues: { supportEmail: '' } });
+  } = useForm<AddForm>({ resolver: zodResolver(addSchema) });
 
-  useEffect(() => {
-    api.get('/settings/support-email')
-      .then((r) => reset({ supportEmail: r.data?.supportEmail ?? '' }))
-      .catch(() => {/* mantém o default vazio */})
+  const load = useCallback(() => {
+    setLoading(true);
+    return api
+      .get<Route[]>('/settings/support-email/routes')
+      .then((r) => setRoutes(r.data))
+      .catch(() => toast.error('Erro ao carregar rotas.'))
       .finally(() => setLoading(false));
-  }, [reset]);
+  }, [toast]);
 
-  useEffect(() => {
-    const sub = watch(() => setSaved(false));
-    return () => sub.unsubscribe();
-  }, [watch]);
+  useEffect(() => { void load(); }, [load]);
 
-  const onSubmit = async (form: Form) => {
-    setSaved(false);
+  const onAdd = async (form: AddForm) => {
     try {
-      await api.put('/settings/support-email', {
-        supportEmail: form.supportEmail?.trim() || undefined,
+      await api.put('/settings/support-email/routes', {
+        category: form.category?.trim() || undefined,
+        email: form.email.trim(),
+        label: form.label?.trim() || undefined,
       });
-      setSaved(true);
+      reset();
+      await load();
+      toast.success('Rota salva!');
     } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Erro ao salvar.';
-      toast.error(msg);
+      toast.error(err?.response?.data?.message ?? 'Erro ao salvar.');
     }
   };
 
-  if (loading) {
-    return <div className="p-8 text-base-content/50">Carregando...</div>;
-  }
+  const onDelete = async (route: Route) => {
+    const label = route.category ? `"${route.category}"` : 'padrao';
+    const ok = await confirm({ message: `Remover rota ${label}?`, variant: 'danger' });
+    if (!ok) return;
+    try {
+      await api.delete(`/settings/support-email/routes/${route.id}`);
+      setRoutes((prev) => prev.filter((r) => r.id !== route.id));
+      toast.success('Rota removida.');
+    } catch {
+      toast.error('Erro ao remover rota.');
+    }
+  };
 
   return (
     <PageContainer>
-      <div className="mx-auto max-w-xl">
+      <div className="mx-auto max-w-2xl space-y-8">
         <PageHeader
           breadcrumb={
             <Breadcrumb
               items={[
-                { label: 'Início', to: '/dashboard' },
+                { label: 'Inicio', to: '/dashboard' },
                 { label: 'E-mail de Suporte' },
               ]}
             />
           }
           title="E-mail de Suporte"
-          subtitle="Endereço que recebe alertas quando um chamado é escalado para atendimento humano. Deixe vazio para usar a configuração global do servidor."
+          subtitle="Configure para onde vao os alertas de escalacao. Voce pode ter um endereco padrao e enderecos especificos por categoria de chamado."
         />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="rounded-xl border border-base-200 bg-white p-5 space-y-4">
-            <div>
-              <label className="text-sm font-medium text-base-content/80">
-                E-mail do suporte
-              </label>
-              <p className="text-xs text-base-content/40 mt-0.5">
-                Quando preenchido, substitui a variável <code className="bg-base-200 px-1 rounded">SUPPORT_EMAIL</code> do servidor para este cliente.
-              </p>
-            </div>
-            <Input
-              type="email"
-              placeholder="suporte@empresa.com.br"
-              {...register('supportEmail')}
-            />
-            {errors.supportEmail && (
-              <p className="text-xs text-red-500">{errors.supportEmail.message}</p>
-            )}
+        {/* Tabela de rotas existentes */}
+        <div className="rounded-xl border border-base-200 bg-white overflow-hidden">
+          <div className="px-5 py-3 border-b border-base-200">
+            <h2 className="text-sm font-semibold text-base-content">Rotas configuradas</h2>
           </div>
 
-          {saved && (
-            <div className="rounded-lg bg-success/10 px-4 py-3 text-sm text-success">
-              Configuração salva com sucesso!
-            </div>
+          {loading ? (
+            <p className="px-5 py-8 text-sm text-base-content/40 text-center">Carregando...</p>
+          ) : routes.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-base-content/40 text-center">
+              Nenhuma rota configurada. Sem rotas, o sistema usa a variavel{' '}
+              <code className="bg-base-200 px-1 rounded">SUPPORT_EMAIL</code> do servidor.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-base-200 bg-base-50">
+                  <th className="px-5 py-2 text-left text-xs font-medium text-base-content/60">Categoria</th>
+                  <th className="px-5 py-2 text-left text-xs font-medium text-base-content/60">Rotulo</th>
+                  <th className="px-5 py-2 text-left text-xs font-medium text-base-content/60">E-mail</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {routes.map((r) => (
+                  <tr key={r.id} className="border-b border-base-100 last:border-0 hover:bg-base-50">
+                    <td className="px-5 py-3 font-mono text-xs">
+                      {r.category ? (
+                        <span className="rounded bg-base-200 px-2 py-0.5">{r.category}</span>
+                      ) : (
+                        <span className="rounded bg-primary/10 px-2 py-0.5 text-primary font-sans font-medium">padrao</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-base-content/60">{r.label ?? '—'}</td>
+                    <td className="px-5 py-3">{r.email}</td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        onClick={() => void onDelete(r)}
+                        className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        Remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
+        </div>
 
-          <div className="flex justify-end gap-3 border-t border-base-200 pt-4">
-            <Button type="submit" loading={isSubmitting}>
-              {isSubmitting ? 'Salvando…' : 'Salvar'}
-            </Button>
+        {/* Formulario para adicionar/editar rota */}
+        <div className="rounded-xl border border-base-200 bg-white p-5 space-y-5">
+          <div>
+            <h2 className="text-sm font-semibold text-base-content">Adicionar / atualizar rota</h2>
+            <p className="text-xs text-base-content/40 mt-1">
+              Deixe a categoria em branco para criar/atualizar a rota padrao. Se a categoria ja existir, a rota sera atualizada.
+            </p>
           </div>
-        </form>
+
+          <form onSubmit={handleSubmit(onAdd)} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-base-content/70">
+                  Categoria <span className="text-base-content/40">(vazio = padrao)</span>
+                </label>
+                <Input
+                  placeholder="fiscal, financeiro, tecnico..."
+                  list="category-suggestions"
+                  {...register('category')}
+                />
+                <datalist id="category-suggestions">
+                  {SUGGESTED_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </datalist>
+                {errors.category && (
+                  <p className="text-xs text-red-500">{errors.category.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-base-content/70">Rotulo (opcional)</label>
+                <Input placeholder="Equipe Fiscal" {...register('label')} />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-base-content/70">E-mail de destino</label>
+              <Input
+                type="email"
+                placeholder="fiscal@empresa.com.br"
+                {...register('email')}
+              />
+              {errors.email && (
+                <p className="text-xs text-red-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" loading={isSubmitting}>
+                {isSubmitting ? 'Salvando...' : 'Salvar rota'}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {/* Legenda */}
+        <div className="rounded-lg bg-base-200/60 px-4 py-3 text-xs text-base-content/50 space-y-1">
+          <p className="font-medium text-base-content/60">Prioridade de resolucao:</p>
+          <p>1. Rota especifica da categoria do chamado</p>
+          <p>2. Rota padrao (sem categoria)</p>
+          <p>3. Variavel <code className="bg-base-200 px-1 rounded">SUPPORT_EMAIL</code> do servidor</p>
+          <p>4. Sem configuracao &rarr; alerta nao enviado</p>
+        </div>
       </div>
     </PageContainer>
   );
