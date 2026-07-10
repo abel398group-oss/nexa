@@ -3000,6 +3000,136 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '- Consumo de Combustível: litros consumidos e custo por veículo/período, com gráfico de evolução.\n' +
       '- Histórico de Manutenções: manutenções realizadas por veículo, custo total e tipo (preventiva/corretiva).\n' +
       'Use esses relatórios para identificar veículos com consumo acima da média ou com alto custo de manutenção.',
-    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 'custo veiculo', 'relatorios frota'],
+    tags: ['custo veiculo', 'relatorios frota'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // K2 — FEATURES NOVAS DO TMS (verificado no código hipertms_v12 em 2026-07-10)
+  // ══════════════════════════════════════════════════════════
+
+  // ── DUPLICAÇÃO DE REGISTROS ───────────────────────────────
+  {
+    topic: 'embarques',
+    category: 'suporte',
+    title: 'Como duplicar um embarque',
+    content:
+      'Abra o detalhe do embarque que deseja copiar.\n' +
+      'No menu de ações (botão de três pontos ou "Ações" no topo da página), clique em "Duplicar".\n' +
+      'O sistema abre o formulário de novo embarque pré-preenchido com os dados do original (rota, partes, carga, tabela de preço).\n' +
+      'Ajuste o que precisar e salve.\n' +
+      'Útil para embarques recorrentes com mesma rota/cliente — evita redigitar tudo do zero.',
+    tags: ['duplicar embarque', 'copiar embarque', 'embarque recorrente', 'nova embarque', 'duplicar'],
+  },
+  {
+    topic: 'cotacoes',
+    category: 'suporte',
+    title: 'Como duplicar uma cotação',
+    content:
+      'Abra o detalhe da cotação que deseja copiar.\n' +
+      'No menu de ações, clique em "Duplicar".\n' +
+      'O sistema abre o formulário de nova cotação pré-preenchido com os dados da original (rota, partes, carga, snapshot de preço).\n' +
+      'Ajuste o que precisar e salve.\n' +
+      'Útil para reenviar proposta com parâmetros parecidos sem redigitar a cotação inteira.',
+    tags: ['duplicar cotacao', 'copiar cotacao', 'nova cotacao', 'duplicar', 'cotacao recorrente'],
+  },
+  {
+    topic: 'frota-manutencao',
+    category: 'suporte',
+    title: 'Como duplicar um registro de manutenção',
+    content:
+      'Na lista de Manutenções (Frota → Manutenções), localize o registro que deseja copiar.\n' +
+      'Abra o menu de ações do registro (ícone de três pontos) e clique em "Duplicar".\n' +
+      'O sistema abre o formulário de nova manutenção pré-preenchido com os dados do original (veículo, tipo, serviços, fornecedor).\n' +
+      'Ajuste data, quilometragem e o que precisar, depois salve.',
+    tags: ['duplicar manutencao', 'copiar manutencao', 'nova manutencao', 'duplicar frota', 'manutencao recorrente'],
+  },
+  {
+    topic: 'frota-abastecimento',
+    category: 'suporte',
+    title: 'Como duplicar um registro de abastecimento',
+    content:
+      'Na lista de Abastecimentos (Frota → Abastecimentos), localize o registro que deseja copiar.\n' +
+      'Abra o menu de ações (ícone de três pontos) e clique em "Duplicar".\n' +
+      'O sistema abre o formulário de novo abastecimento pré-preenchido com os dados do original (veículo, motorista, posto, combustível).\n' +
+      'Ajuste data, litros, valor e o que precisar, depois salve.',
+    tags: ['duplicar abastecimento', 'copiar abastecimento', 'novo abastecimento', 'duplicar frota', 'abastecimento recorrente'],
+  },
+  {
+    topic: 'compras',
+    category: 'suporte',
+    title: 'Como duplicar um pedido de compra',
+    content:
+      'Na lista de Pedidos de Compra, localize o pedido que deseja copiar.\n' +
+      'Abra o menu de ações e clique em "Duplicar".\n' +
+      'O sistema abre o modal de criação de pedido pré-preenchido com os dados do original (fornecedor, itens, quantidades).\n' +
+      'Ajuste o que precisar e confirme para criar o novo pedido.',
+    tags: ['duplicar pedido compra', 'copiar pedido', 'novo pedido', 'duplicar compras', 'pedido recorrente'],
+  },
+
+  // ── PALETA DE COMANDOS / BUSCA GLOBAL ────────────────────
+  {
+    topic: 'faq-geral',
+    category: 'suporte',
+    title: 'Paleta de comandos e busca global (Ctrl+K)',
+    content:
+      'O HiperTMS tem uma paleta de comandos acessível por atalho de teclado.\n' +
+      'Como abrir: pressione Ctrl+K no Windows/Linux ou Cmd+K no Mac. Também é possível clicar no ícone de lupa no topo do sistema.\n' +
+      'O que aparece na paleta:\n' +
+      '• Recentes: últimas páginas que você visitou no sistema (por usuário)\n' +
+      '• Criar: atalhos para criar novo embarque, cotação, CT-e, empresa e outros registros\n' +
+      '• Navegar: todos os hubs e módulos do sistema (filtrados pela sua permissão)\n' +
+      'Como usar: comece a digitar para filtrar. Use as setas ↑↓ para navegar entre os resultados, Enter para abrir e Esc para fechar.\n' +
+      'A busca ignora acentos e maiúsculas/minúsculas.',
+    tags: ['paleta comandos', 'busca global', 'ctrl k', 'atalho teclado', 'buscar', 'navegacao rapida', 'pesquisa global'],
+  },
+
+  // ── NAVEGAÇÃO FIXADA E RECENTES ───────────────────────────
+  {
+    topic: 'faq-geral',
+    category: 'suporte',
+    title: 'Como usar os itens fixados na barra lateral',
+    content:
+      'O HiperTMS tem um bloco "Fixados" no topo da barra lateral esquerda com atalhos rápidos para as páginas mais usadas.\n' +
+      'Itens fixados por padrão: Cotações, Embarques, CT-e, MDF-e, Veículos, Motoristas e Relatórios.\n' +
+      'Como personalizar:\n' +
+      '1. Passe o mouse sobre qualquer item de módulo na barra lateral — aparece uma estrela (☆) à direita do nome.\n' +
+      '2. Clique na estrela para fixar o item no bloco "Fixados".\n' +
+      '3. Para desafixar, clique na estrela preenchida (★) do item.\n' +
+      'Cada usuário tem sua própria lista de fixados (não afeta outros usuários da empresa).\n' +
+      'Os itens recentemente visitados também aparecem na paleta de comandos (Ctrl+K) no grupo "Recentes".',
+    tags: ['fixados', 'favoritos', 'acesso rapido', 'barra lateral', 'personalizar navegacao', 'atalho sidebar', 'recentes', 'fixar pagina'],
+  },
+
+  // ── CRIAÇÃO RÁPIDA DE EMPRESA ─────────────────────────────
+  {
+    topic: 'faq-geral',
+    category: 'suporte',
+    title: 'Como cadastrar uma empresa rapidamente pelo seletor',
+    content:
+      'Em qualquer formulário que pede uma empresa (cliente, fornecedor, transportadora), é possível cadastrar a empresa sem sair do documento.\n' +
+      'Como usar:\n' +
+      '1. No campo de seleção de empresa, digite o nome ou CNPJ da empresa.\n' +
+      '2. Se a empresa não for encontrada, aparece a opção "Criar empresa".\n' +
+      '3. Clique em "Criar empresa" — abre o modal de cadastro rápido.\n' +
+      '4. Informe o CNPJ ou CPF e a razão social. Clique em "Consultar" para preencher automaticamente nome fantasia, IE e endereço via Receita Federal.\n' +
+      '5. Clique em "Cadastrar e selecionar" — a empresa é criada e já selecionada no documento.\n' +
+      'O papel da empresa (cliente/fornecedor/transportadora) é definido automaticamente pelo contexto do formulário.\n' +
+      'Para completar o cadastro (contatos, endereços, contratos), acesse o cadastro completo depois em Diretório → Empresas.',
+    tags: ['cadastrar empresa rapido', 'criacao rapida empresa', 'empresa nao encontrada', 'novo cliente rapido', 'fornecedor rapido', 'cnpj consultar', 'seletor empresa'],
+  },
+
+  // ── WIDGET DE SUPORTE — CHAMADO ENCERRADO ─────────────────
+  {
+    topic: 'faq-geral',
+    category: 'suporte',
+    title: 'O que acontece ao responder um chamado encerrado no widget',
+    content:
+      'No widget de suporte (botão de ajuda no canto do sistema), ao acessar "Meus chamados" e abrir um chamado com status "encerrado":\n' +
+      'O campo de resposta continua disponível com o aviso: "Este chamado foi encerrado — sua mensagem irá reabri-lo ou criar um novo acompanhamento."\n' +
+      'O que acontece ao enviar a mensagem:\n' +
+      '• Chamado encerrado há menos de 7 dias: o chamado é reaberto automaticamente (mesma conversa, histórico preservado).\n' +
+      '• Chamado encerrado há 7 dias ou mais: um novo chamado de acompanhamento é criado, vinculado ao original.\n' +
+      'Não é preciso abrir um novo chamado manualmente — o sistema decide automaticamente.',
+    tags: ['chamado encerrado', 'reabrir chamado', 'responder chamado fechado', 'acompanhamento', 'follow-up chamado', 'widget suporte', 'chamado fechado'],
   },
 ];
