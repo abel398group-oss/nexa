@@ -55,4 +55,98 @@ describe('PortalTicketsService — isolamento do cliente', () => {
 
   it('reply: 404 quando o chamado nao e do cliente (ownership)', async () => {
     prisma.aiConversation.findFirst.mockResolvedValue(null);
-    await expect(svc.re
+    await expect(svc.reply(customer, 'alheio', 'msg')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// ─── N1: Reabertura de chamado fechado ────────────────────────────────────────
+
+describe('PortalTicketsService — N1 reopen / follow-up', () => {
+  let prisma: any;
+  let svc: PortalTicketsService;
+  let conversations: any;
+  let agent: any;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    conversations = { addMessage: vi.fn().mockResolvedValue(undefined), create: vi.fn() };
+    agent = { handle: vi.fn().mockResolvedValue({}) };
+    svc = new PortalTicketsService(prisma, conversations, agent);
+  });
+
+  // Cenário 1: chamado aberto → fluxo normal, sem reopen
+  it('reply em chamado open: nao aciona logica de reopen', async () => {
+    const openTicket = { id: 'c1', status: 'open', endedAt: null, lastActivityAt: null, contactId: 'ct1', phone: '5511', ticketCategory: null };
+    prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(openTicket)   // ownership check
+      .mockResolvedValueOnce({ id: 'c1', status: 'open' })  // detail
+      .mockResolvedValueOnce(null);        // detail messages guard
+    prisma.aiMessage.findMany.mockResolvedValue([]);
+
+    await svc.reply(customer, 'c1', 'mensagem');
+
+    expect(prisma.aiConversation.update).not.toHaveBeenCalled();
+    expect(prisma.conversationStageHistory.create).not.toHaveBeenCalled();
+    expect(conversations.addMessage).toHaveBeenCalledWith('t1', 'c1', expect.objectContaining({ direction: 'inbound' }));
+  });
+
+  // Cenário 2: chamado fechado < 7 dias → reabre, limpa campos, processa no mesmo
+  it('reply em chamado closed < 7d: reabre e processa no mesmo chamado', async () => {
+    const closedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 dias atrás
+    const closedTicket = { id: 'c2', status: 'closed', endedAt: closedAt, lastActivityAt: null, contactId: 'ct1', phone: '5511', ticketCategory: 'cte' };
+    prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(closedTicket)
+      .mockResolvedValueOnce({ id: 'c2', status: 'open' })
+      .mockResolvedValueOnce(null);
+    prisma.aiConversation.update.mockResolvedValue({});
+    prisma.conversationStageHistory.create.mockResolvedValue({});
+    prisma.aiMessage.findMany.mockResolvedValue([]);
+
+    await svc.reply(customer, 'c2', 'tenho duvida');
+
+    // deve ter reaberto o chamado
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c2' },
+        data: expect.objectContaining({ status: 'open', outcome: null, resolvedAt: null }),
+      }),
+    );
+    // deve ter gravado no histórico com reason correto
+    expect(prisma.conversationStageHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ conversationId: 'c2', fromStatus: 'closed', toStatus: 'open', reason: 'reaberto_cliente' }),
+      }),
+    );
+    // mensagem e agent processados no MESMO id
+    expect(conversations.addMessage).toHaveBeenCalledWith('t1', 'c2', expect.anything());
+    expect(agent.handle).toHaveBeenCalledWith('t1', expect.objectContaining({ conversationId: 'c2' }));
+  });
+
+  // Cenário 3: chamado fechado ≥ 7 dias → cria follow-up com followUpOfId
+  it('reply em chamado closed >= 7d: cria follow-up com followUpOfId', async () => {
+    const closedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 dias atrás
+    const closedTicket = { id: 'c3', status: 'closed', endedAt: closedAt, lastActivityAt: null, contactId: 'ct1', phone: '5511', ticketCategory: 'cte' };
+    const newConv = { id: 'c3-followup' };
+    prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(closedTicket)
+      .mockResolvedValueOnce({ id: 'c3-followup', status: 'open' })
+      .mockResolvedValueOnce(null);
+    conversations.create.mockResolvedValue(newConv);
+    prisma.aiConversation.update.mockResolvedValue({});
+    prisma.aiMessage.findMany.mockResolvedValue([]);
+
+    await svc.reply(customer, 'c3', 'nova duvida');
+
+    // deve ter criado uma nova conversa
+    expect(conversations.create).toHaveBeenCalledWith('t1', expect.objectContaining({ sourceChannel: 'portal', agentType: 'support' }));
+    // deve ter setado followUpOfId apontando para o chamado original
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c3-followup' },
+        data: expect.objectContaining({ followUpOfId: 'c3', externalId: 'ext1' }),
+      }),
+    );
+    // agent processa no novo chamado (follow-up), NÃO no original
+    expect(agent.handle).toHaveBeenCalledWith('t1', expect.objectContaining({ conversationId: 'c3-followup' }));
+  });
+});

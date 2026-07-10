@@ -893,4 +893,11 @@ model ProactiveRuleConfig {
   ruleId       String   @map("rule_id")
   enabled      Boolean  @default(true)
   level        String   @default("L1") // L1 | L2 | L3
-  thresholdMin Int      @de
+  thresholdMin Int      @default(240)  @map("threshold_min") // minutos — cada regra usa o seu
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt     @map("updated_at")
+
+  @@unique([tenantId, ruleId])
+  @@index([tenantId])
+  @@map("proactive_rule_configs")
+}
