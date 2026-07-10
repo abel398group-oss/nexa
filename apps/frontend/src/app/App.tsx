@@ -27,6 +27,7 @@ const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) 
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
 const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
+const SupportEmailSettingsPage = lazy(() => import('@/pages/SupportEmailSettingsPage').then((m) => ({ default: m.SupportEmailSettingsPage })));
 const MonitorConfigPage = lazy(() => import('@/pages/MonitorConfigPage').then((m) => ({ default: m.MonitorConfigPage })));
 const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m) => ({ default: m.OpportunitiesPage })));
 const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
+                    <Route path="/settings/support-email" element={<Perm perm="admin"><SupportEmailSettingsPage /></Perm>} />
                     <Route path="/settings/monitor" element={<Perm perm="admin"><MonitorConfigPage /></Perm>} />
                     {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
                   </Route>

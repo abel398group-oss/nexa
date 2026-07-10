@@ -119,4 +119,23 @@ export class EmailChannelService {
       select: SAFE_SELECT,
     });
   }
+
+  // Support e-mail settings — stored on the Tenant record (not EmailChannel).
+  // GET: returns current value (null = not set, falls back to SUPPORT_EMAIL env).
+  // PUT: clears when null/empty string.
+  async getSupportEmail(tenantId: string): Promise<{ supportEmail: string | null }> {
+    const t = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { supportEmail: true } as any,
+    });
+    return { supportEmail: (t as any)?.supportEmail ?? null };
+  }
+
+  async setSupportEmail(tenantId: string, email: string | null): Promise<{ supportEmail: string | null }> {
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { supportEmail: email || null } as any,
+    });
+    return { supportEmail: email || null };
+  }
 }

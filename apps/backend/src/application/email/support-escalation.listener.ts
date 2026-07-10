@@ -32,9 +32,14 @@ export class SupportEscalationListener {
 
   @OnEvent('support.escalated', { async: true })
   async handle(event: SupportEscalatedEvent): Promise<void> {
-    const to = process.env.SUPPORT_EMAIL;
+    // Resolução do destinatário: DB do tenant tem prioridade sobre env.
+    // Garante que cada cliente pode configurar seu próprio e-mail sem alterar .env.
+    const tenant = await this.prisma.tenant
+      .findUnique({ where: { id: event.tenantId }, select: { supportEmail: true } as any })
+      .catch(() => null);
+    const to = (tenant as any)?.supportEmail || process.env.SUPPORT_EMAIL;
     if (!to) {
-      this.logger.debug('SUPPORT_EMAIL não configurado — e-mail de escalação não enviado');
+      this.logger.debug(`support.escalated tenant=${event.tenantId} — sem e-mail de suporte configurado, notificação não enviada`);
       return;
     }
     try {

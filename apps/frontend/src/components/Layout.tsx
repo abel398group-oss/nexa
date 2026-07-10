@@ -58,8 +58,9 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
   ] },
   { label: 'Administração', icon: 'users', items: [
-    { to: '/users',                  label: 'Usuários',      ic: 'users', perm: 'users' },
-    { to: '/settings/email-channel', label: 'Canal de E-mail', ic: 'mail', perm: 'admin' },
+    { to: '/users',                   label: 'Usuários',          ic: 'users', perm: 'users' },
+    { to: '/settings/email-channel',  label: 'Canal de E-mail',   ic: 'mail',  perm: 'admin' },
+    { to: '/settings/support-email',  label: 'E-mail de Suporte', ic: 'mail',  perm: 'admin' },
   ] },
 ];
 
@@ -79,6 +80,7 @@ const titles: Record<string, string> = {
   '/playbook': 'Playbook de Vendas',
   '/users': 'Usuários & Acessos',
   '/settings/email-channel': 'Canal de E-mail',
+  '/settings/support-email': 'E-mail de Suporte',
   '/settings/monitor': 'Monitor Proativo',
 };
 

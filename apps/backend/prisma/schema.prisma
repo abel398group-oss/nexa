@@ -404,13 +404,14 @@ model EventDlq {
 // Por ora NÃO viramos os tenantId String em FK (migration grande e arriscada —
 // ver docs/features/platform-admin/implementation.md §5.1).
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String // "HiperTMS"
-  slug      String   @unique // "hipertms"
-  status    String   @default("active") // active | suspended
-  productId String?  @map("product_id") // opcional: vincula ao conector/produto
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String // "HiperTMS"
+  slug         String   @unique // "hipertms"
+  status       String   @default("active") // active | suspended
+  productId    String?  @map("product_id") // opcional: vincula ao conector/produto
+  supportEmail String?  @map("support_email") // e-mail de escalonamento (UI configurável; fallback: SUPPORT_EMAIL env)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("tenants")
 }
