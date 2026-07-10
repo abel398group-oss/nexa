@@ -4,8 +4,10 @@ import { MANUAIS_KB } from './hipertms-manuais.data';
 import { SUPORTE_KB } from './hipertms-suporte-kb.data';
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
-// STUB: a integração REAL com a API do TMS entra quando o Uelder validar.
-// Por enquanto: healthCheck reporta se TMS está configurado; getPlans devolve mock.
+// Integração REAL com a API do HiperTMS via TMS_BASE_URL (env).
+// Quando configurado: busca planos e clientes ao vivo; fallback para catálogo
+// offline quando TMS indisponível. Endpoints consumidos: GET /nexa/plans,
+// GET /nexa/customers/by-phone. Ver docs/api/api-contract.md § TMS→Nexa.
 @Injectable()
 export class HiperTmsConnector implements Connector, OnModuleInit {
   readonly productCode = 'hipertms';

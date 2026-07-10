@@ -82,6 +82,14 @@ GET    /products
 GET    /products/:code/health    (healthCheck do connector)
 ```
 
+## TMS → Nexa (endpoints expostos pelo HiperTMS, consumidos pelo conector)
+> Autenticação: `Authorization: Bearer <TMS_SERVICE_TOKEN>` (server-to-server).
+> Base URL configurada via `TMS_BASE_URL` no `.env` do Nexa.
+```
+GET    /nexa/plans                          lista planos ativos { plans: [{code, name, price, maxUsers, features}] }
+GET    /nexa/customers/by-phone?phone=      busca cliente por telefone { id, name, email, plan, status }
+```
+
 ## Dashboard
 ```
 GET    /dashboard/summary        (cards: enviados/lidos/respostas/oportunidades)
