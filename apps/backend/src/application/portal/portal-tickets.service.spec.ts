@@ -4,8 +4,9 @@ import { PortalTicketsService } from './portal-tickets.service';
 
 function makePrisma() {
   return {
-    aiConversation: { findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
+    aiConversation: { findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
     aiMessage: { findMany: vi.fn() },
+    conversationStageHistory: { create: vi.fn() },
   } as any;
 }
 const customer = { externalId: 'ext1', tenantId: 't1', name: 'Ana' };
@@ -54,6 +55,4 @@ describe('PortalTicketsService — isolamento do cliente', () => {
 
   it('reply: 404 quando o chamado nao e do cliente (ownership)', async () => {
     prisma.aiConversation.findFirst.mockResolvedValue(null);
-    await expect(svc.reply(customer, 'alheio', 'msg')).rejects.toBeInstanceOf(NotFoundException);
-  });
-});
+    await expect(svc.re

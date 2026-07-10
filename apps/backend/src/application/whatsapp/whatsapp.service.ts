@@ -372,33 +372,59 @@ export class WhatsappService {
         phone: n.phone,
         sourceChannel: 'whatsapp',
       });
-    } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
-      // lead voltou (após fechamento normal ou opt-out) → reabre preservando histórico
-      const fromStatus = conv.status as string;
-      this.logger.log(`Conversa ${conv.id} reaberta (${fromStatus}) — lead ${n.phone} voltou`);
+    } else if ((conv.status as string) === 'opt_out') {
+      // opt-out: re-opt-in voluntário — reabre sempre (consentimento implícito de retorno).
+      this.logger.log(`Conversa ${conv.id} reaberta (opt_out) — lead ${n.phone} retornou`);
       await this.prisma.$transaction([
         this.prisma.aiConversation.update({
           where: { id: conv.id },
-          // ao reabrir de um opt-out, limpa o outcome (a conversa voltou a ficar ativa)
-          data: {
-            status: 'open' as any,
-            endedAt: null,
-            lastActivityAt: new Date(),
-            ...(fromStatus === 'opt_out' ? { outcome: null, outcomeAt: null } : {}),
-          },
+          data: { status: 'open' as any, endedAt: null, lastActivityAt: new Date(), outcome: null, outcomeAt: null },
         }),
         this.prisma.conversationStageHistory.create({
-          data: {
-            conversationId: conv.id,
-            fromStatus,
-            toStatus: 'open',
-            fromOutcome: (conv as any).outcome ?? null,
-            toOutcome: null,
-            reason: fromStatus === 'opt_out' ? 'reaberta_reopt_in' : 'reaberta_lead_retornou',
-          },
+          data: { conversationId: conv.id, fromStatus: 'opt_out', toStatus: 'open', fromOutcome: (conv as any).outcome ?? null, toOutcome: null, reason: 'reaberta_reopt_in' },
         }),
       ]);
       conv = { ...conv, status: 'open' as any, endedAt: null };
+    } else if ((conv.status as string) === 'closed') {
+      // N1: janela de reabertura — <REOPEN_WINDOW_DAYS reabre; ≥ cria follow-up.
+      const windowDays = Number(process.env.REOPEN_WINDOW_DAYS ?? 7);
+      const closedAt = (conv as any).endedAt ?? (conv as any).lastActivityAt ?? new Date(0);
+      const daysSinceClosed = (Date.now() - new Date(closedAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceClosed < windowDays) {
+        this.logger.log(`N1 [WhatsApp]: chamado ${conv.id} reaberto por cliente (${Math.floor(daysSinceClosed)}d < ${windowDays}d)`);
+        await this.prisma.$transaction([
+          this.prisma.aiConversation.update({
+            where: { id: conv.id },
+            data: {
+              status: 'open' as any,
+              endedAt: null,
+              lastActivityAt: new Date(),
+              outcome: null,
+              outcomeAt: null,
+              resolvedAt: null,
+              autoCloseAt: null,
+            },
+          }),
+          this.prisma.conversationStageHistory.create({
+            data: { conversationId: conv.id, fromStatus: 'closed', toStatus: 'open', fromOutcome: (conv as any).outcome ?? null, toOutcome: null, reason: 'reaberto_cliente' },
+          }),
+        ]);
+        conv = { ...conv, status: 'open' as any, endedAt: null };
+      } else {
+        // ≥ windowDays: cria follow-up vinculado ao chamado original.
+        this.logger.log(`N1 [WhatsApp]: chamado ${conv.id} fechado há ${Math.floor(daysSinceClosed)}d (≥${windowDays}d) → criando follow-up`);
+        const followUp = await this.conversations.create(tenantId, {
+          contactId: contact.id,
+          phone: n.phone,
+          sourceChannel: 'whatsapp',
+          agentType: (conv as any).agentType ?? 'router',
+        });
+        await this.prisma.aiConversation.update({
+          where: { id: followUp.id },
+          data: { followUpOfId: conv.id } as any,
+        });
+        conv = followUp;
+      }
     }
 
     // 4) grava a mensagem inbound (empurra pro inbox via WebSocket)
@@ -414,34 +440,4 @@ export class WhatsappService {
     const rateLimited = Date.now() - last < RATE_LIMIT_MS;
     if (this.autonomy.isEnabled('whatsapp') && !rateLimited) {
       this.lastProcessed.set(n.phone, Date.now());
-      setTimeout(() => this.lastProcessed.delete(n.phone), RATE_LIMIT_MS + 1000); // BUG-001: prevent memory leak
-      agentResult = await this.agent.handle(tenantId, { message: n.text, conversationId: conv.id });
-      // diagnóstico: por que respondeu ou não (visível no log)
-      this.logger.log(
-        `Decisão IA p/ ${n.phone}: agente=${agentResult?.route?.agent} score=${agentResult?.route?.leadScore} ` +
-          `autoSent=${agentResult?.autoSent}${agentResult?.blockedReason ? ` BLOQUEIO="${agentResult.blockedReason}"` : ''}`,
-      );
-    } else if (rateLimited) {
-      this.logger.warn(`Rate-limit: ${n.phone} (msg guardada, SEM resposta da IA — última há <${RATE_LIMIT_MS / 1000}s)`);
-    } else if (!this.autonomy.isEnabled('whatsapp')) {
-      // IA-3 (complemento): a Lia não responde com a autonomia OFF, mas ainda escala leads
-      // quentes / pedidos de humano pro vendedor. Marca lastProcessed p/ aplicar o rate-limit.
-      this.lastProcessed.set(n.phone, Date.now());
-      setTimeout(() => this.lastProcessed.delete(n.phone), RATE_LIMIT_MS + 1000); // BUG-001: prevent memory leak
-      const esc = await this.agent
-        .escalateOnly(tenantId, { message: n.text, conversationId: conv.id })
-        .catch(() => null);
-      this.logger.warn(
-        `Autonomia OFF: ${n.phone} (sem resposta; escalada=${esc?.handoff?.assigned ? esc.handoff.sellerName : 'não'})`,
-      );
-    }
-
-    return {
-      ok: true,
-      phone: n.phone,
-      conversationId: conv.id,
-      autoReplied: agentResult?.autoSent ?? false,
-      agent: agentResult?.route?.agent,
-    };
-  }
-}
+      setTimeout(() => this.lastProcessed.delete(n
