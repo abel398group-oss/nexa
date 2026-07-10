@@ -5,6 +5,11 @@ Guidance for Claude Code (and other AI agents) working in this repository.
 > Communicate with the user in **Brazilian Portuguese**. Write documentation,
 > code comments, and commit messages in **English**.
 
+> **MANDATORY:** read and follow [`REGRAS-SQUAD.md`](./REGRAS-SQUAD.md) before any
+> change. It contains hard rules (TMS↔Nexa contract, validation, error handling,
+> commit gates) created after a production incident caused by AI agents. Its final
+> checklist must be included when completing any task.
+
 ## Token efficiency — bash commands
 
 Always pipe/filter bash output to minimize tokens in context:
