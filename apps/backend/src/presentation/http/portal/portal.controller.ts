@@ -2,7 +2,7 @@ import {
   Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { Response } from 'express';
 import { HandoffService, TOKEN_TTL_MS_WEBCHAT } from '@/application/handoff/handoff.service';
@@ -33,6 +33,12 @@ class OpenTicketDto {
 class ReplyDto {
   @IsOptional() @IsString() body?: string;     // campo do TMS
   @IsOptional() @IsString() message?: string;  // alias interno
+}
+
+// N2: Nota CSAT enviada via token público (sem sessão de portal necessária).
+class CsatDto {
+  @IsInt() @Min(1) @Max(5) score!: number;
+  @IsOptional() @IsString() comment?: string;
 }
 
 class TicketsQueryDto {
@@ -214,5 +220,13 @@ export class PortalController {
   async replyTicketLegacy(@Req() req: any, @Param('id') id: string, @Body() dto: ReplyDto) {
     const message = dto.body ?? dto.message ?? '';
     return this.tickets.reply(req.portalCustomer, id, message);
+  }
+
+  // POST /portal/csat/:token — N2: registra nota de satisfação via token público (1x por chamado).
+  // Sem autenticação de sessão — o token já identifica o chamado de forma única.
+  @Post('csat/:token')
+  @HttpCode(200)
+  async submitCsat(@Param('token') token: string, @Body() dto: CsatDto) {
+    return this.tickets.submitCsat(token, dto.score, dto.comment);
   }
 }

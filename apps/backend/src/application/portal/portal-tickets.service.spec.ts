@@ -150,3 +150,60 @@ describe('PortalTicketsService — N1 reopen / follow-up', () => {
     expect(agent.handle).toHaveBeenCalledWith('t1', expect.objectContaining({ conversationId: 'c3-followup' }));
   });
 });
+
+// ─── N2: CSAT — submissão via token público ───────────────────────────────────
+
+describe('PortalTicketsService — N2 submitCsat', () => {
+  let prisma: any;
+  let svc: PortalTicketsService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    svc = new PortalTicketsService(prisma, {} as any, {} as any);
+  });
+
+  it('aceita nota valida (1-5) e persiste csatScore', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', csatScore: null });
+    prisma.aiConversation.update.mockResolvedValue({});
+
+    const result = await svc.submitCsat('tok-abc', 4);
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ csatScore: 4 }),
+      }),
+    );
+  });
+
+  it('aceita nota com comentario e persiste csatComment', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', csatScore: null });
+    prisma.aiConversation.update.mockResolvedValue({});
+
+    await svc.submitCsat('tok-abc', 5, 'Atendimento excelente!');
+
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ csatScore: 5, csatComment: 'Atendimento excelente!' }),
+      }),
+    );
+  });
+
+  it('rejeita token invalido (chamado nao encontrado)', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue(null);
+
+    await expect(svc.submitCsat('token-inexistente', 3)).rejects.toThrow('Token CSAT inválido');
+  });
+
+  it('rejeita dupla submissao (csatScore ja preenchido)', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', csatScore: 4 }); // já avaliado
+
+    await expect(svc.submitCsat('tok-abc', 5)).rejects.toThrow('já registrada');
+  });
+
+  it('rejeita nota fora do intervalo 1-5', async () => {
+    await expect(svc.submitCsat('tok-abc', 6)).rejects.toThrow('Nota inválida');
+    await expect(svc.submitCsat('tok-abc', 0)).rejects.toThrow('Nota inválida');
+  });
+});

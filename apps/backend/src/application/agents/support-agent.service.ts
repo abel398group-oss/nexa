@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { AnthropicService, AI_MODEL } from '@/shared/ai/anthropic.service';
 import { CaseClassifierAgentService } from './case-classifier-agent.service';
@@ -52,6 +53,22 @@ export class SupportAgentService {
       tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string } | null;
     },
   ): Promise<AgentReply> {
+
+    // ── N2: CONFIRMAÇÃO DE RESOLUÇÃO ─────────────────────────────────────────
+    // Se a conversa já tem resolvedAt + autoCloseAt e ainda está open/escalated,
+    // estamos aguardando a confirmação do cliente ("Isso resolveu?").
+    // A resposta atual é classificada como positiva/negativa/neutra.
+    if (input.conversationId) {
+      const conv = await this.prisma.aiConversation
+        .findUnique({ where: { id: input.conversationId }, select: { resolvedAt: true, autoCloseAt: true, status: true, outcome: true } })
+        .catch(() => null);
+      const pendingConfirmation =
+        !!conv?.resolvedAt && !!conv?.autoCloseAt && !conv?.outcome &&
+        (conv?.status === 'open' || conv?.status === 'escalated');
+      if (pendingConfirmation) {
+        return this.handleCsatConfirmation(tenantId, input.conversationId, input.question);
+      }
+    }
 
     // Histórico recente
     const history = input.conversationId
@@ -133,10 +150,15 @@ export class SupportAgentService {
       });
     }
 
-    // Se IA resolveu → marca resolvedAt e agenda autoCloseAt (+48h)
-    // Dispara Lúcio (TicketIntelligence) imediatamente — sem esperar o @Interval de 30min
+    // N2: Se IA resolveu → agenda autoCloseAt (+48h) e substitui draft pela pergunta de confirmação.
+    // O fechamento real só ocorre quando o cliente confirmar (ou o janitor fechar por silêncio).
     if (!needsHuman && resol.resolved) {
       await this.markResolved(input.conversationId);
+      // Substitui o draft pelo "Isso resolveu?" — o payload de resolução real vai no autoCloseAt
+      draft =
+        'Fico feliz em ter ajudado! Isso resolveu seu problema?\n' +
+        'Responda "sim" para encerrar ou "não" se precisar de mais ajuda.';
+      // Dispara análise de inteligência em background
       if (input.conversationId) {
         const conv = await this.prisma.aiConversation
           .findUnique({
@@ -257,5 +279,98 @@ export class SupportAgentService {
     } catch (e: any) {
       this.logger.warn(`markResolved falhou: ${e?.message}`);
     }
+  }
+
+  // N2: Classifica a resposta do cliente à pergunta de confirmação ("Isso resolveu?")
+  // e age conforme o resultado: fecha, reescala ou aguarda o janitor.
+  private async handleCsatConfirmation(
+    tenantId: string,
+    conversationId: string,
+    message: string,
+  ): Promise<AgentReply> {
+    const sentiment = this.classifyConfirmation(message);
+    this.logger.log(`N2 [CSAT] conv=${conversationId} sentiment=${sentiment}`);
+
+    if (sentiment === 'positive') {
+      // Fecha imediatamente + gera token de CSAT
+      const csatToken = randomBytes(24).toString('hex');
+      try {
+        await this.prisma.aiConversation.update({
+          where: { id: conversationId },
+          data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: new Date(), endedAt: new Date(), autoCloseAt: null, csatToken } as any,
+        });
+        await this.prisma.conversationStageHistory.create({
+          data: { conversationId, fromStatus: 'open', toStatus: 'closed', toOutcome: 'resolved', reason: 'confirmado_cliente' },
+        });
+      } catch (e: any) {
+        this.logger.warn(`N2: fechamento confirmado falhou: ${e?.message}`);
+      }
+      const draft =
+        'Ótimo! Chamado encerrado com sucesso. 😊\n' +
+        'Se quiser, avalie o atendimento de 1 a 5 respondendo com o número (1 = ruim, 5 = excelente). ' +
+        'Sua opinião nos ajuda a melhorar!';
+      return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, true);
+    }
+
+    if (sentiment === 'negative') {
+      // Reescala: limpa resolvedAt/autoCloseAt e volta ao escalado
+      try {
+        await this.prisma.aiConversation.update({
+          where: { id: conversationId },
+          data: { status: 'escalated' as any, resolvedAt: null, autoCloseAt: null } as any,
+        });
+        await this.prisma.conversationStageHistory.create({
+          data: { conversationId, fromStatus: 'open', toStatus: 'escalated', reason: 'nao_resolvido_confirmacao' },
+        });
+        await this.notifications.create(tenantId, {
+          type: 'escalation',
+          title: '🟠 Reescalonamento — cliente negou resolução',
+          body: `Cliente informou que o problema não foi resolvido. Chamado ${conversationId} voltou para atendimento humano.`,
+          link: `/inbox/${conversationId}`,
+        });
+      } catch (e: any) {
+        this.logger.warn(`N2: reescalonamento falhou: ${e?.message}`);
+      }
+      const draft =
+        'Entendido, me desculpe pelo transtorno. Estou encaminhando para um especialista que vai te ajudar com mais detalhes. ' +
+        'Em breve alguém entrará em contato!';
+      return this.buildReply(draft, [], '', 'high', true, { category: 'suporte', priority: 'high' }, null, false);
+    }
+
+    // Neutro/silêncio: mantém o autoCloseAt atual, responde gentilmente
+    const draft = 'Fique à vontade para me avisar se precisar de algo mais. Caso não haja resposta, o chamado será encerrado automaticamente em breve.';
+    return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, false);
+  }
+
+  // Classifica mensagem curta como positiva, negativa ou neutra para o fluxo CSAT.
+  private classifyConfirmation(message: string): 'positive' | 'negative' | 'neutral' {
+    const norm = message
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[!?.]+$/, '')
+      .trim();
+
+    const positives = new Set([
+      'sim', 's', 'yes', 'yep', 'ok', 'certo', 'correto', 'resolveu', 'funcionou',
+      'deu certo', 'perfeito', 'obrigado', 'obrigada', 'valeu', 'otimo', 'excelente',
+      'resolvido', 'esta ok', 'esta certo', 'confirmado', 'tudo certo', 'tudo ok',
+    ]);
+    const negatives = new Set([
+      'nao', 'n', 'no', 'nope', 'nada', 'negativo', 'ainda nao', 'ainda com problema',
+      'nao resolveu', 'nao funcionou', 'continua', 'persiste', 'o problema continua',
+      'ainda tenho duvida', 'nao deu certo', 'nao esta ok',
+    ]);
+
+    if (positives.has(norm)) return 'positive';
+    if (negatives.has(norm)) return 'negative';
+
+    // Verifica prefixos (para frases mais longas)
+    for (const p of ['sim ', 'nao ', 'n ', 's ']) {
+      if (norm.startsWith(p)) return p.trim() === 'sim' || p.trim() === 's' ? 'positive' : 'negative';
+    }
+
+    return 'neutral';
   }
 }

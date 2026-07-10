@@ -32,6 +32,8 @@ export class PortalTicketsService {
     lastActivityAt: true,
     resolvedAt: true,
     outcome: true,
+    csatScore: true,   // N2
+    csatComment: true, // N2
   };
 
   async list(
@@ -258,6 +260,30 @@ export class PortalTicketsService {
         phone: realPhone || `portal:${customer.externalId}`,
       },
     });
+  }
+
+  // N2: Registra nota CSAT via token público (1x por chamado).
+  // Token gerado pelo support-agent ao fechar o chamado com confirmação positiva.
+  async submitCsat(token: string, score: number, comment?: string): Promise<{ ok: boolean }> {
+    if (!Number.isInteger(score) || score < 1 || score > 5) {
+      throw new Error('Nota inválida: informe um número de 1 a 5');
+    }
+    const ticket = await this.prisma.aiConversation.findFirst({
+      where: { csatToken: token },
+      select: { id: true, csatScore: true },
+    });
+    if (!ticket) {
+      throw new Error('Token CSAT inválido ou expirado');
+    }
+    if (ticket.csatScore !== null && ticket.csatScore !== undefined) {
+      throw new Error('Nota CSAT já registrada para este chamado');
+    }
+    await this.prisma.aiConversation.update({
+      where: { id: ticket.id },
+      data: { csatScore: score, ...(comment?.trim() ? { csatComment: comment.trim() } : {}) } as any,
+    });
+    this.logger.log(`N2 [CSAT] chamado=${ticket.id} score=${score}`);
+    return { ok: true };
   }
 
   // Telefone de contato do cliente (pro prefill do form) — null se so houver o sintetico.

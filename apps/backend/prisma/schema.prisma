@@ -212,6 +212,9 @@ model AiConversation {
   ticketPriority   String?   @map("ticket_priority") // critical | high | medium | low
   rootCause        String?   @map("root_cause") // causa-raiz classificada pelo DiagnosticAgent
   followUpOfId     String?   @map("follow_up_of_id") // N1: id do chamado anterior que originou este follow-up
+  csatScore        Int?      @map("csat_score")    // N2: nota de satisfação 1–5 enviada pelo cliente
+  csatComment      String?   @map("csat_comment")  // N2: comentário opcional do CSAT
+  csatToken        String?   @unique @map("csat_token") // N2: token único para endpoint público de CSAT (1x)
 
   messages      AiMessage[]
   actions       AiAction[]
