@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RollingStats } from '@/shared/utils/rolling-stats';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { SellersService } from '@/application/sellers/sellers.service';
@@ -87,6 +88,7 @@ export class ConversationAgentService {
     private readonly handoff: HandoffService,
     private readonly opportunities: OpportunitiesService,
     private readonly waha: WahaClientService,
+    private readonly events: EventEmitter2,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -600,6 +602,14 @@ export class ConversationAgentService {
         title: '🆘 Chamado precisa de atendente',
         body: `${conv.phone}: "${input.message.slice(0, 80)}"`,
         link: '/inbox',
+      });
+      // P3: chamado formal — e-mail ao suporte (SupportEscalationListener).
+      // O histórico da conversa da Lia já está no próprio chamado (mesma entidade).
+      // Dedup natural: este bloco só roda na transição para 'escalated'.
+      this.events.emit('support.escalated', {
+        tenantId,
+        conversationId: conv.id,
+        origin: 'chat',
       });
       // Notifica o cliente que um humano assumirá o atendimento (fire-and-forget).
       if (conv.phone && !conv.phone.startsWith('email:')) {

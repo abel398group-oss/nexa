@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AgentsModule } from '@/application/agents/agents.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
+import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { PortalController } from '@/presentation/http/portal/portal.controller';
 import { PortalSessionService } from './portal-session.service';
 import { PortalSessionGuard } from './portal-session.guard';
@@ -17,6 +18,7 @@ import { PortalTicketsService } from './portal-tickets.service';
     }),
     AgentsModule,
     ConversationsModule,
+    NotificationsModule,
   ],
   controllers: [PortalController],
   providers: [PortalSessionService, PortalSessionGuard, PortalTicketsService],

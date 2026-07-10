@@ -5,6 +5,7 @@ import { EmailOptOutService } from './email-optout.service';
 import { EmailImapService } from './email-imap.service';
 import { EmailChannelService } from './email-channel.service';
 import { EmailCampaignSenderService } from './email-campaign-sender.service';
+import { SupportEscalationListener } from './support-escalation.listener';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
@@ -23,6 +24,7 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     EmailImapService,
     EmailChannelService,
     EmailCampaignSenderService,
+    SupportEscalationListener, // P2: e-mail ao suporte no evento 'support.escalated'
   ],
   exports: [EmailReplyService, EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
 })

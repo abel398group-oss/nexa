@@ -1,8 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { Paginated, PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 import { PortalCustomer } from './portal-session.service';
 
 // Janela de reabertura: chamado fechado há menos que este valor é reaberto;
@@ -19,6 +21,8 @@ export class PortalTicketsService {
     private readonly prisma: PrismaService,
     private readonly conversations: ConversationsService,
     private readonly agent: ConversationAgentService,
+    private readonly notifications: NotificationsService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private readonly listFields = {
@@ -107,10 +111,12 @@ export class PortalTicketsService {
     return { ...ticket, messages };
   }
 
-  // Abre um chamado: cria a conversa (canal 'portal', externalId da sessao) e joga a
-  // 1a mensagem no MESMO pipeline da Lia (router->support->supervisor).
-  // dto: assunto (rootCause/titulo), area (ticketCategory), mensagem e telefone de
-  // contato (pra o suporte humano ligar — vem do cadastro ou preenchido pelo cliente).
+  // P1 (fluxo humano): "Abrir chamado" é intenção EXPLÍCITA de falar com a equipe.
+  // A Lia NÃO responde aqui — o chamado nasce escalado (fila humana), recebe número,
+  // notifica o Inbox e dispara e-mail ao suporte (listener de 'support.escalated').
+  // O chat do widget continua sendo o canal da Lia; quando ELA não resolve, ela mesma
+  // escala com o histórico (conversation-agent).
+  // dto: assunto (subject), area (ticketCategory), mensagem e telefone de contato.
   async open(
     customer: PortalCustomer,
     dto: { subject?: string; category?: string; message: string; phone?: string },
@@ -123,26 +129,51 @@ export class PortalTicketsService {
       sourceChannel: 'portal',
       agentType: 'support',
     });
-    // marca a conversa como do cliente (externalId), cliente ativo, + assunto/area
-    // N3: subject vai para a coluna subject (rootCause é exclusivo do DiagnosticAgent)
+    // Identidade + assunto/área + fila humana desde o nascimento.
+    // N3: subject na coluna subject (rootCause é exclusivo do DiagnosticAgent).
+    // Categoria default 'outro' garante que o ticketNumber seja atribuído.
     await this.prisma.aiConversation.update({
       where: { id: conv.id },
       data: {
         externalId: customer.externalId,
         customerStage: 'cliente_ativo',
+        status: 'escalated',
         ...(dto.subject?.trim() ? { subject: dto.subject.trim() } : {}),
-        ...(dto.category?.trim() ? { ticketCategory: dto.category.trim() } : {}),
+        ticketCategory: dto.category?.trim() || 'outro',
+        ticketPriority: 'normal',
       } as any,
+    });
+    await this.prisma.conversationStageHistory.create({
+      data: { conversationId: conv.id, fromStatus: 'open', toStatus: 'escalated', reason: 'aberto_pelo_cliente' },
     });
     await this.conversations.addMessage(customer.tenantId, conv.id, {
       direction: 'inbound',
       content: dto.message,
     });
-    await this.agent.handle(customer.tenantId, {
-      message: dto.message,
-      conversationId: conv.id,
-      portalIdentity: { externalId: customer.externalId, name: customer.name },
+    await this.assignTicketNumber(customer.tenantId, conv.id);
+    const created = await this.prisma.aiConversation.findUnique({
+      where: { id: conv.id },
+      select: { ticketNumber: true } as any,
     });
+    const numero = (created as any)?.ticketNumber ? `#${(created as any).ticketNumber}` : '';
+    // Confirmação no próprio thread — o cliente sabe que um humano vai responder.
+    await this.conversations.addMessage(customer.tenantId, conv.id, {
+      direction: 'outbound',
+      content: `Chamado ${numero} registrado! Nossa equipe de suporte vai te responder por aqui. 🙋`.replace('  ', ' '),
+    });
+    await this.notifications.create(customer.tenantId, {
+      type: 'escalation',
+      title: `🆕 Chamado ${numero} aberto pelo cliente${customer.name ? ` — ${customer.name}` : ''}`,
+      body: dto.subject?.trim() || dto.message.slice(0, 80),
+      link: `/inbox/${conv.id}`,
+    });
+    // P2: e-mail ao suporte (SupportEscalationListener no módulo de e-mail).
+    this.events.emit('support.escalated', {
+      tenantId: customer.tenantId,
+      conversationId: conv.id,
+      origin: 'portal',
+    });
+    this.logger.log(`P1: chamado ${numero || conv.id} aberto direto para a fila humana`);
     return this.detail(customer, conv.id);
   }
 

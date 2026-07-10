@@ -70,6 +70,7 @@ const mockTmsLookup     = { batchLookup: vi.fn() };
 const mockHandoff       = { consume: vi.fn() };
 const mockOpportunities = { createFromLead: vi.fn() };
 const mockWaha          = { sendText: vi.fn() };
+const mockEvents        = { emit: vi.fn() }; // P3: evento support.escalated (e-mail ao suporte)
 
 function makeService() {
   return new ConversationAgentService(
@@ -86,6 +87,7 @@ function makeService() {
     mockHandoff as any,
     mockOpportunities as any,
     mockWaha as any,
+    mockEvents as any,
   );
 }
 

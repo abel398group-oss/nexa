@@ -4,10 +4,18 @@ import { PortalTicketsService } from './portal-tickets.service';
 
 function makePrisma() {
   return {
-    aiConversation: { findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
+    aiConversation: { findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
     aiMessage: { findMany: vi.fn() },
     conversationStageHistory: { create: vi.fn() },
+    $queryRaw: vi.fn().mockResolvedValue([{ last_number: 1 }]),
   } as any;
+}
+// P1: mocks dos novos colaboradores (notificação interna + evento de e-mail)
+function makeNotifications() {
+  return { create: vi.fn().mockResolvedValue(undefined) } as any;
+}
+function makeEvents() {
+  return { emit: vi.fn() } as any;
 }
 const customer = { externalId: 'ext1', tenantId: 't1', name: 'Ana' };
 
@@ -16,7 +24,7 @@ describe('PortalTicketsService — isolamento do cliente', () => {
   let svc: PortalTicketsService;
   beforeEach(() => {
     prisma = makePrisma();
-    svc = new PortalTicketsService(prisma, {} as any, {} as any);
+    svc = new PortalTicketsService(prisma, {} as any, {} as any, makeNotifications(), makeEvents());
   });
 
   it('list: escopa SEMPRE por tenantId + externalId', async () => {
@@ -71,7 +79,7 @@ describe('PortalTicketsService — N1 reopen / follow-up', () => {
     prisma = makePrisma();
     conversations = { addMessage: vi.fn().mockResolvedValue(undefined), create: vi.fn() };
     agent = { handle: vi.fn().mockResolvedValue({}) };
-    svc = new PortalTicketsService(prisma, conversations, agent);
+    svc = new PortalTicketsService(prisma, conversations, agent, makeNotifications(), makeEvents());
   });
 
   // Cenário 1: chamado aberto → fluxo normal, sem reopen
@@ -151,6 +159,69 @@ describe('PortalTicketsService — N1 reopen / follow-up', () => {
   });
 });
 
+// ─── P1: Abrir chamado → fila humana (Lia NÃO responde) ──────────────────────
+
+describe('PortalTicketsService — P1 open direto para humano', () => {
+  let prisma: any;
+  let svc: PortalTicketsService;
+  let conversations: any;
+  let agent: any;
+  let notifications: any;
+  let events: any;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    conversations = { addMessage: vi.fn().mockResolvedValue(undefined), create: vi.fn().mockResolvedValue({ id: 'c1' }) };
+    agent = { handle: vi.fn().mockResolvedValue({}) };
+    notifications = makeNotifications();
+    events = makeEvents();
+    svc = new PortalTicketsService(prisma, conversations, agent, notifications, events);
+
+    // contato existente (ensureContact)
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ id: 'ct1', phone: 'portal:ext1' }), create: vi.fn(), update: vi.fn() };
+    // assignTicketNumber: 1ª findUnique (elegibilidade) → 2ª findUnique (numero p/ mensagem)
+    prisma.aiConversation.findUnique
+      .mockResolvedValueOnce({ ticketNumber: null, ticketCategory: 'outro' })
+      .mockResolvedValueOnce({ ticketNumber: 7 });
+    prisma.$queryRaw.mockResolvedValue([{ last_number: 7 }]);
+    // detail() no final
+    prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', status: 'escalated', ticketNumber: 7 });
+    prisma.aiMessage.findMany.mockResolvedValue([]);
+  });
+
+  it('NAO chama o pipeline da Lia (agent.handle)', async () => {
+    await svc.open(customer, { message: 'preciso de ajuda', category: 'fiscal' });
+    expect(agent.handle).not.toHaveBeenCalled();
+  });
+
+  it('chamado nasce escalated com categoria (ou default outro) e prioridade normal', async () => {
+    await svc.open(customer, { message: 'ajuda', subject: 'Erro no CT-e' });
+    expect(prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ status: 'escalated', ticketCategory: 'outro', ticketPriority: 'normal', subject: 'Erro no CT-e' }),
+      }),
+    );
+    expect(prisma.conversationStageHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ toStatus: 'escalated', reason: 'aberto_pelo_cliente' }) }),
+    );
+  });
+
+  it('gera ticketNumber e envia confirmacao outbound com #numero', async () => {
+    await svc.open(customer, { message: 'ajuda', category: 'fiscal' });
+    expect(prisma.$queryRaw).toHaveBeenCalled(); // contador atômico
+    const outbound = conversations.addMessage.mock.calls.find((c: any[]) => c[2]?.direction === 'outbound');
+    expect(outbound).toBeDefined();
+    expect(outbound[2].content).toContain('#7');
+  });
+
+  it('notifica o Inbox e emite support.escalated (origin portal) para o e-mail', async () => {
+    await svc.open(customer, { message: 'ajuda', category: 'fiscal' });
+    expect(notifications.create).toHaveBeenCalledWith('t1', expect.objectContaining({ type: 'escalation', link: '/inbox/c1' }));
+    expect(events.emit).toHaveBeenCalledWith('support.escalated', expect.objectContaining({ tenantId: 't1', conversationId: 'c1', origin: 'portal' }));
+  });
+});
+
 // ─── N2: CSAT — submissão via token público ───────────────────────────────────
 
 describe('PortalTicketsService — N2 submitCsat', () => {
@@ -159,7 +230,7 @@ describe('PortalTicketsService — N2 submitCsat', () => {
 
   beforeEach(() => {
     prisma = makePrisma();
-    svc = new PortalTicketsService(prisma, {} as any, {} as any);
+    svc = new PortalTicketsService(prisma, {} as any, {} as any, makeNotifications(), makeEvents());
   });
 
   it('aceita nota valida (1-5) e persiste csatScore', async () => {
@@ -228,7 +299,7 @@ describe('PortalTicketsService — C2 assignTicketNumber (TicketCounter atômico
 
   beforeEach(() => {
     prisma = makePrismaC2();
-    svc = new PortalTicketsService(prisma, {} as any, {} as any);
+    svc = new PortalTicketsService(prisma, {} as any, {} as any, makeNotifications(), makeEvents());
   });
 
   it('chama $queryRaw (INSERT ON CONFLICT) e persiste o numero retornado', async () => {
