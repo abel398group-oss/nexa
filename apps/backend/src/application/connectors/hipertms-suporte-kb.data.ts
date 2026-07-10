@@ -3000,4 +3000,6 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '- Consumo de Combustível: litros consumidos e custo por veículo/período, com gráfico de evolução.\n' +
       '- Histórico de Manutenções: manutenções realizadas por veículo, custo total e tipo (preventiva/corretiva).\n' +
       'Use esses relatórios para identificar veículos com consumo acima da média ou com alto custo de manutenção.',
-    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 
+    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 'custo veiculo', 'relatorios frota'],
+  },
+];

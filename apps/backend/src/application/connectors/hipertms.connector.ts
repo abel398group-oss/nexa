@@ -886,4 +886,27 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         severity: e.severity as TmsProactivityEvent['severity'],
         category: (DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain) as TmsProactivityEvent['category'],
         title: String(e.title ?? e.reason ?? e.ruleId ?? 'Evento pendente'),
-        descripti
+        description: (e.description ?? e.subjectLabel ?? null) as string | undefined,
+      }));
+    } catch (err: any) {
+      this.logger.warn(`getProactivityEvents falhou: ${err?.message}`);
+      return [];
+    }
+  }
+}
+
+// Shape do evento de proatividade retornado pelo TMS.
+// Aguarda entrega do endpoint no TMS para validar — shape provisório compatível com o PRD.
+export interface TmsProactivityEvent {
+  id: string;
+  severity: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
+  category: 'fiscal' | 'logistic' | 'frota' | 'finance';
+  title: string;
+  description?: string;
+  /** Phone of the sub-client admin to notify via WhatsApp (e.g. "5511999990001"). */
+  adminPhone?: string;
+  /** Display name of the admin (used in message greeting). */
+  adminName?: string;
+  /** Company/transportadora name (used in message context). */
+  companyName?: string;
+}
