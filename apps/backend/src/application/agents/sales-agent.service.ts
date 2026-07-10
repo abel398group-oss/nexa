@@ -141,8 +141,9 @@ export class SalesAgentService {
       };
     } catch (e: any) {
       this.logger.warn(`Sales fallback (${e?.message})`);
+      // K1: nunca citar preço fixo no fallback — os planos são consultados dinamicamente.
       const draft =
-        `Temos planos a partir de R$89/mês. Para indicar o ideal para a sua operação, me conte: ` +
+        `O HiperTMS tem planos para transportadoras de todos os portes. Para indicar o mais adequado à sua operação, me conte: ` +
         `quantos veículos a sua frota tem hoje e qual o volume aproximado de documentos fiscais por mês?`;
       return { draft, suggestedAction: 'none', usedKnowledge: [], allowedFacts, confidence: 'low', model: AI_MODEL };
     }

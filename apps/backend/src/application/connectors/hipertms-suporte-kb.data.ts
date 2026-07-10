@@ -856,12 +856,9 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     title: 'Limite de usuários do plano atingido — o que fazer',
     content:
       'Problema: ao tentar cadastrar um novo usuário, o sistema informa que o limite do plano foi atingido.\n' +
-      'Limites por plano:\n' +
-      '- Básico: 5 usuários\n' +
-      '- Essencial: 8 usuários\n' +
-      '- Profissional: 15 usuários\n' +
+      'O limite de usuários depende do plano contratado — veja o plano atual em Administração → Assinatura e Cobrança.\n' +
       'Opções:\n' +
-      '1. Fazer upgrade do plano: acesse Administração → Assinatura e Cobrança → Alterar Plano.\n' +
+      '1. Fazer upgrade do plano: acesse Administração → Assinatura e Cobrança → Alterar Plano para ver os planos disponíveis e seus limites atualizados.\n' +
       '2. Desativar usuários inativos: Administração → Usuários → localize usuários que não acessam mais e clique em "Desativar". Usuários inativos não contam para o limite.\n' +
       '3. Verificar o plano atual: Administração → Assinatura e Cobrança mostra o plano ativo e quantos usuários estão em uso.',
     tags: ['limite usuarios', 'plano', 'usuario', 'upgrade', 'maximo', 'administracao', 'assinatura'],
@@ -963,15 +960,12 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     content:
       'Para alterar o plano (upgrade ou downgrade):\n' +
       '1. Acesse Administração → Assinatura e Cobrança.\n' +
-      '2. Veja o plano atual e as opções disponíveis.\n' +
+      '2. Veja o plano atual e as opções disponíveis (preços e limites são exibidos ali, sempre atualizados).\n' +
       '3. Clique em "Alterar Plano" e selecione o novo plano.\n' +
       '4. Confirme as mudanças.\n' +
       'Upgrades: ativados imediatamente, com cobrança proporcional ao período restante.\n' +
       'Downgrades: aplicados no próximo ciclo de cobrança.\n' +
-      'Planos disponíveis:\n' +
-      '- Básico: R$89/mês — 5 usuários\n' +
-      '- Essencial: R$199/mês — 8 usuários\n' +
-      '- Profissional: R$299/mês — 15 usuários + suporte prioritário',
+      'Para consultar preços e limites de cada plano, acesse Administração → Assinatura e Cobrança — os valores exibidos lá são sempre os vigentes.',
     tags: ['plano', 'assinatura', 'upgrade', 'downgrade', 'cobranca', 'mudar plano'],
   },
 
@@ -3006,6 +3000,4 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '- Consumo de Combustível: litros consumidos e custo por veículo/período, com gráfico de evolução.\n' +
       '- Histórico de Manutenções: manutenções realizadas por veículo, custo total e tipo (preventiva/corretiva).\n' +
       'Use esses relatórios para identificar veículos com consumo acima da média ou com alto custo de manutenção.',
-    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 'custo veiculo', 'relatorios frota'],
-  },
-];
+    tags: ['relatorio frota', 'consumo combustivel relatorio', 'historico manutencao relatorio', 

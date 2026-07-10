@@ -107,21 +107,24 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       if (plans.length === 0) throw new Error('planos do TMS inválidos (sem code/preço)');
       return plans;
     } catch (err: any) {
-      // Nunca quebra a venda: cai no catálogo conhecido e registra o aviso.
-      this.logger.warn(`getPlans falhou (${err?.message}) — usando catálogo de fallback`);
-      return this.defaultPlans();
+      // K1: quando o TMS está configurado mas indisponível → retornar [] para forçar escalação.
+      // Lia nunca cita preço possivelmente desatualizado; deve dizer "vou confirmar os valores".
+      // (defaultPlans() é usado apenas quando TMS não está configurado — modo offline/demo.)
+      this.logger.warn(`getPlans falhou (${err?.message}) — conector indisponível, retornando [] para forçar escalação`);
+      return [];
     }
   }
 
-  // Catálogo conhecido do HiperTMS — fallback e fonte enquanto a API do TMS não expõe /api/plans.
-  // Manter sincronizado com o site/TMS até a integração real estar ligada.
+  // Catálogo offline do HiperTMS — usado APENAS quando TMS_API_BASE_URL não está configurado.
+  // Quando o TMS está configurado e indisponível, getPlans() retorna [] (não este fallback).
+  // Manter sincronizado com os planos reais do TMS.
+  // Validado em 2026-06-19 contra GET /api/nexa/plans do TMS local; Corporativo adicionado em K1 (2026-07-10).
   private defaultPlans(): Plan[] {
-    // Fallback offline — atualizar sempre que a API /nexa/plans mudar.
-    // Validado em 2026-06-19 contra GET /api/nexa/plans do TMS local.
     return [
-      { code: 'basic',         name: 'Básico',        price: 89,  maxUsers: 5,  features: ['CT-e', 'MDF-e', 'precificação', 'frota', 'financeiro'] },
-      { code: 'essencial',     name: 'Essencial',     price: 199, maxUsers: 8,  features: ['tudo do Básico', 'multi-filial', 'suporte e-mail'] },
-      { code: 'profissional',  name: 'Profissional',  price: 299, maxUsers: 15, features: ['tudo do Essencial', 'suporte prioritário', 'API REST'] },
+      { code: 'basic',         name: 'Básico',        price: 89,  maxUsers: 5,   features: ['CT-e', 'MDF-e', 'precificação', 'frota', 'financeiro'] },
+      { code: 'essencial',     name: 'Essencial',     price: 199, maxUsers: 8,   features: ['tudo do Básico', 'multi-filial', 'suporte e-mail'] },
+      { code: 'profissional',  name: 'Profissional',  price: 299, maxUsers: 15,  features: ['tudo do Essencial', 'suporte prioritário', 'API REST'] },
+      { code: 'corporativo',   name: 'Corporativo',   price: 499, maxUsers: undefined, features: ['tudo do Profissional', 'usuários ilimitados', 'SLA dedicado', 'gerente de conta'] },
     ];
   }
 
@@ -328,16 +331,18 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       },
 
       // ── MÓDULO: PLANOS E BILLING ──────────────────────────────────────────────
+      // K1: preços e limites são consultados dinamicamente via getPlans() — nunca fixar aqui.
       {
         topic: 'planos', category: 'comercial',
-        title: 'Planos disponíveis — preços e limites',
+        title: 'Planos disponíveis — consultar dados dinâmicos',
         content:
-          'O HiperTMS oferece três planos: ' +
-          'Básico R$89/mês: 5 usuários — ideal para pequenas transportadoras. ' +
-          'Essencial R$199/mês: 8 usuários — para transportadoras em crescimento. ' +
-          'Profissional R$299/mês: 15 usuários, suporte prioritário — para operações maiores. ' +
+          'O HiperTMS oferece planos para transportadoras de todos os portes (Básico, Essencial, Profissional e Corporativo). ' +
+          'Os preços, limites de usuários e funcionalidades de cada plano são consultados em tempo real e podem mudar. ' +
+          'Sempre consulte os dados dinâmicos do conector (getPlans()) para responder sobre preços e limites. ' +
+          'NUNCA informe preço ou limite de plano a partir de texto fixo — se os dados do conector estiverem indisponíveis, ' +
+          'diga "vou confirmar os valores atualizados" e escale para um especialista. ' +
           'Todos os planos incluem: CT-e, MDF-e, precificação, frota, financeiro e suporte por e-mail.',
-        tags: ['plano', 'preco', 'valor', 'basico', 'essencial', 'profissional', 'quanto custa'],
+        tags: ['plano', 'preco', 'valor', 'basico', 'essencial', 'profissional', 'corporativo', 'quanto custa'],
       },
       {
         topic: 'planos', category: 'comercial',
@@ -881,27 +886,4 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         severity: e.severity as TmsProactivityEvent['severity'],
         category: (DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain) as TmsProactivityEvent['category'],
         title: String(e.title ?? e.reason ?? e.ruleId ?? 'Evento pendente'),
-        description: (e.description ?? e.subjectLabel ?? null) as string | undefined,
-      }));
-    } catch (err: any) {
-      this.logger.warn(`getProactivityEvents falhou: ${err?.message}`);
-      return [];
-    }
-  }
-}
-
-// Shape do evento de proatividade retornado pelo TMS.
-// Aguarda entrega do endpoint no TMS para validar — shape provisório compatível com o PRD.
-export interface TmsProactivityEvent {
-  id: string;
-  severity: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
-  category: 'fiscal' | 'logistic' | 'frota' | 'finance';
-  title: string;
-  description?: string;
-  /** Phone of the sub-client admin to notify via WhatsApp (e.g. "5511999990001"). */
-  adminPhone?: string;
-  /** Display name of the admin (used in message greeting). */
-  adminName?: string;
-  /** Company/transportadora name (used in message context). */
-  companyName?: string;
-}
+        descripti
