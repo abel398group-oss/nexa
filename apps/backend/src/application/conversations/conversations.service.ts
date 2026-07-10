@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '@/infra/prisma/prisma.service';
@@ -170,15 +171,19 @@ export class ConversationsService {
   }
 
   // Suporte: marca o chamado como resolvido (fecha) ou reabre. Grava histórico.
+  // C1: fechamento manual (resolved=true) gera csatToken — operador fecha no Inbox
+  // e o cliente ainda precisa poder avaliar via WhatsApp ou portal.
   async setResolved(tenantId: string, id: string, resolved: boolean) {
     const conv = await this.findOne(tenantId, id);
     const now = new Date();
     const toStatus = resolved ? 'closed' : 'open';
+    // C1: token gerado apenas no fechamento; reabertura não toca o token existente
+    const csatToken = resolved ? randomBytes(24).toString('hex') : undefined;
     await this.prisma.$transaction([
       this.prisma.aiConversation.update({
         where: { id },
         data: resolved
-          ? { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, resolvedAt: now, endedAt: now }
+          ? { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, resolvedAt: now, endedAt: now, csatToken } as any
           : { status: 'open' as any, outcome: null, outcomeAt: null, resolvedAt: null, endedAt: null },
       }),
       this.prisma.conversationStageHistory.create({

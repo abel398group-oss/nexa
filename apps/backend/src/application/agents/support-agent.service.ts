@@ -60,8 +60,33 @@ export class SupportAgentService {
     // A resposta atual é classificada como positiva/negativa/neutra.
     if (input.conversationId) {
       const conv = await this.prisma.aiConversation
-        .findUnique({ where: { id: input.conversationId }, select: { resolvedAt: true, autoCloseAt: true, status: true, outcome: true } })
+        .findUnique({
+          where: { id: input.conversationId },
+          select: { resolvedAt: true, autoCloseAt: true, status: true, outcome: true, csatToken: true, csatScore: true },
+        })
         .catch(() => null);
+
+      // C1: CSAT intake via WhatsApp — ticket fechado com token + score ainda nulo + mensagem é "1"-"5"
+      if (conv?.status === 'closed' && conv?.csatToken && (conv?.csatScore === null || conv?.csatScore === undefined)) {
+        const score = parseInt(input.question.trim(), 10);
+        if (!isNaN(score) && score >= 1 && score <= 5) {
+          try {
+            await this.prisma.aiConversation.update({
+              where: { id: input.conversationId },
+              data: { csatScore: score } as any,
+            });
+            this.logger.log(`C1 [CSAT-WA] conv=${input.conversationId} score=${score}`);
+          } catch (e: any) {
+            this.logger.warn(`C1 CSAT-WA update falhou: ${e?.message}`);
+          }
+          const draft =
+            score >= 4
+              ? 'Obrigado pela avaliação! Fico feliz que tenha ficado satisfeito. 😊'
+              : 'Obrigado pelo feedback! Vamos trabalhar para melhorar. Se precisar de mais ajuda, pode nos contatar novamente.';
+          return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, true);
+        }
+      }
+
       const pendingConfirmation =
         !!conv?.resolvedAt && !!conv?.autoCloseAt && !conv?.outcome &&
         (conv?.status === 'open' || conv?.status === 'escalated');

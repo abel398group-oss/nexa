@@ -24,6 +24,7 @@
  *   quando subir para DigitalOcean — hoje usa campo local para evitar loop no TMS DB.
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
@@ -255,14 +256,23 @@ export class ConversationJanitorService {
 
     if (!resolved.length) return;
 
-    const ids = resolved.map((c: any) => c.id);
+    // C1: gera csatToken único por ticket — todo fechamento "resolved" precisa ter token
+    // (seja por confirmação do cliente no support-agent ou aqui no janitor automático).
+    // updateMany não suporta valores distintos por linha, então usamos update individual.
+    const withTokens = resolved.map((c: any) => ({
+      ...c,
+      csatToken: randomBytes(24).toString('hex'),
+    }));
+
     await this.prisma.$transaction([
-      this.prisma.aiConversation.updateMany({
-        where: { id: { in: ids } },
-        data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, endedAt: now },
-      }),
+      ...withTokens.map((c: any) =>
+        this.prisma.aiConversation.update({
+          where: { id: c.id },
+          data: { status: 'closed' as any, outcome: 'resolved', outcomeAt: now, endedAt: now, csatToken: c.csatToken } as any,
+        }),
+      ),
       this.prisma.conversationStageHistory.createMany({
-        data: resolved.map((c: any) => ({
+        data: withTokens.map((c: any) => ({
           conversationId: c.id,
           fromStatus: c.status,   // status real, não hardcoded 'open'
           toStatus: 'closed',
@@ -274,7 +284,7 @@ export class ConversationJanitorService {
       }),
     ]);
 
-    this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved)`);
+    this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved, csatToken gerado)`);
     this.notifyClose(
       resolved.map((c: any) => c.phone),
       'Seu chamado foi resolvido. Se precisar de mais ajuda, é só nos chamar novamente. 😊',

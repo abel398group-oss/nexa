@@ -50,6 +50,18 @@ const pendingConvState = {
   autoCloseAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
   status: 'open',
   outcome: null,
+  csatToken: null,
+  csatScore: null,
+};
+
+// Estado de ticket fechado aguardando avaliação CSAT
+const closedWithCsatToken = {
+  resolvedAt: new Date(),
+  autoCloseAt: null,
+  status: 'closed',
+  outcome: 'resolved',
+  csatToken: 'abc123tokenxyz',
+  csatScore: null,
 };
 
 describe('SupportAgentService — N2 confirmação de resolução', () => {
@@ -121,11 +133,99 @@ describe('SupportAgentService — N2 confirmação de resolução', () => {
   // ── Não-interferência: conversa sem pendência passa pelo pipeline normal ───
   it('conversa sem pendencia (sem resolvedAt): segue pipeline normal (classifica)', async () => {
     deps.prisma.aiConversation.findUnique.mockResolvedValue({
-      resolvedAt: null, autoCloseAt: null, status: 'open', outcome: null,
+      resolvedAt: null, autoCloseAt: null, status: 'open', outcome: null, csatToken: null, csatScore: null,
     });
 
     await svc.ask('t1', { question: 'nao consigo emitir CT-e', conversationId: 'c1' });
 
+    expect(deps.classifier.classify).toHaveBeenCalled();
+  });
+});
+
+// ─── C1: CSAT intake via WhatsApp ─────────────────────────────────────────────
+describe('SupportAgentService — C1 CSAT intake via WhatsApp (ticket fechado)', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: SupportAgentService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findUnique.mockResolvedValue(closedWithCsatToken);
+  });
+
+  it('mensagem "4": salva csatScore=4 e retorna agradecimento positivo', async () => {
+    const reply = await svc.ask('t1', { question: '4', conversationId: 'c1' });
+
+    expect(deps.prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ csatScore: 4 }),
+      }),
+    );
+    expect(reply.draft).toMatch(/obrigado/i);
+    expect(reply.needsHuman).toBe(false);
+  });
+
+  it('mensagem "2": salva csatScore=2 e retorna mensagem de melhoria', async () => {
+    const reply = await svc.ask('t1', { question: '2', conversationId: 'c1' });
+
+    expect(deps.prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ csatScore: 2 }) }),
+    );
+    expect(reply.draft).toMatch(/feedback|melhorar/i);
+  });
+
+  it('mensagem "1": salva csatScore=1 (limite inferior)', async () => {
+    await svc.ask('t1', { question: '1', conversationId: 'c1' });
+
+    const call = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(call.data.csatScore).toBe(1);
+  });
+
+  it('mensagem "5": salva csatScore=5 (limite superior)', async () => {
+    await svc.ask('t1', { question: '5', conversationId: 'c1' });
+
+    const call = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(call.data.csatScore).toBe(5);
+  });
+
+  it('mensagem "6": fora do range 1-5 — nao salva CSAT', async () => {
+    // ticket fechado mas score já preenchido → não deve salvar novamente
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({ ...closedWithCsatToken, csatScore: null });
+
+    await svc.ask('t1', { question: '6', conversationId: 'c1' });
+
+    // Não é CSAT válido → segue o pipeline normal (que PODE gravar ticketCategory
+    // via persistTicketFields). O que NÃO pode acontecer é gravar csatScore.
+    const csatCalls = deps.prisma.aiConversation.update.mock.calls
+      .filter((c: any[]) => c[0]?.data && 'csatScore' in c[0].data);
+    expect(csatCalls).toHaveLength(0);
+    expect(deps.classifier.classify).toHaveBeenCalled();
+  });
+
+  it('ticket fechado mas csatScore ja preenchido: nao atualiza (evita duplicata)', async () => {
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({ ...closedWithCsatToken, csatScore: 5 });
+
+    await svc.ask('t1', { question: '3', conversationId: 'c1' });
+
+    // Score já preenchido → ignora o "3" e segue pipeline (classifica).
+    // O pipeline pode gravar ticketCategory; só não pode regravar csatScore.
+    const csatCalls = deps.prisma.aiConversation.update.mock.calls
+      .filter((c: any[]) => c[0]?.data && 'csatScore' in c[0].data);
+    expect(csatCalls).toHaveLength(0);
+    expect(deps.classifier.classify).toHaveBeenCalled();
+  });
+
+  it('ticket fechado sem csatToken: nao captura como CSAT', async () => {
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({ ...closedWithCsatToken, csatToken: null });
+
+    await svc.ask('t1', { question: '4', conversationId: 'c1' });
+
+    // Sem csatToken → não é intake de CSAT; segue pipeline (pode gravar
+    // ticketCategory), mas nunca csatScore.
+    const csatCalls = deps.prisma.aiConversation.update.mock.calls
+      .filter((c: any[]) => c[0]?.data && 'csatScore' in c[0].data);
+    expect(csatCalls).toHaveLength(0);
     expect(deps.classifier.classify).toHaveBeenCalled();
   });
 });

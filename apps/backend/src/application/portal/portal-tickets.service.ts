@@ -36,6 +36,7 @@ export class PortalTicketsService {
     outcome: true,
     csatScore: true,   // N2
     csatComment: true, // N2
+    csatToken: true,   // C1: exposto ao TMS para o bloco de avaliação do widget
   };
 
   async list(

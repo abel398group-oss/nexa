@@ -139,6 +139,54 @@ describe('ConversationJanitorService — N4 dedup persistente (slaAlertedAt)', (
   });
 });
 
+// ─── C1: closeResolvedSupport gera csatToken por ticket ──────────────────────
+describe('ConversationJanitorService — C1 csatToken gerado no closeResolvedSupport', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationJanitorService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('chama update individual por ticket (nao updateMany) com csatToken unico', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'conv-1', status: 'open', phone: '5511111' },
+      { id: 'conv-2', status: 'open', phone: '5522222' },
+    ]);
+    // $transaction recebe array de promises — simular execucao
+    deps.prisma.$transaction.mockImplementation((ops: any[]) => Promise.all(ops));
+    deps.prisma.aiConversation.update.mockResolvedValue({});
+    deps.prisma.conversationStageHistory.createMany.mockResolvedValue({ count: 2 });
+
+    await (svc as any).closeResolvedSupport();
+
+    // Deve chamar update (nao updateMany) para cada ticket
+    expect(deps.prisma.aiConversation.update).toHaveBeenCalledTimes(2);
+
+    const call1 = deps.prisma.aiConversation.update.mock.calls[0][0];
+    const call2 = deps.prisma.aiConversation.update.mock.calls[1][0];
+
+    // Cada chamado recebe csatToken string unico
+    expect(typeof call1.data.csatToken).toBe('string');
+    expect(typeof call2.data.csatToken).toBe('string');
+    expect(call1.data.csatToken).not.toBe(call2.data.csatToken);
+
+    // Status e outcome corretos
+    expect(call1.data.status).toBe('closed');
+    expect(call1.data.outcome).toBe('resolved');
+  });
+
+  it('nenhum ticket autoCloseAt vencido: nao chama update', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+
+    await (svc as any).closeResolvedSupport();
+
+    expect(deps.prisma.aiConversation.update).not.toHaveBeenCalled();
+    expect(deps.prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
 describe('ConversationJanitorService — N4 notifyClose pula portal: e email:', () => {
   let deps: ReturnType<typeof makeDeps>;
   let svc: ConversationJanitorService;
