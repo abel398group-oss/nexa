@@ -1,9 +1,9 @@
 /**
  * MonitorConfigPage — /settings/monitor
  * Monitor Proativo: alertas automáticos do TMS por setor.
- * Cada setor tem toggle, horário próprio, telefone WhatsApp e e-mail (canal dual).
  *
  * Funcionalidades:
+ *  - Tags removíveis para WhatsApp e E-mail por setor (RecipientTagsInput)
  *  - Auto-fill de telefone/e-mail a partir do cadastro do usuário (GET /monitor/prefill)
  *  - Default Dom-Sáb (todos os dias) para novos setores
  *  - Plan gate: exibe banner + bloqueia edição quando plano não permite
@@ -16,43 +16,50 @@ import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
+import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTagsInput';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
 
+/** Estado interno de um setor — usa recipients[] em vez de strings CSV. */
 interface SectorDetail {
-  /** Telefones WhatsApp — aceita VÁRIOS separados por vírgula (A1: viram recipients[]). */
-  phone: string;
-  /** E-mails para canal dual — aceita VÁRIOS separados por vírgula (A1). */
-  email: string;
+  /** Destinatários (WhatsApp + e-mail combinados). */
+  recipients: Recipient[];
   sendHour: number;
   sendMinute: number;
   /** Dias da semana de envio (0=dom … 6=sáb). */
   sendDays: number[];
 }
 
-/** A1: destinatário individual persistido no sectorConfig do backend. */
-interface SectorRecipient {
-  label?: string;
-  contact: string;
-  channel: 'whatsapp' | 'email';
+/** Shape do sectorConfig vindo do backend (pode ter campos legados ou recipients[]). */
+interface BackendSectorDetail {
+  phone?: string;
+  email?: string;
+  recipients?: Recipient[];
+  sendHour?: number;
+  sendMinute?: number;
+  sendDays?: number[];
 }
 
-/** A1: converte os campos CSV da tela em recipients[] (máx. 10) mantendo
- *  phone/email legados preenchidos com o primeiro de cada (retrocompat). */
-function sectorToPayload(d: SectorDetail): SectorDetail & { recipients: SectorRecipient[] } {
-  const phones = d.phone.split(',').map((s) => s.trim()).filter(Boolean);
-  const emails = d.email.split(',').map((s) => s.trim()).filter(Boolean);
-  const recipients: SectorRecipient[] = [
-    ...phones.map((contact) => ({ contact, channel: 'whatsapp' as const })),
-    ...emails.map((contact) => ({ contact, channel: 'email' as const })),
-  ].slice(0, 10);
-  return { ...d, phone: phones[0] ?? '', email: emails[0] ?? '', recipients };
+/**
+ * Converte SectorDetail em payload para o backend.
+ * Mantém phone/email = primeiro de cada canal (retrocompat já existente no backend).
+ * Sempre envia recipients[] — o backend usa esse campo prioritariamente.
+ */
+function sectorToPayload(d: SectorDetail): BackendSectorDetail & { recipients: Recipient[] } {
+  const waFirst  = d.recipients.find((r) => r.channel === 'whatsapp')?.contact ?? '';
+  const emlFirst = d.recipients.find((r) => r.channel === 'email')?.contact ?? '';
+  return {
+    ...d,
+    phone: waFirst,
+    email: emlFirst,
+    recipients: d.recipients,
+  };
 }
 
-const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-const WEEKDAYS = [1, 2, 3, 4, 5];
+const ALL_DAYS  = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS  = [1, 2, 3, 4, 5];
 const DAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const DAY_TITLES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -70,7 +77,7 @@ interface MonitorConfig {
   logisticEnabled: boolean;
   frotaEnabled: boolean;
   financeEnabled: boolean;
-  sectorConfig?: SectorConfigMap | null;
+  sectorConfig?: Record<string, BackendSectorDetail> | null;
   /** Computed by backend: true if tenant plan allows Monitor (or override active). */
   planAllowed?: boolean;
   /** True if platform admin enabled override for this tenant. */
@@ -171,8 +178,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 // ─── SectorNotifStrip ────────────────────────────────────────────────────────
 // Strip colapsável no rodapé de cada card de setor.
-// Collapsed: ponto de status + "último envio: hoje HH:mm".
-// Expanded: lista compacta dos últimos envios daquele setor.
 
 function SectorNotifStrip({ sectorKey }: { sectorKey: SectorKey }) {
   const [expanded, setExpanded] = useState(false);
@@ -188,11 +193,7 @@ function SectorNotifStrip({ sectorKey }: { sectorKey: SectorKey }) {
 
   const last = logs[0];
 
-  const dotClass = !last
-    ? 'bg-base-300'
-    : last.success
-    ? 'bg-success'
-    : 'bg-error';
+  const dotClass = !last ? 'bg-base-300' : last.success ? 'bg-success' : 'bg-error';
 
   const lastLabel = last
     ? (() => {
@@ -257,7 +258,7 @@ function SectorNotifStrip({ sectorKey }: { sectorKey: SectorKey }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS   = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 const DEFAULT_CONFIG: MonitorConfig = {
@@ -266,7 +267,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   sendMinute: 0,
   notificationPhone: null,
   recipients: [],
-  sendWeekends: true,  // default Dom-Sáb
+  sendWeekends: true,
   channel: 'whatsapp',
   fiscalEnabled: true,
   logisticEnabled: true,
@@ -279,26 +280,25 @@ const DEFAULT_CONFIG: MonitorConfig = {
 
 /** Cria sectorConfig vazio com dias Dom-Sáb por padrão. */
 const makeSectorConfig = (defaultHour = 7, defaultMinute = 0): SectorConfigMap => ({
-  fiscal:   { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  logistic: { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  frota:    { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  finance:  { phone: '', email: '', sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  fiscal:   { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  logistic: { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  frota:    { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
+  finance:  { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
 });
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
 export function MonitorConfigPage() {
-  const [cfg, setCfg] = useState<MonitorConfig>(DEFAULT_CONFIG);
+  const [cfg, setCfg]       = useState<MonitorConfig>(DEFAULT_CONFIG);
   const [sectors, setSectors] = useState<SectorConfigMap>(makeSectorConfig());
   const [saving, setSaving] = useState(false);
 
-  const toast = useToast();
-  const qc = useQueryClient();
-  const { user } = useAuth();
-
+  const toast           = useToast();
+  const qc              = useQueryClient();
+  const { user }        = useAuth();
   const isPlatformAdmin = user?.tenantId === null || user?.tenantId === undefined;
 
-  // ── Queries ─────────────────────────────────────────────────────────────────
+  // ── Queries ──────────────────────────────────────────────────────────────────
 
   const { data: config, isLoading: loadingConfig } = useQuery<MonitorConfig>({
     queryKey: ['monitor-config'],
@@ -315,30 +315,49 @@ export function MonitorConfigPage() {
     if (!config) return;
     setCfg({ ...DEFAULT_CONFIG, ...config });
 
-    // Inicializa sectorConfig: usa dados do banco ou herda hora global.
-    const sc = config.sectorConfig as SectorConfigMap | null | undefined;
-    const h = config.sendHour ?? 7;
-    const m = config.sendMinute ?? 0;
-    // Legado: sem sectorConfig → deriva dias do sendWeekends (ou Dom-Sáb como novo default)
-    const legacyDays = (config.sendWeekends ?? true) ? ALL_DAYS : WEEKDAYS;
-    const withDays = (detail?: Partial<SectorDetail> & { recipients?: SectorRecipient[] }): SectorDetail => {
-      // A1: se o backend tem recipients[], exibe como CSV nos campos (N contatos).
-      const recips = Array.isArray(detail?.recipients) ? detail!.recipients! : [];
-      const phoneCsv = recips.filter((r) => r?.channel === 'whatsapp').map((r) => r.contact).join(', ');
-      const emailCsv = recips.filter((r) => r?.channel === 'email').map((r) => r.contact).join(', ');
+    const sc          = config.sectorConfig as Record<string, BackendSectorDetail> | null | undefined;
+    const h           = config.sendHour ?? 7;
+    const m           = config.sendMinute ?? 0;
+    const legacyDays  = (config.sendWeekends ?? true) ? ALL_DAYS : WEEKDAYS;
+
+    /**
+     * Constrói SectorDetail a partir do payload do backend.
+     * Prioridade: recipients[] → migra phone/email legados (e CSV antigo) → vazio.
+     */
+    const withRecipients = (detail?: BackendSectorDetail): SectorDetail => {
+      const recips: Recipient[] = Array.isArray(detail?.recipients) ? detail!.recipients! : [];
+
+      // Migração legada: sem recipients[] mas tem phone/email (string ou CSV)
+      if (recips.length === 0 && detail) {
+        if (detail.phone) {
+          detail.phone
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((contact) => recips.push({ contact, channel: 'whatsapp' }));
+        }
+        if (detail.email) {
+          detail.email
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((contact) => recips.push({ contact, channel: 'email' }));
+        }
+      }
+
       return {
-        phone: phoneCsv || detail?.phone || '',
-        email: emailCsv || detail?.email || '',
-        sendHour: detail?.sendHour ?? h,
+        recipients: recips,
+        sendHour:   detail?.sendHour ?? h,
         sendMinute: detail?.sendMinute ?? m,
-        sendDays: detail?.sendDays?.length ? detail.sendDays : legacyDays,
+        sendDays:   detail?.sendDays?.length ? detail.sendDays : legacyDays,
       };
     };
+
     setSectors({
-      fiscal:   withDays(sc?.fiscal),
-      logistic: withDays(sc?.logistic),
-      frota:    withDays(sc?.frota),
-      finance:  withDays(sc?.finance),
+      fiscal:   withRecipients(sc?.fiscal),
+      logistic: withRecipients(sc?.logistic),
+      frota:    withRecipients(sc?.frota),
+      finance:  withRecipients(sc?.finance),
     });
   }, [config]);
 
@@ -365,12 +384,11 @@ export function MonitorConfigPage() {
             !['sectorConfig', 'planAllowed', 'monitorOverride'].includes(k),
           ),
         ),
-        // A1: campos CSV viram recipients[] por setor (retrocompat com phone/email).
         sectorConfig: {
-          fiscal: sectorToPayload(sectors.fiscal),
+          fiscal:   sectorToPayload(sectors.fiscal),
           logistic: sectorToPayload(sectors.logistic),
-          frota: sectorToPayload(sectors.frota),
-          finance: sectorToPayload(sectors.finance),
+          frota:    sectorToPayload(sectors.frota),
+          finance:  sectorToPayload(sectors.finance),
         },
       };
       await api.put('/monitor/config', payload);
@@ -430,7 +448,6 @@ export function MonitorConfigPage() {
     onError: () => toast.error('Erro ao disparar notificações.'),
   });
 
-  /** Platform admin: toggle override de plano para o tenant ativo (x-acting-tenant-id). */
   const toggleOverride = useMutation({
     mutationFn: (enabled: boolean) => api.post('/monitor/config/override', { enabled }),
     onSuccess: () => {
@@ -447,8 +464,14 @@ export function MonitorConfigPage() {
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
-  const setSector = (key: SectorKey, field: keyof SectorDetail, val: string | number | number[]) =>
-    setSectors((s) => ({ ...s, [key]: { ...s[key], [field]: val } }));
+  const setSectorField = (
+    key: SectorKey,
+    field: 'sendHour' | 'sendMinute',
+    val: number,
+  ) => setSectors((s) => ({ ...s, [key]: { ...s[key], [field]: val } }));
+
+  const setSectorRecipients = (key: SectorKey, recipients: Recipient[]) =>
+    setSectors((s) => ({ ...s, [key]: { ...s[key], recipients } }));
 
   /** Liga/desliga um dia do setor. Impede deixar zero dias (mínimo 1). */
   const toggleSectorDay = (key: SectorKey, day: number) =>
@@ -457,21 +480,31 @@ export function MonitorConfigPage() {
       const next = current.includes(day)
         ? current.filter((d) => d !== day)
         : [...current, day].sort((a, b) => a - b);
-      if (next.length === 0) return s; // pelo menos 1 dia
+      if (next.length === 0) return s;
       return { ...s, [key]: { ...s[key], sendDays: next } };
     });
 
-  /** Auto-fill: preenche telefone e e-mail de todos os setores com os dados do cadastro. */
+  /**
+   * Auto-fill: adiciona telefone/e-mail do cadastro nos setores que ainda não
+   * têm nenhum destinatário do canal correspondente.
+   */
   function fillAllSectorsFromPrefill() {
     if (!prefill) return;
     setSectors((s) => {
       const updated = { ...s };
       for (const key of Object.keys(updated) as SectorKey[]) {
-        updated[key] = {
-          ...updated[key],
-          phone: prefill.phone ? (updated[key].phone || prefill.phone) : updated[key].phone,
-          email: prefill.email ? (updated[key].email || prefill.email) : updated[key].email,
-        };
+        const existing = updated[key].recipients;
+        const hasWa    = existing.some((r) => r.channel === 'whatsapp');
+        const hasEmail = existing.some((r) => r.channel === 'email');
+        const toAdd: Recipient[] = [];
+        if (!hasWa    && prefill.phone) toAdd.push({ contact: prefill.phone, channel: 'whatsapp' });
+        if (!hasEmail && prefill.email) toAdd.push({ contact: prefill.email, channel: 'email' });
+        if (toAdd.length > 0) {
+          updated[key] = {
+            ...updated[key],
+            recipients: [...existing, ...toAdd].slice(0, 10),
+          };
+        }
       }
       return updated;
     });
@@ -596,13 +629,12 @@ export function MonitorConfigPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40">
                 Alertas por setor
               </p>
-              {/* Auto-fill a partir do cadastro */}
               {prefill && (prefill.phone || prefill.email) && (
                 <button
                   type="button"
                   className="text-xs text-brand-500 hover:text-brand-400 transition-colors flex items-center gap-1"
                   onClick={fillAllSectorsFromPrefill}
-                  title="Preenche telefone/e-mail com dados do seu cadastro nos setores que ainda estão em branco"
+                  title="Preenche com seus dados de cadastro nos setores em branco"
                 >
                   <Icon name="users" className="h-3 w-3" />
                   Usar dados do meu cadastro
@@ -613,7 +645,9 @@ export function MonitorConfigPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {SECTORS.map((sector) => {
                 const enabled = !!cfg[sector.enabledKey];
-                const sc = sectors[sector.key];
+                const sc      = sectors[sector.key];
+                const waRecips    = sc.recipients.filter((r) => r.channel === 'whatsapp');
+                const emailRecips = sc.recipients.filter((r) => r.channel === 'email');
 
                 return (
                   <div
@@ -644,8 +678,8 @@ export function MonitorConfigPage() {
                       </label>
                     </div>
 
-                    {/* Corpo: horário + telefone + e-mail + dias + histórico */}
-                    <div className={`px-5 py-5 space-y-4 transition-opacity ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+                    {/* Corpo */}
+                    <div className={`px-5 py-5 space-y-5 transition-opacity ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
 
                       {/* Horário */}
                       <div>
@@ -656,7 +690,7 @@ export function MonitorConfigPage() {
                           <select
                             className="select select-bordered select-sm flex-1"
                             value={sc.sendHour}
-                            onChange={(e) => setSector(sector.key, 'sendHour', Number(e.target.value))}
+                            onChange={(e) => setSectorField(sector.key, 'sendHour', Number(e.target.value))}
                           >
                             {HOURS.map((h) => (
                               <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
@@ -665,42 +699,44 @@ export function MonitorConfigPage() {
                           <select
                             className="select select-bordered select-sm w-28"
                             value={sc.sendMinute}
-                            onChange={(e) => setSector(sector.key, 'sendMinute', Number(e.target.value))}
+                            onChange={(e) => setSectorField(sector.key, 'sendMinute', Number(e.target.value))}
                           >
-                            {MINUTES.map((m) => (
-                              <option key={m} value={m}>{String(m).padStart(2, '0')}min</option>
+                            {MINUTES.map((mm) => (
+                              <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
                             ))}
                           </select>
                         </div>
                       </div>
 
-                      {/* WhatsApp */}
-                      <div>
-                        <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                          <span>📱</span> WhatsApp (com DDI) — vários separados por vírgula
-                        </p>
-                        <input
-                          type="text"
-                          className="input input-bordered input-sm w-full"
-                          placeholder="5511999999999, 5511888888888"
-                          value={sc.phone}
-                          onChange={(e) => setSector(sector.key, 'phone', e.target.value)}
-                        />
-                      </div>
+                      {/* WhatsApp — RecipientTagsInput */}
+                      <RecipientTagsInput
+                        channel="whatsapp"
+                        label="📱 WhatsApp (com DDI)"
+                        value={waRecips}
+                        onChange={(newWa) =>
+                          setSectorRecipients(sector.key, [
+                            ...newWa,
+                            ...emailRecips,
+                          ])
+                        }
+                        disabled={!enabled}
+                        max={10}
+                      />
 
-                      {/* E-mail */}
-                      <div>
-                        <p className="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                          <span>✉️</span> E-mail (opcional — canal dual) — vários separados por vírgula
-                        </p>
-                        <input
-                          type="text"
-                          className="input input-bordered input-sm w-full"
-                          placeholder="financeiro@empresa.com.br, gerente@empresa.com.br"
-                          value={sc.email}
-                          onChange={(e) => setSector(sector.key, 'email', e.target.value)}
-                        />
-                      </div>
+                      {/* E-mail — RecipientTagsInput */}
+                      <RecipientTagsInput
+                        channel="email"
+                        label="✉️ E-mail (opcional — canal dual)"
+                        value={emailRecips}
+                        onChange={(newEmail) =>
+                          setSectorRecipients(sector.key, [
+                            ...waRecips,
+                            ...newEmail,
+                          ])
+                        }
+                        disabled={!enabled}
+                        max={10}
+                      />
 
                       {/* Dias de envio */}
                       <div>
@@ -710,14 +746,14 @@ export function MonitorConfigPage() {
                             <button
                               type="button"
                               className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
-                              onClick={() => setSector(sector.key, 'sendDays', WEEKDAYS)}
+                              onClick={() => setSectors((s) => ({ ...s, [sector.key]: { ...s[sector.key], sendDays: WEEKDAYS } }))}
                             >
                               Dias úteis
                             </button>
                             <button
                               type="button"
                               className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
-                              onClick={() => setSector(sector.key, 'sendDays', ALL_DAYS)}
+                              onClick={() => setSectors((s) => ({ ...s, [sector.key]: { ...s[sector.key], sendDays: ALL_DAYS } }))}
                             >
                               Todos
                             </button>

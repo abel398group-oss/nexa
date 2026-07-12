@@ -18,6 +18,7 @@ export * from '@/components/ui/Breadcrumb';
 
 // Primitivos base
 export * from '@/components/ui/Button';
+export * from '@/components/ui/RecipientTagsInput';
 export * from '@/components/ui/IconButton';
 export * from '@/components/ui/Input';
 export * from '@/components/ui/Textarea';
