@@ -812,7 +812,11 @@ model TenantNotificationConfig {
   logisticEnabled Boolean  @default(true) @map("logistic_enabled")
   frotaEnabled    Boolean  @default(true) @map("frota_enabled")
   financeEnabled  Boolean  @default(true) @map("finance_enabled")
-  sectorConfig    Json?    @map("sector_config")    // { fiscal|logistic|frota|finance: { phone, email, sendHour, sendMinute, sendDays } }
+  sectorConfig       Json?    @map("sector_config")       // { fiscal|logistic|frota|finance: { phone, email, recipients[], sendHour, sendMinute, sendDays } }
+  // G4: severidade mínima para notificação WhatsApp imediata.
+  // 'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente.
+  // 'all' = todo evento novo notifica (comportamento pré-G4).
+  immediateSeverity  String   @default("CRITICAL") @map("immediate_severity")
   monitorOverride Boolean  @default(false) @map("monitor_override") // platform-admin override: unlock monitor regardless of plan
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")

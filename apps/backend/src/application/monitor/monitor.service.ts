@@ -30,7 +30,13 @@ const EXTERNAL_CONFIG_SELECT = {
   frotaEnabled: true,
   financeEnabled: true,
   sectorConfig: true,
+  immediateSeverity: true,
 } as const;
+
+/** G4: severidades que disparam WhatsApp imediato. 'CRITICAL' = default conservador.
+ *  'all' = comportamento legado (todo evento novo notifica). */
+const IMMEDIATE_SEVERITY_DEFAULT = 'CRITICAL';
+const IMMEDIATE_ALL_SEVERITIES = new Set(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']);
 
 export interface ExternalMonitorConfigInput {
   enabled?: boolean;
@@ -52,6 +58,10 @@ export interface ExternalMonitorConfigInput {
       sendDays?: number[];
     }
   >;
+  /** G4: qual severidade mínima dispara WhatsApp imediato.
+   *  'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente;
+   *  'all' = todo evento novo notifica (comportamento pré-G4). */
+  immediateSeverity?: 'CRITICAL' | 'all';
 }
 
 /** A1: saneia o sectorConfig antes de persistir — cap de 10 destinatários,
@@ -292,36 +302,79 @@ export class MonitorService {
   }
 
   /**
-   * Envia WhatsApp para o admin de cada sub-cliente com seus alertas consolidados.
+   * Envia WhatsApp imediato para os destinatários de cada evento novo/CRITICAL.
    *
-   * Agrupa eventos por adminPhone para que o admin receba UMA mensagem com todos
-   * os alertas de uma vez, em vez de uma mensagem por alerta.
-   * Eventos sem adminPhone são ignorados (logados como warning).
+   * G4: filtra por immediateSeverity (config do tenant, default 'CRITICAL').
+   *     Eventos que não passam no filtro aguardam o digest do horário configurado.
+   * G3: resolve destinatários de sectorConfig[category].recipients[] (whatsapp);
+   *     fallback para sectorConfig[category].phone; fallback final para adminPhone.
+   * G2: buildAlertMessage tem teto de 10 itens + nota de overflow.
+   * A2: envio via canal agnóstico (channel.sendTo), nunca waha direto.
    *
    * Retorna o número de phones notificados com sucesso.
    */
   private async sendAlertsToAdmins(tenantId: string, events: TmsProactivityEvent[]): Promise<number> {
     if (!events.length) return 0;
 
-    // Agrupa por phone
+    const config = await this.getConfig(tenantId);
+
+    // G4 — filtro por severidade imediata
+    const immediacy: string = (config as any)?.immediateSeverity ?? IMMEDIATE_SEVERITY_DEFAULT;
+    const toSend =
+      immediacy === 'all'
+        ? events
+        : events.filter((e) => e.severity === 'CRITICAL');
+
+    if (!toSend.length) {
+      this.logger.debug(
+        `Monitor: ${events.length} evento(s) novo(s) mas nenhum atinge immediateSeverity="${immediacy}" — aguardam digest (tenant=${tenantId})`,
+      );
+      return 0;
+    }
+
+    // G3 — resolve destinatários por setor
+    const sectorCfg = config?.sectorConfig as Record<string, any> | null | undefined;
+
     const byPhone = new Map<string, TmsProactivityEvent[]>();
-    for (const e of events) {
-      if (!e.adminPhone) {
-        this.logger.warn(`Monitor: evento "${e.id}" sem adminPhone — não será notificado via WhatsApp`);
+    for (const e of toSend) {
+      const sector = sectorCfg?.[e.category];
+
+      // Prioridade: recipients[].whatsapp → sector.phone → adminPhone (payload TMS)
+      let phones: string[] = [];
+
+      const recipients: Array<{ contact: string; channel: string }> = sector?.recipients ?? [];
+      const waRecipients = recipients.filter(
+        (r) => r.channel === 'whatsapp' && typeof r.contact === 'string' && r.contact.trim(),
+      );
+      if (waRecipients.length > 0) {
+        phones = waRecipients.map((r) => r.contact.trim());
+      } else if (sector?.phone) {
+        phones = [sector.phone];
+      } else if (e.adminPhone) {
+        phones = [e.adminPhone];
+      }
+
+      if (!phones.length) {
+        this.logger.warn(
+          `Monitor: evento "${e.id}" (${e.category}) sem destinatário WhatsApp — não será notificado`,
+        );
         continue;
       }
-      const list = byPhone.get(e.adminPhone) ?? [];
-      list.push(e);
-      byPhone.set(e.adminPhone, list);
+
+      for (const phone of phones) {
+        const list = byPhone.get(phone) ?? [];
+        list.push(e);
+        byPhone.set(phone, list);
+      }
     }
 
     let notified = 0;
     for (const [phone, phoneEvents] of byPhone) {
+      // G2: mensagem com teto de itens
       const msg = this.buildAlertMessage(phoneEvents);
-      // A2: envio via canal agnóstico (WAHA ou Cloud API), não mais waha direto
       const r = await this.channel.sendTo(tenantId, phone, msg);
       if (r.sent) {
-        this.logger.log(`Monitor: ${phoneEvents.length} alerta(s) enviado(s) para ${phone}`);
+        this.logger.log(`Monitor: ${phoneEvents.length} alerta(s) enviado(s) para ${phone} (tenant=${tenantId})`);
         notified++;
       } else {
         this.logger.warn(`Monitor: falha ao notificar ${phone}: ${r.reason}`);
@@ -332,10 +385,12 @@ export class MonitorService {
   }
 
   /**
-   * Monta a mensagem consolidada de alertas para um admin.
-   * Ordena por severidade (CRITICAL primeiro) e formata com emojis.
+   * G2 — Monta mensagem consolidada com teto de 10 itens por severidade.
+   * Ordena CRITICAL → OVERDUE → DUE_SOON → INFO.
+   * Se eventos.length > 10: exibe top 10 e nota de overflow em vez de lista infinita.
    */
-  private buildAlertMessage(events: TmsProactivityEvent[]): string {
+  buildAlertMessage(events: TmsProactivityEvent[]): string {
+    const CAP = 10;
     const SEV_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
     const SEV_ICON: Record<string, string> = {
       CRITICAL: '🔴',
@@ -350,9 +405,11 @@ export class MonitorService {
     const sorted = [...events].sort(
       (a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity),
     );
+    const shown    = sorted.slice(0, CAP);
+    const overflow = sorted.length - CAP;
 
-    const lines = sorted.map((e) => {
-      const icon = SEV_ICON[e.severity] ?? '⚪';
+    const lines = shown.map((e) => {
+      const icon   = SEV_ICON[e.severity] ?? '⚪';
       const detail = e.description ? `\n   ${e.description}` : '';
       return `${icon} ${e.title}${detail}`;
     });
@@ -360,12 +417,16 @@ export class MonitorService {
     const greeting = adminName ? `Olá *${adminName}*` : 'Olá';
     const company  = companyName ? ` (${companyName})` : '';
     const plural   = events.length > 1 ? 'alertas' : 'alerta';
+    const footer   =
+      overflow > 0
+        ? `\n\n… e mais ${overflow} pendência(s), veja o painel.`
+        : `\n\nAcesse o sistema para verificar e resolver cada item.`;
 
     return (
       `${greeting}${company}! ⚠️\n\n` +
       `*${events.length} ${plural} no HiperTMS:*\n\n` +
       lines.join('\n\n') +
-      `\n\nAcesse o sistema para verificar e resolver cada item.`
+      footer
     );
   }
 
