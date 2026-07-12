@@ -203,9 +203,8 @@ export function RecipientTagsInput({
           )}
         >
           <span className="text-xs text-base-content/70">
-            <span className="font-semibold text-base-content">{value.length}</span>{' '}
-            contato{value.length !== 1 ? 's' : ''} configurado{value.length !== 1 ? 's' : ''} — clique
-            para {expanded ? 'ocultar' : 'ver'}
+            <span className="font-semibold text-base-content">{value.length}</span>
+            {` ${value.length !== 1 ? 'contatos configurados' : 'contato configurado'} — clique para ${expanded ? 'ocultar' : 'ver'}`}
           </span>
           <span
             className={cn(
