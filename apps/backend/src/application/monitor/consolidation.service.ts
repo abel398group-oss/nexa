@@ -43,6 +43,13 @@ interface SectorCfg {
   sendMinute?: number;
   /** Dias da semana de envio (0=dom … 6=sáb). Ausente → deriva do sendWeekends global. */
   sendDays?: number[];
+  /**
+   * ISO date (YYYY-MM-DD, fuso do servidor) do último digest enviado com sucesso para
+   * este setor. Gravado no DB após cada envio para sobreviver a restarts.
+   * Usado pelo mecanismo de catch-up: se o backend reiniciou durante a janela de 5 min
+   * e o alerta do dia se perdeu, o próximo tick reenvia (até 2h após o horário configurado).
+   */
+  lastDigestDate?: string;
 }
 
 /** A1: máximo de destinatários por setor. */
@@ -208,6 +215,13 @@ export class ConsolidationService {
 
   // ─── Modo per-sector ────────────────────────────────────────────────────────
 
+  /**
+   * Janela máxima de catch-up (em minutos) após o horário configurado.
+   * Se o backend reiniciou e o tick caiu dentro desta janela → envia com atraso.
+   * Após este limite → logger.warn e desiste (não envia).
+   */
+  private static readonly CATCHUP_WINDOW_MINUTES = 120;
+
   private async processPerSector(
     tenantId: string,
     config: Record<string, any>,
@@ -220,54 +234,87 @@ export class ConsolidationService {
     let totalSent = 0;
     const globalHour = config?.sendHour ?? Number(process.env.MONITOR_DEFAULT_SEND_HOUR ?? 7);
     const globalMinute = config?.sendMinute ?? 0;
+    const todayStr = this.toDateStr(now);
+
+    /**
+     * Skip reasons acumulados por sector.key durante o loop.
+     * Emitidos em UMA linha de log ao final — evita spam e mantém rastreabilidade.
+     */
+    const skipReasons: Record<string, string> = {};
 
     for (const sector of SECTORS) {
-      const sc = sectorConfig[sector.key];
+      // Usa spread para manter o tipo correto; sc pode ser undefined se o setor nunca foi configurado.
+      const sc: SectorCfg = sectorConfig[sector.key] ?? {};
+
       // A1: resolve a lista de destinatários (recipients[] > phone/email legados)
       const { phones, emails } = this.resolveSectorRecipients(sc);
       if (!phones.length && !emails.length) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem destinatário configurado — pulando`);
+        skipReasons[sector.key] = 'sem_destinatario';
         continue;
       }
 
       // Verifica se o setor está habilitado
       if (!config[sector.enabledField]) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: desabilitado — pulando`);
+        skipReasons[sector.key] = 'desabilitado';
         continue;
       }
 
       const sectorHour = sc.sendHour ?? globalHour;
       const sectorMinute = sc.sendMinute ?? globalMinute;
       const sendDays = this.resolveSendDays(sc, config);
-
-      if (!force && !sendDays.includes(now.getDay())) {
-        this.logger.debug(
-          `[${tenantId}] setor ${sector.key}: hoje (dia ${now.getDay()}) fora dos dias de envio [${sendDays.join(',')}] — pulando`,
-        );
-        continue;
-      }
+      let isCatchUp = false;
 
       if (!force) {
-        if (currentHour !== sectorHour) {
-          this.logger.debug(
-            `[${tenantId}] setor ${sector.key}: fora da hora (agora=${currentHour}h alvo=${sectorHour}h)`,
-          );
+        if (!sendDays.includes(now.getDay())) {
+          skipReasons[sector.key] = 'fora_do_dia';
           continue;
         }
-        if (currentMinute < sectorMinute || currentMinute >= sectorMinute + 5) {
-          this.logger.debug(
-            `[${tenantId}] setor ${sector.key}: fora da janela (min=${currentMinute} alvo=${sectorMinute}-${sectorMinute + 5})`,
-          );
-          continue;
-        }
-      }
 
-      // Dedup por tenant:sector
-      const dedupKey = `${tenantId}:${sector.key}`;
-      const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
-      if (!force && this.sentThisHour.get(dedupKey) === slotKey) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: já enviado neste slot — pulando`);
-        continue;
+        const inWindow =
+          currentHour === sectorHour &&
+          currentMinute >= sectorMinute &&
+          currentMinute < sectorMinute + 5;
+
+        const alreadySentToday = sc.lastDigestDate === todayStr;
+
+        if (inWindow) {
+          // Janela normal: dedup in-memory + lastDigestDate impedem duplo envio.
+          const dedupKey = `${tenantId}:${sector.key}`;
+          const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
+          if (this.sentThisHour.get(dedupKey) === slotKey || alreadySentToday) {
+            skipReasons[sector.key] = 'ja_enviado';
+            continue;
+          }
+        } else if (!alreadySentToday) {
+          // Fora da janela de 5 min mas ainda não enviou hoje → avaliar catch-up.
+          const nowMins = currentHour * 60 + currentMinute;
+          const scheduledMins = sectorHour * 60 + sectorMinute;
+          const diffMins = nowMins - scheduledMins;
+
+          if (diffMins >= 0 && diffMins < ConsolidationService.CATCHUP_WINDOW_MINUTES) {
+            // Dentro da janela de catch-up: backend provavelmente reiniciou durante o alvo.
+            isCatchUp = true;
+            this.logger.log(
+              `[${tenantId}] setor ${sector.key}: catch-up (${diffMins}min após ${sectorHour}h${String(sectorMinute).padStart(2, '0')} — possível restart durante janela)`,
+            );
+          } else if (diffMins >= ConsolidationService.CATCHUP_WINDOW_MINUTES) {
+            // Passou da janela de 2h → desiste e avisa.
+            this.logger.warn(
+              `[${tenantId}] setor ${sector.key}: janela de catch-up expirada ` +
+              `(${diffMins}min após ${sectorHour}h${String(sectorMinute).padStart(2, '0')}) — digest do dia perdido`,
+            );
+            skipReasons[sector.key] = 'catch_up_expirado';
+            continue;
+          } else {
+            // diffMins < 0: horário ainda não chegou hoje.
+            skipReasons[sector.key] = 'fora_da_hora';
+            continue;
+          }
+        } else {
+          // alreadySentToday && !inWindow: envio diário já registrado → skip normal.
+          skipReasons[sector.key] = 'ja_enviado_hoje';
+          continue;
+        }
       }
 
       // Busca alertas do setor
@@ -282,17 +329,19 @@ export class ConsolidationService {
       });
 
       if (!alerts.length) {
-        this.logger.debug(`[${tenantId}] setor ${sector.key}: sem alertas abertos`);
+        skipReasons[sector.key] = 'sem_alertas';
         continue;
       }
 
       const message = this.buildSectorMessage(sector, alerts, now);
+      const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
 
-      // WhatsApp — A1: todos os destinatários do canal; A4: enfileira com jitter
-      // de até 2min (força = sem jitter, o admin está esperando na tela).
+      // WhatsApp — A1: todos os destinatários do canal; jitter de até 2min (força = sem jitter).
       for (const phone of phones) {
         await this.notification.notifyPhone(tenantId, phone, message, force ? 0 : 120_000);
-        this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → WhatsApp ${phone} (enfileirado)`);
+        this.logger.log(
+          `[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → WhatsApp ${phone}${catchUpSuffix} (enfileirado)`,
+        );
       }
 
       // E-mail — A1: todos os destinatários do canal (dual)
@@ -302,19 +351,37 @@ export class ConsolidationService {
         for (const email of emails) {
           const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
           if (result.sent) {
-            this.logger.log(`[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${email}`);
+            this.logger.log(
+              `[${tenantId}] setor ${sector.key}: ${alerts.length} alerta(s) → e-mail ${email}${catchUpSuffix}`,
+            );
           } else {
-            this.logger.warn(`[${tenantId}] setor ${sector.key}: falha e-mail → ${email}: ${result.reason}`);
+            this.logger.warn(
+              `[${tenantId}] setor ${sector.key}: falha e-mail → ${email}: ${result.reason}`,
+            );
           }
         }
       }
 
-      if (!force) this.sentThisHour.set(dedupKey, slotKey);
+      if (!force) {
+        const dedupKey = `${tenantId}:${sector.key}`;
+        const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
+        this.sentThisHour.set(dedupKey, slotKey);
+        // Persiste lastDigestDate no JSON do banco para sobreviver a restarts futuros.
+        sectorConfig[sector.key] = { ...sc, lastDigestDate: todayStr };
+        await this.persistLastDigestDate(tenantId, sectorConfig);
+      }
 
       const alertIds = alerts.map((a) => a.id);
       await this.persistAlertUpdates(alertIds, now);
 
       totalSent += alerts.length;
+    }
+
+    // ── Observabilidade: uma linha de log por tenant com todos os setores que não enviaram ──
+    const skipped = Object.entries(skipReasons);
+    if (skipped.length > 0) {
+      const summary = skipped.map(([k, v]) => `${k}=${v}`).join(', ');
+      this.logger.log(`[${tenantId}] setores sem envio neste tick: ${summary}`);
     }
 
     return totalSent;
@@ -560,9 +627,37 @@ export class ConsolidationService {
 </html>`;
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // ─── Helpers ────────────────────────────────────────────────────────────────────────────
 
-  /** Gera chave numérica única por janela de 5 min (para deduplicação). */
+  /**
+   * Retorna a data como string 'YYYY-MM-DD' no fuso local do servidor.
+   * Usado pelo mecanismo de catch-up (lastDigestDate) para detectar se o digest
+   * já foi enviado hoje sem depender do Map em memória (que é limpo no restart).
+   */
+  toDateStr(d: Date): string {
+    return (
+      `${d.getFullYear()}-` +
+      `${String(d.getMonth() + 1).padStart(2, '0')}-` +
+      `${String(d.getDate()).padStart(2, '0')}`
+    );
+  }
+
+  /**
+   * Persiste o sectorConfig atualizado (com lastDigestDate por setor) de volta
+   * ao banco para que o catch-up sobreviva a reinicializações do container.
+   * Escreve o JSON completo — chamado após cada envio bem-sucedido de setor.
+   */
+  private async persistLastDigestDate(
+    tenantId: string,
+    sectorConfig: Record<string, SectorCfg>,
+  ): Promise<void> {
+    await this.prisma.tenantNotificationConfig.update({
+      where: { tenantId },
+      data: { sectorConfig: sectorConfig as any },
+    });
+  }
+
+  /** Gera chave numérica única por janela de 5 min (para deduplicaCao). */
   private makeSlotKey(now: Date, hour: number, minute: number): number {
     const slot5 = Math.floor(minute / 5);
     return (

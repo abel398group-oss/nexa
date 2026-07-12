@@ -188,7 +188,14 @@ describe('Colapso e expansão', () => {
 
   it('colapsa automaticamente com 3 contatos', () => {
     setup({ channel: 'whatsapp', value: threeContacts });
-    expect(screen.getByText(/3 contatos configurados/i)).toBeInTheDocument();
+    // The count "3" renders inside a nested bold <span>, so the summary text is
+    // split across elements. Match on the element's full textContent instead.
+    expect(
+      screen.getByText((_content, el) => {
+        const text = el?.textContent?.replace(/\s+/g, ' ').trim();
+        return text === '3 contatos configurados — clique para ver';
+      }),
+    ).toBeInTheDocument();
     // Tags inline should NOT be visible
     expect(screen.queryByText('5511111111111')).not.toBeInTheDocument();
   });
