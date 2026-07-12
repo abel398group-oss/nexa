@@ -14,7 +14,7 @@
  * Debug manual: POST /monitor/sync chama syncNow() sob demanda.
  * Notificação manual: POST /monitor/notify-now dispara ConsolidationService (legado).
  */
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { HiperTmsConnector, TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
 import { NOTIFICATION_CHANNEL, NotificationChannel } from './notification-channel.interface';
@@ -91,8 +91,9 @@ function sanitizeSectorConfig(
 }
 
 @Injectable()
-export class MonitorService {
+export class MonitorService implements OnModuleInit {
   private readonly logger = new Logger('MonitorService');
+  private static readonly DEGRADATION_THRESHOLD = 10;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -100,6 +101,24 @@ export class MonitorService {
     // A2: canal agnóstico de provedor — sendAlertsToAdmins usa o channel, não o WAHA direto
     @Inject(NOTIFICATION_CHANNEL) private readonly channel: NotificationChannel,
   ) {}
+
+  /**
+   * Agendamento automático de reconciliação (configura um setInterval no boot).
+   * Intervalo: MONITOR_SYNC_INTERVAL_MIN minutos (default 60).
+   * Só ativo quando MONITOR_ENABLED=true.
+   */
+  onModuleInit(): void {
+    if ((process.env.MONITOR_ENABLED ?? '').toLowerCase() !== 'true') return;
+    const intervalMin = Math.max(1, Number(process.env.MONITOR_SYNC_INTERVAL_MIN ?? 60));
+    setInterval(
+      () =>
+        this.runReconciliation().catch((e: any) =>
+          this.logger.warn(`Monitor: erro inesperado na reconciliação: ${e?.message}`),
+        ),
+      intervalMin * 60 * 1000,
+    );
+    this.logger.log(`Monitor: reconciliação automática agendada a cada ${intervalMin}min`);
+  }
 
   /**
    * Recebe eventos empurrados pelo TMS (webhook push).
@@ -133,14 +152,67 @@ export class MonitorService {
     return { synced, resolved, notified };
   }
 
-  /** Força uma sincronização imediata para um tenant (usado pelo controller p/ debug). */
-  async syncNow(tenantId: string): Promise<{ synced: number; resolved: number }> {
+  /**
+   * Força uma sincronização imediata para um tenant.
+   * Usado pelo controller (debug/manual) e internamente pela reconciliação automática.
+   * Passa novos eventos pelo MESMO fluxo de imediatos do ingest (sendAlertsToAdmins).
+   */
+  async syncNow(tenantId: string): Promise<{ synced: number; resolved: number; notified: number; newEventsCount: number }> {
     const tenant = await this.prisma.tenant.findFirst({ where: { id: tenantId, status: 'active' } });
-    if (!tenant) return { synced: 0, resolved: 0 };
+    if (!tenant) return { synced: 0, resolved: 0, notified: 0, newEventsCount: 0 };
 
     const events = await this.tms.getProactivityEvents(this.resolveTmsTenantId(tenant.slug));
-    const { synced, resolved } = await this.syncAlertStates(tenantId, events);
-    return { synced, resolved };
+    const { synced, resolved, newEvents } = await this.syncAlertStates(tenantId, events);
+    const notified = await this.sendAlertsToAdmins(tenantId, newEvents);
+    return { synced, resolved, notified, newEventsCount: newEvents.length };
+  }
+
+  /**
+   * Reconciliação pull para todos os tenants com monitor habilitado.
+   *
+   * Chamado pelo setInterval configurado em onModuleInit (default 60min) e pode
+   * ser chamado diretamente (ex: testes, endpoint de admin).
+   *
+   * Comportamentos:
+   *  1. Itera todos os TenantNotificationConfig com enabled=true.
+   *  2. Por tenant: syncNow → sendAlertsToAdmins (mesmo fluxo do ingest).
+   *  3. Try/catch por tenant — falha de um não para os demais.
+   *  4. Se newEventsCount > DEGRADATION_THRESHOLD → warn "push TMS→Nexa possivelmente degradado".
+   *  5. Log resumido ao final: "reconciliação: N tenant(s), X synced, Y resolved, Z notified".
+   */
+  async runReconciliation(): Promise<{ tenants: number; synced: number; resolved: number; notified: number }> {
+    const configs = await this.prisma.tenantNotificationConfig.findMany({
+      where: { enabled: true },
+      select: { tenantId: true },
+    });
+
+    let totalSynced = 0;
+    let totalResolved = 0;
+    let totalNotified = 0;
+
+    for (const { tenantId } of configs) {
+      try {
+        const { synced, resolved, notified, newEventsCount } = await this.syncNow(tenantId);
+        totalSynced   += synced;
+        totalResolved += resolved;
+        totalNotified += notified;
+
+        if (newEventsCount > MonitorService.DEGRADATION_THRESHOLD) {
+          this.logger.warn(
+            `Monitor: push TMS→Nexa possivelmente degradado — ` +
+            `${newEventsCount} eventos novos descobertos pela reconciliação (tenant=${tenantId})`,
+          );
+        }
+      } catch (e: any) {
+        this.logger.warn(`Monitor: reconciliação falhou para tenant ${tenantId}: ${e?.message}`);
+      }
+    }
+
+    this.logger.log(
+      `reconciliação: ${configs.length} tenant(s), ${totalSynced} synced, ${totalResolved} resolved, ${totalNotified} notified`,
+    );
+
+    return { tenants: configs.length, synced: totalSynced, resolved: totalResolved, notified: totalNotified };
   }
 
   /**

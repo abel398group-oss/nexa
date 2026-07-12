@@ -228,3 +228,219 @@ describe('MonitorService.sendAlertsToAdmins — G3 destinatario por setor', () =
     expect(channel.sendTo).toHaveBeenCalledTimes(2);
   });
 });
+
+// ─── Reconciliação automática — factories estendidas ─────────────────────────
+// Os testes abaixo precisam de tenantNotificationConfig.findMany e tenant.findFirst
+// não presentes no makeService() acima. Usamos makeServiceR() dedicado.
+
+function makeServiceR(configOverrides: Record<string, any> = {}) {
+  const config = {
+    enabled: true,
+    sendHour: 8,
+    sendMinute: 0,
+    sendWeekends: false,
+    fiscalEnabled: true,
+    logisticEnabled: true,
+    frotaEnabled: true,
+    financeEnabled: true,
+    sectorConfig: null,
+    immediateSeverity: 'CRITICAL',
+    ...configOverrides,
+  };
+
+  const prisma = {
+    tenant: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    alertState: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    tenantNotificationConfig: {
+      findUnique: vi.fn().mockResolvedValue(config),
+      findMany:   vi.fn().mockResolvedValue([]),
+    },
+  } as any;
+
+  const channel = { sendTo: vi.fn().mockResolvedValue({ sent: true }) } as any;
+  const tms     = { getProactivityEvents: vi.fn().mockResolvedValue([]) } as any;
+
+  const svc = new MonitorService(prisma, tms, channel);
+
+  const logLog  = vi.fn();
+  const logWarn = vi.fn();
+  (svc as any)['logger'] = { log: logLog, warn: logWarn, debug: vi.fn(), error: vi.fn() };
+
+  return { svc, prisma, tms, channel, logLog, logWarn };
+}
+
+// ─── Comportamento 1: runReconciliation — iteração de tenants ─────────────────
+
+describe('MonitorService.runReconciliation — iteração de tenants (comportamento 1)', () => {
+  it('chama syncNow para cada tenant com enabled=true', async () => {
+    const { svc } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'tenant-a' },
+      { tenantId: 'tenant-b' },
+    ]);
+
+    const spySyncNow = vi
+      .spyOn(svc, 'syncNow')
+      .mockResolvedValue({ synced: 1, resolved: 0, notified: 0, newEventsCount: 0 });
+
+    const result = await svc.runReconciliation();
+
+    expect(spySyncNow).toHaveBeenCalledTimes(2);
+    expect(spySyncNow).toHaveBeenCalledWith('tenant-a');
+    expect(spySyncNow).toHaveBeenCalledWith('tenant-b');
+    expect(result.tenants).toBe(2);
+    expect(result.synced).toBe(2);
+  });
+
+  it('continua para o próximo tenant quando um lança exceção', async () => {
+    const { svc, logWarn } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'tenant-err' },
+      { tenantId: 'tenant-ok' },
+    ]);
+
+    vi.spyOn(svc, 'syncNow')
+      .mockRejectedValueOnce(new Error('TMS timeout'))
+      .mockResolvedValueOnce({ synced: 3, resolved: 1, notified: 0, newEventsCount: 0 });
+
+    const result = await svc.runReconciliation();
+
+    expect(result.tenants).toBe(2);
+    expect(result.synced).toBe(3); // só tenant-ok contribuiu
+    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('tenant-err'));
+  });
+
+  it('retorna totais corretos acumulados de todos os tenants', async () => {
+    const { svc } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'ta' },
+      { tenantId: 'tb' },
+      { tenantId: 'tc' },
+    ]);
+
+    vi.spyOn(svc, 'syncNow')
+      .mockResolvedValueOnce({ synced: 5, resolved: 2, notified: 1, newEventsCount: 1 })
+      .mockResolvedValueOnce({ synced: 3, resolved: 0, notified: 2, newEventsCount: 2 })
+      .mockResolvedValueOnce({ synced: 0, resolved: 1, notified: 0, newEventsCount: 0 });
+
+    const result = await svc.runReconciliation();
+
+    expect(result.tenants).toBe(3);
+    expect(result.synced).toBe(8);
+    expect(result.resolved).toBe(3);
+    expect(result.notified).toBe(3);
+  });
+});
+
+// ─── Comportamento 2: syncNow dispara sendAlertsToAdmins (mesmo fluxo do ingest)
+
+describe('MonitorService.syncNow — notificação via channel.sendTo (comportamento 2)', () => {
+  it('chama channel.sendTo para evento CRITICAL novo (mesmo caminho do ingest)', async () => {
+    const { svc, prisma, tms, channel } = makeServiceR();
+
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'ta', slug: 'test', status: 'active' });
+    tms.getProactivityEvents.mockResolvedValue([
+      makeEvent({ id: 'e1', severity: 'CRITICAL', category: 'fiscal', adminPhone: '5511999999999' }),
+    ]);
+    // fiscal habilitado, immediateSeverity CRITICAL — já no default do makeServiceR
+    prisma.alertState.findUnique.mockResolvedValue(null); // evento novo
+
+    const result = await svc.syncNow('ta');
+
+    expect(channel.sendTo).toHaveBeenCalledTimes(1);
+    expect(channel.sendTo).toHaveBeenCalledWith('ta', '5511999999999', expect.any(String));
+    expect(result.notified).toBe(1);
+    expect(result.newEventsCount).toBe(1);
+  });
+
+  it('NÃO chama channel.sendTo quando evento já existe (não é novo)', async () => {
+    const { svc, prisma, tms, channel } = makeServiceR();
+
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'ta', slug: 'test', status: 'active' });
+    tms.getProactivityEvents.mockResolvedValue([
+      makeEvent({ id: 'e1', severity: 'CRITICAL', category: 'fiscal', adminPhone: '5511999999999' }),
+    ]);
+    prisma.alertState.findUnique.mockResolvedValue({ status: 'open' }); // evento já existe
+
+    const result = await svc.syncNow('ta');
+
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(result.notified).toBe(0);
+    expect(result.newEventsCount).toBe(0);
+  });
+
+  it('retorna zeros quando tenant não encontrado', async () => {
+    const { svc } = makeServiceR();
+    (svc as any)['prisma'].tenant.findFirst.mockResolvedValue(null);
+
+    const result = await svc.syncNow('ghost');
+
+    expect(result).toEqual({ synced: 0, resolved: 0, notified: 0, newEventsCount: 0 });
+  });
+});
+
+// ─── Comportamento 3: warn de degradação do push TMS→Nexa ────────────────────
+
+describe('MonitorService.runReconciliation — sinal de degradação push (comportamento 3)', () => {
+  it('emite logger.warn quando newEventsCount > 10', async () => {
+    const { svc, logWarn } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'ta' },
+    ]);
+    vi.spyOn(svc, 'syncNow').mockResolvedValue({
+      synced: 11, resolved: 0, notified: 5, newEventsCount: 11,
+    });
+
+    await svc.runReconciliation();
+
+    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('possivelmente degradado'));
+    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('11'));
+  });
+
+  it('NÃO emite warn quando newEventsCount === 10 (threshold é > 10, não >=)', async () => {
+    const { svc, logWarn } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'ta' },
+    ]);
+    vi.spyOn(svc, 'syncNow').mockResolvedValue({
+      synced: 10, resolved: 0, notified: 2, newEventsCount: 10,
+    });
+
+    await svc.runReconciliation();
+
+    expect(logWarn).not.toHaveBeenCalledWith(expect.stringContaining('possivelmente degradado'));
+  });
+
+  it('warn identifica o tenant específico que ultrapassou o threshold', async () => {
+    const { svc, logWarn } = makeServiceR();
+
+    (svc as any)['prisma'].tenantNotificationConfig.findMany.mockResolvedValue([
+      { tenantId: 'tenant-degradado' },
+      { tenantId: 'tenant-normal' },
+    ]);
+
+    vi.spyOn(svc, 'syncNow')
+      .mockResolvedValueOnce({ synced: 15, resolved: 0, notified: 3, newEventsCount: 15 })
+      .mockResolvedValueOnce({ synced: 2,  resolved: 0, notified: 0, newEventsCount: 2 });
+
+    await svc.runReconciliation();
+
+    const degradCalls = (logWarn.mock.calls as string[][]).filter(args =>
+      args[0]?.includes('possivelmente degradado'),
+    );
+    expect(degradCalls).toHaveLength(1);
+    expect(degradCalls[0][0]).toContain('tenant-degradado');
+  });
+});
