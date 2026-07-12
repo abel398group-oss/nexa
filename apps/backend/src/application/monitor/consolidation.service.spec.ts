@@ -189,7 +189,7 @@ describe('Catch-up — janela perdida por restart', () => {
     const now1 = makeNow(7, 30);
     const sc = makeSectorConfig();
     const cfg = makeTenantConfig(sc);
-    await callPerSector(svc, { now, sectorConfig: sc, config: cfg });
+    await callPerSector(svc, { now: now1, sectorConfig: sc, config: cfg });
 
     // Simula o que o service persiste: lastDigestDate no sectorConfig
     const { svc: svc2, notification: notification2 } = makeService({ prismaFindMany: findMany, prismaUpdate: vi.fn() });
