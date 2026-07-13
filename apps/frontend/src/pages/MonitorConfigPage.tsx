@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
-import { Button, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
+import { Button, PageContainer, PageHeader, Breadcrumb, Icon, useConfirm } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTagsInput';
 
@@ -293,7 +293,15 @@ export function MonitorConfigPage() {
   const [sectors, setSectors] = useState<SectorConfigMap>(makeSectorConfig());
   const [saving, setSaving] = useState(false);
 
+  /** Horário padrão: referência para "Aplicar a todos" e badge "personalizado". */
+  const [defaultSchedule, setDefaultSchedule] = useState<{
+    sendHour: number;
+    sendMinute: number;
+    sendDays: number[];
+  }>({ sendHour: 7, sendMinute: 0, sendDays: ALL_DAYS });
+
   const toast           = useToast();
+  const confirm         = useConfirm();
   const qc              = useQueryClient();
   const { user }        = useAuth();
   const isPlatformAdmin = user?.tenantId === null || user?.tenantId === undefined;
@@ -358,6 +366,14 @@ export function MonitorConfigPage() {
       logistic: withRecipients(sc?.logistic),
       frota:    withRecipients(sc?.frota),
       finance:  withRecipients(sc?.finance),
+    });
+
+    // Inicializa o horário padrão a partir do global do backend.
+    // sendDays não existe no nível global → padrão ALL_DAYS.
+    setDefaultSchedule({
+      sendHour:   config.sendHour   ?? 7,
+      sendMinute: config.sendMinute ?? 0,
+      sendDays:   ALL_DAYS,
     });
   }, [config]);
 
@@ -460,6 +476,52 @@ export function MonitorConfigPage() {
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   const planAllowed = cfg.planAllowed ?? false;
+
+  /**
+   * Retorna true quando o setor tem hora/minuto/dias diferentes do horário padrão.
+   * Usado para exibir o badge "personalizado" em cada card de setor.
+   */
+  function isSectorCustomized(sc: SectorDetail): boolean {
+    if (sc.sendHour !== defaultSchedule.sendHour) return true;
+    if (sc.sendMinute !== defaultSchedule.sendMinute) return true;
+    const a = [...(sc.sendDays ?? ALL_DAYS)].sort((x, y) => x - y).join(',');
+    const b = [...defaultSchedule.sendDays].sort((x, y) => x - y).join(',');
+    return a !== b;
+  }
+
+  /** Liga/desliga um dia no horário padrão (mínimo 1 dia). */
+  function toggleDefaultDay(day: number) {
+    setDefaultSchedule((s) => {
+      const next = s.sendDays.includes(day)
+        ? s.sendDays.filter((d) => d !== day)
+        : [...s.sendDays, day].sort((a, b) => a - b);
+      if (next.length === 0) return s;
+      return { ...s, sendDays: next };
+    });
+  }
+
+  /** Copia defaultSchedule para os 4 setores (com confirmação). */
+  async function applyScheduleToAll() {
+    const ok = await confirm({
+      title: 'Aplicar horário padrão a todos os setores?',
+      message:
+        'Isso substitui os horários individuais dos 4 setores. ' +
+        'Você ainda pode ajustar qualquer setor individualmente depois.',
+      confirmLabel: 'Aplicar a todos',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    setSectors((s) => {
+      const updated = { ...s };
+      for (const key of Object.keys(updated) as SectorKey[]) {
+        updated[key] = { ...updated[key], ...defaultSchedule };
+      }
+      return updated;
+    });
+    // Mantém cfg global em sincronia (sendHour/sendMinute vão no payload)
+    set('sendHour', defaultSchedule.sendHour);
+    set('sendMinute', defaultSchedule.sendMinute);
+  }
 
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
@@ -642,6 +704,78 @@ export function MonitorConfigPage() {
               )}
             </div>
 
+            {/* ─── Horário padrão ───────────────────────────────────────────── */}
+            <div className="card px-5 py-4 mb-4 border border-base-200">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-base-content">Horário padrão (todos os setores)</p>
+                  <p className="text-xs text-base-content/50 mt-0.5">
+                    Horário base para os alertas. "Aplicar a todos" copia para os 4 setores; cada setor ainda pode ter horário individual.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={applyScheduleToAll}
+                  className="shrink-0 rounded-md border border-base-300 bg-white px-3 py-1.5 text-xs font-medium text-base-content/70 shadow-sm hover:border-brand-500 hover:text-brand-600 transition-colors"
+                >
+                  Aplicar a todos os setores
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Hora */}
+                <select
+                  className="select select-bordered select-sm"
+                  value={defaultSchedule.sendHour}
+                  onChange={(e) =>
+                    setDefaultSchedule((s) => ({ ...s, sendHour: Number(e.target.value) }))
+                  }
+                  aria-label="Hora padrão"
+                >
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
+                  ))}
+                </select>
+
+                {/* Minuto */}
+                <select
+                  className="select select-bordered select-sm w-28"
+                  value={defaultSchedule.sendMinute}
+                  onChange={(e) =>
+                    setDefaultSchedule((s) => ({ ...s, sendMinute: Number(e.target.value) }))
+                  }
+                  aria-label="Minuto padrão"
+                >
+                  {MINUTES.map((mm) => (
+                    <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
+                  ))}
+                </select>
+
+                {/* Dias */}
+                <div className="flex items-center gap-1.5">
+                  {ALL_DAYS.map((day) => {
+                    const active = defaultSchedule.sendDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        title={DAY_TITLES[day]}
+                        aria-pressed={active}
+                        onClick={() => toggleDefaultDay(day)}
+                        className={`h-7 w-7 rounded-full text-[11px] font-semibold transition-colors ${
+                          active
+                            ? 'bg-brand-500 text-white'
+                            : 'bg-base-200 text-base-content/40 hover:bg-base-300'
+                        }`}
+                      >
+                        {DAY_LABELS[day]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {SECTORS.map((sector) => {
                 const enabled = !!cfg[sector.enabledKey];
@@ -661,7 +795,14 @@ export function MonitorConfigPage() {
                           {sector.emoji}
                         </span>
                         <div>
-                          <p className="text-sm font-semibold text-base-content">{sector.label}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-base-content">{sector.label}</p>
+                            {isSectorCustomized(sc) && (
+                              <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                                personalizado
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-base-content/50">{sector.sub}</p>
                         </div>
                       </div>
