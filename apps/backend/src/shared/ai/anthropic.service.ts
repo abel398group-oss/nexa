@@ -14,6 +14,10 @@ const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS ?? 20_000);
 // 1 retry (2 tentativas no total) só para falhas transitórias: 429 e 5xx, ou timeout/rede.
 const AI_MAX_RETRIES = Number(process.env.AI_MAX_RETRIES ?? 1);
 const AI_RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS ?? 500);
+// Concurrency cap: máximo de chamadas simultâneas à Anthropic. Sem isso, um pico de
+// mensagens vira centenas de requests paralelos → rate-limit (429), custo e memória.
+// O excesso entra numa fila FIFO até liberar um slot.
+const AI_MAX_CONCURRENCY = Math.max(1, Number(process.env.AI_MAX_CONCURRENCY ?? 8));
 
 export interface AiUsage {
   text: string;
@@ -32,6 +36,9 @@ export class AnthropicService {
   // In-memory failure counters (reset on process restart) — consumed by /health.
   private _failureCount = 0;
   private _lastFailAt: Date | null = null;
+  // Concurrency gate (AI_MAX_CONCURRENCY): in-memory semaphore, no external dep.
+  private active = 0;
+  private readonly queue: Array<() => void> = [];
 
   get configured(): boolean {
     const k = process.env.ANTHROPIC_API_KEY;
@@ -60,11 +67,44 @@ export class AnthropicService {
     return name === 'AbortError' || name === 'TimeoutError' || name === 'TypeError';
   }
 
+  // Adquire um slot de concorrência; resolve na hora se houver folga, senão espera
+  // na fila FIFO até outra chamada liberar.
+  private acquireSlot(): Promise<void> {
+    if (this.active < AI_MAX_CONCURRENCY) {
+      this.active++;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => this.queue.push(resolve));
+  }
+
+  // Libera o slot: se há alguém esperando, passa o slot direto (active constante);
+  // senão, decrementa (slot realmente livre).
+  private releaseSlot(): void {
+    const next = this.queue.shift();
+    if (next) next();
+    else this.active--;
+  }
+
+  // Wrapper de concorrência sobre requestInner — garante no máx. AI_MAX_CONCURRENCY
+  // chamadas simultâneas. Timeout/retry ficam intactos no requestInner.
+  private async request(
+    system: string,
+    user: string,
+    opts: { maxTokens?: number; temperature?: number } = {},
+  ): Promise<any> {
+    await this.acquireSlot();
+    try {
+      return await this.requestInner(system, user, opts);
+    } finally {
+      this.releaseSlot();
+    }
+  }
+
   // Núcleo único das chamadas: monta o request, aplica timeout por tentativa e faz
   // até AI_MAX_RETRIES retries com backoff exponencial para falhas transitórias.
   // Retorna o JSON bruto da Anthropic; o chamador extrai texto/usage. Lança em falha
   // definitiva (o chamador decide o fallback seguro — ADR 012).
-  private async request(
+  private async requestInner(
     system: string,
     user: string,
     opts: { maxTokens?: number; temperature?: number } = {},
