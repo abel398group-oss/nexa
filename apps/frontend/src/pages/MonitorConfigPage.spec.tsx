@@ -22,6 +22,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MonitorConfigPage } from './MonitorConfigPage';
 
@@ -98,9 +99,13 @@ function renderPage() {
     },
   });
   return render(
-    <QueryClientProvider client={qc}>
-      <MonitorConfigPage />
-    </QueryClientProvider>,
+    // MemoryRouter: a página renderiza <Link> (Breadcrumb) — sem Router o
+    // useContext do react-router é null e o render explode.
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <MonitorConfigPage />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
