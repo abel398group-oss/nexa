@@ -255,7 +255,10 @@ function makeServiceR(configOverrides: Record<string, any> = {}) {
     },
     alertState: {
       findUnique: vi.fn().mockResolvedValue(null),
+      // findFirst: used by soft-migration path (UUID → dedupeKey)
+      findFirst: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     tenantNotificationConfig: {
@@ -442,5 +445,94 @@ describe('MonitorService.runReconciliation — sinal de degradação push (compo
     );
     expect(degradCalls).toHaveLength(1);
     expect(degradCalls[0][0]).toContain('tenant-degradado');
+  });
+});
+// ─── D1: dedupeKey — pull + push mesmo evento → sem duplicata nem re-notificação ───
+
+describe('MonitorService.syncNow — dedupeKey deduplication (D1)', () => {
+  /**
+   * D1-A: push chegou primeiro com dedupeKey como id.
+   * Pull retorna o mesmo dedupeKey → findUnique encontra existente → isNew=false → sem notificação.
+   */
+  it('D1-A: pull após push com mesmo dedupeKey NÃO notifica (isNew=false)', async () => {
+    const { svc, prisma, tms, channel } = makeServiceR();
+
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'ta', slug: 'test', status: 'active' });
+    // Pull retorna evento com dedupeKey (já mapeado pelo connector)
+    tms.getProactivityEvents.mockResolvedValue([
+      makeEvent({ id: 'fiscal-cte-123456', severity: 'CRITICAL', category: 'fiscal', adminPhone: '5511900000001' }),
+    ]);
+    // findUnique encontra: push já criou o alertState com tmsEventId = dedupeKey
+    prisma.alertState.findUnique.mockResolvedValue({ status: 'open' });
+
+    const result = await svc.syncNow('ta');
+
+    // Nenhuma notificação — evento já existia
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(result.notified).toBe(0);
+    expect(result.newEventsCount).toBe(0);
+    // Upsert foi chamado (atualiza severity/title)
+    expect(prisma.alertState.upsert).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * D1-B: alertState antigo com UUID (criado por push antes do dedupeKey).
+   * Pull chega com dedupeKey diferente do UUID → findUnique falha → findFirst encontra UUID alias
+   * → soft migration: update tmsEventId → sem notificação.
+   */
+  it('D1-B: UUID-keyed alert migrado ao chegar pull com dedupeKey — sem re-notificação', async () => {
+    const UUID_LEGACY = '550e8400-e29b-41d4-a716-446655440000';
+    const DEDUPE_KEY  = 'fiscal-cte-123456';
+
+    const { svc, prisma, tms, channel } = makeServiceR({ immediateSeverity: 'CRITICAL' });
+
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'ta', slug: 'test', status: 'active' });
+    tms.getProactivityEvents.mockResolvedValue([
+      makeEvent({ id: DEDUPE_KEY, severity: 'CRITICAL', category: 'fiscal', adminPhone: '5511900000001' }),
+    ]);
+    // findUnique por dedupeKey → null (ainda não existe com essa chave)
+    prisma.alertState.findUnique.mockResolvedValue(null);
+    // findFirst encontra UUID alias com mesma category+title
+    prisma.alertState.findFirst.mockResolvedValue({ tmsEventId: UUID_LEGACY });
+
+    const result = await svc.syncNow('ta');
+
+    // update deve ter sido chamado para renomear UUID → dedupeKey
+    expect(prisma.alertState.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId_tmsEventId: { tenantId: 'ta', tmsEventId: UUID_LEGACY } },
+        data: expect.objectContaining({ tmsEventId: DEDUPE_KEY }),
+      }),
+    );
+    // Tratado como existente — sem notificação
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(result.notified).toBe(0);
+    expect(result.newEventsCount).toBe(0);
+  });
+
+  /**
+   * D1-C: novo evento genuíno (nem dedupeKey no DB, nem UUID alias).
+   * Deve criar e notificar normalmente.
+   */
+  it('D1-C: evento genuinamente novo (sem alias UUID) é criado e notificado', async () => {
+    const { svc, prisma, tms, channel } = makeServiceR({ immediateSeverity: 'CRITICAL' });
+
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'ta', slug: 'test', status: 'active' });
+    tms.getProactivityEvents.mockResolvedValue([
+      makeEvent({ id: 'fiscal-cte-new-999', severity: 'CRITICAL', category: 'fiscal', adminPhone: '5511900000001' }),
+    ]);
+    // findUnique → null (dedupeKey não existe)
+    prisma.alertState.findUnique.mockResolvedValue(null);
+    // findFirst → null (nenhum UUID alias)
+    prisma.alertState.findFirst.mockResolvedValue(null);
+
+    const result = await svc.syncNow('ta');
+
+    // Evento novo → notifica
+    expect(channel.sendTo).toHaveBeenCalledOnce();
+    expect(result.notified).toBe(1);
+    expect(result.newEventsCount).toBe(1);
+    // update NÃO deve ter sido chamado (não houve migração)
+    expect(prisma.alertState.update).not.toHaveBeenCalled();
   });
 });

@@ -319,12 +319,43 @@ export class MonitorService implements OnModuleInit {
 
     const newEvents: TmsProactivityEvent[] = [];
 
+    // UUID pattern — tmsEventIds created by push before dedupeKey was mapped
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     for (const event of filtered) {
       // Verifica se já existe para saber se é novo ou reabertura
-      const existing = await this.prisma.alertState.findUnique({
+      let existing = await this.prisma.alertState.findUnique({
         where: { tenantId_tmsEventId: { tenantId, tmsEventId: event.id } },
         select: { status: true },
       });
+
+      // Soft migration: if not found by dedupeKey, look for an open alert with a
+      // UUID-shaped tmsEventId and same category+title (created by push before
+      // dedupeKey was mapped on the pull side). Renaming the key prevents a
+      // spurious resolve+recreate cycle on the first pull after the deploy.
+      if (!existing) {
+        const uuidAlias = await this.prisma.alertState.findFirst({
+          where: {
+            tenantId,
+            status: 'open',
+            category: event.category,
+            title: event.title,
+            tmsEventId: { not: event.id },
+          },
+          select: { tmsEventId: true },
+        });
+        if (uuidAlias && UUID_RE.test(uuidAlias.tmsEventId)) {
+          await this.prisma.alertState.update({
+            where: { tenantId_tmsEventId: { tenantId, tmsEventId: uuidAlias.tmsEventId } },
+            data: { tmsEventId: event.id, updatedAt: new Date() },
+          });
+          this.logger.log(
+            `Monitor: migrado alertState ${uuidAlias.tmsEventId} → ${event.id} (tenant=${tenantId})`,
+          );
+          // Treat as existing — not new, no re-notification
+          existing = { status: 'open' };
+        }
+      }
 
       const isNew = !existing;
       const isReopenedCritical = existing?.status === 'resolved' && event.severity === 'CRITICAL';

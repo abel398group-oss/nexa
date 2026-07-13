@@ -105,3 +105,84 @@ describe('HiperTmsConnector — getPlans() (K1)', () => {
     expect(plans).toHaveLength(0);
   });
 });
+
+// K2: getProactivityEvents — dedupeKey mapping
+describe('HiperTmsConnector — getProactivityEvents() (K2)', () => {
+  let connector: HiperTmsConnector;
+  const origFetch = global.fetch;
+
+  beforeEach(() => {
+    connector = makeConnector();
+    process.env.TMS_BASE_URL = 'http://tms-host';
+    process.env.TMS_INTERNAL_TOKEN = 'secret';
+  });
+
+  afterEach(() => {
+    global.fetch = origFetch;
+    delete process.env.TMS_BASE_URL;
+    delete process.env.TMS_INTERNAL_TOKEN;
+  });
+
+  // Cenário 1: TMS retorna dedupeKey — event.id deve ser o dedupeKey (não o UUID)
+  it('usa dedupeKey quando presente: id = dedupeKey (nao o UUID)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ([
+        {
+          id: 'uuid-550e8400',
+          dedupeKey: 'fiscal-cte-123456',
+          severity: 'CRITICAL',
+          domain: 'fiscal',
+          title: 'CT-e vencido',
+        },
+      ]),
+    } as any);
+
+    const events = await connector.getProactivityEvents('tenant-ext-1');
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('fiscal-cte-123456');
+    expect(events[0].category).toBe('fiscal');
+    expect(events[0].severity).toBe('CRITICAL');
+  });
+
+  // Cenário 2: TMS antigo sem dedupeKey — fallback para e.id (retrocompat)
+  it('fallback para id quando dedupeKey ausente (TMS antigo)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ([
+        {
+          id: 'uuid-legacy-abc',
+          severity: 'OVERDUE',
+          domain: 'logistic',
+          title: 'Entrega atrasada',
+          // sem dedupeKey
+        },
+      ]),
+    } as any);
+
+    const events = await connector.getProactivityEvents('tenant-ext-2');
+
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('uuid-legacy-abc');
+    expect(events[0].category).toBe('logistic');
+  });
+
+  // Cenário 3: TMS não configurado → retorna []
+  it('nao configurado: retorna []', async () => {
+    delete process.env.TMS_BASE_URL;
+    const events = await connector.getProactivityEvents('tenant-ext-3');
+    expect(events).toHaveLength(0);
+  });
+
+  // Cenário 4: TMS retorna erro HTTP → retorna []
+  it('TMS retorna 500: retorna []', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+    } as any);
+
+    const events = await connector.getProactivityEvents('tenant-ext-4');
+    expect(events).toHaveLength(0);
+  });
+});

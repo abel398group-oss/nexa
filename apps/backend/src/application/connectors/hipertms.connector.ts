@@ -884,7 +884,10 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         fiscal: 'fiscal',
       };
       return raw.map((e: any) => ({
-        id: e.id,
+        // Prefer dedupeKey (stable TMS-side key, same value used in push webhook)
+        // so that pull and push always share the same AlertState identity.
+        // Falls back to e.id for TMS versions that don't expose dedupeKey yet.
+        id: e.dedupeKey ?? e.id,
         severity: e.severity as TmsProactivityEvent['severity'],
         category: (DOMAIN_TO_CATEGORY[e.domain] ?? e.category ?? e.domain) as TmsProactivityEvent['category'],
         title: String(e.title ?? e.reason ?? e.ruleId ?? 'Evento pendente'),
