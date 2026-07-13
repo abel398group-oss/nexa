@@ -25,7 +25,7 @@ function makeDeps() {
 }
 
 function makeService(deps: ReturnType<typeof makeDeps>) {
-  return new ConversationJanitorService(deps.prisma, deps.waha, deps.notifications);
+  return new ConversationJanitorService(deps.prisma, deps.waha, deps.notifications, { acquire: async () => async () => {} } as any);
 }
 
 // Expõe o método privado para teste (cast para any)

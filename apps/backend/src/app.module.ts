@@ -11,6 +11,7 @@ import { AiModule } from './shared/ai/ai.module';
 import { GovernanceModule } from './shared/governance/governance.module';
 import { WahaModule } from './shared/waha/waha.module';
 import { AuditModule } from './shared/audit/audit.module';
+import { RedisLockModule } from './shared/lock/redis-lock.module';
 import { AdminModule } from './application/admin/admin.module';
 import { PortalModule } from './application/portal/portal.module';
 import { OpportunitiesModule } from './application/opportunities/opportunities.module';
@@ -63,6 +64,7 @@ import { HealthController } from './presentation/http/health/health.controller';
       },
     }),
     PrismaModule,
+    RedisLockModule, // global — distributed locks for @Interval/@Cron workers
     AiModule,
     GovernanceModule,
     WahaModule,

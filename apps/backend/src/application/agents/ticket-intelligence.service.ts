@@ -18,6 +18,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // Quantas ocorrências do mesmo rootCause (nos últimos WINDOW_DAYS) disparam o alerta.
 const RECURRENCE_THRESHOLD = Number(process.env.TICKET_RECURRENCE_THRESHOLD ?? 3);
@@ -47,11 +48,23 @@ export class TicketIntelligenceService {
     private readonly notifications: NotificationsService,
     private readonly knowledge: KnowledgeService,
     private readonly ai: AnthropicService,
+    private readonly lock: RedisLockService,
   ) {}
 
   // ── @Interval: analisa tickets fechados nas últimas LOOK_BACK_HOURS ────────
   @Interval(30 * 60 * 1000)
   async runIntelligence(): Promise<void> {
+    // Multi-instance guard: only one replica runs the analysis at a time.
+    const release = await this.lock.acquire('lock:ticket-intelligence:run', 900);
+    if (!release) return;
+    try {
+      await this.runIntelligenceLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async runIntelligenceLocked(): Promise<void> {
     const windowStart = new Date(Date.now() - LOOK_BACK_HOURS * 60 * 60 * 1000);
 
     const recentlyClosed = await this.prisma.aiConversation.findMany({

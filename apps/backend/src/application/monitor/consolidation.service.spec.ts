@@ -33,7 +33,7 @@ function makeService(overrides?: {
     sendAlertEmail: vi.fn().mockResolvedValue({ sent: false, reason: 'disabled' }),
   } as any;
 
-  const svc: any = new ConsolidationService(prisma, notification, emailReply);
+  const svc: any = new ConsolidationService(prisma, notification, emailReply, { acquire: async () => async () => {} } as any);
 
   // Captura de logs
   const logLog = overrides?.logLog ?? vi.fn();

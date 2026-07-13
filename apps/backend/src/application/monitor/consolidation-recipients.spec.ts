@@ -6,7 +6,7 @@ import { ConsolidationService } from './consolidation.service';
  * Testa o método privado via bracket access — comportamento puro, sem I/O.
  */
 function makeSvc(): any {
-  return new ConsolidationService({} as any, {} as any, {} as any);
+  return new ConsolidationService({} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any);
 }
 
 describe('ConsolidationService — resolveSectorRecipients (A1)', () => {

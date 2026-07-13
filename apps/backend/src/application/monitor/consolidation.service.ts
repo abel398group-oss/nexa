@@ -22,6 +22,7 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorNotificationService } from './monitor-notification.service';
 import { EmailReplyService } from '@/application/email/email-reply.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export class ConsolidationService {
     private readonly prisma: PrismaService,
     private readonly notification: MonitorNotificationService,
     private readonly emailReply: EmailReplyService,
+    private readonly lock: RedisLockService,
   ) {}
 
   private get enabled(): boolean {
@@ -120,6 +122,17 @@ export class ConsolidationService {
 
   @Interval(5 * 60 * 1000)
   async runConsolidation(): Promise<void> {
+    // Multi-instance guard: only one replica runs the consolidation at a time.
+    const release = await this.lock.acquire('lock:consolidation:run', 240);
+    if (!release) return;
+    try {
+      await this.runConsolidationLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async runConsolidationLocked(): Promise<void> {
     if (!this.enabled) {
       this.logger.debug('tick pulado — MONITOR_ENABLED != true');
       return;

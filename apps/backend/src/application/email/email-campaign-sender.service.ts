@@ -30,6 +30,7 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
 import { emailToPhone } from './email.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -57,6 +58,7 @@ export class EmailCampaignSenderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailReply: EmailReplyService,
+    private readonly lock: RedisLockService,
   ) {}
 
   // ── Helpers ─────────────────────────────────────────────────────
@@ -179,7 +181,18 @@ export class EmailCampaignSenderService {
   // ── Worker: tick a cada 15s ──────────────────────────────────────
 
   @Interval(15_000)
-  async tick() {
+  async tick(): Promise<void> {
+    // Multi-instance guard: only one replica runs the tick at a time.
+    const release = await this.lock.acquire('lock:email-campaign:tick', 60);
+    if (!release) return;
+    try {
+      await this.tickLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async tickLocked() {
     try {
       // Reset do contador diário na virada do dia
       const today = this.today();

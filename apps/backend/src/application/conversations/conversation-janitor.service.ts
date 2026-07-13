@@ -29,6 +29,7 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
@@ -70,6 +71,7 @@ export class ConversationJanitorService {
     private readonly prisma: PrismaService,
     private readonly waha: WahaClientService,
     private readonly notifications: NotificationsService,
+    private readonly lock: RedisLockService,
   ) {}
 
   // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
@@ -84,7 +86,18 @@ export class ConversationJanitorService {
   }
 
   @Interval(60 * 60 * 1000) // roda a cada hora
-  async closeInactiveConversations() {
+  async closeInactiveConversations(): Promise<void> {
+    // Multi-instance guard: only one replica runs the close cycle at a time.
+    const release = await this.lock.acquire('lock:janitor:close-inactive', 1800);
+    if (!release) return;
+    try {
+      await this.closeInactiveConversationsLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async closeInactiveConversationsLocked() {
     ConversationJanitorService.lastRunAt = new Date();
     // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
     await this.closeResolvedSupport();
@@ -170,7 +183,18 @@ export class ConversationJanitorService {
   // ganha 1 linha por mensagem recebida e sessions acumula todas as sessões revogadas/
   // expiradas — inchando índice e disco em escala (10k+ tenants).
   @Interval(24 * 60 * 60 * 1000) // roda uma vez por dia
-  async purgeEphemeralData() {
+  async purgeEphemeralData(): Promise<void> {
+    // Multi-instance guard: only one replica runs the purge at a time.
+    const release = await this.lock.acquire('lock:janitor:purge-ephemeral', 3600);
+    if (!release) return;
+    try {
+      await this.purgeEphemeralDataLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async purgeEphemeralDataLocked() {
     // 1) Dedup de inbound: só precisamos das últimas horas (reentrega/reconexão do WAHA).
     const msgCutoff = new Date(Date.now() - PROCESSED_MSG_RETENTION_HOURS * 60 * 60 * 1000);
     const msgs = await this.prisma.processedMessage
@@ -219,7 +243,18 @@ export class ConversationJanitorService {
   // Anonimiza apenas contatos opt-out ou com conversas encerradas há mais de RETENTION_DAYS.
   // Anonimização: name → 'Anonimizado', phone → hash truncado, email → null, company → null, tags → [].
   @Interval(24 * 60 * 60 * 1000) // roda uma vez por dia
-  async anonymizeExpiredData() {
+  async anonymizeExpiredData(): Promise<void> {
+    // Multi-instance guard: only one replica runs the anonymization at a time.
+    const release = await this.lock.acquire('lock:janitor:anonymize-expired', 3600);
+    if (!release) return;
+    try {
+      await this.anonymizeExpiredDataLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async anonymizeExpiredDataLocked() {
     const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
     // Contatos opt-out criados antes do cutoff que ainda têm dados pessoais visíveis.

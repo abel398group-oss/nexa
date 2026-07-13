@@ -3,7 +3,7 @@ import { SenderService } from './sender.service';
 
 // As regras puras nao usam as dependencias — instancia com mocks vazios.
 function makeSvc(): SenderService {
-  return new SenderService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+  return new SenderService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any);
 }
 
 // ── helpers para testes de status WhatsApp (ADR-026) ────────────────────────
@@ -51,7 +51,7 @@ function makeStatusSvc(overrides: {
     sendStatusImage: vi.fn().mockResolvedValue(wahaResult),
   };
 
-  const svc = new SenderService(prisma as any, {} as any, {} as any, {} as any, waha as any, {} as any);
+  const svc = new SenderService(prisma as any, {} as any, {} as any, {} as any, waha as any, {} as any, { acquire: async () => async () => {} } as any);
   return { svc, prisma, waha };
 }
 
@@ -103,7 +103,7 @@ describe('SenderService — regras de negocio', () => {
     // prisma mockado sem settings salvos -> cai nos defaults de env (7-19)
     function svcWithPrisma(): SenderService {
       const prisma = { senderSettings: { findUnique: vi.fn().mockResolvedValue(null) } };
-      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any);
     }
     const within = () => (svcWithPrisma() as any).withinWaWindow('default') as Promise<boolean>;
     it('dentro do horario comercial -> true', async () => {
@@ -245,7 +245,7 @@ const MSG_TARGET = { id: 'tgt1', campaignId: 'camp1', tenantId: 't1', phone: '55
 
 describe('SenderService.tick() — envio de campanha de mensagem (harness)', () => {
   let prisma: any, contacts: any, conversations: any, followup: any, waha: any, tmsLookup: any;
-  const makeService = () => new SenderService(prisma, contacts, conversations, followup, waha, tmsLookup);
+  const makeService = () => new SenderService(prisma, contacts, conversations, followup, waha, tmsLookup, { acquire: async () => async () => {} } as any);
 
   beforeEach(() => {
     vi.useFakeTimers();

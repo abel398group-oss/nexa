@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // Cadência configurável (horas). Default 24h e 72h (a partir do 1º contato).
 const STAGE1_HOURS = Number(process.env.FOLLOWUP_STAGE1_HOURS ?? 24);
@@ -22,6 +23,7 @@ export class FollowUpService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly conversations: ConversationsService,
+    private readonly lock: RedisLockService,
   ) {}
 
   private hoursFromNow(h: number) {
@@ -67,7 +69,18 @@ export class FollowUpService {
   }
 
   @Interval(20000) // checa a cada 20s
-  async tick() {
+  async tick(): Promise<void> {
+    // Multi-instance guard: only one replica runs the tick at a time.
+    const release = await this.lock.acquire('lock:followup:tick', 60);
+    if (!release) return;
+    try {
+      await this.tickLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async tickLocked() {
     try {
       if (!this.withinBusinessHours()) return;
       const due = await this.prisma.followUp.findMany({

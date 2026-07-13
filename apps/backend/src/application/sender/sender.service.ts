@@ -7,6 +7,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -84,6 +85,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     private readonly followup: FollowUpService,
     private readonly waha: WahaClientService,
     private readonly tmsLookup: TmsLookupService,
+    private readonly lock: RedisLockService,
   ) {}
 
   // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
@@ -485,7 +487,20 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   }
 
   @Interval(15000) // tenta a cada 15s; o delay real entre envios é controlado abaixo
-  async tick() {
+  async tick(): Promise<void> {
+    // Multi-instance guard: only one replica sends per tick. This complements the
+    // existing Redis anti-ban state (BUG-001) by ensuring a single sender runs,
+    // so the 30-90s delay is never violated by two replicas ticking together.
+    const release = await this.lock.acquire('lock:sender:tick', 60);
+    if (!release) return;
+    try {
+      await this.tickLocked();
+    } finally {
+      await release();
+    }
+  }
+
+  private async tickLocked() {
     try {
       // Recuperação de travamento: alvos presos em 'sending' por mais de 5 min
       // indicam crash do worker no meio do envio — volta para 'queued' para reprocessar.
