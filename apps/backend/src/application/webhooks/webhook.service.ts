@@ -13,8 +13,11 @@
  *   - O receptor valida o HMAC antes de processar o payload.
  *   - O secret é armazenado criptografado (EmailCryptoService / AES-256-GCM).
  *
- * Observação: o retry corre em memória (@Interval). Para produção com múltiplas
- * instâncias, substituir por BullMQ/Redis queue (registrar como TODO).
+ * Durabilidade: o estado de cada entrega vive na tabela WebhookDelivery (Postgres),
+ * não em memória. Um restart não perde nada — retryPending() reprocessa os pendentes.
+ * O scheduler de retry é um @Interval protegido por lock Redis (uma instância por vez).
+ * emit() despacha a 1ª tentativa em segundo plano (não bloqueia o caller); falhas caem
+ * no fluxo de retry. Fila dedicada (BullMQ) só valeria a pena em volume muito maior.
  */
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
@@ -69,7 +72,13 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
           status: 'pending',
         },
       });
-      await this.deliver(delivery.id, sub.url, this.crypto.decrypt(sub.secret), event, payload);
+      // Fire-and-forget: não bloqueia o caller (caminho quente) na entrega HTTP.
+      // deliver() persiste sucesso/falha na WebhookDelivery e falhas são reprocessadas
+      // por retryPending() — o registro no banco é a fila durável. O .catch() cobre um
+      // erro inesperado (ex: falha de DB dentro do deliver) para não virar unhandled.
+      void this.deliver(delivery.id, sub.url, this.crypto.decrypt(sub.secret), event, payload).catch(
+        (e) => this.logger.warn(`Webhook emit deliver ${delivery.id} erro não tratado: ${e?.message}`),
+      );
     }
   }
 

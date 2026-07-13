@@ -102,8 +102,17 @@ hundreds of parallel Anthropic requests (rate-limit 429 / cost / memory). The
 existing per-attempt timeout and retry are unchanged. Tune via env
 `AI_MAX_CONCURRENCY`.
 
+## Webhook delivery (reviewed — already durable)
+
+Contrary to an earlier note, webhook delivery state is **not** in-memory: each
+delivery is a `WebhookDelivery` row (Postgres) with retry + exponential backoff,
+and `retryPending()` is a `@Interval` guarded by a Redis lock (one instance at a
+time). A restart loses nothing. `emit()` now dispatches the first attempt
+**fire-and-forget** so it never blocks the caller (hot path) on outbound HTTP;
+failures fall into the existing retry flow. A dedicated queue (BullMQ) would only
+pay off at much higher volume.
+
 ## Still open (tracked separately, not in this change)
 
-- Webhook delivery queue is still in-memory → move to BullMQ (Redis) for
-  persistence + retry under load.
 - Consolidate `ProactiveEngineCron` / `WebhookService` onto `RedisLockService`.
+- Only if webhook volume grows a lot: move retry to BullMQ for higher throughput.
