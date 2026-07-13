@@ -1084,16 +1084,15 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     category: 'suporte',
     title: 'Perfis de acesso — referência de permissões por perfil',
     content:
-      'O HiperTMS possui perfis de acesso pré-definidos que controlam o que cada usuário pode ver e fazer.\n' +
+      'O HiperTMS possui 3 perfis de acesso pré-definidos que controlam o que cada usuário pode ver e fazer.\n' +
       'Para consultar os perfis disponíveis: Administração → Perfis de Acesso (referência).\n' +
-      'Perfis típicos:\n' +
-      '• Administrador: acesso total, incluindo configurações fiscais, usuários e assinatura.\n' +
-      '• Operacional: acesso a embarques, viagens, CT-e e MDF-e. Sem acesso financeiro ou administrativo.\n' +
-      '• Comercial: acesso a cotações, clientes e oportunidades. Sem acesso operacional ou financeiro.\n' +
-      '• Financeiro: acesso a contas, faturas e relatórios. Sem acesso a configurações.\n' +
+      'Perfis disponíveis:\n' +
+      '• Administrador: acesso total, incluindo configurações fiscais, financeiro, usuários e assinatura.\n' +
+      '• Operação: acesso a embarques, cotações, viagens, CT-e, MDF-e, GNRE e NFS-e. Sem acesso financeiro ou administrativo.\n' +
+      '• Financeiro: acesso a contas a pagar/receber, faturas, contas bancárias e relatórios. Pode visualizar embarques e cotações, mas não criar.\n' +
       'Para ajustar permissões individuais além do perfil padrão: Administração → Usuários → Editar → aba Permissões.\n' +
       'Apenas administradores podem alterar perfis e permissões.',
-    tags: ['perfil acesso', 'role', 'permissao', 'administrador', 'operacional', 'comercial', 'financeiro', 'usuario'],
+    tags: ['perfil acesso', 'role', 'permissao', 'administrador', 'operacao', 'financeiro', 'usuario'],
   },
   {
     topic: 'financeiro-problemas',
@@ -2586,12 +2585,12 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     category: 'suporte',
     title: 'Como usar o funil de oportunidades (SDR)',
     content:
-      'O funil SDR é para prospecção de novos clientes de frete.\n' +
-      '1. Vendas → Oportunidades.\n' +
-      '2. O funil tem etapas: Prospecção → Qualificação → Proposta → Negociação → Fechado.\n' +
-      '3. Adicione uma oportunidade com: empresa prospectada, valor estimado, responsável e prazo.\n' +
-      '4. Arraste o card entre etapas conforme o andamento.\n' +
-      'No cadastro de empresa, a aba SDR registra interações e histórico de prospecção com o lead.',
+      'O funil SDR organiza a prospecção de novos clientes de frete em uma lista estruturada.\n' +
+      'Acesse Vendas → Oportunidades. A tela exibe as empresas com fase comercial aberta no funil SDR.\n' +
+      'Colunas da lista: Fase (etapa atual da negociação), Macro-etapa, Playbook (% do checklist concluído) e Contato.\n' +
+      'Para avançar uma empresa no funil: clique na empresa → cadastro → aba SDR → atualize a fase e a macro-etapa.\n' +
+      'Para adicionar nova oportunidade: botão "Nova Oportunidade" no topo da lista.\n' +
+      'Registre interações (ligação, e-mail, reunião) na aba Atividades do cadastro da empresa.',
     tags: ['funil vendas', 'oportunidades', 'sdr', 'prospeccao', 'leads', 'pipeline vendas', 'funil oportunidades'],
   },
   // ══════════════════════════════════════════════════════════

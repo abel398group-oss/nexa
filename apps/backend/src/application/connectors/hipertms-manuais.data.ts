@@ -66,7 +66,7 @@ export const MANUAIS_KB: KnowledgeItem[] = [
     topic: "hipertms-02-vendas",
     category: "suporte",
     title: "Vendas › Cotações › Consulte e gerencie suas cotações",
-    content: "Na lista de cotações, você visualiza todas as propostas com seus respectivos status:\r\n\r\n- **Rascunho** — em elaboração\r\n- **Enviada** — proposta enviada ao cliente\r\n- **Aprovada** — cliente aceitou\r\n- **Recusada** — proposta não aceita\r\n- **Convertida** — gerou embarque\r\n\r\nUse os filtros de data, cliente e status para localizar cotações rapidamente. Clique em qualquer linha para ver os detalhes ou editar.\r\n\r\n---",
+    content: "Na lista de cotações, você visualiza todas as propostas com seus respectivos status:\r\n\r\n- **Rascunho** — em elaboração\r\n- **Pendente** — aguardando aprovação do cliente\r\n- **Aprovada** — cliente aceitou\r\n- **Rejeitada** — proposta não aceita\r\n- **Convertida** — gerou embarque\r\n- **Expirada** — prazo de validade encerrado\r\n- **Cancelada** — cancelada manualmente\r\n\r\nUse os filtros de data, cliente e status para localizar cotações rapidamente. Clique em qualquer linha para ver os detalhes ou editar.\r\n\r\n---",
     tags: ["manual", "hipertms", "vendas", "cotacoes", "consulte", "gerencie", "suas", "lista", "voce", "visualiza"],
   },
   {
@@ -241,7 +241,7 @@ export const MANUAIS_KB: KnowledgeItem[] = [
     topic: "hipertms-03-operacao",
     category: "suporte",
     title: "Operação › Viagens › Busca e filtro de status",
-    content: "Caminho: **Operação → Viagens**\n\nA listagem de viagens possui campo de busca por texto e filtro de status: **Em andamento**, **Fechada**, **Cancelada**, além de viagens sem status (em planejamento). Combine busca e filtro para localizar qualquer viagem rapidamente.\n\n---",
+    content: "Caminho: **Operação → Viagens**\n\nA listagem de viagens possui campo de busca por texto e filtro de status: **Em andamento**, **Encerrada**, **Cancelada**, além de viagens sem status (em planejamento). Combine busca e filtro para localizar qualquer viagem rapidamente.\n\n---",
     tags: ["manual", "hipertms", "operacao", "viagens", "busca", "filtro", "status", "listagem", "possui", "campo"],
   },
   {
@@ -276,14 +276,14 @@ export const MANUAIS_KB: KnowledgeItem[] = [
     topic: "hipertms-03-operacao",
     category: "suporte",
     title: "Operação › Viagens › WorkflowStepper",
-    content: "Um componente visual no topo do detalhe da viagem mostra as etapas do fluxo operacional — **Planejamento → Em andamento → Concluída → Fechada** — com a etapa atual destacada, facilitando a identificação do ponto da operação sem precisar ler o campo de status.\n\n---",
+    content: "Um componente visual no topo do detalhe da viagem mostra as etapas do fluxo operacional — **Planejamento → Em andamento → Concluída → Encerrada** — com a etapa atual destacada, facilitando a identificação do ponto da operação sem precisar ler o campo de status.\n\n---",
     tags: ["manual", "hipertms", "operacao", "viagens", "workflowstepper", "componente", "visual", "topo", "detalhe", "viagem", "mostra"],
   },
   {
     topic: "hipertms-03-operacao",
     category: "suporte",
     title: "Operação › Viagens › Ciclo de vida da viagem (ações no detalhe)",
-    content: "No detalhe da viagem, botões de ação aparecem conforme o status atual:\n\n**Iniciar viagem** — muda o status para \"Em andamento\" e registra o horário de saída. **Completar viagem** — registra a chegada no destino final. **Encerrar viagem** — finaliza operacionalmente e libera para fechamento financeiro (status \"Fechada\"). **Cancelar viagem** — cancela a viagem com justificativa obrigatória.\n\n> **Atenção:** viagens com CT-e emitidos não podem ser canceladas diretamente. Cancele primeiro os documentos fiscais.\n\n---",
+    content: "No detalhe da viagem, botões de ação aparecem conforme o status atual:\n\n**Iniciar viagem** — muda o status para \"Em andamento\" e registra o horário de saída. **Completar viagem** — registra a chegada no destino final. **Encerrar viagem** — finaliza operacionalmente e libera para fechamento financeiro (status \"Encerrada\"). **Cancelar viagem** — cancela a viagem com justificativa obrigatória.\n\n> **Atenção:** viagens com CT-e emitidos não podem ser canceladas diretamente. Cancele primeiro os documentos fiscais.\n\n---",
     tags: ["manual", "hipertms", "operacao", "viagens", "ciclo", "vida", "viagem", "acoes", "detalhe", "botoes"],
   },
   {
