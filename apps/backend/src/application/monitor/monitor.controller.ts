@@ -9,6 +9,7 @@
  * GET  /monitor/notification-logs   → histórico de notificações enviadas
  */
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -30,12 +31,61 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { normalizePhone } from '@/shared/utils/phone.util';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
+import {
+  monitorWaLimit,
+  MONITOR_WA_INCLUDED,
+} from './monitor-plan-limits.const';
 
-/** Plans that have Monitor Proativo included. */
-const MONITOR_PLANS = new Set(['pro', 'enterprise', 'profissional', 'corporativo', 'professional', 'corporate']);
+/** Plans that have Monitor Proativo included (Básico/free/starter = blocked). */
+const MONITOR_PLANS = new Set([
+  'essencial',
+  'pro', 'professional',
+  'enterprise', 'corporativo', 'corporate',
+  'profissional',
+]);
 
 function isPlanAllowed(plan: string | null | undefined): boolean {
   return MONITOR_PLANS.has((plan ?? 'free').toLowerCase());
+}
+
+/**
+ * Extracts all unique normalised WhatsApp numbers from a sectorConfig object
+ * plus an optional root-level notificationPhone (legacy field).
+ * The same number in multiple sectors counts once.
+ */
+function extractUniqueWaNumbers(
+  sectorConfig: Record<string, any> | null | undefined,
+  rootPhone?: string | null,
+): Set<string> {
+  const unique = new Set<string>();
+
+  if (sectorConfig && typeof sectorConfig === 'object') {
+    for (const sc of Object.values(sectorConfig)) {
+      if (!sc) continue;
+      // Modern recipients[]
+      if (Array.isArray(sc.recipients)) {
+        for (const r of sc.recipients) {
+          if (r?.channel === 'whatsapp' && typeof r.contact === 'string') {
+            const norm = normalizePhone(r.contact);
+            if (norm) unique.add(norm);
+          }
+        }
+      }
+      // Legacy per-sector `phone` field
+      if (typeof sc.phone === 'string') {
+        const norm = normalizePhone(sc.phone);
+        if (norm) unique.add(norm);
+      }
+    }
+  }
+
+  // Legacy root-level notificationPhone
+  if (rootPhone) {
+    const norm = normalizePhone(rootPhone.split(',')[0]);
+    if (norm) unique.add(norm);
+  }
+
+  return unique;
 }
 
 // Converte null → undefined para que @IsOptional() pule a validação.
@@ -98,11 +148,23 @@ export class MonitorController {
           monitorOverride: true,
         },
       }),
-      this.prisma.planLimit.findUnique({ where: { tenantId }, select: { plan: true } }),
+      this.prisma.planLimit.findUnique({
+        where: { tenantId },
+        select: { plan: true, monitorExtraNumbers: true },
+      }),
     ]);
 
     const monitorOverride = config?.monitorOverride ?? false;
     const planAllowed = isPlanAllowed(planLimit?.plan) || monitorOverride;
+
+    // Compute WA number usage for the UI counter
+    const sectorCfg = (config?.sectorConfig as Record<string, any> | null) ?? null;
+    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone).size;
+    const waNumbersLimit = monitorWaLimit(
+      planLimit?.plan,
+      planLimit?.monitorExtraNumbers ?? 0,
+      monitorOverride,
+    );
 
     const defaults = {
       enabled: false,
@@ -120,20 +182,68 @@ export class MonitorController {
       monitorOverride: false,
     };
 
-    return { ...(config ?? defaults), planAllowed, monitorOverride };
+    return {
+      ...(config ?? defaults),
+      planAllowed,
+      monitorOverride,
+      waNumbersUsed,
+      waNumbersLimit,
+    };
   }
 
   @RequirePerm('admin')
   @Put('config')
   async updateConfig(@CurrentTenant() tenantId: string, @Body() dto: UpdateConfigDto) {
-    // Plan gate: block saves (except disabling) when plan not allowed and no override
-    if (dto.enabled) {
-      const [planLimit, existing] = await Promise.all([
-        this.prisma.planLimit.findUnique({ where: { tenantId }, select: { plan: true } }),
-        this.prisma.tenantNotificationConfig.findUnique({ where: { tenantId }, select: { monitorOverride: true } }),
-      ]);
-      if (!isPlanAllowed(planLimit?.plan) && !existing?.monitorOverride) {
-        throw new ForbiddenException('Monitor Proativo não está disponível no plano atual. Faça upgrade para Profissional ou Corporativo.');
+    // ── Gate 1: plan must allow Monitor ──────────────────────────────────────
+    const [planLimit, existing] = await Promise.all([
+      this.prisma.planLimit.findUnique({
+        where: { tenantId },
+        select: { plan: true, monitorExtraNumbers: true },
+      }),
+      this.prisma.tenantNotificationConfig.findUnique({
+        where: { tenantId },
+        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true },
+      }),
+    ]);
+
+    const override = existing?.monitorOverride ?? false;
+
+    if (dto.enabled && !isPlanAllowed(planLimit?.plan) && !override) {
+      throw new ForbiddenException(
+        'Monitor Proativo não está disponível no plano Básico. ' +
+        'Faça upgrade para Essencial ou superior para ativar os alertas.',
+      );
+    }
+
+    // ── Gate 2: WhatsApp number limit ─────────────────────────────────────────
+    // Only enforce when sectorConfig or notificationPhone is being changed.
+    if (dto.sectorConfig !== undefined || dto.notificationPhone !== undefined) {
+      const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
+
+      // Merge: use DTO value if provided, otherwise keep existing
+      const mergedSectorConfig =
+        dto.sectorConfig !== undefined
+          ? (dto.sectorConfig as Record<string, any>)
+          : ((existing?.sectorConfig as Record<string, any> | null) ?? null);
+
+      const rootPhone =
+        dto.notificationPhone !== undefined ? dto.notificationPhone : existing?.notificationPhone;
+
+      const uniqueNumbers = extractUniqueWaNumbers(mergedSectorConfig, rootPhone);
+
+      if (uniqueNumbers.size > limit) {
+        const planKey = (planLimit?.plan ?? 'free').toLowerCase();
+        const included = MONITOR_WA_INCLUDED[planKey] ?? 0;
+        const extras = planLimit?.monitorExtraNumbers ?? 0;
+        throw new BadRequestException(
+          `Limite de números WhatsApp atingido. ` +
+          `Seu plano "${planLimit?.plan ?? 'atual'}" inclui ${included} número(s)` +
+          (extras > 0 ? ` + ${extras} adicional(is)` : '') +
+          ` = ${limit} no total. ` +
+          `A configuração enviada usa ${uniqueNumbers.size} número(s) únicos. ` +
+          `Para adicionar mais números, contrate licenças adicionais em ` +
+          `Configurações → Assinatura no HiperTMS (R$ 29,90/número/mês).`,
+        );
       }
     }
 

@@ -789,9 +789,10 @@ model PlanLimit {
   maxContacts      Int?     @map("max_contacts")       // null = ilimitado
   maxCampaigns     Int?     @map("max_campaigns")      // null = ilimitado
   maxMessagesMonth Int?     @map("max_messages_month") // null = ilimitado
-  plan             String   @default("free")           // free | starter | pro | enterprise
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  plan                String   @default("free")           // free | starter | essencial | pro | enterprise | profissional | corporativo
+  monitorExtraNumbers Int      @default(0) @map("monitor_extra_numbers") // extra WA numbers purchased (R$29.90/mo each)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@map("plan_limits")
 }

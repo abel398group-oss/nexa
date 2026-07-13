@@ -82,6 +82,10 @@ interface MonitorConfig {
   planAllowed?: boolean;
   /** True if platform admin enabled override for this tenant. */
   monitorOverride?: boolean;
+  /** Number of unique WhatsApp numbers currently configured across all sectors. */
+  waNumbersUsed?: number;
+  /** Maximum WhatsApp numbers allowed by the current plan + extras. */
+  waNumbersLimit?: number;
 }
 
 interface AlertState {
@@ -475,7 +479,10 @@ export function MonitorConfigPage() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  const planAllowed = cfg.planAllowed ?? false;
+  const planAllowed    = cfg.planAllowed ?? false;
+  const waNumbersUsed  = cfg.waNumbersUsed  ?? 0;
+  const waNumbersLimit = cfg.waNumbersLimit ?? 0;
+  const atWaLimit      = planAllowed && waNumbersLimit > 0 && waNumbersUsed >= waNumbersLimit;
 
   /**
    * Retorna true quando o setor tem hora/minuto/dias diferentes do horário padrão.
@@ -630,7 +637,7 @@ export function MonitorConfigPage() {
               <span className="text-2xl shrink-0">🔒</span>
               <div>
                 <p className="text-sm font-semibold text-base-content">
-                  Monitor Proativo disponível nos planos Profissional e Corporativo
+                  Monitor Proativo disponível nos planos Essencial, Profissional e Corporativo
                 </p>
                 <p className="text-xs text-base-content/60 mt-1">
                   Faça upgrade do seu plano para habilitar alertas automáticos do TMS por WhatsApp e e-mail.
@@ -849,6 +856,36 @@ export function MonitorConfigPage() {
                         </div>
                       </div>
 
+                      {/* Contador de números WhatsApp — visível só quando o plano tem limite */}
+                      {planAllowed && waNumbersLimit > 0 && (
+                        <div className="flex items-center justify-between text-xs text-base-content/50">
+                          <span>📱 Números WhatsApp no plano</span>
+                          <span className={atWaLimit ? 'font-semibold text-warning' : ''}>
+                            {waNumbersUsed} / {waNumbersLimit}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Bloco de upsell — só no primeiro setor ao atingir o limite */}
+                      {atWaLimit && sector.key === 'fiscal' && (
+                        <div className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning/90">
+                          <p className="font-semibold mb-0.5">Limite de números atingido</p>
+                          <p>
+                            Adicione mais números por{' '}
+                            <span className="font-medium">R$ 29,90/número/mês</span> em{' '}
+                            <a
+                              href="https://app.hipertms.com.br/configuracoes/assinatura"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline hover:opacity-80"
+                            >
+                              Configurações → Assinatura
+                            </a>{' '}
+                            no HiperTMS.
+                          </p>
+                        </div>
+                      )}
+
                       {/* WhatsApp — RecipientTagsInput */}
                       <RecipientTagsInput
                         channel="whatsapp"
@@ -860,7 +897,7 @@ export function MonitorConfigPage() {
                             ...emailRecips,
                           ])
                         }
-                        disabled={!enabled}
+                        disabled={!enabled || atWaLimit}
                         max={10}
                       />
 

@@ -4,7 +4,7 @@
  * Auth: shared secret via `x-tms-secret` header (env TMS_SYNC_SECRET).
  * No JWT — these are server-to-server calls, not user-facing.
  *
- * POST /integrations/plan-sync   → update PlanLimit.plan for a tenant
+ * POST /integrations/plan-sync   → update PlanLimit.plan (and monitorExtraNumbers) for a tenant
  */
 import {
   BadRequestException,
@@ -16,12 +16,21 @@ import {
   Post,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { safeEqual } from '@/shared/utils/safe-compare';
 
-/** Plans recognised by Nexa. Mirrors MONITOR_PLANS in monitor.controller.ts. */
-const VALID_PLANS = ['free', 'starter', 'pro', 'enterprise', 'profissional', 'corporativo'] as const;
+/**
+ * Plans recognised by Nexa. Mirrors MONITOR_PLANS in monitor.controller.ts.
+ * Keep in sync when adding new plan codes.
+ */
+const VALID_PLANS = [
+  'free', 'starter',
+  'essencial',
+  'pro', 'professional',
+  'enterprise', 'corporativo', 'corporate',
+  'profissional',
+] as const;
 type Plan = (typeof VALID_PLANS)[number];
 
 class PlanSyncDto {
@@ -41,6 +50,17 @@ class PlanSyncDto {
 
   @IsIn(VALID_PLANS)
   plan!: Plan;
+
+  /**
+   * Extra WhatsApp numbers purchased by the tenant (R$ 29.90/number/month).
+   * Optional — when omitted the existing value is preserved (no reset to 0).
+   * Billed by TMS/Asaas; Nexa only stores the count to compute the limit.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  monitorExtraNumbers?: number;
 }
 
 // C2 (auditoria 2026-07-08): endpoint server-to-server (TMS → Nexa), autenticado por
@@ -54,11 +74,14 @@ export class IntegrationsController {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Called by HiperTMS whenever a tenant's plan changes.
-   * Updates PlanLimit.plan, which gates Monitor Proativo and future gated features.
+   * Called by HiperTMS whenever a tenant's plan or extra WhatsApp licenses change.
+   * Updates PlanLimit.plan and (optionally) PlanLimit.monitorExtraNumbers.
    *
-   * Body:  { tenantId: string, plan: 'free'|'starter'|'pro'|'enterprise'|'profissional'|'corporativo' }
+   * Body:  { tenantId?, tmsTenantId?, plan, monitorExtraNumbers? }
    * Auth:  x-tms-secret header must match env TMS_SYNC_SECRET
+   *
+   * monitorExtraNumbers is optional — omitting it preserves the current value.
+   * The TMS must send it when the tenant buys or cancels add-on numbers.
    */
   @Post('plan-sync')
   async planSync(
@@ -81,14 +104,24 @@ export class IntegrationsController {
       );
     }
 
+    // Only update monitorExtraNumbers when the TMS explicitly sends it.
+    // Omitting the field preserves the current value (no accidental reset to 0).
+    const extraUpdate =
+      dto.monitorExtraNumbers !== undefined
+        ? { monitorExtraNumbers: dto.monitorExtraNumbers }
+        : {};
+
     const updated = await this.prisma.planLimit.upsert({
       where:  { tenantId },
-      create: { tenantId, plan: dto.plan },
-      update: { plan: dto.plan },
-      select: { tenantId: true, plan: true, updatedAt: true },
+      create: { tenantId, plan: dto.plan, monitorExtraNumbers: dto.monitorExtraNumbers ?? 0 },
+      update: { plan: dto.plan, ...extraUpdate },
+      select: { tenantId: true, plan: true, monitorExtraNumbers: true, updatedAt: true },
     });
 
-    this.logger.log(`plan-sync: tenant=${tenantId} plan=${dto.plan}`);
+    this.logger.log(
+      `plan-sync: tenant=${tenantId} plan=${dto.plan}` +
+      (dto.monitorExtraNumbers !== undefined ? ` extraNumbers=${dto.monitorExtraNumbers}` : ''),
+    );
     return { synced: true, ...updated };
   }
 
