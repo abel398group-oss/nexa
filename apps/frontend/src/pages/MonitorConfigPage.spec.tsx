@@ -35,7 +35,7 @@ vi.mock('@/app/providers/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', tenantId: 'tenant-1', email: 'admin@test.com' } }),
 }));
 
-const mockConfirm = vi.fn<[], Promise<boolean>>();
+const mockConfirm = vi.fn<() => Promise<boolean>>();
 
 vi.mock('@/app/providers/ConfirmContext', () => ({
   useConfirm: () => mockConfirm,
