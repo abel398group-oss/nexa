@@ -34,60 +34,9 @@ import { ConsolidationService } from './consolidation.service';
 import {
   monitorWaLimit,
   MONITOR_WA_INCLUDED,
+  isPlanAllowed,
+  extractUniqueWaNumbers,
 } from './monitor-plan-limits.const';
-
-/** Plans that have Monitor Proativo included (free/starter = blocked). */
-const MONITOR_PLANS = new Set([
-  'basico',
-  'essencial',
-  'pro', 'professional',
-  'enterprise', 'corporativo', 'corporate',
-  'profissional',
-]);
-
-function isPlanAllowed(plan: string | null | undefined): boolean {
-  return MONITOR_PLANS.has((plan ?? 'free').toLowerCase());
-}
-
-/**
- * Extracts all unique normalised WhatsApp numbers from a sectorConfig object
- * plus an optional root-level notificationPhone (legacy field).
- * The same number in multiple sectors counts once.
- */
-function extractUniqueWaNumbers(
-  sectorConfig: Record<string, any> | null | undefined,
-  rootPhone?: string | null,
-): Set<string> {
-  const unique = new Set<string>();
-
-  if (sectorConfig && typeof sectorConfig === 'object') {
-    for (const sc of Object.values(sectorConfig)) {
-      if (!sc) continue;
-      // Modern recipients[]
-      if (Array.isArray(sc.recipients)) {
-        for (const r of sc.recipients) {
-          if (r?.channel === 'whatsapp' && typeof r.contact === 'string') {
-            const norm = normalizePhone(r.contact);
-            if (norm) unique.add(norm);
-          }
-        }
-      }
-      // Legacy per-sector `phone` field
-      if (typeof sc.phone === 'string') {
-        const norm = normalizePhone(sc.phone);
-        if (norm) unique.add(norm);
-      }
-    }
-  }
-
-  // Legacy root-level notificationPhone
-  if (rootPhone) {
-    const norm = normalizePhone(rootPhone.split(',')[0]);
-    if (norm) unique.add(norm);
-  }
-
-  return unique;
-}
 
 // Converte null → undefined para que @IsOptional() pule a validação.
 // Necessário porque o ValidationPipe global tem transform:true (class-transformer ativo)

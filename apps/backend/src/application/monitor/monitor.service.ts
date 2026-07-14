@@ -14,10 +14,24 @@
  * Debug manual: POST /monitor/sync chama syncNow() sob demanda.
  * Notificação manual: POST /monitor/notify-now dispara ConsolidationService (legado).
  */
-import { Inject, Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { HiperTmsConnector, TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
 import { NOTIFICATION_CHANNEL, NotificationChannel } from './notification-channel.interface';
+import {
+  extractUniqueWaNumbers,
+  isPlanAllowed,
+  monitorWaLimit,
+  MONITOR_WA_INCLUDED,
+} from './monitor-plan-limits.const';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
 const EXTERNAL_CONFIG_SELECT = {
@@ -246,17 +260,40 @@ export class MonitorService implements OnModuleInit {
 
   // ─── Config externa (ADR 022 — o painel do TMS edita a config via proxy) ─────
 
-  /** Config de notificação exposta ao TMS. Defaults quando o tenant nunca configurou. */
+  /**
+   * Config de notificação exposta ao TMS. Defaults quando o tenant nunca configurou.
+   *
+   * Paridade com MonitorController.getConfig() (painel próprio do Nexa): também
+   * devolve `waNumbersUsed`/`waNumbersLimit`, calculados a partir do PlanLimit do
+   * tenant — sem isso o contador exibido na tela de Automação do TMS nunca refletia
+   * o uso real (ver docs/monitor/ajuste-limites-planos-v2-2026-07-14.md).
+   */
   async getExternalConfig(tmsTenantId: string) {
     const tenantId = await this.resolveTenantByTmsId(tmsTenantId);
     if (!tenantId) throw new NotFoundException(`tmsTenantId "${tmsTenantId}" não mapeado`);
 
-    const config = await this.prisma.tenantNotificationConfig.findUnique({
-      where: { tenantId },
-      select: EXTERNAL_CONFIG_SELECT,
-    });
-    return (
-      config ?? {
+    const [config, planLimit] = await Promise.all([
+      this.prisma.tenantNotificationConfig.findUnique({
+        where: { tenantId },
+        select: { ...EXTERNAL_CONFIG_SELECT, notificationPhone: true, monitorOverride: true },
+      }),
+      this.prisma.planLimit.findUnique({
+        where: { tenantId },
+        select: { plan: true, monitorExtraNumbers: true },
+      }),
+    ]);
+
+    const monitorOverride = config?.monitorOverride ?? false;
+    const sectorCfg = (config?.sectorConfig as Record<string, any> | null) ?? null;
+    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone ?? null).size;
+    const waNumbersLimit = monitorWaLimit(
+      planLimit?.plan,
+      planLimit?.monitorExtraNumbers ?? 0,
+      monitorOverride,
+    );
+
+    if (!config) {
+      return {
         enabled: false,
         sendHour: 18,
         sendMinute: 0,
@@ -266,14 +303,83 @@ export class MonitorService implements OnModuleInit {
         frotaEnabled: true,
         financeEnabled: true,
         sectorConfig: null,
-      }
-    );
+        waNumbersUsed: 0,
+        waNumbersLimit,
+      };
+    }
+
+    // notificationPhone/monitorOverride foram buscados só para o cálculo acima —
+    // não fazem parte do shape exposto ao TMS (EXTERNAL_CONFIG_SELECT).
+    const { notificationPhone: _notificationPhone, monitorOverride: _monitorOverride, ...rest } = config;
+    return { ...rest, waNumbersUsed, waNumbersLimit };
   }
 
-  /** Upsert da config vinda do TMS. Mesma tabela usada pelo painel do Nexa — fonte única. */
+  /**
+   * Upsert da config vinda do TMS. Mesma tabela usada pelo painel do Nexa — fonte única.
+   *
+   * Paridade com MonitorController.updateConfig(): replica o Gate 1 (plano permite
+   * Monitor) e o Gate 2 (limite de números WhatsApp, com grandfathering em downgrade).
+   * Sem isso, um tenant conseguia cadastrar números além do limite do plano pela tela
+   * do TMS mesmo com a trava já aplicada no painel do Nexa (bug de paridade — ver
+   * docs/monitor/ajuste-limites-planos-v2-2026-07-14.md).
+   */
   async updateExternalConfig(tmsTenantId: string, input: ExternalMonitorConfigInput) {
     const tenantId = await this.resolveTenantByTmsId(tmsTenantId);
     if (!tenantId) throw new NotFoundException(`tmsTenantId "${tmsTenantId}" não mapeado`);
+
+    const [planLimit, existing] = await Promise.all([
+      this.prisma.planLimit.findUnique({
+        where: { tenantId },
+        select: { plan: true, monitorExtraNumbers: true },
+      }),
+      this.prisma.tenantNotificationConfig.findUnique({
+        where: { tenantId },
+        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true },
+      }),
+    ]);
+
+    const override = existing?.monitorOverride ?? false;
+
+    // ── Gate 1: plano precisa permitir Monitor (paridade com MonitorController) ──
+    if (input.enabled && !isPlanAllowed(planLimit?.plan) && !override) {
+      throw new ForbiddenException(
+        'Monitor Proativo requer uma assinatura ativa do HiperTMS. ' +
+        'Ative um plano (Básico ou superior) para usar os alertas.',
+      );
+    }
+
+    // ── Gate 2: limite de números WhatsApp (paridade com MonitorController) ──────
+    // Grandfathering: só bloqueia quando o save AUMENTA a contagem além do limite.
+    // ExternalConfigDto não tem notificationPhone (raiz) — só sectorConfig é
+    // enviado pelo proxy do TMS, então o rootPhone usado é sempre o existente.
+    if (input.sectorConfig !== undefined) {
+      const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
+
+      const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
+      const existingPhone = existing?.notificationPhone ?? null;
+      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone).size;
+
+      const uniqueNumbers = extractUniqueWaNumbers(
+        input.sectorConfig as Record<string, any>,
+        existingPhone,
+      );
+      const newCount = uniqueNumbers.size;
+
+      if (newCount > limit && newCount > previousCount) {
+        const planKey = (planLimit?.plan ?? 'free').toLowerCase();
+        const included = MONITOR_WA_INCLUDED[planKey] ?? 0;
+        const extras = planLimit?.monitorExtraNumbers ?? 0;
+        throw new BadRequestException(
+          `Limite de números WhatsApp atingido. ` +
+          `Seu plano "${planLimit?.plan ?? 'atual'}" inclui ${included} número(s)` +
+          (extras > 0 ? ` + ${extras} adicional(is)` : '') +
+          ` = ${limit} no total. ` +
+          `A configuração enviada usa ${newCount} número(s) únicos. ` +
+          `Para adicionar mais números, contrate licenças adicionais em ` +
+          `Configurações → Assinatura no HiperTMS (R$ 29,90/número/mês).`,
+        );
+      }
+    }
 
     // Remove chaves undefined para não sobrescrever campos não enviados.
     // A1: saneia recipients do sectorConfig (cap 10, entradas válidas).

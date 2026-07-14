@@ -2,7 +2,10 @@
  * monitor-plan-limits.const.ts
  *
  * Defines the number of WhatsApp recipients included per plan for Monitor Proativo,
- * plus helper to compute the effective limit (included + purchased extras).
+ * plus helpers to compute the effective limit (included + purchased extras) and to
+ * enforce it. Shared between MonitorController (Nexa's own panel, /monitor/config)
+ * and MonitorService (TMS proxy, /monitor/external-config) so both entry points
+ * apply identical plan/number gates — see docs/monitor/ajuste-limites-planos-v2-2026-07-14.md.
  *
  * Business rules (revised 2026-07-14 — supersedes 2026-07-13):
  *   free / starter           → Monitor blocked (0 included)
@@ -16,6 +19,7 @@
  * The count is unique per tenant (same phone in multiple sectors = 1).
  * Email recipients have no per-plan limit (only the 10/sector technical cap).
  */
+import { normalizePhone } from '@/shared/utils/phone.util';
 
 /** WhatsApp numbers included per plan (case-insensitive key). */
 export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
@@ -50,4 +54,58 @@ export function monitorWaLimit(
   const key = (plan ?? 'free').toLowerCase();
   const included = MONITOR_WA_INCLUDED[key] ?? 0;
   return included + Math.max(0, extras);
+}
+
+/** Plans that have Monitor Proativo included (free/starter = blocked). */
+export const MONITOR_PLANS = new Set([
+  'basico',
+  'essencial',
+  'pro', 'professional',
+  'enterprise', 'corporativo', 'corporate',
+  'profissional',
+]);
+
+/** Whether a plan (case-insensitive) has Monitor Proativo included. */
+export function isPlanAllowed(plan: string | null | undefined): boolean {
+  return MONITOR_PLANS.has((plan ?? 'free').toLowerCase());
+}
+
+/**
+ * Extracts all unique normalised WhatsApp numbers from a sectorConfig object
+ * plus an optional root-level notificationPhone (legacy field).
+ * The same number in multiple sectors counts once.
+ */
+export function extractUniqueWaNumbers(
+  sectorConfig: Record<string, any> | null | undefined,
+  rootPhone?: string | null,
+): Set<string> {
+  const unique = new Set<string>();
+
+  if (sectorConfig && typeof sectorConfig === 'object') {
+    for (const sc of Object.values(sectorConfig)) {
+      if (!sc) continue;
+      // Modern recipients[]
+      if (Array.isArray(sc.recipients)) {
+        for (const r of sc.recipients) {
+          if (r?.channel === 'whatsapp' && typeof r.contact === 'string') {
+            const norm = normalizePhone(r.contact);
+            if (norm) unique.add(norm);
+          }
+        }
+      }
+      // Legacy per-sector `phone` field
+      if (typeof sc.phone === 'string') {
+        const norm = normalizePhone(sc.phone);
+        if (norm) unique.add(norm);
+      }
+    }
+  }
+
+  // Legacy root-level notificationPhone
+  if (rootPhone) {
+    const norm = normalizePhone(rootPhone.split(',')[0]);
+    if (norm) unique.add(norm);
+  }
+
+  return unique;
 }

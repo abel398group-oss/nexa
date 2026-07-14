@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MonitorService } from './monitor.service';
 import type { TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
 
@@ -534,5 +535,268 @@ describe('MonitorService.syncNow — dedupeKey deduplication (D1)', () => {
     expect(result.newEventsCount).toBe(1);
     // update NÃO deve ter sido chamado (não houve migração)
     expect(prisma.alertState.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── external-config (TMS proxy, ADR 022) — paridade com MonitorController ───
+// Bug: GET/PUT /monitor/external-config (MonitorIngestController, chamado pelo
+// TMS via proxy) não aplicava os mesmos Gate 1 (plano) / Gate 2 (limite de
+// números) que MonitorController.updateConfig() já aplica no painel próprio do
+// Nexa. Ver docs/monitor/ajuste-limites-planos-v2-2026-07-14.md.
+
+const TMS_TENANT_ID_ENV = 'TMS_TENANT_ID_TESTCO';
+const TMS_TENANT_ID = 'tms-uuid-1';
+const NEXA_TENANT_ID = 'nexa-tenant-1';
+
+function makeExternalService(overrides: { planLimit?: any; config?: any } = {}) {
+  const prisma = {
+    tenant: {
+      findMany: vi.fn().mockResolvedValue([{ id: NEXA_TENANT_ID, slug: 'testco' }]),
+    },
+    planLimit: {
+      findUnique: vi.fn().mockResolvedValue(overrides.planLimit ?? null),
+    },
+    tenantNotificationConfig: {
+      findUnique: vi.fn().mockResolvedValue(overrides.config ?? null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+  } as any;
+
+  const channel = { sendTo: vi.fn() } as any;
+  const tms = {} as any;
+  const svc = new MonitorService(prisma, tms, channel);
+  return { svc, prisma };
+}
+
+describe('MonitorService.getExternalConfig/updateExternalConfig — paridade TMS proxy', () => {
+  beforeEach(() => {
+    process.env[TMS_TENANT_ID_ENV] = TMS_TENANT_ID;
+  });
+  afterEach(() => {
+    delete process.env[TMS_TENANT_ID_ENV];
+  });
+
+  // ── getExternalConfig: waNumbersUsed/waNumbersLimit ────────────────────────
+
+  it('getExternalConfig retorna waNumbersUsed e waNumbersLimit calculados do PlanLimit', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 }, // limit=3
+      config: {
+        enabled: true, sendHour: 8, sendMinute: 0, sendWeekends: false,
+        fiscalEnabled: true, logisticEnabled: true, frotaEnabled: true, financeEnabled: true,
+        sectorConfig: {
+          fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+          logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        },
+        notificationPhone: null,
+        monitorOverride: false,
+      },
+    });
+
+    const result = await svc.getExternalConfig(TMS_TENANT_ID);
+    expect(result.waNumbersUsed).toBe(2);
+    expect(result.waNumbersLimit).toBe(3);
+    // Campos usados só para o cálculo não vazam no shape exposto ao TMS
+    expect((result as any).notificationPhone).toBeUndefined();
+    expect((result as any).monitorOverride).toBeUndefined();
+  });
+
+  it('getExternalConfig sem PlanLimit e sem config → waNumbersLimit = 0 (default free bloqueado)', async () => {
+    const { svc } = makeExternalService({ planLimit: null, config: null });
+    const result = await svc.getExternalConfig(TMS_TENANT_ID);
+    expect(result.waNumbersUsed).toBe(0);
+    expect(result.waNumbersLimit).toBe(0);
+  });
+
+  it('getExternalConfig com config acima do limite → 200 (grandfathering no GET)', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=1
+      config: {
+        enabled: true, sendHour: 8, sendMinute: 0, sendWeekends: false,
+        fiscalEnabled: true, logisticEnabled: true, frotaEnabled: true, financeEnabled: true,
+        sectorConfig: {
+          fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+          logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        },
+        notificationPhone: null,
+        monitorOverride: false,
+      },
+    });
+    const result = await svc.getExternalConfig(TMS_TENANT_ID);
+    expect(result.waNumbersUsed).toBe(2);
+    expect(result.waNumbersLimit).toBe(1);
+  });
+
+  it('getExternalConfig com monitorOverride=true → waNumbersLimit = 10 (cap técnico)', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: {
+        enabled: true, sendHour: 8, sendMinute: 0, sendWeekends: false,
+        fiscalEnabled: true, logisticEnabled: true, frotaEnabled: true, financeEnabled: true,
+        sectorConfig: null, notificationPhone: null, monitorOverride: true,
+      },
+    });
+    const result = await svc.getExternalConfig(TMS_TENANT_ID);
+    expect(result.waNumbersLimit).toBe(10);
+  });
+
+  it('tmsTenantId não mapeado → NotFoundException', async () => {
+    const { svc, prisma } = makeExternalService();
+    prisma.tenant.findMany.mockResolvedValue([]);
+    await expect(svc.getExternalConfig('unknown-tms-id')).rejects.toThrow('não mapeado');
+  });
+
+  // ── updateExternalConfig — Gate 1: plano permite Monitor ───────────────────
+
+  it('Gate 1: plano free → ForbiddenException ao habilitar via proxy TMS', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'free', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, { enabled: true }))
+      .rejects.toThrow(ForbiddenException);
+  });
+
+  it('Gate 1: plano basico pode habilitar (Monitor disponível no Básico)', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, { enabled: true }))
+      .resolves.not.toThrow();
+  });
+
+  // ── updateExternalConfig — Gate 2: limite de números WhatsApp ──────────────
+
+  it('Básico bloqueia no 2º número (limite=1)', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=1
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const input = {
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+      },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow(BadRequestException);
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow('Limite de números WhatsApp');
+  });
+
+  it('Básico aceita exatamente 1 número (dentro do limite)', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const input = {
+      sectorConfig: { fiscal: { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] } },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
+  });
+
+  it('grandfathering: tenant com 6 números (limit=3) pode salvar sem aumentar a contagem', async () => {
+    const existingSector = {
+      fiscal:   { recipients: [{ contact: '5511000000001', channel: 'whatsapp' }] },
+      logistic: { recipients: [{ contact: '5511000000002', channel: 'whatsapp' }] },
+      frota:    { recipients: [{ contact: '5511000000003', channel: 'whatsapp' }] },
+      finance:  { recipients: [{ contact: '5511000000004', channel: 'whatsapp' }] },
+      compras:  { recipients: [{ contact: '5511000000005', channel: 'whatsapp' }] },
+      rh:       { recipients: [{ contact: '5511000000006', channel: 'whatsapp' }] },
+    };
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 }, // limit=3
+      config: { monitorOverride: false, sectorConfig: existingSector, notificationPhone: null },
+    });
+    // Mesmos 6 números — não aumentou → passa mesmo acima do limite (congelado)
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, { sectorConfig: existingSector }))
+      .resolves.not.toThrow();
+  });
+
+  it('grandfathering: tenant com 6 números (limit=3) NÃO pode adicionar o 7º', async () => {
+    const existingSector = {
+      fiscal:   { recipients: [{ contact: '5511000000001', channel: 'whatsapp' }] },
+      logistic: { recipients: [{ contact: '5511000000002', channel: 'whatsapp' }] },
+      frota:    { recipients: [{ contact: '5511000000003', channel: 'whatsapp' }] },
+      finance:  { recipients: [{ contact: '5511000000004', channel: 'whatsapp' }] },
+      compras:  { recipients: [{ contact: '5511000000005', channel: 'whatsapp' }] },
+      rh:       { recipients: [{ contact: '5511000000006', channel: 'whatsapp' }] },
+    };
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 }, // limit=3
+      config: { monitorOverride: false, sectorConfig: existingSector, notificationPhone: null },
+    });
+    const expandedSector = {
+      ...existingSector,
+      vendas: { recipients: [{ contact: '5511000000007', channel: 'whatsapp' }] },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, { sectorConfig: expandedSector }))
+      .rejects.toThrow(BadRequestException);
+  });
+
+  it('Essencial (3 inclusos) permite até 3 números únicos', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const input = {
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+      },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
+  });
+
+  it('Profissional (5 inclusos) bloqueia no 6º número', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'profissional', monitorExtraNumbers: 0 }, // limit=5
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const input = {
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+        finance:  { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
+        compras:  { recipients: [{ contact: '5511999990005', channel: 'whatsapp' }] },
+        rh:       { recipients: [{ contact: '5511999990006', channel: 'whatsapp' }] },
+      },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow(BadRequestException);
+  });
+
+  it('Profissional + 2 extras (limit=7) permite 7 números únicos', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'profissional', monitorExtraNumbers: 2 }, // limit=7
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const input = {
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+        finance:  { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
+        compras:  { recipients: [{ contact: '5511999990005', channel: 'whatsapp' }] },
+        rh:       { recipients: [{ contact: '5511999990006', channel: 'whatsapp' }] },
+        vendas:   { recipients: [{ contact: '5511999990007', channel: 'whatsapp' }] },
+      },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
+  });
+
+  it('mesmo número em dois setores conta 1 vez (dedup) — dentro do limite', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 }, // limit=3
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
+    });
+    const sameNumber = '5511999990001';
+    const input = {
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: sameNumber, channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: sameNumber, channel: 'whatsapp' }] },
+      },
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
   });
 });
