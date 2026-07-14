@@ -349,6 +349,24 @@ export class ConsolidationService {
       const message = this.buildSectorMessage(sector, alerts, now);
       const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
 
+      // BUG FIX (2026-07-14): reivindica o slot ANTES de enviar, não depois.
+      // Antes, o marcador "já enviado hoje" (in-memory + lastDigestDate no banco) só
+      // era gravado DEPOIS do loop de envio. Se o backend reiniciasse (deploy/crash)
+      // entre o envio e essa gravação — algo comum em dias com deploys frequentes —
+      // o marcador se perdia e o próximo tick de catch-up reenviava o MESMO digest
+      // (visto em produção em 14/07/2026: mesmo alerta fiscal reenviado 5x no dia).
+      // Gravar o claim primeiro troca "duplicidade" por, na pior hipótese, um envio
+      // perdido e recuperável pela janela de catch-up — trade-off correto para um
+      // sistema de notificação.
+      if (!force) {
+        const dedupKey = `${tenantId}:${sector.key}`;
+        const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
+        this.sentThisHour.set(dedupKey, slotKey);
+        // Persiste lastDigestDate no JSON do banco para sobreviver a restarts futuros.
+        sectorConfig[sector.key] = { ...sc, lastDigestDate: todayStr };
+        await this.persistLastDigestDate(tenantId, sectorConfig);
+      }
+
       // WhatsApp — A1: todos os destinatários do canal; jitter de até 2min (força = sem jitter).
       for (const phone of phones) {
         await this.notification.notifyPhone(tenantId, phone, message, force ? 0 : 120_000);
@@ -373,15 +391,6 @@ export class ConsolidationService {
             );
           }
         }
-      }
-
-      if (!force) {
-        const dedupKey = `${tenantId}:${sector.key}`;
-        const slotKey = this.makeSlotKey(now, sectorHour, currentMinute);
-        this.sentThisHour.set(dedupKey, slotKey);
-        // Persiste lastDigestDate no JSON do banco para sobreviver a restarts futuros.
-        sectorConfig[sector.key] = { ...sc, lastDigestDate: todayStr };
-        await this.persistLastDigestDate(tenantId, sectorConfig);
       }
 
       const alertIds = alerts.map((a) => a.id);
@@ -443,8 +452,9 @@ export class ConsolidationService {
     if (!alerts.length) return 0;
 
     const message = this.buildGlobalMessage(alerts, now);
-    await this.notification.notify(tenantId, message);
+    // Claim antes de enviar (mesmo motivo do modo per-sector — ver comentário lá).
     if (!force) this.sentThisHour.set(tenantId, slotKey);
+    await this.notification.notify(tenantId, message);
 
     const alertIds = alerts.map((a) => a.id);
     await this.persistAlertUpdates(alertIds, now);
