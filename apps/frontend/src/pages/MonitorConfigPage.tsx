@@ -401,7 +401,9 @@ export function MonitorConfigPage() {
           Object.entries(cfg).filter(([k, v]) =>
             v !== null &&
             v !== undefined &&
-            !['sectorConfig', 'planAllowed', 'monitorOverride'].includes(k),
+            // Campos read-only do GET que o DTO do PUT não aceita (forbidNonWhitelisted).
+            // REGRAS-SQUAD Regra 1: todo campo novo no GET entra aqui OU no DTO.
+            !['sectorConfig', 'planAllowed', 'monitorOverride', 'waNumbersUsed', 'waNumbersLimit'].includes(k),
           ),
         ),
         sectorConfig: {
