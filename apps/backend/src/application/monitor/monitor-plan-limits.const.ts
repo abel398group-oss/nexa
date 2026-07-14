@@ -4,11 +4,12 @@
  * Defines the number of WhatsApp recipients included per plan for Monitor Proativo,
  * plus helper to compute the effective limit (included + purchased extras).
  *
- * Business rules (approved 2026-07-13):
- *   Básico / free / starter  → Monitor blocked (0 included)
- *   Essencial                → 1 included
- *   Profissional / pro       → 3 included
- *   Corporativo / enterprise → 5 included
+ * Business rules (revised 2026-07-14 — supersedes 2026-07-13):
+ *   free / starter           → Monitor blocked (0 included)
+ *   Básico                   → 1 included  (Monitor now available on Básico)
+ *   Essencial                → 3 included
+ *   Profissional / pro       → 5 included
+ *   Corporativo / enterprise → 5 included + extras via monitorExtraNumbers (sob consulta)
  *   monitorOverride          → 10 (technical cap, platform-admin only)
  *
  * Extra numbers: R$ 29.90/number/month, contracted via TMS/Asaas.
@@ -20,10 +21,11 @@
 export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
   free:         0,
   starter:      0,
-  essencial:    1,
-  pro:          3,
-  profissional: 3,
-  professional: 3,
+  basico:       1,
+  essencial:    3,
+  pro:          5,
+  profissional: 5,
+  professional: 5,
   enterprise:   5,
   corporativo:  5,
   corporate:    5,

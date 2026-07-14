@@ -36,8 +36,9 @@ import {
   MONITOR_WA_INCLUDED,
 } from './monitor-plan-limits.const';
 
-/** Plans that have Monitor Proativo included (Básico/free/starter = blocked). */
+/** Plans that have Monitor Proativo included (free/starter = blocked). */
 const MONITOR_PLANS = new Set([
+  'basico',
   'essencial',
   'pro', 'professional',
   'enterprise', 'corporativo', 'corporate',
@@ -210,28 +211,35 @@ export class MonitorController {
 
     if (dto.enabled && !isPlanAllowed(planLimit?.plan) && !override) {
       throw new ForbiddenException(
-        'Monitor Proativo não está disponível no plano Básico. ' +
-        'Faça upgrade para Essencial ou superior para ativar os alertas.',
+        'Monitor Proativo requer uma assinatura ativa do HiperTMS. ' +
+        'Ative um plano (Básico ou superior) para usar os alertas.',
       );
     }
 
     // ── Gate 2: WhatsApp number limit ─────────────────────────────────────────
     // Only enforce when sectorConfig or notificationPhone is being changed.
+    // Grandfathering: if the tenant's current count already exceeds the limit
+    // (e.g. after a downgrade), allow saves that do NOT increase the count.
+    // Block only when: newCount > limit AND newCount > previousCount.
     if (dto.sectorConfig !== undefined || dto.notificationPhone !== undefined) {
       const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
 
-      // Merge: use DTO value if provided, otherwise keep existing
+      // Previous state (before this save)
+      const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
+      const existingPhone = existing?.notificationPhone ?? null;
+      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone).size;
+
+      // Merged state (after this save)
       const mergedSectorConfig =
         dto.sectorConfig !== undefined
           ? (dto.sectorConfig as Record<string, any>)
-          : ((existing?.sectorConfig as Record<string, any> | null) ?? null);
-
+          : existingSectorConfig;
       const rootPhone =
-        dto.notificationPhone !== undefined ? dto.notificationPhone : existing?.notificationPhone;
-
+        dto.notificationPhone !== undefined ? dto.notificationPhone : existingPhone;
       const uniqueNumbers = extractUniqueWaNumbers(mergedSectorConfig, rootPhone);
+      const newCount = uniqueNumbers.size;
 
-      if (uniqueNumbers.size > limit) {
+      if (newCount > limit && newCount > previousCount) {
         const planKey = (planLimit?.plan ?? 'free').toLowerCase();
         const included = MONITOR_WA_INCLUDED[planKey] ?? 0;
         const extras = planLimit?.monitorExtraNumbers ?? 0;
@@ -240,7 +248,7 @@ export class MonitorController {
           `Seu plano "${planLimit?.plan ?? 'atual'}" inclui ${included} número(s)` +
           (extras > 0 ? ` + ${extras} adicional(is)` : '') +
           ` = ${limit} no total. ` +
-          `A configuração enviada usa ${uniqueNumbers.size} número(s) únicos. ` +
+          `A configuração enviada usa ${newCount} número(s) únicos. ` +
           `Para adicionar mais números, contrate licenças adicionais em ` +
           `Configurações → Assinatura no HiperTMS (R$ 29,90/número/mês).`,
         );

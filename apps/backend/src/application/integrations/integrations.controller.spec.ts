@@ -77,7 +77,15 @@ describe('IntegrationsController — plan-sync (U9/U10)', () => {
     expect(updateArg).not.toHaveProperty('monitorExtraNumbers');
   });
 
-  // essencial é plano válido
+  // basico e essencial são planos válidos (N1 — v2 2026-07-14)
+  it('plano basico é aceito no VALID_PLANS', async () => {
+    const prisma = makePrisma();
+    const ctrl = new IntegrationsController(prisma);
+    await expect(
+      ctrl.planSync(SECRET, { tenantId: 'tenant-1', plan: 'basico' }),
+    ).resolves.not.toThrow();
+  });
+
   it('plano essencial é aceito no VALID_PLANS', async () => {
     const prisma = makePrisma();
     const ctrl = new IntegrationsController(prisma);

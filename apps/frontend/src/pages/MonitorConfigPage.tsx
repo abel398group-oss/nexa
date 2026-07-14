@@ -639,11 +639,10 @@ export function MonitorConfigPage() {
               <span className="text-2xl shrink-0">🔒</span>
               <div>
                 <p className="text-sm font-semibold text-base-content">
-                  Monitor Proativo disponível nos planos Essencial, Profissional e Corporativo
+                  Monitor Proativo disponível em todos os planos do HiperTMS. Ative uma assinatura para usar.
                 </p>
                 <p className="text-xs text-base-content/60 mt-1">
-                  Faça upgrade do seu plano para habilitar alertas automáticos do TMS por WhatsApp e e-mail.
-                  Entre em contato com o suporte para mais informações.
+                  Entre em contato com o suporte para ativar sua assinatura e habilitar os alertas automáticos por WhatsApp e e-mail.
                 </p>
               </div>
             </div>
@@ -889,17 +888,21 @@ export function MonitorConfigPage() {
                       )}
 
                       {/* WhatsApp — RecipientTagsInput */}
+                      {/* N3.4: disabled only when sector is off; removal always allowed.
+                          Additions are blocked in onChange when tenant is at the WA limit. */}
                       <RecipientTagsInput
                         channel="whatsapp"
                         label="📱 WhatsApp (com DDI)"
                         value={waRecips}
-                        onChange={(newWa) =>
+                        onChange={(newWa) => {
+                          // Block only ADDITION when at limit; removal is always allowed.
+                          if (newWa.length > waRecips.length && atWaLimit) return;
                           setSectorRecipients(sector.key, [
                             ...newWa,
                             ...emailRecips,
-                          ])
-                        }
-                        disabled={!enabled || atWaLimit}
+                          ]);
+                        }}
+                        disabled={!enabled}
                         max={10}
                       />
 

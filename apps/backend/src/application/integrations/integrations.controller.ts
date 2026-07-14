@@ -26,6 +26,7 @@ import { safeEqual } from '@/shared/utils/safe-compare';
  */
 const VALID_PLANS = [
   'free', 'starter',
+  'basico',
   'essencial',
   'pro', 'professional',
   'enterprise', 'corporativo', 'corporate',

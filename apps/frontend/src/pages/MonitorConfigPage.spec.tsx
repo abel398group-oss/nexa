@@ -287,3 +287,79 @@ describe('MonitorConfigPage — Horário padrão', () => {
     });
   });
 });
+// ── N3.3: saveConfig não envia campos read-only no PUT ─────────────────────────
+
+describe('MonitorConfigPage — saveConfig (N3.3)', () => {
+  it('PUT payload não inclui waNumbersUsed nem waNumbersLimit', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/monitor/config')
+        return Promise.resolve({
+          data: makeConfig({ waNumbersUsed: 2, waNumbersLimit: 3 }),
+        });
+      if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
+      if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
+      if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    await screen.findByText('Horário padrão (todos os setores)');
+
+    // Clica no botão Salvar
+    const saveBtn = screen.getByRole('button', { name: /salvar/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalled());
+
+    const [, payload] = mockPut.mock.calls[0];
+    expect(payload).not.toHaveProperty('waNumbersUsed');
+    expect(payload).not.toHaveProperty('waNumbersLimit');
+    expect(payload).not.toHaveProperty('planAllowed');
+    expect(payload).not.toHaveProperty('monitorOverride');
+  });
+});
+
+// ── N3.4: remoção de número WA permitida mesmo no limite ──────────────────────
+
+describe('MonitorConfigPage — UX limite WA (N3.4)', () => {
+  it('botão × de remoção não está disabled quando atWaLimit=true e sector enabled', async () => {
+    const WA_CONTACT = '5511999990001';
+
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/monitor/config')
+        return Promise.resolve({
+          data: makeConfig({
+            waNumbersUsed: 1,
+            waNumbersLimit: 1,
+            planAllowed: true,
+            sectorConfig: {
+              fiscal: {
+                recipients: [{ contact: WA_CONTACT, channel: 'whatsapp' }],
+                sendHour: 7,
+                sendMinute: 0,
+                sendDays: ALL_DAYS,
+              },
+              logistic: makeSectorOverride(),
+              frota:    makeSectorOverride(),
+              finance:  makeSectorOverride(),
+            },
+          }),
+        });
+      if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
+      if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
+      if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    await screen.findByText('Horário padrão (todos os setores)');
+
+    // Deve existir o botão × para remover o contato WA
+    const removeBtn = await screen.findByRole('button', {
+      name: new RegExp(`Remover ${WA_CONTACT}`, 'i'),
+    });
+
+    // N3.4: o botão NÃO deve estar disabled (atWaLimit não deve desabilitar remoção)
+    expect(removeBtn).not.toBeDisabled();
+  });
+});
