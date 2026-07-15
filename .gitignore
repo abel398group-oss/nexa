@@ -41,3 +41,5 @@ apps/backend/err.txt
 
 # TypeScript incremental build cache (artefato de build, não versionar)
 *.tsbuildinfo
+
+waha-sessions/
