@@ -163,6 +163,21 @@ describe('Catch-up — janela perdida por restart', () => {
     expect(notification.notifyPhone).toHaveBeenCalledOnce();
   });
 
+  it('H1: digest agendado usa o título nomeado "🕐 Alerta programado · {Setor} — {data}"', async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { id: 'a1', severity: 'CRITICAL', title: 'CT-e vencido', snoozedUntil: null },
+    ]);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const now = makeNow(SECTOR_HOUR, SECTOR_MINUTE);
+    const sc = makeSectorConfig();
+    const cfg = makeTenantConfig(sc);
+    await callPerSector(svc, { now, sectorConfig: sc, config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('🕐 *Alerta programado · Fiscal —');
+    // Simétrico ao imediato (MonitorService.buildImmediateMessage) — nunca usa "⚡".
+    expect(msg).not.toContain('⚡');
+  });
+
   it('catch-up: envia quando tick caiu 30 min após o horário (restart simulado)', async () => {
     const findMany = vi.fn().mockResolvedValue([
       { id: 'a1', severity: 'CRITICAL', title: 'CT-e vencido', snoozedUntil: null },

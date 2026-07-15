@@ -377,7 +377,8 @@ export class ConsolidationService {
 
       // E-mail — A1: todos os destinatários do canal (dual)
       if (emails.length) {
-        const subject = `${sector.emoji} Alertas ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
+        // H1: mesmo nome do título do WhatsApp — "🕐 Alerta programado" no assunto.
+        const subject = `🕐 Alerta programado · ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
         const html = this.buildSectorEmailHtml(sector, alerts, now);
         for (const email of emails) {
           const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
@@ -471,8 +472,11 @@ export class ConsolidationService {
     now: Date,
   ): string {
     const date = now.toLocaleDateString('pt-BR');
+    // H1: título nomeado, simétrico ao imediato (MonitorService.buildImmediateMessage)
+    // — "🕐 Alerta programado" vs "⚡ Alerta imediato" — pra dar pra saber de cara,
+    // só de olhar o topo da mensagem, qual dos dois disparou.
     const lines: string[] = [
-      `${sector.emoji} *Alertas ${sector.label} — ${date}*\n`,
+      `🕐 *Alerta programado · ${sector.label} — ${date}*\n`,
     ];
 
     const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
@@ -592,7 +596,7 @@ export class ConsolidationService {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Alertas ${sector.label} — HiperTMS</title>
+  <title>Alerta programado · ${sector.label} — HiperTMS</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:24px 16px">
@@ -603,7 +607,7 @@ export class ConsolidationService {
     <tr>
       <td style="background:#18181b;padding:24px 28px;border-bottom:4px solid ${accent}">
         <p style="margin:0;color:#a1a1aa;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase">MONITOR PROATIVO · HIPERTMS</p>
-        <p style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.2">${sector.emoji} Alertas ${sector.label}</p>
+        <p style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.2">🕐 Alerta programado · ${sector.label}</p>
         <p style="margin:6px 0 0;color:#a1a1aa;font-size:13px">${date} &nbsp;·&nbsp; ${alerts.length} ocorrência${alerts.length !== 1 ? 's' : ''}</p>
       </td>
     </tr>
