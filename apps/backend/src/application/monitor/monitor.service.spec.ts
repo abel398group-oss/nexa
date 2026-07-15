@@ -126,7 +126,7 @@ describe('MonitorService.sendAlertsToAdmins — G4 immediateSeverity', () => {
     // So o CRITICAL deve ter gerado envio
     expect(channel.sendTo).toHaveBeenCalledTimes(1);
     const [, , msg] = channel.sendTo.mock.calls[0];
-    expect(msg).toContain('⚡ Alerta imediato');
+    expect(msg).toContain('⚡ *Alerta imediato · Financeiro*');
     expect(msg).toContain('CRÍTICO');
   });
 
@@ -177,7 +177,7 @@ describe('MonitorService.buildImmediateMessage — H1 título imediato', () => {
       makeEvent({ id: 'e1', severity: 'CRITICAL', category: 'fiscal', title: 'CT-e 123 foi rejeitado pela SEFAZ' }),
     ];
     const msg = svc.buildImmediateMessage('fiscal', events);
-    expect(msg).toContain('⚡ Alerta imediato · Fiscal');
+    expect(msg).toContain('⚡ *Alerta imediato · Fiscal*');
     expect(msg).not.toMatch(/Alertas Fiscal — \d/); // não usa o formato do título agendado
   });
 
@@ -199,7 +199,7 @@ describe('MonitorService.buildImmediateMessage — H1 título imediato', () => {
     const msg = svc.buildImmediateMessage('outro', [
       makeEvent({ severity: 'CRITICAL', category: 'outro' as any, title: 'X' }),
     ]);
-    expect(msg).toContain('⚡ Alerta imediato · outro');
+    expect(msg).toContain('⚡ *Alerta imediato · outro*');
   });
 });
 
@@ -212,7 +212,7 @@ describe('MonitorService.sendAlertsToAdmins — H1 disparo imediato x agendado',
     await svc['sendAlertsToAdmins']('t1', events);
     expect(channel.sendTo).toHaveBeenCalledTimes(1);
     const [, , msg] = channel.sendTo.mock.calls[0];
-    expect(msg).toContain('⚡ Alerta imediato · Fiscal');
+    expect(msg).toContain('⚡ *Alerta imediato · Fiscal*');
   });
 
   it('item não-crítico NÃO dispara fora do ciclo — fica só para o digest agendado', async () => {
@@ -242,8 +242,8 @@ describe('MonitorService.sendAlertsToAdmins — H1 disparo imediato x agendado',
     // Duas mensagens distintas para o mesmo telefone — não uma combinada.
     expect(channel.sendTo).toHaveBeenCalledTimes(2);
     const messages = channel.sendTo.mock.calls.map((c: any[]) => c[2] as string);
-    expect(messages.some((m) => m.includes('⚡ Alerta imediato · Fiscal') && m.includes('CT-e rejeitado'))).toBe(true);
-    expect(messages.some((m) => m.includes('⚡ Alerta imediato · Logística') && m.includes('Coleta vencida'))).toBe(true);
+    expect(messages.some((m) => m.includes('⚡ *Alerta imediato · Fiscal*') && m.includes('CT-e rejeitado'))).toBe(true);
+    expect(messages.some((m) => m.includes('⚡ *Alerta imediato · Logística*') && m.includes('Coleta vencida'))).toBe(true);
   });
 });
 
