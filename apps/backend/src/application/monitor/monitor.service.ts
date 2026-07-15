@@ -544,7 +544,12 @@ export class MonitorService implements OnModuleInit {
     // G3 — resolve destinatários por setor
     const sectorCfg = config?.sectorConfig as Record<string, any> | null | undefined;
 
-    const byPhone = new Map<string, TmsProactivityEvent[]>();
+    // H1: agrupa por (telefone, setor) — não só por telefone — para que cada
+    // mensagem imediata fale de UM setor só e o título "⚡ Alerta imediato · {Setor}"
+    // nunca fique ambíguo. Antes agrupava só por telefone e misturava categorias
+    // na mesma mensagem (buildAlertMessage genérico); agora cada (telefone,setor)
+    // vira uma mensagem própria, no mesmo formato do digest agendado.
+    const byPhoneSector = new Map<string, { phone: string; category: string; events: TmsProactivityEvent[] }>();
     for (const e of toSend) {
       const sector = sectorCfg?.[e.category];
 
@@ -571,19 +576,21 @@ export class MonitorService implements OnModuleInit {
       }
 
       for (const phone of phones) {
-        const list = byPhone.get(phone) ?? [];
-        list.push(e);
-        byPhone.set(phone, list);
+        const key = `${phone}::${e.category}`;
+        const entry = byPhoneSector.get(key) ?? { phone, category: e.category, events: [] };
+        entry.events.push(e);
+        byPhoneSector.set(key, entry);
       }
     }
 
     let notified = 0;
-    for (const [phone, phoneEvents] of byPhone) {
-      // G2: mensagem com teto de itens
-      const msg = this.buildAlertMessage(phoneEvents);
+    for (const { phone, category, events: sectorEvents } of byPhoneSector.values()) {
+      // H1: mesmo corpo do digest agendado (severidade agrupada + link do painel),
+      // só o título de topo muda para "⚡ Alerta imediato · {Setor}".
+      const msg = this.buildImmediateMessage(category, sectorEvents);
       const r = await this.channel.sendTo(tenantId, phone, msg);
       if (r.sent) {
-        this.logger.log(`Monitor: ${phoneEvents.length} alerta(s) enviado(s) para ${phone} (tenant=${tenantId})`);
+        this.logger.log(`Monitor: ${sectorEvents.length} alerta(s) imediato(s) enviado(s) para ${phone} (tenant=${tenantId})`);
         notified++;
       } else {
         this.logger.warn(`Monitor: falha ao notificar ${phone}: ${r.reason}`);
@@ -593,10 +600,63 @@ export class MonitorService implements OnModuleInit {
     return notified;
   }
 
+  /** Rótulo e emoji por setor — mesmo vocabulário usado no digest agendado (ConsolidationService.SECTORS). */
+  private readonly SECTOR_LABEL: Record<string, string> = {
+    fiscal: 'Fiscal', logistic: 'Logística', frota: 'Frota', finance: 'Financeiro',
+  };
+
+  /**
+   * H1 — Monta a mensagem de alerta IMEDIATO (evento CRÍTICO notificado fora do
+   * ciclo agendado do setor). Mesmo corpo do digest agendado — severidade
+   * agrupada com contagem, bullets, link do painel — construído com
+   * ConsolidationService.buildSectorMessage; só o título de topo muda para deixar
+   * explícito, só de olhar a mensagem, que ela chegou fora do horário fixo:
+   *   imediato → "⚡ Alerta imediato · {Setor}"
+   *   agendado → "Alertas {Setor} — {data}" (inalterado, ver ConsolidationService)
+   */
+  buildImmediateMessage(category: string, events: TmsProactivityEvent[]): string {
+    const SEV_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
+    const SEV_ICON: Record<string, string> = {
+      CRITICAL: '🔴',
+      OVERDUE:  '🟠',
+      DUE_SOON: '🟡',
+      INFO:     '🔵',
+    };
+    const SEV_LABEL_PT: Record<string, string> = {
+      CRITICAL: 'CRÍTICO',
+      OVERDUE:  'VENCIDO',
+      DUE_SOON: 'A VENCER',
+      INFO:     'INFO',
+    };
+
+    const label = this.SECTOR_LABEL[category] ?? category;
+    const lines: string[] = [`⚡ *Alerta imediato · ${label}*\n`];
+
+    const grouped = SEV_ORDER.reduce<Record<string, TmsProactivityEvent[]>>((acc, s) => {
+      acc[s] = events.filter((e) => e.severity === s);
+      return acc;
+    }, {});
+
+    for (const sev of SEV_ORDER) {
+      const group = grouped[sev];
+      if (!group.length) continue;
+      lines.push(`${SEV_ICON[sev]} *${SEV_LABEL_PT[sev] ?? sev}* (${group.length})`);
+      group.slice(0, 5).forEach((e) => lines.push(`  • ${e.title}`));
+      if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
+    }
+
+    lines.push('\nAcesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
+    return lines.join('\n');
+  }
+
   /**
    * G2 — Monta mensagem consolidada com teto de 10 itens por severidade.
    * Ordena CRITICAL → OVERDUE → DUE_SOON → INFO.
    * Se eventos.length > 10: exibe top 10 e nota de overflow em vez de lista infinita.
+   *
+   * LEGADO: não é mais chamado por sendAlertsToAdmins desde H1 (substituído por
+   * buildImmediateMessage, que usa o mesmo corpo do digest agendado). Mantido
+   * público — testes existentes (G2) chamam diretamente.
    */
   buildAlertMessage(events: TmsProactivityEvent[]): string {
     const CAP = 10;

@@ -126,7 +126,8 @@ describe('MonitorService.sendAlertsToAdmins — G4 immediateSeverity', () => {
     // So o CRITICAL deve ter gerado envio
     expect(channel.sendTo).toHaveBeenCalledTimes(1);
     const [, , msg] = channel.sendTo.mock.calls[0];
-    expect(msg).toContain('1 alerta');
+    expect(msg).toContain('⚡ Alerta imediato');
+    expect(msg).toContain('CRÍTICO');
   });
 
   it('immediateSeverity=CRITICAL: nenhum CRITICAL → nao envia', async () => {
@@ -159,6 +160,90 @@ describe('MonitorService.sendAlertsToAdmins — G4 immediateSeverity', () => {
     ];
     await svc['sendAlertsToAdmins']('t1', events);
     expect(channel.sendTo).not.toHaveBeenCalled();
+  });
+});
+
+// ─── H1: alerta imediato vs agendado — título diferenciado ──────────────────
+// Evento CRÍTICO dispara fora do ciclo (via sendAlertsToAdmins, já chamado pelo
+// ingest/reconciliação) com título "⚡ Alerta imediato · {Setor}". Item não
+// crítico nunca dispara por esse caminho — só no digest agendado
+// (ConsolidationService, testado à parte). Corpo da mensagem (severidade
+// agrupada + link do painel) é o mesmo do digest — só o título muda.
+
+describe('MonitorService.buildImmediateMessage — H1 título imediato', () => {
+  it('título é "⚡ Alerta imediato · {Setor}", sem data (diferente do agendado)', () => {
+    const { svc } = makeService();
+    const events: TmsProactivityEvent[] = [
+      makeEvent({ id: 'e1', severity: 'CRITICAL', category: 'fiscal', title: 'CT-e 123 foi rejeitado pela SEFAZ' }),
+    ];
+    const msg = svc.buildImmediateMessage('fiscal', events);
+    expect(msg).toContain('⚡ Alerta imediato · Fiscal');
+    expect(msg).not.toMatch(/Alertas Fiscal — \d/); // não usa o formato do título agendado
+  });
+
+  it('corpo agrupa por severidade (igual ao digest agendado) e termina com o link do painel', () => {
+    const { svc } = makeService();
+    const events: TmsProactivityEvent[] = [
+      makeEvent({ id: 'e1', severity: 'CRITICAL', category: 'fiscal', title: 'CT-e 111 rejeitado' }),
+      makeEvent({ id: 'e2', severity: 'CRITICAL', category: 'fiscal', title: 'CT-e 222 rejeitado' }),
+    ];
+    const msg = svc.buildImmediateMessage('fiscal', events);
+    expect(msg).toContain('🔴 *CRÍTICO* (2)');
+    expect(msg).toContain('CT-e 111 rejeitado');
+    expect(msg).toContain('CT-e 222 rejeitado');
+    expect(msg).toContain('Acesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
+  });
+
+  it('categoria desconhecida usa o próprio valor como rótulo (fallback seguro)', () => {
+    const { svc } = makeService();
+    const msg = svc.buildImmediateMessage('outro', [
+      makeEvent({ severity: 'CRITICAL', category: 'outro' as any, title: 'X' }),
+    ]);
+    expect(msg).toContain('⚡ Alerta imediato · outro');
+  });
+});
+
+describe('MonitorService.sendAlertsToAdmins — H1 disparo imediato x agendado', () => {
+  it('evento CRÍTICO novo → dispara na hora com título imediato (fora do ciclo do scheduler)', async () => {
+    const { svc, channel } = makeService();
+    const events: TmsProactivityEvent[] = [
+      makeEvent({ id: 'c1', severity: 'CRITICAL', category: 'fiscal', title: 'CT-e rejeitado' }),
+    ];
+    await svc['sendAlertsToAdmins']('t1', events);
+    expect(channel.sendTo).toHaveBeenCalledTimes(1);
+    const [, , msg] = channel.sendTo.mock.calls[0];
+    expect(msg).toContain('⚡ Alerta imediato · Fiscal');
+  });
+
+  it('item não-crítico NÃO dispara fora do ciclo — fica só para o digest agendado', async () => {
+    const { svc, channel } = makeService(); // immediateSeverity default = CRITICAL
+    const events: TmsProactivityEvent[] = [
+      makeEvent({ id: 'd1', severity: 'DUE_SOON', category: 'fiscal', title: 'Certificado vence em 10d' }),
+    ];
+    const notified = await svc['sendAlertsToAdmins']('t1', events);
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(notified).toBe(0);
+  });
+
+  it('mesmo telefone com eventos de dois setores → duas mensagens, cada uma com o título do próprio setor', async () => {
+    const { svc, channel } = makeService({
+      immediateSeverity: 'CRITICAL',
+      sectorConfig: {
+        fiscal:   { phone: '5511900000009' },
+        logistic: { phone: '5511900000009' }, // mesmo número nos dois setores
+      },
+    });
+    const events: TmsProactivityEvent[] = [
+      makeEvent({ id: 'f1', severity: 'CRITICAL', category: 'fiscal',   title: 'CT-e rejeitado' }),
+      makeEvent({ id: 'l1', severity: 'CRITICAL', category: 'logistic', title: 'Coleta vencida' }),
+    ];
+    await svc['sendAlertsToAdmins']('t1', events);
+
+    // Duas mensagens distintas para o mesmo telefone — não uma combinada.
+    expect(channel.sendTo).toHaveBeenCalledTimes(2);
+    const messages = channel.sendTo.mock.calls.map((c: any[]) => c[2] as string);
+    expect(messages.some((m) => m.includes('⚡ Alerta imediato · Fiscal') && m.includes('CT-e rejeitado'))).toBe(true);
+    expect(messages.some((m) => m.includes('⚡ Alerta imediato · Logística') && m.includes('Coleta vencida'))).toBe(true);
   });
 });
 
