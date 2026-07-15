@@ -814,6 +814,12 @@ model TenantNotificationConfig {
   frotaEnabled    Boolean  @default(true) @map("frota_enabled")
   financeEnabled  Boolean  @default(true) @map("finance_enabled")
   sectorConfig       Json?    @map("sector_config")       // { fiscal|logistic|frota|finance: { phone, email, recipients[], sendHour, sendMinute, sendDays } }
+  // T6 (2026-07): horário de envio migra de setor para contato. Cada contato tem até 3
+  // horários próprios + lista de setores que assina. Fonte de verdade quando presente;
+  // sectorConfig continua sendo escrito em paralelo (phone/email = 1º contato de cada
+  // canal por setor) para não quebrar tenants/Nexa antigos que só leem o formato por setor.
+  // Shape: [{ id, whatsapp?, emails[], sectors[], sendTimes[](<=3 {hour,minute}), sendDays[], lastDigestDate? }]
+  contacts           Json?    @map("contacts")
   // G4: severidade mínima para notificação WhatsApp imediata.
   // 'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente.
   // 'all' = todo evento novo notifica (comportamento pré-G4).

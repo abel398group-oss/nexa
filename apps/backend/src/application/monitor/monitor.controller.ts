@@ -21,8 +21,20 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Transform } from 'class-transformer';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
@@ -37,12 +49,39 @@ import {
   isPlanAllowed,
   extractUniqueWaNumbers,
 } from './monitor-plan-limits.const';
+import {
+  CONTACT_SECTOR_KEYS,
+  sanitizeContacts,
+  deriveSectorConfigFallback,
+  type ContactRecipient,
+} from './contact-recipient.types';
 
 // Converte null → undefined para que @IsOptional() pule a validação.
 // Necessário porque o ValidationPipe global tem transform:true (class-transformer ativo)
 // mas @IsOptional() só ignora undefined, não null. Com @Transform antes, null vira
 // undefined e todos os validadores são pulados corretamente.
 const nullToUndefined = () => Transform(({ value }) => (value === null ? undefined : value));
+
+/** T6: um horário de envio (hora + minuto), até 3 por contato. */
+class ContactSendTimeDto {
+  @IsInt() @Min(0) @Max(23) hour!: number;
+  @IsInt() @Min(0) @Max(59) minute!: number;
+}
+
+/** T6: destinatário por contato — substitui "1 horário por setor" por "até 3 horários por contato". */
+class ContactRecipientDto {
+  @IsOptional() @IsString() id?: string;
+  @IsOptional() @IsString() whatsapp?: string;
+  @IsArray() @IsOptional() @IsString({ each: true }) emails?: string[];
+  @IsArray() @IsIn(CONTACT_SECTOR_KEYS, { each: true }) sectors!: string[];
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(3)
+  @ValidateNested({ each: true })
+  @Type(() => ContactSendTimeDto)
+  sendTimes!: ContactSendTimeDto[];
+  @IsArray() @IsOptional() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) sendDays?: number[];
+}
 
 class UpdateConfigDto {
   @IsBoolean() @IsOptional() enabled?: boolean;
@@ -62,6 +101,10 @@ class UpdateConfigDto {
     string,
     { phone?: string; email?: string; sendHour?: number; sendMinute?: number; sendDays?: number[] }
   >;
+  // T6: novo modelo por contato — fonte de verdade do horário de envio quando presente.
+  // sectorConfig continua sendo derivado automaticamente (phone/email) para compat.
+  @IsArray() @IsOptional() @ValidateNested({ each: true }) @Type(() => ContactRecipientDto)
+  contacts?: ContactRecipientDto[];
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -95,6 +138,7 @@ export class MonitorController {
           frotaEnabled: true,
           financeEnabled: true,
           sectorConfig: true,
+          contacts: true,
           monitorOverride: true,
         },
       }),
@@ -107,9 +151,11 @@ export class MonitorController {
     const monitorOverride = config?.monitorOverride ?? false;
     const planAllowed = isPlanAllowed(planLimit?.plan) || monitorOverride;
 
-    // Compute WA number usage for the UI counter
+    // Compute WA number usage for the UI counter — conta números únicos entre
+    // sectorConfig (legado), notificationPhone (raiz) e contacts (T6).
     const sectorCfg = (config?.sectorConfig as Record<string, any> | null) ?? null;
-    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone).size;
+    const contacts = (config?.contacts as ContactRecipient[] | null) ?? null;
+    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone, contacts).size;
     const waNumbersLimit = monitorWaLimit(
       planLimit?.plan,
       planLimit?.monitorExtraNumbers ?? 0,
@@ -129,6 +175,7 @@ export class MonitorController {
       frotaEnabled: true,
       financeEnabled: true,
       sectorConfig: null,
+      contacts: [],
       monitorOverride: false,
     };
 
@@ -152,11 +199,18 @@ export class MonitorController {
       }),
       this.prisma.tenantNotificationConfig.findUnique({
         where: { tenantId },
-        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true },
+        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true, contacts: true },
       }),
     ]);
 
     const override = existing?.monitorOverride ?? false;
+    const existingContacts = (existing?.contacts as ContactRecipient[] | null) ?? null;
+
+    // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)
+    // antes de qualquer gate — os gates de limite abaixo já usam a versão saneada.
+    const sanitizedContacts = dto.contacts !== undefined
+      ? sanitizeContacts(dto.contacts, existingContacts)
+      : undefined;
 
     if (dto.enabled && !isPlanAllowed(planLimit?.plan) && !override) {
       throw new ForbiddenException(
@@ -166,17 +220,17 @@ export class MonitorController {
     }
 
     // ── Gate 2: WhatsApp number limit ─────────────────────────────────────────
-    // Only enforce when sectorConfig or notificationPhone is being changed.
+    // Only enforce when sectorConfig, notificationPhone or contacts (T6) is being changed.
     // Grandfathering: if the tenant's current count already exceeds the limit
     // (e.g. after a downgrade), allow saves that do NOT increase the count.
     // Block only when: newCount > limit AND newCount > previousCount.
-    if (dto.sectorConfig !== undefined || dto.notificationPhone !== undefined) {
+    if (dto.sectorConfig !== undefined || dto.notificationPhone !== undefined || dto.contacts !== undefined) {
       const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
 
       // Previous state (before this save)
       const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
       const existingPhone = existing?.notificationPhone ?? null;
-      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone).size;
+      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone, existingContacts).size;
 
       // Merged state (after this save)
       const mergedSectorConfig =
@@ -185,7 +239,8 @@ export class MonitorController {
           : existingSectorConfig;
       const rootPhone =
         dto.notificationPhone !== undefined ? dto.notificationPhone : existingPhone;
-      const uniqueNumbers = extractUniqueWaNumbers(mergedSectorConfig, rootPhone);
+      const mergedContacts = sanitizedContacts !== undefined ? sanitizedContacts : existingContacts;
+      const uniqueNumbers = extractUniqueWaNumbers(mergedSectorConfig, rootPhone, mergedContacts);
       const newCount = uniqueNumbers.size;
 
       if (newCount > limit && newCount > previousCount) {
@@ -204,10 +259,22 @@ export class MonitorController {
       }
     }
 
+    // T6: quando contacts é enviado, grava a versão saneada e deriva o fallback
+    // sectorConfig[setor].phone/.email (1º contato de cada canal) — mantém tenants/
+    // integrações antigas que só leem o formato por setor funcionando sem mudança.
+    const data: Record<string, unknown> = { ...dto };
+    if (sanitizedContacts !== undefined) {
+      data.contacts = sanitizedContacts as any;
+      data.sectorConfig = deriveSectorConfigFallback(
+        sanitizedContacts,
+        dto.sectorConfig !== undefined ? dto.sectorConfig : (existing?.sectorConfig as Record<string, any> | null),
+      );
+    }
+
     return this.prisma.tenantNotificationConfig.upsert({
       where: { tenantId },
-      create: { tenantId, ...dto },
-      update: { ...dto },
+      create: { tenantId, ...data },
+      update: { ...data },
     });
   }
 

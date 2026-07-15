@@ -1,9 +1,19 @@
 /**
  * ConsolidationService — agrupa alertas abertos e dispara resumos diários.
  *
- * Dois modos de operação:
+ * Três modos de operação, verificados nesta ordem de prioridade:
  *
- * ── MODO PER-SECTOR (sectorConfig preenchido) ──────────────────────────────
+ * ── MODO PER-CONTATO (contacts preenchido — T6, 2026-07) ──────────────────
+ *   Cada contato (não mais cada setor) tem:
+ *     - até 3 horários de envio próprios (sendTimes), independentes entre si
+ *     - lista de setores que assina (sectors[])
+ *     - 1 WhatsApp e/ou N e-mails
+ *   O serviço itera os contatos e, para cada setor assinado, verifica CADA UM
+ *   dos horários do contato independentemente — um contato pode receber o
+ *   digest do mesmo setor várias vezes ao dia (ex.: 08h/13h/18h). Deduplicação
+ *   por chave `tenantId:contact:{id}:{sector}:{HH:MM}` (por horário, não só por setor).
+ *
+ * ── MODO PER-SECTOR (sectorConfig preenchido, sem contacts) ────────────────
  *   Cada setor (fiscal, logistic, frota, finance) tem:
  *     - sendHour / sendMinute próprios
  *     - telefone WhatsApp próprio
@@ -11,7 +21,7 @@
  *   e envia somente os alertas daquele setor para aquele telefone.
  *   Deduplicação por chave `tenantId:sector`.
  *
- * ── MODO LEGADO (sem sectorConfig) ────────────────────────────────────────
+ * ── MODO LEGADO (sem sectorConfig nem contacts) ────────────────────────────
  *   Comportamento anterior: um digest global com todos os alertas, enviado no
  *   sendHour global para todos os destinatários do config.
  *
@@ -23,6 +33,13 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorNotificationService } from './monitor-notification.service';
 import { EmailReplyService } from '@/application/email/email-reply.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import {
+  CONTACT_SECTOR_KEYS,
+  DEFAULT_SEND_DAYS,
+  DEFAULT_SEND_TIMES,
+  digestSlotKey,
+  type ContactRecipient,
+} from './contact-recipient.types';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +186,16 @@ export class ConsolidationService {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
+
+    // T6: modo per-contato tem prioridade quando há ao menos 1 contato com canal + setor.
+    const contacts = config?.contacts as ContactRecipient[] | null | undefined;
+    const hasContacts =
+      Array.isArray(contacts) &&
+      contacts.some((c) => (c?.whatsapp || (Array.isArray(c?.emails) && c.emails.length > 0)) && Array.isArray(c?.sectors) && c.sectors.length > 0);
+
+    if (hasContacts) {
+      return this.processPerContact(tenantId, config as any, contacts!, now, currentHour, currentMinute, force);
+    }
 
     const sectorConfig = config?.sectorConfig as Record<string, SectorCfg> | null | undefined;
     // A1: modo per-sector ativa com phone legado OU recipients[]
@@ -405,6 +432,168 @@ export class ConsolidationService {
     if (skipped.length > 0) {
       const summary = skipped.map(([k, v]) => `${k}=${v}`).join(', ');
       this.logger.log(`[${tenantId}] setores sem envio neste tick: ${summary}`);
+    }
+
+    return totalSent;
+  }
+
+  // ─── Modo per-contato (T6) ──────────────────────────────────────────────────
+
+  /**
+   * T6: varre CONTATOS em vez de setores. Para cada contato, para cada setor que
+   * ele assina, e para CADA UM dos até 3 horários próprios do contato, aplica a
+   * mesma verificação de janela/catch-up que o modo per-sector fazia com o único
+   * horário do setor — só que agora repetida por horário. Isso é o que permite um
+   * contato receber o digest de um setor 3x/dia (ex.: 08h/13h/18h) sem que os
+   * horários pisem um no outro: cada (setor, horário) tem seu próprio dedup.
+   *
+   * Isolamento: um contato NUNCA recebe alerta de um setor que não está em
+   * `contact.sectors`, e cada horário só dispara na sua própria janela — os
+   * outros horários daquele contato ficam ociosos até baterem a janela deles.
+   */
+  private async processPerContact(
+    tenantId: string,
+    config: Record<string, any>,
+    contacts: ContactRecipient[],
+    now: Date,
+    currentHour: number,
+    currentMinute: number,
+    force: boolean,
+  ): Promise<number> {
+    let totalSent = 0;
+    const todayStr = this.toDateStr(now);
+
+    const skipReasons: Record<string, string> = {};
+
+    for (const contact of contacts) {
+      const hasChannel = !!contact.whatsapp || (Array.isArray(contact.emails) && contact.emails.length > 0);
+      if (!hasChannel) continue;
+
+      const sendDays = Array.isArray(contact.sendDays) && contact.sendDays.length ? contact.sendDays : DEFAULT_SEND_DAYS;
+      if (!force && !sendDays.includes(now.getDay())) {
+        skipReasons[`contato:${contact.id}`] = 'fora_do_dia';
+        continue;
+      }
+
+      const sendTimes = (Array.isArray(contact.sendTimes) && contact.sendTimes.length
+        ? contact.sendTimes
+        : DEFAULT_SEND_TIMES
+      ).slice(0, 3);
+
+      for (const sectorKey of contact.sectors ?? []) {
+        if (!CONTACT_SECTOR_KEYS.includes(sectorKey)) continue;
+        const sector = SECTORS.find((s) => s.key === sectorKey);
+        if (!sector) continue;
+
+        // Setor desabilitado globalmente pelo tenant — nenhum horário deste setor dispara.
+        if (!config[sector.enabledField]) {
+          skipReasons[`contato:${contact.id}:${sector.key}`] = 'desabilitado';
+          continue;
+        }
+
+        for (const t of sendTimes) {
+          const slotLabel = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+          const skipKey = `contato:${contact.id}:${sector.key}@${slotLabel}`;
+          const digestKey = digestSlotKey(sectorKey, t);
+          const alreadySentToday = contact.lastDigestDate?.[digestKey] === todayStr;
+
+          let isCatchUp = false;
+
+          if (!force) {
+            if (alreadySentToday) {
+              skipReasons[skipKey] = 'ja_enviado_hoje';
+              continue;
+            }
+
+            const inWindow = currentHour === t.hour && currentMinute >= t.minute && currentMinute < t.minute + 5;
+
+            if (!inWindow) {
+              const nowMins = currentHour * 60 + currentMinute;
+              const scheduledMins = t.hour * 60 + t.minute;
+              const diffMins = nowMins - scheduledMins;
+              if (diffMins >= 0 && diffMins < ConsolidationService.CATCHUP_WINDOW_MINUTES) {
+                isCatchUp = true;
+              } else {
+                // diffMins < 0: horário ainda não chegou hoje. diffMins >= janela: expirou — desiste em silêncio (sem warn por slot pra não gerar spam de 3x por contato).
+                skipReasons[skipKey] = 'fora_da_hora';
+                continue;
+              }
+            }
+
+            const dedupKey = `${tenantId}:contact:${contact.id}:${sector.key}:${slotLabel}`;
+            const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
+            if (this.sentThisHour.get(dedupKey) === slotKeyNum) {
+              skipReasons[skipKey] = 'ja_enviado';
+              continue;
+            }
+          }
+
+          const alerts = await this.prisma.alertState.findMany({
+            where: {
+              tenantId,
+              category: sector.key,
+              status: 'open',
+              OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
+            },
+            orderBy: { severity: 'asc' },
+          });
+
+          if (!alerts.length) {
+            skipReasons[skipKey] = 'sem_alertas';
+            continue;
+          }
+
+          const message = this.buildSectorMessage(sector, alerts, now);
+          const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
+
+          // Mesmo princípio do BUG FIX per-sector (2026-07-14): reivindica o slot e
+          // PERSISTE no banco ANTES de enviar — se o processo cair no meio do envio
+          // (WhatsApp + N e-mails do mesmo contato, por exemplo), o pior cenário é um
+          // envio perdido (recuperável pela janela de catch-up), nunca um duplicado.
+          if (!force) {
+            const dedupKey = `${tenantId}:contact:${contact.id}:${sector.key}:${slotLabel}`;
+            const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
+            this.sentThisHour.set(dedupKey, slotKeyNum);
+            contact.lastDigestDate = { ...(contact.lastDigestDate ?? {}), [digestKey]: todayStr };
+            await this.persistContacts(tenantId, contacts);
+          }
+
+          if (contact.whatsapp) {
+            await this.notification.notifyPhone(tenantId, contact.whatsapp, message, force ? 0 : 120_000);
+            this.logger.log(
+              `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: ${alerts.length} alerta(s) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
+            );
+          }
+
+          if (contact.emails?.length) {
+            const subject = `🕐 Alerta programado · ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
+            const html = this.buildSectorEmailHtml(sector, alerts, now);
+            for (const email of contact.emails) {
+              const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
+              if (result.sent) {
+                this.logger.log(
+                  `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: ${alerts.length} alerta(s) → e-mail ${email}${catchUpSuffix}`,
+                );
+              } else {
+                this.logger.warn(
+                  `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: falha e-mail → ${email}: ${result.reason}`,
+                );
+              }
+            }
+          }
+
+          const alertIds = alerts.map((a) => a.id);
+          await this.persistAlertUpdates(alertIds, now);
+
+          totalSent += alerts.length;
+        }
+      }
+    }
+
+    const skipped = Object.entries(skipReasons);
+    if (skipped.length > 0) {
+      const summary = skipped.map(([k, v]) => `${k}=${v}`).join(', ');
+      this.logger.log(`[${tenantId}] contatos sem envio neste tick: ${summary}`);
     }
 
     return totalSent;
@@ -681,6 +870,18 @@ export class ConsolidationService {
     await this.prisma.tenantNotificationConfig.update({
       where: { tenantId },
       data: { sectorConfig: sectorConfig as any },
+    });
+  }
+
+  /**
+   * T6: persiste a lista de contatos atualizada (com lastDigestDate por setor)
+   * de volta ao banco — mesmo papel de persistLastDigestDate, mas para o
+   * modo per-contato. Escreve o array completo — chamado só quando algo mudou.
+   */
+  private async persistContacts(tenantId: string, contacts: ContactRecipient[]): Promise<void> {
+    await this.prisma.tenantNotificationConfig.update({
+      where: { tenantId },
+      data: { contacts: contacts as any },
     });
   }
 

@@ -72,14 +72,26 @@ export function isPlanAllowed(plan: string | null | undefined): boolean {
 
 /**
  * Extracts all unique normalised WhatsApp numbers from a sectorConfig object
- * plus an optional root-level notificationPhone (legacy field).
- * The same number in multiple sectors counts once.
+ * plus an optional root-level notificationPhone (legacy field), plus an
+ * optional T6 `contacts[]` array (per-contact model — see contact-recipient.types.ts).
+ * The same number appearing in multiple sectors/contacts counts once — the
+ * plan limit is per unique WhatsApp number, regardless of which format added it.
  */
 export function extractUniqueWaNumbers(
   sectorConfig: Record<string, any> | null | undefined,
   rootPhone?: string | null,
+  contacts?: Array<{ whatsapp?: string }> | null,
 ): Set<string> {
   const unique = new Set<string>();
+
+  if (Array.isArray(contacts)) {
+    for (const c of contacts) {
+      if (c?.whatsapp) {
+        const norm = normalizePhone(c.whatsapp);
+        if (norm) unique.add(norm);
+      }
+    }
+  }
 
   if (sectorConfig && typeof sectorConfig === 'object') {
     for (const sc of Object.values(sectorConfig)) {
