@@ -62,14 +62,16 @@ import {
 // undefined e todos os validadores são pulados corretamente.
 const nullToUndefined = () => Transform(({ value }) => (value === null ? undefined : value));
 
-/** T6: um horário de envio (hora + minuto), até 3 por contato. */
-class ContactSendTimeDto {
+/** T6: um horário de envio (hora + minuto), até 3 por contato.
+ *  Exportado — reaproveitado por MonitorIngestController (proxy /monitor/external-config
+ *  chamado pelo TMS) para que o TMS também possa ler/gravar contacts. */
+export class ContactSendTimeDto {
   @IsInt() @Min(0) @Max(23) hour!: number;
   @IsInt() @Min(0) @Max(59) minute!: number;
 }
 
 /** T6: destinatário por contato — substitui "1 horário por setor" por "até 3 horários por contato". */
-class ContactRecipientDto {
+export class ContactRecipientDto {
   @IsOptional() @IsString() id?: string;
   @IsOptional() @IsString() whatsapp?: string;
   @IsArray() @IsOptional() @IsString({ each: true }) emails?: string[];

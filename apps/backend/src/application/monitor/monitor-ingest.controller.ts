@@ -26,6 +26,10 @@ import {
 } from 'class-validator';
 import { ServiceTokenGuard } from '@/shared/guards/service-token.guard';
 import { MonitorService } from './monitor.service';
+// T6 (2026-07): reaproveita os mesmos DTOs de contacts do painel próprio do Nexa
+// (MonitorController) — mesmo shape, para que o TMS possa ler/gravar o novo
+// modelo por contato (até 3 horários, N e-mails, setores[]) via este proxy.
+import { ContactRecipientDto } from './monitor.controller';
 
 export class TmsEventDto {
   @IsString() id!: string;
@@ -69,6 +73,10 @@ export class ExternalConfigDto {
       sendDays?: number[];
     }
   >;
+  // T6: novo modelo por contato — mesmo shape do painel próprio do Nexa (ContactRecipientDto).
+  // sectorConfig continua sendo derivado automaticamente (phone/email) para compat.
+  @IsArray() @IsOptional() @ValidateNested({ each: true }) @Type(() => ContactRecipientDto)
+  contacts?: ContactRecipientDto[];
 }
 
 @Controller('monitor')

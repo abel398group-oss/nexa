@@ -1427,27 +1427,30 @@ export function MonitorConfigPage() {
       >
         {contactModal && (
           <div className="space-y-6">
-            <div>
-              <p className="text-sm font-medium text-base-content/70 mb-1.5">WhatsApp (com DDI, opcional)</p>
-              <input
-                type="tel"
-                inputMode="numeric"
-                className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
-                placeholder="5511999999999"
-                value={contactModal.whatsapp}
-                onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
-                aria-label="WhatsApp do contato"
-              />
-            </div>
+            {/* WhatsApp e E-mail — duas opções separadas (um contato pode ter as duas, uma só, ou nenhuma). */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-base-300 p-4">
+                <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp (opcional)</p>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
+                  placeholder="5511999999999 (com DDI)"
+                  value={contactModal.whatsapp}
+                  onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
+                  aria-label="WhatsApp do contato"
+                />
+              </div>
 
-            <div className="border-t border-base-200 pt-6">
-              <RecipientTagsInput
-                channel="email"
-                label="E-mails (ilimitado)"
-                value={contactModal.emails.map((e) => ({ contact: e, channel: 'email' as const }))}
-                onChange={updateContactEmails}
-                max={999}
-              />
+              <div className="rounded-lg border border-base-300 p-4">
+                <RecipientTagsInput
+                  channel="email"
+                  label="✉️ E-mails (ilimitado)"
+                  value={contactModal.emails.map((e) => ({ contact: e, channel: 'email' as const }))}
+                  onChange={updateContactEmails}
+                  max={999}
+                />
+              </div>
             </div>
 
             <div className="border-t border-base-200 pt-6">

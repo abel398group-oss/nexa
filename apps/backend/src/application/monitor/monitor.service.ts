@@ -32,6 +32,11 @@ import {
   monitorWaLimit,
   MONITOR_WA_INCLUDED,
 } from './monitor-plan-limits.const';
+import {
+  sanitizeContacts,
+  deriveSectorConfigFallback,
+  type ContactRecipient,
+} from './contact-recipient.types';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
 const EXTERNAL_CONFIG_SELECT = {
@@ -45,6 +50,8 @@ const EXTERNAL_CONFIG_SELECT = {
   financeEnabled: true,
   sectorConfig: true,
   immediateSeverity: true,
+  // T6: novo modelo por contato — mesmo campo do painel próprio do Nexa.
+  contacts: true,
 } as const;
 
 /** G4: severidades que disparam WhatsApp imediato. 'CRITICAL' = default conservador.
@@ -76,6 +83,8 @@ export interface ExternalMonitorConfigInput {
    *  'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente;
    *  'all' = todo evento novo notifica (comportamento pré-G4). */
   immediateSeverity?: 'CRITICAL' | 'all';
+  /** T6: novo modelo por contato — mesmo shape do painel próprio do Nexa (ContactRecipient). */
+  contacts?: ContactRecipient[];
 }
 
 /** A1: saneia o sectorConfig antes de persistir — cap de 10 destinatários,
@@ -285,7 +294,8 @@ export class MonitorService implements OnModuleInit {
 
     const monitorOverride = config?.monitorOverride ?? false;
     const sectorCfg = (config?.sectorConfig as Record<string, any> | null) ?? null;
-    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone ?? null).size;
+    const contacts = (config?.contacts as ContactRecipient[] | null) ?? null;
+    const waNumbersUsed = extractUniqueWaNumbers(sectorCfg, config?.notificationPhone ?? null, contacts).size;
     const waNumbersLimit = monitorWaLimit(
       planLimit?.plan,
       planLimit?.monitorExtraNumbers ?? 0,
@@ -303,6 +313,7 @@ export class MonitorService implements OnModuleInit {
         frotaEnabled: true,
         financeEnabled: true,
         sectorConfig: null,
+        contacts: [],
         waNumbersUsed: 0,
         waNumbersLimit,
       };
@@ -334,11 +345,18 @@ export class MonitorService implements OnModuleInit {
       }),
       this.prisma.tenantNotificationConfig.findUnique({
         where: { tenantId },
-        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true },
+        select: { monitorOverride: true, sectorConfig: true, notificationPhone: true, contacts: true },
       }),
     ]);
 
     const override = existing?.monitorOverride ?? false;
+    const existingContacts = (existing?.contacts as ContactRecipient[] | null) ?? null;
+
+    // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)
+    // antes de qualquer gate — mesmo padrão de MonitorController.updateConfig.
+    const sanitizedContacts = input.contacts !== undefined
+      ? sanitizeContacts(input.contacts, existingContacts)
+      : undefined;
 
     // ── Gate 1: plano precisa permitir Monitor (paridade com MonitorController) ──
     if (input.enabled && !isPlanAllowed(planLimit?.plan) && !override) {
@@ -350,19 +368,19 @@ export class MonitorService implements OnModuleInit {
 
     // ── Gate 2: limite de números WhatsApp (paridade com MonitorController) ──────
     // Grandfathering: só bloqueia quando o save AUMENTA a contagem além do limite.
-    // ExternalConfigDto não tem notificationPhone (raiz) — só sectorConfig é
-    // enviado pelo proxy do TMS, então o rootPhone usado é sempre o existente.
-    if (input.sectorConfig !== undefined) {
+    // ExternalConfigDto não tem notificationPhone (raiz) — só sectorConfig/contacts são
+    // enviados pelo proxy do TMS, então o rootPhone usado é sempre o existente.
+    if (input.sectorConfig !== undefined || input.contacts !== undefined) {
       const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
 
       const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
       const existingPhone = existing?.notificationPhone ?? null;
-      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone).size;
+      const previousCount = extractUniqueWaNumbers(existingSectorConfig, existingPhone, existingContacts).size;
 
-      const uniqueNumbers = extractUniqueWaNumbers(
-        input.sectorConfig as Record<string, any>,
-        existingPhone,
-      );
+      const mergedSectorConfig =
+        input.sectorConfig !== undefined ? (input.sectorConfig as Record<string, any>) : existingSectorConfig;
+      const mergedContacts = sanitizedContacts !== undefined ? sanitizedContacts : existingContacts;
+      const uniqueNumbers = extractUniqueWaNumbers(mergedSectorConfig, existingPhone, mergedContacts);
       const newCount = uniqueNumbers.size;
 
       if (newCount > limit && newCount > previousCount) {
@@ -383,10 +401,24 @@ export class MonitorService implements OnModuleInit {
 
     // Remove chaves undefined para não sobrescrever campos não enviados.
     // A1: saneia recipients do sectorConfig (cap 10, entradas válidas).
+    // T6: quando contacts é enviado, grava a versão saneada e deriva o fallback
+    // sectorConfig[setor].phone/.email (1º contato de cada canal) — mesmo padrão
+    // de MonitorController.updateConfig, mantém consumidores legados funcionando.
     const sanitized: ExternalMonitorConfigInput = {
       ...input,
       ...(input.sectorConfig !== undefined
         ? { sectorConfig: sanitizeSectorConfig(input.sectorConfig) }
+        : {}),
+      ...(sanitizedContacts !== undefined
+        ? {
+            contacts: sanitizedContacts,
+            sectorConfig: deriveSectorConfigFallback(
+              sanitizedContacts,
+              input.sectorConfig !== undefined
+                ? sanitizeSectorConfig(input.sectorConfig)
+                : (existing?.sectorConfig as Record<string, any> | null),
+            ),
+          }
         : {}),
     };
     const data = Object.fromEntries(
