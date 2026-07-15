@@ -3,12 +3,13 @@ import { cn } from '@/shared/lib/cn';
 
 // Shell de diálogo reutilizável: overlay + painel centralizado, fecha no Esc / clique fora.
 // WCAG 2.1: role=dialog + aria-modal + aria-labelledby + focus trap + foco automático ao abrir.
-export type ModalSize = 'sm' | 'md' | 'lg';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const SIZE: Record<ModalSize, string> = {
   sm: 'w-96 max-w-[92vw]',
   md: 'w-[32rem] max-w-[94vw]',
   lg: 'w-[44rem] max-w-[96vw]',
+  xl: 'w-[60rem] max-w-[97vw]',
 };
 
 // Selectors de elementos focáveis para o focus trap.

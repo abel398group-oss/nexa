@@ -21,7 +21,7 @@
  *  8 = hora finance  | 9 = min finance
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MonitorConfigPage } from './MonitorConfigPage';
@@ -139,7 +139,11 @@ beforeEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('MonitorConfigPage — Horário padrão', () => {
+// Standby (2026-07): a grade "Alertas por setor" foi tirada de tela a pedido do
+// Abel (ver SECTOR_GRID_ENABLED em MonitorConfigPage.tsx) — o fluxo principal
+// agora é a lista de Contatos (T6). Testes mantidos (não deletados) para quando
+// a grade for reativada; usar .skip até lá.
+describe.skip('MonitorConfigPage — Horário padrão', () => {
   /**
    * Comportamento 1:
    * "Aplicar a todos os setores" copia hora do bloco "Horário padrão"
@@ -289,7 +293,8 @@ describe('MonitorConfigPage — Horário padrão', () => {
 });
 // ── N3.3: saveConfig não envia campos read-only no PUT ─────────────────────────
 
-describe('MonitorConfigPage — saveConfig (N3.3)', () => {
+// Standby (2026-07): depende de "Horário padrão (todos os setores)" (grade oculta) — ver nota acima.
+describe.skip('MonitorConfigPage — saveConfig (N3.3)', () => {
   it('PUT payload não inclui waNumbersUsed nem waNumbersLimit', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/monitor/config')
@@ -321,7 +326,8 @@ describe('MonitorConfigPage — saveConfig (N3.3)', () => {
 
 // ── N3.4: remoção de número WA permitida mesmo no limite ──────────────────────
 
-describe('MonitorConfigPage — UX limite WA (N3.4)', () => {
+// Standby (2026-07): depende de "Horário padrão (todos os setores)" (grade oculta) — ver nota acima.
+describe.skip('MonitorConfigPage — UX limite WA (N3.4)', () => {
   it('botão × de remoção não está disabled quando atWaLimit=true e sector enabled', async () => {
     const WA_CONTACT = '5511999990001';
 
@@ -361,5 +367,324 @@ describe('MonitorConfigPage — UX limite WA (N3.4)', () => {
 
     // N3.4: o botão NÃO deve estar disabled (atWaLimit não deve desabilitar remoção)
     expect(removeBtn).not.toBeDisabled();
+  });
+});
+
+// ── T6: contatos com horário próprio ──────────────────────────────────────────
+
+describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
+  function mockConfigWithContacts(contacts: unknown[]) {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/monitor/config') return Promise.resolve({ data: makeConfig({ contacts }) });
+      if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
+      if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
+      if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('mostra "Nenhum contato cadastrado." quando não há contatos', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+    expect(screen.getByText('Nenhum contato cadastrado.')).toBeInTheDocument();
+  });
+
+  it('carrega contatos existentes e mostra setores + horários', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: ['fiscal@empresa.com'],
+        sectors: ['fiscal', 'finance'],
+        sendTimes: [{ hour: 8, minute: 0 }, { hour: 18, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    expect(await screen.findByText(/5511999990001/)).toBeInTheDocument();
+    expect(screen.getByText(/fiscal@empresa\.com/)).toBeInTheDocument();
+
+    // "Fiscal"/"Financeiro" aparecem tanto nas abas de filtro quanto nos badges da
+    // linha da tabela — escopar ao <table> para checar especificamente os badges do contato.
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('Fiscal')).toBeInTheDocument();
+    expect(within(table).getByText('Financeiro')).toBeInTheDocument();
+    expect(within(table).getByText('WhatsApp')).toBeInTheDocument();
+    expect(within(table).getByText('E-mail')).toBeInTheDocument();
+    expect(within(table).getByText('08:00 · 18:00')).toBeInTheDocument();
+  });
+
+  it('aba de setor filtra a lista de contatos', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+      {
+        id: 'c2',
+        whatsapp: '5511999990002',
+        emails: [],
+        sectors: ['finance'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    expect(await screen.findByText(/5511999990001/)).toBeInTheDocument();
+    expect(screen.getByText(/5511999990002/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fiscal', pressed: false }));
+
+    expect(screen.getByText(/5511999990001/)).toBeInTheDocument();
+    expect(screen.queryByText(/5511999990002/)).not.toBeInTheDocument();
+  });
+
+  it('"+ Novo contato" abre modal; cadastra com WhatsApp + 1 setor', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/5511988880000/)).toBeInTheDocument();
+  });
+
+  it('exige WhatsApp ou e-mail antes de salvar', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe um WhatsApp ou pelo menos um e-mail/i);
+  });
+
+  it('exige ao menos 1 setor antes de salvar', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Selecione ao menos um setor/i);
+  });
+
+  it('rejeita telefone inválido', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Telefone inválido/i);
+  });
+
+  it('permite até 3 horários e desabilita "+ adicionar horário" no limite', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    expect(screen.getByLabelText('Hora do horário 1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('+ adicionar horário'));
+    expect(screen.getByLabelText('Hora do horário 2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('+ adicionar horário'));
+    expect(screen.getByLabelText('Hora do horário 3')).toBeInTheDocument();
+
+    // No limite de 3, o botão de adicionar some
+    expect(screen.queryByText('+ adicionar horário')).not.toBeInTheDocument();
+  });
+
+  it('editar contato pré-carrega os campos', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 9, minute: 30 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
+
+    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('5511999990001');
+    expect(screen.getByLabelText('Hora do horário 1')).toHaveValue('9');
+    expect(screen.getByLabelText('Minuto do horário 1')).toHaveValue('30');
+  });
+
+  // TEMP (teste do Abel) — minuto voltou temporariamente; skip.skip acima quando remover.
+  it.skip('modal de horário não tem seletor de minuto (hora redonda)', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+
+    expect(screen.getByLabelText('Hora do horário 1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Minuto do horário 1')).not.toBeInTheDocument();
+  });
+
+  it('remover contato pede confirmação e some da lista', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Remover 5511999990001/i }));
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalledOnce());
+
+    await waitFor(() => {
+      expect(screen.queryByText(/5511999990001/)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Nenhum contato cadastrado.')).toBeInTheDocument();
+  });
+
+  it('"Salvar contato" no modal já persiste no backend (auto-save) — não depende do "Salvar" principal', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    // O PUT já deve ter disparado ao fechar o modal, sem precisar clicar no "Salvar" da página.
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+
+    const [, payload] = mockPut.mock.calls[0];
+    // Payload mínimo — só `contacts`, sem sectorConfig nem os demais campos da página.
+    expect(Object.keys(payload)).toEqual(['contacts']);
+    expect(payload.contacts).toHaveLength(1);
+    expect(payload.contacts[0]).toMatchObject({
+      whatsapp: '5511988880000',
+      sectors: ['fiscal'],
+    });
+    expect(payload.contacts[0].sendTimes).toEqual([{ hour: 8, minute: 0 }]);
+  });
+
+  it('se o auto-save falhar, o modal continua aberto mostrando o erro (não perde o que foi digitado)', async () => {
+    mockPut.mockRejectedValueOnce({ response: { data: { message: 'Limite de números WhatsApp atingido.' } } });
+
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Não foi possível salvar/i);
+    // Modal continua aberto — o WhatsApp digitado não some.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('5511988880000');
+  });
+
+  it('payload do "Salvar" principal também inclui contacts com o shape esperado', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(2));
+
+    // Última chamada = clique no "Salvar" principal da página (a 1ª é o auto-save do modal).
+    const [, payload] = mockPut.mock.calls.at(-1)!;
+    expect(payload.contacts).toHaveLength(1);
+    expect(payload.contacts[0]).toMatchObject({
+      whatsapp: '5511988880000',
+      sectors: ['fiscal'],
+    });
+    expect(payload.contacts[0].sendTimes).toEqual([{ hour: 8, minute: 0 }]);
+  });
+
+  it('BUGFIX: payload do "Salvar" principal não reenvia sectorConfig (grade em standby) — evita bloqueio falso de limite WA', async () => {
+    // Config com sectorConfig legado já populado (números antigos) + plano com limite
+    // apertado — reproduz o cenário em que o save de um contato novo era bloqueado
+    // porque o sectorConfig congelado do estado local era somado ao contato novo.
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/monitor/config')
+        return Promise.resolve({
+          data: makeConfig({
+            waNumbersUsed: 2,
+            waNumbersLimit: 2,
+            sectorConfig: {
+              fiscal: { recipients: [{ contact: '5511917747429', channel: 'whatsapp' }], sendHour: 13, sendMinute: 0, sendDays: ALL_DAYS },
+              logistic: { recipients: [{ contact: '5511994327713', channel: 'whatsapp' }], sendHour: 13, sendMinute: 0, sendDays: ALL_DAYS },
+              frota: makeSectorOverride(),
+              finance: makeSectorOverride(),
+            },
+          }),
+        });
+      if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
+      if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
+      if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
+      target: { value: '5511988880000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(2));
+
+    // Última chamada = clique no "Salvar" principal (a 1ª é o auto-save do modal, que
+    // nunca manda sectorConfig de qualquer forma — o ponto aqui é o botão da página).
+    const [, payload] = mockPut.mock.calls.at(-1)!;
+    expect(payload).not.toHaveProperty('sectorConfig');
+    expect(payload.contacts).toHaveLength(1);
   });
 });
