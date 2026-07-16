@@ -9,7 +9,7 @@
  *  - Plan gate: exibe banner + bloqueia edição quando plano não permite
  *  - Override de plano: visível apenas para platform admins
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
@@ -89,6 +89,8 @@ const DEFAULT_CONTACT_TIME: ContactSendTime = { hour: 8, minute: 0 };
 
 interface ContactModalState {
   editId: string | null;
+  /** Módulo de cadastro é separado por canal — o modal só mostra o campo do canal ativo. */
+  channel: 'whatsapp' | 'email';
   whatsapp: string;
   emails: string[];
   sectors: SectorKey[];
@@ -651,9 +653,11 @@ export function MonitorConfigPage() {
 
   // ─── T6: CRUD de contatos ───────────────────────────────────────────────────
 
-  function openNewContact() {
+  /** Cadastro é um módulo por canal — abre só o campo do canal escolhido. */
+  function openNewContact(channel: 'whatsapp' | 'email') {
     setContactModal({
       editId: null,
+      channel,
       whatsapp: '',
       emails: [],
       sectors: [],
@@ -663,9 +667,11 @@ export function MonitorConfigPage() {
     });
   }
 
-  function openEditContact(c: ContactRecipient) {
+  /** Editar também é por canal — mexe só no campo do canal daquela linha, preserva o outro canal intacto. */
+  function openEditContact(c: ContactRecipient, channel: 'whatsapp' | 'email') {
     setContactModal({
       editId: c.id,
+      channel,
       whatsapp: c.whatsapp ?? '',
       emails: c.emails,
       sectors: c.sectors,
@@ -735,29 +741,39 @@ export function MonitorConfigPage() {
   async function saveContactModal() {
     if (!contactModal) return;
     const digits = contactModal.whatsapp.replace(/\D/g, '');
+    const isWhatsapp = contactModal.channel === 'whatsapp';
 
-    if (!digits && contactModal.emails.length === 0) {
-      setContactModal({ ...contactModal, error: 'Informe um WhatsApp ou pelo menos um e-mail.' });
+    if (isWhatsapp && !digits) {
+      setContactModal({ ...contactModal, error: 'Informe um número de WhatsApp.' });
       return;
     }
-    if (digits && digits.length < 12) {
+    if (isWhatsapp && digits.length < 12) {
       setContactModal({ ...contactModal, error: 'Telefone inválido — use DDI + DDD + número (ex: 5511999999999).' });
+      return;
+    }
+    if (!isWhatsapp && contactModal.emails.length === 0) {
+      setContactModal({ ...contactModal, error: 'Informe pelo menos um e-mail.' });
       return;
     }
     if (contactModal.sectors.length === 0) {
       setContactModal({ ...contactModal, error: 'Selecione ao menos um setor.' });
       return;
     }
-    const dup = digits && contacts.some((c) => c.id !== contactModal.editId && c.whatsapp === digits);
+    const dup = isWhatsapp && contacts.some((c) => c.id !== contactModal.editId && c.whatsapp === digits);
     if (dup) {
       setContactModal({ ...contactModal, error: 'Esse WhatsApp já está cadastrado em outro contato.' });
       return;
     }
 
+    // Módulo de cadastro é por canal: salvar no módulo WhatsApp só grava/edita o
+    // whatsapp; salvar no módulo E-mail só grava/edita os e-mails. Se o registro
+    // já tinha o OUTRO canal preenchido (ex.: contato antigo, de antes dessa
+    // separação), preserva esse outro canal intacto em vez de apagar.
+    const existing = contactModal.editId ? contacts.find((c) => c.id === contactModal.editId) : undefined;
     const saved: ContactRecipient = {
       id: contactModal.editId ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      whatsapp: digits || undefined,
-      emails: contactModal.emails,
+      whatsapp: isWhatsapp ? digits : existing?.whatsapp,
+      emails: isWhatsapp ? (existing?.emails ?? []) : contactModal.emails,
       sectors: contactModal.sectors,
       sendTimes: contactModal.sendTimes,
       sendDays: contactModal.sendDays,
@@ -1187,18 +1203,13 @@ export function MonitorConfigPage() {
           {/* ─── T6: Contatos com horário próprio — lista única, canal misto ── */}
           <div className={`transition-opacity ${cfg.enabled && planAllowed ? '' : 'opacity-40 pointer-events-none'}`}>
             <div className="card px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-                <div>
-                  <p className="text-sm font-semibold text-base-content">Contatos com horário próprio</p>
-                  <p className="text-xs text-base-content/50 mt-0.5">
-                    Opcional. Cada contato pode ter até 3 horários independentes por dia (ex.: 08h, 13h, 18h)
-                    e escolher em quais setores recebe alerta. Contatos cadastrados aqui têm prioridade
-                    sobre o horário dos cards de setor acima.
-                  </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={openNewContact}>
-                  <Icon name="plus" className="h-3.5 w-3.5" /> Novo contato
-                </Button>
+              <div className="mb-1">
+                <p className="text-sm font-semibold text-base-content">Contatos com horário próprio</p>
+                <p className="text-xs text-base-content/50 mt-0.5">
+                  Opcional. Cadastre WhatsApp e e-mail em módulos separados — cada um pode ter até 3
+                  horários independentes por dia (ex.: 08h, 13h, 18h) e escolher em quais setores recebe
+                  alerta. Contatos cadastrados aqui têm prioridade sobre o horário dos cards de setor acima.
+                </p>
               </div>
 
               {/* Abas: Todos + um por setor */}
@@ -1233,112 +1244,153 @@ export function MonitorConfigPage() {
               </div>
 
               {(() => {
-                const filtered = contacts.filter((c) => contactTab === 'all' || c.sectors.includes(contactTab));
+                const bySector = (c: ContactRecipient) => contactTab === 'all' || c.sectors.includes(contactTab);
+                const waContacts    = contacts.filter((c) => !!c.whatsapp && bySector(c));
+                const emailContacts = contacts.filter((c) => c.emails.length > 0 && bySector(c));
 
-                if (contacts.length === 0) {
-                  return <p className="text-xs text-base-content/40 mt-3">Nenhum contato cadastrado.</p>;
-                }
-                if (filtered.length === 0) {
-                  return <p className="text-xs text-base-content/40 mt-3">Nenhum contato neste setor.</p>;
-                }
+                const renderRows = (
+                  list: ContactRecipient[],
+                  channel: 'whatsapp' | 'email',
+                  contactCell: (c: ContactRecipient) => ReactNode,
+                ) =>
+                  list.map((c) => {
+                    const idLabel = c.whatsapp || c.emails[0] || 'contato';
+                    return (
+                      <tr key={c.id} className="hover:bg-base-200/20 transition-colors">
+                        <td className="py-3 pl-4 pr-3 min-w-0">{contactCell(c)}</td>
+                        <td className="py-3 pr-3">
+                          <div className="flex flex-wrap gap-1">
+                            {c.sectors.map((key) => {
+                              const meta = SECTORS.find((s) => s.key === key);
+                              return (
+                                <span
+                                  key={key}
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${meta?.badgeClass ?? ''}`}
+                                >
+                                  {meta?.label ?? key}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span className="text-[10px] text-base-content/40">
+                            {c.sendTimes
+                              .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
+                              .join(' · ')}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="flex gap-1 justify-end shrink-0">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              title="Editar"
+                              aria-label={`Editar ${idLabel}`}
+                              onClick={() => openEditContact(c, channel)}
+                            >
+                              <Icon name="edit" className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs text-error"
+                              title="Remover"
+                              aria-label={`Remover ${idLabel}`}
+                              onClick={() => removeContact(c)}
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+
+                const tableHead = (firstCol: string) => (
+                  <thead>
+                    <tr className="bg-base-200/50 text-[10px] uppercase tracking-widest text-base-content/40">
+                      <th className="text-left font-semibold px-4 py-2">{firstCol}</th>
+                      <th className="text-left font-semibold px-4 py-2">Setores</th>
+                      <th className="text-left font-semibold px-4 py-2">Horários</th>
+                      <th className="px-4 py-2" />
+                    </tr>
+                  </thead>
+                );
 
                 return (
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-[10px] uppercase tracking-widest text-base-content/40">
-                          <th className="text-left font-semibold pb-2 pr-3">Contato</th>
-                          <th className="text-left font-semibold pb-2 pr-3">Canal</th>
-                          <th className="text-left font-semibold pb-2 pr-3">Setores</th>
-                          <th className="text-left font-semibold pb-2 pr-3">Horários</th>
-                          <th className="pb-2" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-base-200">
-                        {filtered.map((c) => {
-                          const idLabel = c.whatsapp || c.emails[0] || 'contato';
-                          return (
-                            <tr key={c.id}>
-                              <td className="py-2.5 pr-3 min-w-0">
-                                {c.whatsapp && <p className="text-sm font-medium text-base-content truncate">{c.whatsapp}</p>}
-                                {c.emails.map((e) => (
-                                  <p key={e} className="text-sm font-medium text-base-content truncate">{e}</p>
-                                ))}
-                              </td>
-                              <td className="py-2.5 pr-3">
-                                <div className="flex flex-wrap gap-1">
-                                  {c.whatsapp && (
-                                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500/20 text-emerald-400">
-                                      WhatsApp
-                                    </span>
-                                  )}
-                                  {c.emails.length > 0 && (
-                                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-base-300 text-base-content/60">
-                                      E-mail
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-2.5 pr-3">
-                                <div className="flex flex-wrap gap-1">
-                                  {c.sectors.map((key) => {
-                                    const meta = SECTORS.find((s) => s.key === key);
-                                    return (
-                                      <span
-                                        key={key}
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${meta?.badgeClass ?? ''}`}
-                                      >
-                                        {meta?.label ?? key}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                              <td className="py-2.5 pr-3">
-                                <span className="text-[10px] text-base-content/40">
-                                  {c.sendTimes
-                                    .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
-                                    .join(' · ')}
-                                </span>
-                              </td>
-                              <td className="py-2.5">
-                                <div className="flex gap-1 justify-end shrink-0">
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-xs"
-                                    title="Editar"
-                                    aria-label={`Editar ${idLabel}`}
-                                    onClick={() => openEditContact(c)}
-                                  >
-                                    <Icon name="edit" className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-xs text-error"
-                                    title="Remover"
-                                    aria-label={`Remover ${idLabel}`}
-                                    onClick={() => removeContact(c)}
-                                  >
-                                    <Icon name="trash" className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="mt-3 space-y-4">
+                    {/* Módulo WhatsApp — cadastro e lista próprios, independentes do e-mail. */}
+                    <div className="rounded-lg border border-base-200 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-base-200/30 border-b border-base-200">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-sm">
+                            📱
+                          </span>
+                          <p className="text-sm font-semibold text-base-content">WhatsApp</p>
+                        </div>
+                        <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('whatsapp')}>
+                          <Icon name="plus" className="h-3.5 w-3.5" /> Novo WhatsApp
+                        </Button>
+                      </div>
+                      {waContacts.length === 0 ? (
+                        <p className="text-xs text-base-content/40 px-4 py-4">Nenhum WhatsApp cadastrado.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            {tableHead('WhatsApp')}
+                            <tbody className="divide-y divide-base-200">
+                              {renderRows(waContacts, 'whatsapp', (c) => (
+                                <p className="text-sm font-medium text-base-content truncate">{c.whatsapp}</p>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {planAllowed && waNumbersLimit > 0 && (
+                        <p className="text-[11px] text-base-content/40 px-4 py-2 border-t border-base-200">
+                          {waNumbersUsed} de {waNumbersLimit} números de WhatsApp
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Módulo E-mail — cadastro e lista próprios, independentes do WhatsApp. */}
+                    <div className="rounded-lg border border-base-200 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-base-200/30 border-b border-base-200">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/20 text-sm">
+                            ✉️
+                          </span>
+                          <p className="text-sm font-semibold text-base-content">E-mail</p>
+                        </div>
+                        <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('email')}>
+                          <Icon name="plus" className="h-3.5 w-3.5" /> Novo e-mail
+                        </Button>
+                      </div>
+                      {emailContacts.length === 0 ? (
+                        <p className="text-xs text-base-content/40 px-4 py-4">Nenhum e-mail cadastrado.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            {tableHead('E-mail')}
+                            <tbody className="divide-y divide-base-200">
+                              {renderRows(emailContacts, 'email', (c) => (
+                                <>
+                                  {c.emails.map((e) => (
+                                    <p key={e} className="text-sm font-medium text-base-content truncate">{e}</p>
+                                  ))}
+                                </>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-base-content/40 px-4 py-2 border-t border-base-200">
+                        E-mails ilimitados
+                      </p>
+                    </div>
                   </div>
                 );
               })()}
-
-              {contacts.length > 0 && (
-                <p className="text-[11px] text-base-content/40 mt-3">
-                  {planAllowed && waNumbersLimit > 0
-                    ? `${waNumbersUsed} de ${waNumbersLimit} números de WhatsApp · e-mails ilimitados`
-                    : 'E-mails ilimitados'}
-                </p>
-              )}
             </div>
           </div>
 
@@ -1408,11 +1460,15 @@ export function MonitorConfigPage() {
         </div>
       )}
 
-      {/* ─── T6: Modal de cadastro/edição de contato ───────────────────── */}
+      {/* ─── T6: Módulo de cadastro — um modal por canal (WhatsApp / E-mail), nunca os dois juntos ── */}
       <Modal
         open={!!contactModal}
         onClose={() => setContactModal(null)}
-        title={contactModal?.editId ? 'Editar contato' : 'Novo contato'}
+        title={
+          contactModal?.channel === 'whatsapp'
+            ? (contactModal?.editId ? 'Editar WhatsApp' : 'Novo WhatsApp')
+            : (contactModal?.editId ? 'Editar e-mail' : 'Novo e-mail')
+        }
         size="xl"
         footer={
           <>
@@ -1420,17 +1476,17 @@ export function MonitorConfigPage() {
               Cancelar
             </Button>
             <Button type="button" onClick={saveContactModal} loading={!!contactModal?.saving} disabled={!!contactModal?.saving}>
-              Salvar contato
+              {contactModal?.channel === 'whatsapp' ? 'Salvar WhatsApp' : 'Salvar e-mail'}
             </Button>
           </>
         }
       >
         {contactModal && (
           <div className="space-y-6">
-            {/* WhatsApp e E-mail — duas opções separadas (um contato pode ter as duas, uma só, ou nenhuma). */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-base-300 p-4">
-                <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp (opcional)</p>
+            {/* Módulo de cadastro é por canal — só mostra o campo do canal ativo, nunca os dois juntos. */}
+            {contactModal.channel === 'whatsapp' ? (
+              <div>
+                <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp</p>
                 <input
                   type="tel"
                   inputMode="numeric"
@@ -1441,8 +1497,8 @@ export function MonitorConfigPage() {
                   aria-label="WhatsApp do contato"
                 />
               </div>
-
-              <div className="rounded-lg border border-base-300 p-4">
+            ) : (
+              <div>
                 <RecipientTagsInput
                   channel="email"
                   label="✉️ E-mails (ilimitado)"
@@ -1451,7 +1507,7 @@ export function MonitorConfigPage() {
                   max={999}
                 />
               </div>
-            </div>
+            )}
 
             <div className="border-t border-base-200 pt-6">
               <p className="text-sm font-medium text-base-content/70 mb-2">Recebe alertas de</p>

@@ -59,6 +59,23 @@ const EXTERNAL_CONFIG_SELECT = {
 const IMMEDIATE_SEVERITY_DEFAULT = 'CRITICAL';
 const IMMEDIATE_ALL_SEVERITIES = new Set(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']);
 
+/**
+ * T6: shape de entrada de `contacts` antes de `sanitizeContacts()` normalizar —
+ * tipagem propositalmente frouxa (sectors/sendDays como tipos largos, id/emails/sendDays
+ * opcionais) para bater estruturalmente tanto com `ContactRecipientDto` (monitor.controller.ts,
+ * campo de contatos do painel próprio) quanto com o `ContactRecipient` já saneado
+ * (contact-recipient.types.ts), sem precisar importar nenhum dos dois — evita import
+ * circular entre este arquivo e os controllers que o injetam.
+ */
+interface ContactRecipientInput {
+  id?: string;
+  whatsapp?: string;
+  emails?: string[];
+  sectors: string[];
+  sendTimes: Array<{ hour: number; minute: number }>;
+  sendDays?: number[];
+}
+
 export interface ExternalMonitorConfigInput {
   enabled?: boolean;
   sendHour?: number;
@@ -83,8 +100,8 @@ export interface ExternalMonitorConfigInput {
    *  'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente;
    *  'all' = todo evento novo notifica (comportamento pré-G4). */
   immediateSeverity?: 'CRITICAL' | 'all';
-  /** T6: novo modelo por contato — mesmo shape do painel próprio do Nexa (ContactRecipient). */
-  contacts?: ContactRecipient[];
+  /** T6: novo modelo por contato — mesmo shape do painel próprio do Nexa. */
+  contacts?: ContactRecipientInput[];
 }
 
 /** A1: saneia o sectorConfig antes de persistir — cap de 10 destinatários,

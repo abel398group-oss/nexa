@@ -370,7 +370,7 @@ describe.skip('MonitorConfigPage — UX limite WA (N3.4)', () => {
   });
 });
 
-// ── T6: contatos com horário próprio ──────────────────────────────────────────
+// ── T6: contatos com horário próprio — módulos separados (WhatsApp / E-mail) ──
 
 describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
   function mockConfigWithContacts(contacts: unknown[]) {
@@ -383,13 +383,14 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     });
   }
 
-  it('mostra "Nenhum contato cadastrado." quando não há contatos', async () => {
+  it('mostra "Nenhum ... cadastrado." nas duas seções quando não há contatos', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
-    expect(screen.getByText('Nenhum contato cadastrado.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum WhatsApp cadastrado.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum e-mail cadastrado.')).toBeInTheDocument();
   });
 
-  it('carrega contatos existentes e mostra setores + horários', async () => {
+  it('carrega contatos existentes e mostra duas seções (WhatsApp e E-mail) com setores + horários', async () => {
     mockConfigWithContacts([
       {
         id: 'c1',
@@ -403,17 +404,23 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    expect(await screen.findByText(/5511999990001/)).toBeInTheDocument();
-    expect(screen.getByText(/fiscal@empresa\.com/)).toBeInTheDocument();
+    // Contato tem WhatsApp + e-mail → aparece nas duas seções (módulos), cada uma com sua própria tabela.
+    expect(await screen.findByRole('button', { name: /novo whatsapp/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /novo e-mail/i })).toBeInTheDocument();
 
-    // "Fiscal"/"Financeiro" aparecem tanto nas abas de filtro quanto nos badges da
-    // linha da tabela — escopar ao <table> para checar especificamente os badges do contato.
-    const table = screen.getByRole('table');
-    expect(within(table).getByText('Fiscal')).toBeInTheDocument();
-    expect(within(table).getByText('Financeiro')).toBeInTheDocument();
-    expect(within(table).getByText('WhatsApp')).toBeInTheDocument();
-    expect(within(table).getByText('E-mail')).toBeInTheDocument();
-    expect(within(table).getByText('08:00 · 18:00')).toBeInTheDocument();
+    const tables = screen.getAllByRole('table');
+    expect(tables).toHaveLength(2);
+
+    expect(within(tables[0]).getByText('5511999990001')).toBeInTheDocument();
+    expect(within(tables[1]).getByText('fiscal@empresa.com')).toBeInTheDocument();
+
+    // "Fiscal"/"Financeiro" aparecem nas abas de filtro E nos badges de cada tabela —
+    // escopar às tabelas para checar especificamente os badges do contato (uma ocorrência por tabela).
+    for (const table of tables) {
+      expect(within(table).getByText('Fiscal')).toBeInTheDocument();
+      expect(within(table).getByText('Financeiro')).toBeInTheDocument();
+      expect(within(table).getByText('08:00 · 18:00')).toBeInTheDocument();
+    }
   });
 
   it('aba de setor filtra a lista de contatos', async () => {
@@ -447,18 +454,21 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     expect(screen.queryByText(/5511999990002/)).not.toBeInTheDocument();
   });
 
-  it('"+ Novo contato" abre modal; cadastra com WhatsApp + 1 setor', async () => {
+  it('"+ Novo WhatsApp" abre o módulo de WhatsApp (só o campo de telefone); cadastra com 1 setor', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Novo WhatsApp')).toBeInTheDocument();
+    // Módulo de WhatsApp não mostra o campo de e-mail.
+    expect(screen.queryByLabelText('Adicionar e-mail')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -466,26 +476,59 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     expect(screen.getByText(/5511988880000/)).toBeInTheDocument();
   });
 
-  it('exige WhatsApp ou e-mail antes de salvar', async () => {
+  it('"+ Novo e-mail" abre o módulo de e-mail (só a lista de e-mails); cadastra com 1 setor', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: /novo e-mail/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Novo e-mail')).toBeInTheDocument();
+    // Módulo de e-mail não mostra o campo de WhatsApp.
+    expect(screen.queryByLabelText('WhatsApp do contato')).not.toBeInTheDocument();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe um WhatsApp ou pelo menos um e-mail/i);
+    const emailInput = screen.getByLabelText('Adicionar e-mail');
+    fireEvent.change(emailInput, { target: { value: 'contato@empresa.com' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter', code: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar e-mail' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('contato@empresa.com')).toBeInTheDocument();
+  });
+
+  it('exige WhatsApp no módulo de WhatsApp', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe um número de WhatsApp/i);
+  });
+
+  it('exige e-mail no módulo de e-mail', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo e-mail/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar e-mail' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe pelo menos um e-mail/i);
   });
 
   it('exige ao menos 1 setor antes de salvar', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Selecione ao menos um setor/i);
   });
@@ -494,10 +537,10 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '123' } });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Telefone inválido/i);
   });
@@ -506,7 +549,7 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     expect(screen.getByLabelText('Hora do horário 1')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('+ adicionar horário'));
@@ -519,7 +562,7 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     expect(screen.queryByText('+ adicionar horário')).not.toBeInTheDocument();
   });
 
-  it('editar contato pré-carrega os campos', async () => {
+  it('editar WhatsApp pré-carrega os campos (módulo de WhatsApp)', async () => {
     mockConfigWithContacts([
       {
         id: 'c1',
@@ -535,17 +578,39 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
 
+    expect(screen.getByText('Editar WhatsApp')).toBeInTheDocument();
     expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('5511999990001');
     expect(screen.getByLabelText('Hora do horário 1')).toHaveValue('9');
     expect(screen.getByLabelText('Minuto do horário 1')).toHaveValue('30');
   });
 
-  // TEMP (teste do Abel) — minuto voltou temporariamente; skip.skip acima quando remover.
+  it('editar e-mail abre o módulo de e-mail (não mostra o campo de WhatsApp)', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: undefined,
+        emails: ['fiscal@empresa.com'],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Editar fiscal@empresa\.com/i }));
+
+    expect(screen.getByText('Editar e-mail')).toBeInTheDocument();
+    expect(screen.queryByLabelText('WhatsApp do contato')).not.toBeInTheDocument();
+    expect(screen.getByText('fiscal@empresa.com')).toBeInTheDocument();
+  });
+
+  // TEMP (teste do Abel) — minuto voltou temporariamente; tirar o skip acima quando remover.
   it.skip('modal de horário não tem seletor de minuto (hora redonda)', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
 
     expect(screen.getByLabelText('Hora do horário 1')).toBeInTheDocument();
     expect(screen.queryByLabelText('Minuto do horário 1')).not.toBeInTheDocument();
@@ -571,19 +636,19 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     await waitFor(() => {
       expect(screen.queryByText(/5511999990001/)).not.toBeInTheDocument();
     });
-    expect(screen.getByText('Nenhum contato cadastrado.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum WhatsApp cadastrado.')).toBeInTheDocument();
   });
 
-  it('"Salvar contato" no modal já persiste no backend (auto-save) — não depende do "Salvar" principal', async () => {
+  it('"Salvar WhatsApp" no modal já persiste no backend (auto-save) — não depende do "Salvar" principal', async () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
 
     // O PUT já deve ter disparado ao fechar o modal, sem precisar clicar no "Salvar" da página.
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
@@ -605,12 +670,12 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Não foi possível salvar/i);
     // Modal continua aberto — o WhatsApp digitado não some.
@@ -622,12 +687,12 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
@@ -670,12 +735,12 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     renderPage();
     await screen.findByText('Contatos com horário próprio');
 
-    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), {
       target: { value: '5511988880000' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
