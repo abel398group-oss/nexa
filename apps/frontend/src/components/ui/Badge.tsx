@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { cn } from '@/shared/lib/cn';
 
 export type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'neutral';
 
@@ -11,9 +12,21 @@ const VARIANT: Record<BadgeVariant, string> = {
 };
 
 // Selo de status padronizado (inspirado no TMS).
-export function Badge({ variant = 'neutral', children }: { variant?: BadgeVariant; children: ReactNode }) {
+// `className`, quando informado, SUBSTITUI a cor do `variant` em vez de somar
+// (evita duas classes de bg-*/text-* concorrentes no mesmo elemento) — use para
+// paletas de cor específicas de domínio (ex.: cor por setor) que não mapeiam
+// 1:1 pras 5 variantes semânticas.
+export function Badge({
+  variant = 'neutral',
+  className,
+  children,
+}: {
+  variant?: BadgeVariant;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${VARIANT[variant]}`}>
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', className ?? VARIANT[variant])}>
       {children}
     </span>
   );

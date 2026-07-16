@@ -48,11 +48,15 @@ import {
   MONITOR_WA_INCLUDED,
   isPlanAllowed,
   extractUniqueWaNumbers,
+  maxContactTimes,
 } from './monitor-plan-limits.const';
 import {
   CONTACT_SECTOR_KEYS,
+  CLOSING_REPORT_KINDS,
+  CASH_VIEW_MODES,
   sanitizeContacts,
   deriveSectorConfigFallback,
+  validateContactSendTimesLimit,
   type ContactRecipient,
 } from './contact-recipient.types';
 
@@ -83,6 +87,11 @@ export class ContactRecipientDto {
   @Type(() => ContactSendTimeDto)
   sendTimes!: ContactSendTimeDto[];
   @IsArray() @IsOptional() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) sendDays?: number[];
+  // T8: resumo de fechamento — 'off' (default) | 'biweekly' | 'monthly'. Regra 1
+  // do REGRAS-SQUAD: campo novo SEMPRE entra no DTO junto (mesmo erro do T6).
+  @IsOptional() @IsIn(CLOSING_REPORT_KINDS) closingReport?: string;
+  // T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia — 'off' (default) | 'lastSlot'.
+  @IsOptional() @IsIn(CASH_VIEW_MODES) cashView?: string;
 }
 
 class UpdateConfigDto {
@@ -207,6 +216,15 @@ export class MonitorController {
 
     const override = existing?.monitorOverride ?? false;
     const existingContacts = (existing?.contacts as ContactRecipient[] | null) ?? null;
+
+    // T7.2: valida o teto de horários por contato ANTES de saneie — sanitizeContacts
+    // corta silenciosamente (slice) e isso escondia do usuário quando o front (ou
+    // qualquer outro chamador) mandava mais que o permitido. maxContactTimes(plan)
+    // é o gancho pro futuro modo "turbinado" do Corporativo (ver comentário lá).
+    if (dto.contacts !== undefined) {
+      const sendTimesError = validateContactSendTimesLimit(dto.contacts, maxContactTimes(planLimit?.plan));
+      if (sendTimesError) throw new BadRequestException(sendTimesError);
+    }
 
     // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)
     // antes de qualquer gate — os gates de limite abaixo já usam a versão saneada.

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
+import { ClosingReportService } from './closing-report.service';
 import { MonitorNotificationService } from './monitor-notification.service';
 import { MonitorDispatchService } from './monitor-dispatch.service';
 import { WahaNotificationChannel } from './waha-notification-channel';
@@ -18,6 +19,7 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
   providers: [
     MonitorService,
     ConsolidationService,
+    ClosingReportService,
     MonitorNotificationService,
     MonitorDispatchService, // A4: fila com retry/rate-limit
     WahaNotificationChannel,

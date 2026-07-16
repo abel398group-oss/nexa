@@ -334,3 +334,111 @@ describe('MonitorController — plan unlock (N1 v2)', () => {
     await expect(ctrl.updateConfig(TENANT, dto)).resolves.not.toThrow();
   });
 });
+
+// ─── T7.2: teto de horários por contato ──────────────────────────────────────
+describe('MonitorController — T7.2 teto de horários por contato', () => {
+  const TENANT = 'tenant-t72-test';
+
+  it('contato com 4 horários (> maxContactTimes) → 400 com mensagem clara, ANTES de salvar', async () => {
+    const prisma = makePrisma();
+    prisma.planLimit.findUnique.mockResolvedValue({ plan: 'essencial', monitorExtraNumbers: 0 });
+    prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
+      monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: null,
+    });
+    const ctrl = makeController(prisma);
+    const dto = {
+      contacts: [
+        {
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [
+            { hour: 7, minute: 0 },
+            { hour: 12, minute: 0 },
+            { hour: 18, minute: 0 },
+            { hour: 20, minute: 0 },
+          ],
+          sendDays: [1, 2, 3, 4, 5],
+        },
+      ],
+    };
+    await expect(ctrl.updateConfig(TENANT, dto as any)).rejects.toThrow(BadRequestException);
+    await expect(ctrl.updateConfig(TENANT, dto as any)).rejects.toThrow(/no máximo 3 horário/i);
+    // Nunca chega a salvar — a validação corta antes do upsert (sanitizeContacts nem roda).
+    expect(prisma.tenantNotificationConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('contato com exatamente 3 horários (teto) → OK', async () => {
+    const prisma = makePrisma();
+    prisma.planLimit.findUnique.mockResolvedValue({ plan: 'essencial', monitorExtraNumbers: 0 });
+    prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
+      monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: null,
+    });
+    const ctrl = makeController(prisma);
+    const dto = {
+      contacts: [
+        {
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [
+            { hour: 7, minute: 0 },
+            { hour: 12, minute: 0 },
+            { hour: 18, minute: 0 },
+          ],
+          sendDays: [1, 2, 3, 4, 5],
+        },
+      ],
+    };
+    await expect(ctrl.updateConfig(TENANT, dto as any)).resolves.not.toThrow();
+  });
+});
+
+// ─── T8.1: closingReport/cashView no DTO + sanitize ──────────────────────────
+describe('MonitorController — T8.1 closingReport/cashView no contato', () => {
+  const TENANT = 'tenant-t8-test';
+
+  function baseDto(contactOverrides: Record<string, unknown>) {
+    return {
+      contacts: [
+        {
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [{ hour: 7, minute: 0 }],
+          sendDays: [1, 2, 3, 4, 5],
+          ...contactOverrides,
+        },
+      ],
+    };
+  }
+
+  async function saveAndGetContact(dto: unknown) {
+    const prisma = makePrisma();
+    prisma.planLimit.findUnique.mockResolvedValue({ plan: 'essencial', monitorExtraNumbers: 0 });
+    prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
+      monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: null,
+    });
+    const ctrl = makeController(prisma);
+    await ctrl.updateConfig(TENANT, dto as any);
+    return prisma.tenantNotificationConfig.upsert.mock.calls[0][0].update.contacts[0];
+  }
+
+  it('aceita closingReport/cashView válidos e persiste como enviado', async () => {
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'biweekly', cashView: 'lastSlot' }));
+    expect(saved.closingReport).toBe('biweekly');
+    expect(saved.cashView).toBe('lastSlot');
+  });
+
+  it('valor fora do enum vira "off" (sanitizeContacts é a rede de segurança, não só o DTO)', async () => {
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'weekly', cashView: 'always' }));
+    expect(saved.closingReport).toBe('off');
+    expect(saved.cashView).toBe('off');
+  });
+
+  it('campo ausente (contato nunca configurou) vira "off"', async () => {
+    const saved = await saveAndGetContact(baseDto({}));
+    expect(saved.closingReport).toBe('off');
+    expect(saved.cashView).toBe('off');
+  });
+});

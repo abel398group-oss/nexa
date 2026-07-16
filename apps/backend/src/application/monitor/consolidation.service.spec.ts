@@ -19,13 +19,19 @@ function makeService(overrides?: {
   notifyPhone?: MockedFunction<any>;
   logLog?: MockedFunction<any>;
   logWarn?: MockedFunction<any>;
+  getCashView?: MockedFunction<any>;
+  tenantFindUnique?: MockedFunction<any>;
 }) {
   const prismaUpdate = overrides?.prismaUpdate ?? vi.fn().mockResolvedValue({});
   const prismaFindMany = overrides?.prismaFindMany ?? vi.fn().mockResolvedValue([]);
+  // T8.6: usado só quando algum contato tem cashView='lastSlot' — default devolve
+  // um slug qualquer, já que a maioria dos testes (pré-T8) nunca chama isto.
+  const tenantFindUnique = overrides?.tenantFindUnique ?? vi.fn().mockResolvedValue({ slug: 'acme' });
 
   const prisma = {
     tenantNotificationConfig: { update: prismaUpdate },
     alertState: { findMany: prismaFindMany, updateMany: vi.fn().mockResolvedValue({}) },
+    tenant: { findUnique: tenantFindUnique },
   } as any;
 
   const notification = {
@@ -36,14 +42,26 @@ function makeService(overrides?: {
     sendAlertEmail: vi.fn().mockResolvedValue({ sent: false, reason: 'disabled' }),
   } as any;
 
-  const svc: any = new ConsolidationService(prisma, notification, emailReply, { acquire: async () => async () => {} } as any);
+  // T8.6: por default TMS não configurado → getCashView nunca é chamado de verdade
+  // nos testes pré-T8 (só quando cashView='lastSlot' no contato + último slot).
+  const tms = {
+    getCashView: overrides?.getCashView ?? vi.fn().mockResolvedValue(null),
+  } as any;
+
+  const svc: any = new ConsolidationService(
+    prisma,
+    notification,
+    emailReply,
+    { acquire: async () => async () => {} } as any,
+    tms,
+  );
 
   // Captura de logs
   const logLog = overrides?.logLog ?? vi.fn();
   const logWarn = overrides?.logWarn ?? vi.fn();
   svc['logger'] = { log: logLog, warn: logWarn, debug: vi.fn(), error: vi.fn() };
 
-  return { svc, prisma, notification, emailReply, prismaUpdate, prismaFindMany, logLog, logWarn };
+  return { svc, prisma, notification, emailReply, tms, prismaUpdate, prismaFindMany, tenantFindUnique, logLog, logWarn };
 }
 
 // ─── Fixture de config ────────────────────────────────────────────────────────
@@ -410,10 +428,10 @@ describe('Resumo de skip — observabilidade', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Grupo 4 — T6: horário de envio por CONTATO
+// Grupo 4 — T6/T7: horário de envio por CONTATO, unificado em T7 (2026-07-16)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('processPerContact — T6 horário por contato', () => {
+describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
   function makeContact(overrides?: Partial<ContactRecipient>): ContactRecipient {
     return {
       id: 'c1',
@@ -439,8 +457,26 @@ describe('processPerContact — T6 horário por contato', () => {
     };
   }
 
-  const FISCAL_ALERT = { id: 'a1', severity: 'CRITICAL', title: 'CT-e vencido', snoozedUntil: null };
-  const LOGISTIC_ALERT = { id: 'a2', severity: 'CRITICAL', title: 'Embarque atrasado', snoozedUntil: null };
+  // category é obrigatório a partir do T7: o agrupamento por setor da mensagem
+  // unificada (buildUnifiedMessage/buildUnifiedEmailHtml) filtra os alertas
+  // retornados pela query única por `a.category === sector.key`.
+  // severity NÃO é CRITICAL de propósito: o relatório programado (T7) exclui
+  // CRITICAL (já foi mandado pelo canal imediato) — ver teste de regressão
+  // "T7: CRITICAL nunca aparece" abaixo.
+  const FISCAL_ALERT = { id: 'a1', category: 'fiscal', severity: 'OVERDUE', title: 'CT-e vencido', snoozedUntil: null };
+  const LOGISTIC_ALERT = { id: 'a2', category: 'logistic', severity: 'DUE_SOON', title: 'Embarque atrasado', snoozedUntil: null };
+
+  /**
+   * T7: a query do modo per-contato agora é uma só, com `category: { in: [...] }`
+   * cobrindo todos os setores habilitados do contato — este mock simula isso
+   * devolvendo a união dos alertas de cada categoria pedida no `in`.
+   */
+  function makeFindManyByCategory(bySector: Record<string, any[]>) {
+    return vi.fn().mockImplementation(({ where }: any) => {
+      const cats: string[] = where?.category?.in ?? [];
+      return Promise.resolve(cats.flatMap((c) => bySector[c] ?? []));
+    });
+  }
 
   async function callPerContact(svc: any, {
     now,
@@ -485,9 +521,9 @@ describe('processPerContact — T6 horário por contato', () => {
     expect(notification.notifyPhone).not.toHaveBeenCalled();
   });
 
-  // ── 2 horários ──────────────────────────────────────────────────────────────
+  // ── 2 horários / dedup por slot (T7: item b) ─────────────────────────────
 
-  it('contato com 2 horários: ambos disparam em ticks diferentes, sem duplicar', async () => {
+  it('contato com 2 horários: ambos disparam em ticks diferentes, sem duplicar — dedup por slot unificado (T7)', async () => {
     const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
     const update = vi.fn().mockResolvedValue({});
     const { svc, notification } = makeService({ prismaFindMany: findMany, prismaUpdate: update });
@@ -497,9 +533,10 @@ describe('processPerContact — T6 horário por contato', () => {
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: makeContactsConfig([contact]) });
     expect(notification.notifyPhone).toHaveBeenCalledTimes(1);
 
-    // Simula o que foi persistido: lastDigestDate só pro slot 08:00
+    // T7: chave de dedup/catch-up agora é "all|HH:MM" (slot unificado — todos os
+    // setores do contato juntos), não mais "fiscal|HH:MM" por setor.
     const persistedContact = update.mock.calls[0][0].data.contacts[0];
-    expect(persistedContact.lastDigestDate).toEqual({ 'fiscal|08:00': '2026-07-13' });
+    expect(persistedContact.lastDigestDate).toEqual({ 'all|08:00': '2026-07-13' });
 
     // Tick 2: 13h00 (mesmo dia) → dispara pro 2º horário — NÃO bloqueado pelo 1º já ter enviado
     await callPerContact(svc, { now: makeNow(13, 0), contacts: [persistedContact], config: makeContactsConfig([persistedContact]) });
@@ -551,10 +588,7 @@ describe('processPerContact — T6 horário por contato', () => {
   // ── isolamento de setor ───────────────────────────────────────────────────
 
   it('contato marcado só pra "fiscal" NÃO recebe alerta de "logistic" mesmo com alertas abertos lá (não vaza setor)', async () => {
-    const findMany = vi.fn().mockImplementation(({ where }: any) => {
-      if (where.category === 'fiscal') return Promise.resolve([FISCAL_ALERT]);
-      return Promise.resolve([LOGISTIC_ALERT]);
-    });
+    const findMany = makeFindManyByCategory({ fiscal: [FISCAL_ALERT], logistic: [LOGISTIC_ALERT] });
     const { svc, notification } = makeService({ prismaFindMany: findMany });
     const contact = makeContact({ sectors: ['fiscal'] }); // NÃO inclui 'logistic'
     const cfg = makeContactsConfig([contact]);
@@ -564,36 +598,184 @@ describe('processPerContact — T6 horário por contato', () => {
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).toContain('CT-e vencido');
     expect(msg).not.toContain('Embarque atrasado');
-    // findMany nunca foi chamado com category=logistic — o setor nem foi consultado.
-    expect(findMany).not.toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ category: 'logistic' }),
+    // T7: a query única só pede category:{in:['fiscal']} — 'logistic' nunca é consultado.
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ category: { in: ['fiscal'] } }),
     }));
   });
 
-  it('contato marcado pra dois setores recebe as duas mensagens, cada uma só com os alertas do seu setor', async () => {
-    const findMany = vi.fn().mockImplementation(({ where }: any) => {
-      if (where.category === 'fiscal') return Promise.resolve([FISCAL_ALERT]);
-      if (where.category === 'logistic') return Promise.resolve([LOGISTIC_ALERT]);
-      return Promise.resolve([]);
-    });
+  // ── T7 (a): 1 envio único consolidando ≥2 setores ────────────────────────
+
+  it('T7: contato com 2 setores recebe 1 ÚNICA mensagem consolidando os alertas dos dois (antes eram 2 mensagens)', async () => {
+    const findMany = makeFindManyByCategory({ fiscal: [FISCAL_ALERT], logistic: [LOGISTIC_ALERT] });
     const { svc, notification } = makeService({ prismaFindMany: findMany });
     const contact = makeContact({ sectors: ['fiscal', 'logistic'], sendTimes: [{ hour: 8, minute: 0 }] });
     const cfg = makeContactsConfig([contact]);
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
 
-    expect(notification.notifyPhone).toHaveBeenCalledTimes(2);
-    const messages = notification.notifyPhone.mock.calls.map((c: any[]) => c[2]);
-    expect(messages.some((m: string) => m.includes('CT-e vencido'))).toBe(true);
-    expect(messages.some((m: string) => m.includes('Embarque atrasado'))).toBe(true);
+    // T7: 1 envio só (não mais 1 por setor).
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('CT-e vencido');
+    expect(msg).toContain('Embarque atrasado');
+    expect(msg).toContain('Fiscal');
+    expect(msg).toContain('Logística');
+
+    // 1 query só, com os dois setores no IN — não mais 1 query por (setor, horário).
+    expect(findMany).toHaveBeenCalledOnce();
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ category: { in: ['fiscal', 'logistic'] } }),
+    }));
   });
 
-  it('setor desabilitado globalmente pelo tenant não dispara mesmo se o contato assina', async () => {
+  // ── T7 reformat: CRITICAL excluído do relatório programado ──────────────
+
+  it('T7: alerta CRITICAL nunca aparece no relatório programado (já foi no canal imediato)', async () => {
+    const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+    const findMany = vi.fn().mockResolvedValue([criticalAlert, FISCAL_ALERT]);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('CT-e vencido'); // OVERDUE — aparece
+    expect(msg).not.toContain('CT-e cancelado'); // CRITICAL — filtrado
+    // where clause também exclui CRITICAL (otimização, além do filtro em memória)
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ severity: { notIn: ['CRITICAL'] } }),
+    }));
+  });
+
+  it('T7: só CRITICAL no setor habilitado → não envia nada (sem pendência não-crítica)', async () => {
+    const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+    const findMany = vi.fn().mockResolvedValue([criticalAlert]);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    expect(notification.notifyPhone).not.toHaveBeenCalled();
+  });
+
+  // ── T7 reformat: cap de 6 pendências por setor + overflow ───────────────
+
+  it('T7: setor com mais de 6 pendências mostra só 6 + linha "… e mais N pendências"', async () => {
+    const manyAlerts = Array.from({ length: 8 }, (_, i) => ({
+      id: `f${i}`,
+      category: 'fiscal',
+      severity: 'OVERDUE',
+      title: `Pendência fiscal ${i + 1}`,
+      snoozedUntil: null,
+    }));
+    const findMany = vi.fn().mockResolvedValue(manyAlerts);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    // total do setor no cabeçalho de seção reflete os 8, não só os 6 exibidos
+    expect(msg).toContain('Fiscal (8)');
+    for (let i = 1; i <= 6; i++) expect(msg).toContain(`Pendência fiscal ${i}`);
+    expect(msg).not.toContain('Pendência fiscal 7');
+    expect(msg).not.toContain('Pendência fiscal 8');
+    expect(msg).toContain('… e mais 2 pendências');
+  });
+
+  it('T7: setor com exatamente 6 pendências não mostra linha de overflow', async () => {
+    const sixAlerts = Array.from({ length: 6 }, (_, i) => ({
+      id: `f${i}`,
+      category: 'fiscal',
+      severity: 'OVERDUE',
+      title: `Pendência fiscal ${i + 1}`,
+      snoozedUntil: null,
+    }));
+    const findMany = vi.fn().mockResolvedValue(sixAlerts);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('Fiscal (6)');
+    expect(msg).not.toContain('… e mais');
+  });
+
+  // ── T7 (d): setor desabilitado no tenant fica fora do relatório ─────────
+
+  it('T7: setor desabilitado no tenant fica fora da mensagem mesmo que o contato o assine', async () => {
+    const findMany = makeFindManyByCategory({ fiscal: [FISCAL_ALERT], logistic: [LOGISTIC_ALERT] });
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal', 'logistic'], sendTimes: [{ hour: 8, minute: 0 }] });
+    // logistic desabilitado globalmente pelo tenant — fiscal continua habilitado.
+    const cfg = makeContactsConfig([contact], { logisticEnabled: false });
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('Fiscal');
+    expect(msg).not.toContain('Logística');
+    expect(msg).not.toContain('Embarque atrasado');
+    // setor desabilitado nem entra na query — só fiscal é consultado.
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ category: { in: ['fiscal'] } }),
+    }));
+  });
+
+  it('setor desabilitado globalmente pelo tenant não dispara mesmo se o contato assina (nenhum setor sobra)', async () => {
     const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
     const { svc, notification } = makeService({ prismaFindMany: findMany });
     const contact = makeContact({ sectors: ['fiscal'] });
     const cfg = makeContactsConfig([contact], { fiscalEnabled: false });
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     expect(notification.notifyPhone).not.toHaveBeenCalled();
+    // Nem chega a consultar o banco — não sobrou setor habilitado pra este contato.
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // ── T7 (e): sem alertas em nenhum setor habilitado → sem envio ──────────
+
+  it('T7: nenhum alerta em nenhum setor habilitado do contato → não envia nada no slot', async () => {
+    const findMany = vi.fn().mockResolvedValue([]); // nenhum alerta aberto, nem fiscal nem logistic
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({ sectors: ['fiscal', 'logistic'], sendTimes: [{ hour: 8, minute: 0 }] });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    expect(notification.notifyPhone).not.toHaveBeenCalled();
+  });
+
+  // ── T7 (c): compat com chave antiga do mesmo dia (dia do deploy) ────────
+
+  it('T7 compat: chave antiga pré-T7 ("<setor>|HH:MM") de HOJE pro mesmo horário impede reenvio duplicado', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const todayStr = svc.toDateStr(makeNow(8, 0));
+    // Simula um contato que já recebeu o digest de "fiscal" às 08:00 HOJE pelo
+    // código pré-T7 (antes do redeploy) — chave antiga, formato "<setor>|HH:MM".
+    const contact = makeContact({
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }],
+      lastDigestDate: { 'fiscal|08:00': todayStr },
+    });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    // T7 lê a chave antiga como "já enviado" pro slot unificado — não duplica.
+    expect(notification.notifyPhone).not.toHaveBeenCalled();
+  });
+
+  it('T7 compat: chave antiga de ONTEM não bloqueia o envio de hoje', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const { svc, notification } = makeService({ prismaFindMany: findMany });
+    const contact = makeContact({
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }],
+      lastDigestDate: { 'fiscal|08:00': '2026-07-12' }, // ontem
+    });
+    const cfg = makeContactsConfig([contact]);
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
   });
 
   // ── dia da semana ─────────────────────────────────────────────────────────
@@ -671,5 +853,96 @@ describe('processPerContact — T6 horário por contato', () => {
     expect(notification.notifyPhone).toHaveBeenCalledOnce();
     const [, phoneUsed] = notification.notifyPhone.mock.calls[0];
     expect(phoneUsed).toBe('5511999990001'); // vem do sectorConfig (fixture padrão de makeSectorConfig)
+  });
+
+  // ── T8.6: visão do caixa anexada ao último digest do dia ────────────────────
+
+  const CASH_VIEW_OK = {
+    inflow15d: { amount: 58300, count: 14 },
+    outflow15d: { amount: 41700, count: 9 },
+    overdueReceivable: { amount: 12400, count: 3 },
+    unbilledCte: { amount: 34200, count: 12 },
+    invoicedMonth: { amount: 148200 },
+  };
+
+  it('T8.6: bloco "💰 SEU CAIXA" aparece só no ÚLTIMO horário do dia do contato', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK);
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }, { hour: 18, minute: 0 }],
+      cashView: 'lastSlot',
+    });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
+    expect(msgFirst).not.toContain('SEU CAIXA');
+
+    await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
+    const [, , msgLast] = notification.notifyPhone.mock.calls[1];
+    expect(msgLast).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msgLast).toContain('✅ Sobra:');
+  });
+
+  it('T8.6: cashView ausente/off → bloco nunca aparece, mesmo no último horário', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK);
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] }); // cashView ausente
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).not.toContain('SEU CAIXA');
+    expect(getCashView).not.toHaveBeenCalled(); // nem chama o TMS — feature desligada
+  });
+
+  it('T8.6: TMS retorna null pro cash-view → digest sai normal, sem o bloco', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(null);
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'lastSlot' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    expect(notification.notifyPhone).toHaveBeenCalledOnce(); // pendências saem normal
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).not.toContain('SEU CAIXA');
+  });
+
+  it('T8.6: saldo negativo (outflow > inflow) → linha "🔴 Falta: R$ X"', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue({
+      inflow15d: { amount: 10000, count: 2 },
+      outflow15d: { amount: 25000, count: 5 },
+      overdueReceivable: { amount: 0, count: 0 },
+      unbilledCte: { amount: 0, count: 0 },
+      invoicedMonth: { amount: 0 },
+    });
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'lastSlot' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('🔴 Falta: R$ 15.000,00');
+    expect(msg).not.toContain('✅ Sobra');
+  });
+
+  it('T8.6: cache — 1 chamada TMS por tenant por dia mesmo com 2 contatos elegíveis no mesmo tenant', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK);
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    // Dois contatos independentes, cada um com seu único horário (= último do próprio contato).
+    const contactA = makeContact({ id: 'ca', whatsapp: '5511999990001', sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'lastSlot' });
+    const contactB = makeContact({ id: 'cb', whatsapp: '5511999990002', sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'lastSlot' });
+    const cfg = makeContactsConfig([contactA, contactB]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contactA, contactB], config: cfg });
+
+    expect(notification.notifyPhone).toHaveBeenCalledTimes(2);
+    expect(getCashView).toHaveBeenCalledOnce(); // cacheado por tenant+dia — não 1 por contato
   });
 });

@@ -31,10 +31,12 @@ import {
   isPlanAllowed,
   monitorWaLimit,
   MONITOR_WA_INCLUDED,
+  maxContactTimes,
 } from './monitor-plan-limits.const';
 import {
   sanitizeContacts,
   deriveSectorConfigFallback,
+  validateContactSendTimesLimit,
   type ContactRecipient,
 } from './contact-recipient.types';
 
@@ -74,6 +76,10 @@ interface ContactRecipientInput {
   sectors: string[];
   sendTimes: Array<{ hour: number; minute: number }>;
   sendDays?: number[];
+  /** T8: mesmo campo do painel próprio (ContactRecipientDto) — paridade TMS↔Nexa. */
+  closingReport?: string;
+  /** T8.6: idem. */
+  cashView?: string;
 }
 
 export interface ExternalMonitorConfigInput {
@@ -368,6 +374,13 @@ export class MonitorService implements OnModuleInit {
 
     const override = existing?.monitorOverride ?? false;
     const existingContacts = (existing?.contacts as ContactRecipient[] | null) ?? null;
+
+    // T7.2: mesma validação de teto de horários do painel próprio (paridade com
+    // MonitorController.updateConfig) — ver comentário lá e em contact-recipient.types.ts.
+    if (input.contacts !== undefined) {
+      const sendTimesError = validateContactSendTimesLimit(input.contacts, maxContactTimes(planLimit?.plan));
+      if (sendTimesError) throw new BadRequestException(sendTimesError);
+    }
 
     // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)
     // antes de qualquer gate — mesmo padrão de MonitorController.updateConfig.

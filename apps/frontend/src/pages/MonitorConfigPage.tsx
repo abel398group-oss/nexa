@@ -14,7 +14,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
-import { Button, PageContainer, PageHeader, Breadcrumb, Icon, useConfirm, Modal } from '@/shared/ui';
+import {
+  Button,
+  PageContainer,
+  PageHeader,
+  Breadcrumb,
+  Icon,
+  useConfirm,
+  Modal,
+  Table,
+  THead,
+  TBody,
+  TR,
+  TH,
+  TD,
+  Badge,
+  EmptyState,
+  IconButton,
+  SelectField,
+} from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTagsInput';
 
@@ -75,6 +93,11 @@ interface ContactSendTime {
   minute: number;
 }
 
+/** T8: resumo de fechamento — 'off' (default) | 'biweekly' (dias 16 e 1º) | 'monthly' (só dia 1º). */
+type ClosingReportKind = 'off' | 'biweekly' | 'monthly';
+/** T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia — 'off' (default) | 'lastSlot'. */
+type CashViewMode = 'off' | 'lastSlot';
+
 interface ContactRecipient {
   id: string;
   whatsapp?: string;
@@ -82,10 +105,22 @@ interface ContactRecipient {
   sectors: SectorKey[];
   sendTimes: ContactSendTime[];
   sendDays: number[];
+  closingReport?: ClosingReportKind;
+  cashView?: CashViewMode;
 }
 
 const MAX_CONTACT_TIMES = 3;
 const DEFAULT_CONTACT_TIME: ContactSendTime = { hour: 8, minute: 0 };
+
+const CLOSING_REPORT_OPTIONS: { value: ClosingReportKind; label: string }[] = [
+  { value: 'off', label: 'Desligado' },
+  { value: 'biweekly', label: 'Quinzenal' },
+  { value: 'monthly', label: 'Mensal' },
+];
+const CASH_VIEW_OPTIONS: { value: CashViewMode; label: string }[] = [
+  { value: 'off', label: 'Desligado' },
+  { value: 'lastSlot', label: 'No último horário' },
+];
 
 interface ContactModalState {
   editId: string | null;
@@ -96,6 +131,8 @@ interface ContactModalState {
   sectors: SectorKey[];
   sendTimes: ContactSendTime[];
   sendDays: number[];
+  closingReport: ClosingReportKind;
+  cashView: CashViewMode;
   error: string | null;
   /** true enquanto o PUT de salvar o contato está em voo (ver saveContactModal). */
   saving?: boolean;
@@ -493,6 +530,9 @@ export function MonitorConfigPage() {
             sectors: c.sectors,
             sendTimes: c.sendTimes,
             sendDays: c.sendDays,
+            // T8: ver nota igual em persistContacts() — mesmo motivo.
+            closingReport: c.closingReport ?? 'off',
+            cashView: c.cashView ?? 'off',
           })),
       };
       await api.put('/monitor/config', payload);
@@ -676,6 +716,11 @@ export function MonitorConfigPage() {
       sectors: [],
       sendTimes: [DEFAULT_CONTACT_TIME],
       sendDays: WEEKDAYS,
+      // T8: contato NOVO nasce com fechamento Mensal pré-selecionado (decisão de
+      // negócio 2026-07-16) — o usuário ainda vê e pode desligar antes de salvar.
+      // Visão do caixa nasce sempre desligada (ninguém liga sem pedir).
+      closingReport: 'monthly',
+      cashView: 'off',
       error: null,
     });
   }
@@ -690,6 +735,9 @@ export function MonitorConfigPage() {
       sectors: c.sectors,
       sendTimes: c.sendTimes.length ? c.sendTimes : [DEFAULT_CONTACT_TIME],
       sendDays: c.sendDays?.length ? c.sendDays : WEEKDAYS,
+      // T8: contato EXISTENTE preserva o que já tinha — 'off' se nunca configurado.
+      closingReport: c.closingReport ?? 'off',
+      cashView: c.cashView ?? 'off',
       error: null,
     });
   }
@@ -756,6 +804,11 @@ export function MonitorConfigPage() {
           sectors: c.sectors,
           sendTimes: c.sendTimes,
           sendDays: c.sendDays,
+          // T8: campos novos SEMPRE no payload — omitir aqui apagaria o fechamento/
+          // caixa de TODOS os outros contatos no próximo save de qualquer um deles
+          // (mesmo bug de origem do incidente T6 — ver REGRAS-SQUAD Regra 1).
+          closingReport: c.closingReport ?? 'off',
+          cashView: c.cashView ?? 'off',
         }));
       await api.put('/monitor/config', { contacts: filtered });
       setContacts(next);
@@ -807,6 +860,8 @@ export function MonitorConfigPage() {
       sectors: contactModal.sectors,
       sendTimes: contactModal.sendTimes,
       sendDays: contactModal.sendDays,
+      closingReport: contactModal.closingReport,
+      cashView: contactModal.cashView,
     };
 
     const next = contactModal.editId
@@ -1238,7 +1293,9 @@ export function MonitorConfigPage() {
                 <p className="text-xs text-base-content/50 mt-0.5">
                   Opcional. Cadastre WhatsApp e e-mail em módulos separados — cada um pode ter até 3
                   horários independentes por dia (ex.: 08h, 13h, 18h) e escolher em quais setores recebe
-                  alerta. Contatos cadastrados aqui têm prioridade sobre o horário dos cards de setor acima.
+                  alerta. Em cada horário, o contato recebe um relatório único com os setores que assina
+                  (no máximo 3 relatórios por dia — não 1 por setor). Contatos cadastrados aqui têm
+                  prioridade sobre o horário dos cards de setor acima.
                 </p>
               </div>
 
@@ -1278,6 +1335,14 @@ export function MonitorConfigPage() {
                 const waContacts    = contacts.filter((c) => !!c.whatsapp && bySector(c));
                 const emailContacts = contacts.filter((c) => c.emails.length > 0 && bySector(c));
 
+                /** Resumo compacto dos dias de envio pra linha da lista. */
+                const daySummary = (days: number[]) => {
+                  const sorted = [...new Set(days)].sort((a, b) => a - b);
+                  if (sorted.length === 7) return 'Todos os dias';
+                  if (sorted.join(',') === '1,2,3,4,5') return 'Dias úteis';
+                  return sorted.map((d) => DAY_TITLES[d]?.slice(0, 3)).join(', ');
+                };
+
                 const renderRows = (
                   list: ContactRecipient[],
                   channel: 'whatsapp' | 'email',
@@ -1286,133 +1351,174 @@ export function MonitorConfigPage() {
                   list.map((c) => {
                     const idLabel = c.whatsapp || c.emails[0] || 'contato';
                     return (
-                      <tr key={c.id} className="hover:bg-base-200/20 transition-colors">
-                        <td className="py-3 pl-4 pr-3 min-w-0">{contactCell(c)}</td>
-                        <td className="py-3 pr-3">
+                      <TR key={c.id}>
+                        <TD className="min-w-0">{contactCell(c)}</TD>
+                        <TD>
                           <div className="flex flex-wrap gap-1">
                             {c.sectors.map((key) => {
                               const meta = SECTORS.find((s) => s.key === key);
                               return (
-                                <span
-                                  key={key}
-                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${meta?.badgeClass ?? ''}`}
-                                >
+                                <Badge key={key} className={meta?.badgeClass}>
                                   {meta?.label ?? key}
-                                </span>
+                                </Badge>
                               );
                             })}
+                            {/* T8.5/T8.6: badges discretos — só aparecem quando ligados. */}
+                            {c.closingReport && c.closingReport !== 'off' && (
+                              <Badge variant="info">
+                                Fechamento: {c.closingReport === 'biweekly' ? 'quinzenal' : 'mensal'}
+                              </Badge>
+                            )}
+                            {c.cashView === 'lastSlot' && <Badge variant="neutral">💰 Caixa</Badge>}
                           </div>
-                        </td>
-                        <td className="py-3 pr-3">
-                          <span className="text-[10px] text-base-content/40">
-                            {c.sendTimes
-                              .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
-                              .join(' · ')}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4">
+                        </TD>
+                        <TD>
+                          <div className="flex flex-col gap-1">
+                            {/* Texto dos horários fica num único nó (join ' · ') — os testes dependem disso. */}
+                            <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-base-200/60 px-2 py-1 text-[11px] font-medium text-base-content/60 whitespace-nowrap">
+                              <Icon name="clock" className="h-3 w-3 opacity-60" />
+                              {c.sendTimes
+                                .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
+                                .join(' · ')}
+                            </span>
+                            <span className="text-[10px] text-base-content/35 pl-0.5">{daySummary(c.sendDays)}</span>
+                          </div>
+                        </TD>
+                        <TD>
                           <div className="flex gap-1 justify-end shrink-0">
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-xs"
+                            <IconButton
+                              variant="ghost"
+                              size="icon-xs"
+                              label={`Editar ${idLabel}`}
                               title="Editar"
-                              aria-label={`Editar ${idLabel}`}
                               onClick={() => openEditContact(c, channel)}
                             >
                               <Icon name="edit" className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-xs text-error"
+                            </IconButton>
+                            <IconButton
+                              variant="ghost"
+                              size="icon-xs"
+                              className="!text-error hover:!text-error"
+                              label={`Remover ${idLabel}`}
                               title="Remover"
-                              aria-label={`Remover ${idLabel}`}
                               onClick={() => removeContact(c)}
                             >
                               <Icon name="trash" className="h-3.5 w-3.5" />
-                            </button>
+                            </IconButton>
                           </div>
-                        </td>
-                      </tr>
+                        </TD>
+                      </TR>
                     );
                   });
 
                 const tableHead = (firstCol: string) => (
-                  <thead>
-                    <tr className="bg-base-200/50 text-[10px] uppercase tracking-widest text-base-content/40">
-                      <th className="text-left font-semibold px-4 py-2">{firstCol}</th>
-                      <th className="text-left font-semibold px-4 py-2">Setores</th>
-                      <th className="text-left font-semibold px-4 py-2">Horários</th>
-                      <th className="px-4 py-2" />
-                    </tr>
-                  </thead>
+                  <THead>
+                    <TR>
+                      <TH>{firstCol}</TH>
+                      <TH>Setores</TH>
+                      <TH>Horários</TH>
+                      <TH />
+                    </TR>
+                  </THead>
                 );
 
                 return (
                   <div className="mt-3 space-y-4">
                     {/* Módulo WhatsApp — cadastro e lista próprios, independentes do e-mail. */}
                     <div className="rounded-lg border border-base-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-base-200/30 border-b border-base-200">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
                         <div className="flex items-center gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-sm">
                             📱
                           </span>
                           <p className="text-sm font-semibold text-base-content">WhatsApp</p>
+                          {waContacts.length > 0 && <Badge variant="neutral">{waContacts.length}</Badge>}
                         </div>
                         <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('whatsapp')}>
                           <Icon name="plus" className="h-3.5 w-3.5" /> Novo WhatsApp
                         </Button>
                       </div>
                       {waContacts.length === 0 ? (
-                        <p className="text-xs text-base-content/40 px-4 py-4">Nenhum WhatsApp cadastrado.</p>
+                        <EmptyState
+                          icon={<span aria-hidden="true" className="text-2xl">📱</span>}
+                          title="Nenhum WhatsApp cadastrado."
+                          description={'Clique em "+ Novo WhatsApp" para criar um contato com horários e setores próprios.'}
+                        />
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            {tableHead('WhatsApp')}
-                            <tbody className="divide-y divide-base-200">
-                              {renderRows(waContacts, 'whatsapp', (c) => (
-                                <p className="text-sm font-medium text-base-content truncate">{c.whatsapp}</p>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <Table>
+                          {tableHead('WhatsApp')}
+                          <TBody>
+                            {renderRows(waContacts, 'whatsapp', (c) => (
+                              <p className="text-sm font-medium text-base-content truncate">{c.whatsapp}</p>
+                            ))}
+                          </TBody>
+                        </Table>
                       )}
                       {planAllowed && waNumbersLimit > 0 && (
-                        <p className="text-[11px] text-base-content/40 px-4 py-2 border-t border-base-200">
-                          {waNumbersUsed} de {waNumbersLimit} números de WhatsApp
-                        </p>
+                        <div className="flex items-center gap-3 px-4 py-2.5 border-t border-base-200">
+                          <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-base-200">
+                            <div
+                              className={`h-full rounded-full transition-all ${atWaLimit ? 'bg-warning' : 'bg-emerald-500/70'}`}
+                              style={{
+                                width: `${
+                                  waNumbersUsed > 0
+                                    ? Math.max(6, Math.min(100, Math.round((waNumbersUsed / waNumbersLimit) * 100)))
+                                    : 0
+                                }%`,
+                              }}
+                            />
+                          </div>
+                          <p className={`text-[11px] ${atWaLimit ? 'font-medium text-warning' : 'text-base-content/40'}`}>
+                            {waNumbersUsed} de {waNumbersLimit} números de WhatsApp
+                            {atWaLimit ? ' — limite do plano atingido' : ''}
+                          </p>
+                          {atWaLimit && (
+                            <a
+                              href="https://app.hipertms.com.br/configuracoes/assinatura"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-auto text-[11px] font-medium text-brand-500 underline hover:text-brand-400"
+                            >
+                              Adicionar número — R$ 29,90/mês
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
 
                     {/* Módulo E-mail — cadastro e lista próprios, independentes do WhatsApp. */}
                     <div className="rounded-lg border border-base-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-base-200/30 border-b border-base-200">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
                         <div className="flex items-center gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/20 text-sm">
-                            ✉️
+                            <Icon name="mail" className="h-3.5 w-3.5" />
                           </span>
                           <p className="text-sm font-semibold text-base-content">E-mail</p>
+                          {emailContacts.length > 0 && <Badge variant="neutral">{emailContacts.length}</Badge>}
                         </div>
                         <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('email')}>
                           <Icon name="plus" className="h-3.5 w-3.5" /> Novo e-mail
                         </Button>
                       </div>
                       {emailContacts.length === 0 ? (
-                        <p className="text-xs text-base-content/40 px-4 py-4">Nenhum e-mail cadastrado.</p>
+                        <EmptyState
+                          icon={<Icon name="mail" className="h-8 w-8" />}
+                          title="Nenhum e-mail cadastrado."
+                          description={'Clique em "+ Novo e-mail" para criar um contato com horários e setores próprios.'}
+                        />
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            {tableHead('E-mail')}
-                            <tbody className="divide-y divide-base-200">
-                              {renderRows(emailContacts, 'email', (c) => (
-                                <>
-                                  {c.emails.map((e) => (
-                                    <p key={e} className="text-sm font-medium text-base-content truncate">{e}</p>
-                                  ))}
-                                </>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <Table>
+                          {tableHead('E-mail')}
+                          <TBody>
+                            {renderRows(emailContacts, 'email', (c) => (
+                              <>
+                                {c.emails.map((e) => (
+                                  <p key={e} className="text-sm font-medium text-base-content truncate">{e}</p>
+                                ))}
+                              </>
+                            ))}
+                          </TBody>
+                        </Table>
                       )}
                       <p className="text-[11px] text-base-content/40 px-4 py-2 border-t border-base-200">
                         E-mails ilimitados
@@ -1526,6 +1632,9 @@ export function MonitorConfigPage() {
                   onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
                   aria-label="WhatsApp do contato"
                 />
+                <p className="mt-1.5 text-[11px] text-base-content/35">
+                  Só dígitos: DDI + DDD + número. Ex.: 5511999999999
+                </p>
               </div>
             ) : (
               <div>
@@ -1576,9 +1685,13 @@ export function MonitorConfigPage() {
               </div>
               <div className="flex flex-wrap gap-3">
                 {contactModal.sendTimes.map((t, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-lg border border-base-200 bg-base-200/30 px-2.5 py-1.5"
+                  >
+                    <Icon name="clock" className="h-3.5 w-3.5 text-base-content/30" />
                     <select
-                      className="select select-bordered h-11 w-24"
+                      className="select select-bordered h-10 w-22"
                       aria-label={`Hora do horário ${i + 1}`}
                       value={t.hour}
                       onChange={(e) => updateContactTime(i, 'hour', Number(e.target.value))}
@@ -1589,7 +1702,7 @@ export function MonitorConfigPage() {
                     </select>
                     {/* TEMP (teste do Abel) — minuto de volta por enquanto. Remover junto com esta nota. */}
                     <select
-                      className="select select-bordered h-11 w-24"
+                      className="select select-bordered h-10 w-22"
                       aria-label={`Minuto do horário ${i + 1}`}
                       value={t.minute}
                       onChange={(e) => updateContactTime(i, 'minute', Number(e.target.value))}
@@ -1602,7 +1715,7 @@ export function MonitorConfigPage() {
                       <button
                         type="button"
                         aria-label={`Remover horário ${i + 1}`}
-                        className="text-base-content/30 hover:text-error transition-colors"
+                        className="ml-0.5 text-base-content/30 hover:text-error transition-colors"
                         onClick={() => removeContactTime(i)}
                       >
                         <Icon name="close" className="h-4 w-4" />
@@ -1614,7 +1727,25 @@ export function MonitorConfigPage() {
             </div>
 
             <div className="border-t border-base-200 pt-6">
-              <p className="text-sm font-medium text-base-content/70 mb-2">Dias de envio</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-base-content/70">Dias de envio</p>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                    onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [1, 2, 3, 4, 5] } : m))}
+                  >
+                    Dias úteis
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                    onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [...ALL_DAYS] } : m))}
+                  >
+                    Todos
+                  </button>
+                </div>
+              </div>
               <div className="flex gap-2">
                 {ALL_DAYS.map((day) => {
                   const active = contactModal.sendDays.includes(day);
@@ -1636,10 +1767,39 @@ export function MonitorConfigPage() {
               </div>
             </div>
 
-            {contactModal.error && (
-              <p role="alert" className="text-sm text-error">
-                {contactModal.error}
+            {/* T8.5: resumo de fechamento — independente dos horários de pendências (T7). */}
+            <div className="border-t border-base-200 pt-6">
+              <p className="text-sm font-medium text-base-content/70 mb-1.5">📊 Resumo de fechamento</p>
+              <SelectField
+                aria-label="Resumo de fechamento"
+                value={contactModal.closingReport}
+                onValueChange={(v) => setContactModal((m) => (m ? { ...m, closingReport: v as ClosingReportKind } : m))}
+                options={CLOSING_REPORT_OPTIONS}
+              />
+              <p className="mt-1.5 text-[11px] text-base-content/35">
+                Quinzenal: dias 16 e 1º às 07h · Mensal: dia 1º às 07h
               </p>
+            </div>
+
+            {/* T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia deste contato. */}
+            <div className="border-t border-base-200 pt-6">
+              <p className="text-sm font-medium text-base-content/70 mb-1.5">💰 Visão do caixa</p>
+              <SelectField
+                aria-label="Visão do caixa"
+                value={contactModal.cashView}
+                onValueChange={(v) => setContactModal((m) => (m ? { ...m, cashView: v as CashViewMode } : m))}
+                options={CASH_VIEW_OPTIONS}
+              />
+              <p className="mt-1.5 text-[11px] text-base-content/35">
+                Anexa o resumo financeiro à última mensagem do dia deste contato
+              </p>
+            </div>
+
+            {contactModal.error && (
+              <div role="alert" className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
+                <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-error" />
+                <p className="text-sm text-error">{contactModal.error}</p>
+              </div>
             )}
           </div>
         )}

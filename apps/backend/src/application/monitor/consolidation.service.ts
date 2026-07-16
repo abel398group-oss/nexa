@@ -3,15 +3,18 @@
  *
  * Três modos de operação, verificados nesta ordem de prioridade:
  *
- * ── MODO PER-CONTATO (contacts preenchido — T6, 2026-07) ──────────────────
+ * ── MODO PER-CONTATO (contacts preenchido — T6 2026-07, unificado em T7 2026-07-16) ──
  *   Cada contato (não mais cada setor) tem:
  *     - até 3 horários de envio próprios (sendTimes), independentes entre si
  *     - lista de setores que assina (sectors[])
  *     - 1 WhatsApp e/ou N e-mails
- *   O serviço itera os contatos e, para cada setor assinado, verifica CADA UM
- *   dos horários do contato independentemente — um contato pode receber o
- *   digest do mesmo setor várias vezes ao dia (ex.: 08h/13h/18h). Deduplicação
- *   por chave `tenantId:contact:{id}:{sector}:{HH:MM}` (por horário, não só por setor).
+ *   T7: cada horário do contato dispara UMA mensagem só, consolidando os alertas
+ *   de TODOS os setores assinados (em vez de 1 mensagem por setor — decisão de
+ *   negócio aprovada pelo Abel em 2026-07-16: com 4 setores × 3 horários eram até
+ *   12 msgs/dia; agora no máx. 3/dia). Setor sem alerta no slot simplesmente não
+ *   aparece na mensagem; setor desabilitado no tenant fica fora do relatório.
+ *   Deduplicação por chave `tenantId:contact:{id}:{HH:MM}` (por horário, não mais
+ *   por setor+horário) — ver `unifiedDigestSlotKey` em contact-recipient.types.ts.
  *
  * ── MODO PER-SECTOR (sectorConfig preenchido, sem contacts) ────────────────
  *   Cada setor (fiscal, logistic, frota, finance) tem:
@@ -33,12 +36,17 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { MonitorNotificationService } from './monitor-notification.service';
 import { EmailReplyService } from '@/application/email/email-reply.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { HiperTmsConnector, type TmsCashView } from '@/application/connectors/hipertms.connector';
+import { resolveTmsTenantId } from './tms-tenant-id.util';
+import { formatBRL } from './money-format.util';
 import {
   CONTACT_SECTOR_KEYS,
   DEFAULT_SEND_DAYS,
   DEFAULT_SEND_TIMES,
   digestSlotKey,
+  unifiedDigestSlotKey,
   type ContactRecipient,
+  type ContactSendTime,
 } from './contact-recipient.types';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -80,6 +88,17 @@ interface SectorMeta {
   emoji: string;
 }
 
+/**
+ * T7: alertas de UM setor já filtrados (sem CRITICAL) e ordenados por
+ * gravidade pro relatório unificado — `shown` é o que entra na mensagem
+ * (cap `MAX_ITEMS_PER_SECTOR_UNIFIED`), `total` é a contagem real (usada no
+ * cabeçalho da seção e no cálculo do "… e mais N").
+ */
+interface UnifiedSectorAlerts {
+  shown: Array<{ severity: string; title: string; description?: string | null }>;
+  total: number;
+}
+
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
 const SECTORS: SectorMeta[] = [
@@ -103,6 +122,23 @@ const SEVERITY_LABEL_PT: Record<string, string> = {
   DUE_SOON: 'A VENCER',
   INFO:     'INFO',
 };
+/**
+ * T7 (2026-07-16, formato aprovado pelo Abel): níveis de gravidade do relatório
+ * UNIFICADO por contato — só 3, não os 4 do modo por setor legado. CRITICAL
+ * fica de fora de propósito: já sai pelo canal imediato (ver MonitorService/
+ * buildImmediateMessage), então não duplica aqui. Cores e rótulos são
+ * PRÓPRIOS deste relatório — não usar SEVERITY_EMOJI/SEVERITY_LABEL_PT (legado,
+ * usado pelo modo por setor, que continua com os 4 níveis originais e INTOCADO).
+ */
+const UNIFIED_SEVERITY_ORDER = ['OVERDUE', 'DUE_SOON', 'INFO'];
+const UNIFIED_SEVERITY_EMOJI: Record<string, string> = {
+  OVERDUE:  '🔴', // vencidas
+  DUE_SOON: '🟠', // a vencer
+  INFO:     '🟡', // avisos
+};
+/** Máximo de pendências listadas por setor no relatório unificado — acima disso, "… e mais N". */
+const MAX_ITEMS_PER_SECTOR_UNIFIED = 6;
+
 const ARCHIVE_AFTER_NOTIFICATIONS = 2;
 const ARCHIVE_AFTER_HOURS = 48;
 
@@ -126,11 +162,15 @@ export class ConsolidationService {
   // Valor → slot numérico único para a janela de 5 min (evita reenvio no mesmo slot)
   private readonly sentThisHour = new Map<string, number>();
 
+  /** T8.6: cache em memória da visão do caixa por tenant — 1 chamada TMS/tenant/dia. */
+  private readonly cashViewCache = new Map<string, { date: string; value: TmsCashView | null }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notification: MonitorNotificationService,
     private readonly emailReply: EmailReplyService,
     private readonly lock: RedisLockService,
+    private readonly tms: HiperTmsConnector,
   ) {}
 
   private get enabled(): boolean {
@@ -437,15 +477,18 @@ export class ConsolidationService {
     return totalSent;
   }
 
-  // ─── Modo per-contato (T6) ──────────────────────────────────────────────────
+  // ─── Modo per-contato (T6, unificado em T7) ────────────────────────────────
 
   /**
-   * T6: varre CONTATOS em vez de setores. Para cada contato, para cada setor que
-   * ele assina, e para CADA UM dos até 3 horários próprios do contato, aplica a
-   * mesma verificação de janela/catch-up que o modo per-sector fazia com o único
-   * horário do setor — só que agora repetida por horário. Isso é o que permite um
-   * contato receber o digest de um setor 3x/dia (ex.: 08h/13h/18h) sem que os
-   * horários pisem um no outro: cada (setor, horário) tem seu próprio dedup.
+   * T7 (2026-07-16, decisão de negócio do Abel): varre CONTATOS em vez de setores,
+   * e para cada um dos até 3 horários próprios do contato dispara UMA mensagem só,
+   * consolidando os alertas de TODOS os setores que ele assina — antes disso era
+   * 1 mensagem por (setor, horário), então 4 setores × 3 horários chegava a
+   * 12 msgs/dia; agora é no máx. 3/dia. Setor sem alerta no slot não aparece na
+   * mensagem; setor desabilitado no tenant fica fora do relatório inteiro.
+   *
+   * Laço invertido (T7): contato → horário → junta os setores habilitados numa
+   * query só. Dedup por `tenantId:contact:{id}:{HH:MM}` (não mais por setor).
    *
    * Isolamento: um contato NUNCA recebe alerta de um setor que não está em
    * `contact.sectors`, e cada horário só dispara na sua própria janela — os
@@ -480,113 +523,157 @@ export class ConsolidationService {
         : DEFAULT_SEND_TIMES
       ).slice(0, 3);
 
-      for (const sectorKey of contact.sectors ?? []) {
-        if (!CONTACT_SECTOR_KEYS.includes(sectorKey)) continue;
-        const sector = SECTORS.find((s) => s.key === sectorKey);
-        if (!sector) continue;
+      // Setores que o contato assina, filtrados pelos que o tenant tem habilitados
+      // globalmente — um setor desabilitado fica fora do relatório inteiro, não só
+      // "sem alertas".
+      const enabledSectors = (contact.sectors ?? [])
+        .filter((sectorKey) => CONTACT_SECTOR_KEYS.includes(sectorKey))
+        .map((sectorKey) => SECTORS.find((s) => s.key === sectorKey))
+        .filter((s): s is SectorMeta => !!s && !!config[s.enabledField]);
 
-        // Setor desabilitado globalmente pelo tenant — nenhum horário deste setor dispara.
-        if (!config[sector.enabledField]) {
-          skipReasons[`contato:${contact.id}:${sector.key}`] = 'desabilitado';
-          continue;
-        }
+      if (enabledSectors.length === 0) {
+        skipReasons[`contato:${contact.id}`] = 'sem_setor_habilitado';
+        continue;
+      }
 
-        for (const t of sendTimes) {
-          const slotLabel = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
-          const skipKey = `contato:${contact.id}:${sector.key}@${slotLabel}`;
-          const digestKey = digestSlotKey(sectorKey, t);
-          const alreadySentToday = contact.lastDigestDate?.[digestKey] === todayStr;
+      for (const t of sendTimes) {
+        const slotLabel = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+        const skipKey = `contato:${contact.id}@${slotLabel}`;
+        const digestKey = unifiedDigestSlotKey(t);
 
-          let isCatchUp = false;
+        // T7 compat (dia do deploy): se QUALQUER setor assinado já tinha uma chave
+        // antiga (pré-T7, `${sector}|HH:MM`) marcada como enviada hoje pra este
+        // horário, trata o slot unificado como já enviado — evita duplicar o que
+        // o código antigo já mandou por setor antes do redeploy (ver comentário
+        // em ContactRecipient.lastDigestDate). Só é lido, nunca mais escrito.
+        const alreadySentUnified = contact.lastDigestDate?.[digestKey] === todayStr;
+        const alreadySentLegacyCompat = enabledSectors.some(
+          (sector) => contact.lastDigestDate?.[digestSlotKey(sector.key, t)] === todayStr,
+        );
+        const alreadySentToday = alreadySentUnified || alreadySentLegacyCompat;
 
-          if (!force) {
-            if (alreadySentToday) {
-              skipReasons[skipKey] = 'ja_enviado_hoje';
-              continue;
-            }
+        let isCatchUp = false;
 
-            const inWindow = currentHour === t.hour && currentMinute >= t.minute && currentMinute < t.minute + 5;
-
-            if (!inWindow) {
-              const nowMins = currentHour * 60 + currentMinute;
-              const scheduledMins = t.hour * 60 + t.minute;
-              const diffMins = nowMins - scheduledMins;
-              if (diffMins >= 0 && diffMins < ConsolidationService.CATCHUP_WINDOW_MINUTES) {
-                isCatchUp = true;
-              } else {
-                // diffMins < 0: horário ainda não chegou hoje. diffMins >= janela: expirou — desiste em silêncio (sem warn por slot pra não gerar spam de 3x por contato).
-                skipReasons[skipKey] = 'fora_da_hora';
-                continue;
-              }
-            }
-
-            const dedupKey = `${tenantId}:contact:${contact.id}:${sector.key}:${slotLabel}`;
-            const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
-            if (this.sentThisHour.get(dedupKey) === slotKeyNum) {
-              skipReasons[skipKey] = 'ja_enviado';
-              continue;
-            }
-          }
-
-          const alerts = await this.prisma.alertState.findMany({
-            where: {
-              tenantId,
-              category: sector.key,
-              status: 'open',
-              OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
-            },
-            orderBy: { severity: 'asc' },
-          });
-
-          if (!alerts.length) {
-            skipReasons[skipKey] = 'sem_alertas';
+        if (!force) {
+          if (alreadySentToday) {
+            skipReasons[skipKey] = 'ja_enviado_hoje';
             continue;
           }
 
-          const message = this.buildSectorMessage(sector, alerts, now);
-          const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
+          const inWindow = currentHour === t.hour && currentMinute >= t.minute && currentMinute < t.minute + 5;
 
-          // Mesmo princípio do BUG FIX per-sector (2026-07-14): reivindica o slot e
-          // PERSISTE no banco ANTES de enviar — se o processo cair no meio do envio
-          // (WhatsApp + N e-mails do mesmo contato, por exemplo), o pior cenário é um
-          // envio perdido (recuperável pela janela de catch-up), nunca um duplicado.
-          if (!force) {
-            const dedupKey = `${tenantId}:contact:${contact.id}:${sector.key}:${slotLabel}`;
-            const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
-            this.sentThisHour.set(dedupKey, slotKeyNum);
-            contact.lastDigestDate = { ...(contact.lastDigestDate ?? {}), [digestKey]: todayStr };
-            await this.persistContacts(tenantId, contacts);
-          }
-
-          if (contact.whatsapp) {
-            await this.notification.notifyPhone(tenantId, contact.whatsapp, message, force ? 0 : 120_000);
-            this.logger.log(
-              `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: ${alerts.length} alerta(s) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
-            );
-          }
-
-          if (contact.emails?.length) {
-            const subject = `🕐 Alerta programado · ${sector.label} — ${now.toLocaleDateString('pt-BR')}`;
-            const html = this.buildSectorEmailHtml(sector, alerts, now);
-            for (const email of contact.emails) {
-              const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
-              if (result.sent) {
-                this.logger.log(
-                  `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: ${alerts.length} alerta(s) → e-mail ${email}${catchUpSuffix}`,
-                );
-              } else {
-                this.logger.warn(
-                  `[${tenantId}] contato ${contact.id} · setor ${sector.key}@${slotLabel}: falha e-mail → ${email}: ${result.reason}`,
-                );
-              }
+          if (!inWindow) {
+            const nowMins = currentHour * 60 + currentMinute;
+            const scheduledMins = t.hour * 60 + t.minute;
+            const diffMins = nowMins - scheduledMins;
+            if (diffMins >= 0 && diffMins < ConsolidationService.CATCHUP_WINDOW_MINUTES) {
+              isCatchUp = true;
+            } else {
+              // diffMins < 0: horário ainda não chegou hoje. diffMins >= janela: expirou —
+              // desiste em silêncio (sem warn por slot pra não gerar spam por contato).
+              skipReasons[skipKey] = 'fora_da_hora';
+              continue;
             }
           }
 
-          const alertIds = alerts.map((a) => a.id);
-          await this.persistAlertUpdates(alertIds, now);
-
-          totalSent += alerts.length;
+          const dedupKey = `${tenantId}:contact:${contact.id}:${slotLabel}`;
+          const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
+          if (this.sentThisHour.get(dedupKey) === slotKeyNum) {
+            skipReasons[skipKey] = 'ja_enviado';
+            continue;
+          }
         }
+
+        // T7: uma query só, com TODOS os setores habilitados do contato — antes
+        // era 1 query por (setor, horário). CRITICAL fica de fora do relatório
+        // programado (já foi mandado pelo canal imediato) — filtro no `where`
+        // como otimização, e repetido em memória logo abaixo porque o mock de
+        // Prisma dos testes não interpreta o `where`, só o `.filter()` real.
+        const alerts = await this.prisma.alertState.findMany({
+          where: {
+            tenantId,
+            category: { in: enabledSectors.map((s) => s.key) },
+            status: 'open',
+            severity: { notIn: ['CRITICAL'] },
+            OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
+          },
+          orderBy: [{ severity: 'asc' }, { category: 'asc' }],
+        });
+
+        const nonCriticalAlerts = alerts.filter((a) => a.severity !== 'CRITICAL');
+
+        if (!nonCriticalAlerts.length) {
+          skipReasons[skipKey] = 'sem_alertas';
+          continue;
+        }
+
+        // Agrupa por setor e monta o formato aprovado: ordenado por gravidade
+        // (UNIFIED_SEVERITY_ORDER), cap de MAX_ITEMS_PER_SECTOR_UNIFIED itens
+        // exibidos + total pro "… e mais N pendências". Setor sem alerta
+        // simplesmente não entra no Map (ver buildUnifiedMessage/buildUnifiedEmailHtml).
+        const alertsBySector = new Map<string, UnifiedSectorAlerts>();
+        for (const sector of enabledSectors) {
+          const sectorAlerts = nonCriticalAlerts
+            .filter((a) => a.category === sector.key)
+            .sort((a, b) => UNIFIED_SEVERITY_ORDER.indexOf(a.severity) - UNIFIED_SEVERITY_ORDER.indexOf(b.severity));
+          if (!sectorAlerts.length) continue;
+          alertsBySector.set(sector.key, {
+            shown: sectorAlerts.slice(0, MAX_ITEMS_PER_SECTOR_UNIFIED),
+            total: sectorAlerts.length,
+          });
+        }
+
+        // T8.6: bloco "💰 SEU CAIXA" só no ÚLTIMO horário do dia do contato, e só
+        // quando ligado (cashView='lastSlot'). NÃO cria um novo gatilho de envio —
+        // só decora um digest que já ia sair (não mexe no fluxo de pendências/T7).
+        const cashView =
+          contact.cashView === 'lastSlot' && this.isLastSlotForContact(contact, t)
+            ? await this.getCashViewForTenant(tenantId, now)
+            : null;
+
+        const message = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashView);
+        const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
+
+        // Mesmo princípio do BUG FIX per-sector (2026-07-14): reivindica o slot e
+        // PERSISTE no banco ANTES de enviar — se o processo cair no meio do envio
+        // (WhatsApp + N e-mails do mesmo contato, por exemplo), o pior cenário é um
+        // envio perdido (recuperável pela janela de catch-up), nunca um duplicado.
+        if (!force) {
+          const dedupKey = `${tenantId}:contact:${contact.id}:${slotLabel}`;
+          const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
+          this.sentThisHour.set(dedupKey, slotKeyNum);
+          contact.lastDigestDate = { ...(contact.lastDigestDate ?? {}), [digestKey]: todayStr };
+          await this.persistContacts(tenantId, contacts);
+        }
+
+        if (contact.whatsapp) {
+          await this.notification.notifyPhone(tenantId, contact.whatsapp, message, force ? 0 : 120_000);
+          this.logger.log(
+            `[${tenantId}] contato ${contact.id}@${slotLabel}: ${nonCriticalAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
+          );
+        }
+
+        if (contact.emails?.length) {
+          const subject = `⚠️ HiperTMS — Pendências · ${now.toLocaleDateString('pt-BR')} ${slotLabel}`;
+          const html = this.buildUnifiedEmailHtml(enabledSectors, alertsBySector, now, slotLabel, cashView);
+          for (const email of contact.emails) {
+            const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
+            if (result.sent) {
+              this.logger.log(
+                `[${tenantId}] contato ${contact.id}@${slotLabel}: ${nonCriticalAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → e-mail ${email}${catchUpSuffix}`,
+              );
+            } else {
+              this.logger.warn(
+                `[${tenantId}] contato ${contact.id}@${slotLabel}: falha e-mail → ${email}: ${result.reason}`,
+              );
+            }
+          }
+        }
+
+        const alertIds = nonCriticalAlerts.map((a) => a.id);
+        await this.persistAlertUpdates(alertIds, now);
+
+        totalSent += nonCriticalAlerts.length;
       }
     }
 
@@ -655,19 +742,14 @@ export class ConsolidationService {
 
   // ─── Builders de mensagem ───────────────────────────────────────────────────
 
-  private buildSectorMessage(
-    sector: SectorMeta,
-    alerts: Array<{ severity: string; title: string }>,
-    now: Date,
-  ): string {
-    const date = now.toLocaleDateString('pt-BR');
-    // H1: título nomeado, simétrico ao imediato (MonitorService.buildImmediateMessage)
-    // — "🕐 Alerta programado" vs "⚡ Alerta imediato" — pra dar pra saber de cara,
-    // só de olhar o topo da mensagem, qual dos dois disparou.
-    const lines: string[] = [
-      `🕐 *Alerta programado · ${sector.label} — ${date}*\n`,
-    ];
-
+  /**
+   * Miolo compartilhado de formatação (texto WhatsApp) de um grupo de alertas,
+   * agrupado por severidade — extraído em T7 pra ser reaproveitado tanto pelo
+   * modo per-sector legado (`buildSectorMessage`, formato INTOCADO) quanto pelo
+   * modo per-contato unificado (`buildUnifiedMessage`, uma seção por setor).
+   */
+  private buildSeverityLines(alerts: Array<{ severity: string; title: string }>): string[] {
+    const lines: string[] = [];
     const grouped = SEVERITY_ORDER.reduce<Record<string, typeof alerts>>((acc, s) => {
       acc[s] = alerts.filter((a) => a.severity === s);
       return acc;
@@ -680,9 +762,120 @@ export class ConsolidationService {
       group.slice(0, 5).forEach((a) => lines.push(`  • ${a.title}`));
       if (group.length > 5) lines.push(`  … e mais ${group.length - 5} item(ns)`);
     }
+    return lines;
+  }
+
+  private buildSectorMessage(
+    sector: SectorMeta,
+    alerts: Array<{ severity: string; title: string }>,
+    now: Date,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR');
+    // H1: título nomeado, simétrico ao imediato (MonitorService.buildImmediateMessage)
+    // — "🕐 Alerta programado" vs "⚡ Alerta imediato" — pra dar pra saber de cara,
+    // só de olhar o topo da mensagem, qual dos dois disparou.
+    const lines: string[] = [
+      `🕐 *Alerta programado · ${sector.label} — ${date}*\n`,
+      ...this.buildSeverityLines(alerts),
+    ];
 
     lines.push('\nAcesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
     return lines.join('\n');
+  }
+
+  /**
+   * T7 (formato aprovado pelo Abel, 2026-07-16): mensagem única do modo
+   * per-contato, consolidando os alertas de TODOS os setores habilitados que o
+   * contato assina num só envio. Setor sem pendência não gera seção. Lista
+   * plana por setor (sem subtítulo por severidade, diferente do modo legado) —
+   * ordenada por gravidade, cap de `MAX_ITEMS_PER_SECTOR_UNIFIED` itens com
+   * "… e mais N pendências" acima disso. CRITICAL não aparece aqui (ver
+   * `UNIFIED_SEVERITY_ORDER`) — já foi no canal imediato.
+   *
+   * `slotLabel` é o horário AGENDADO do contato (ex. "08:00"), não o horário
+   * real do tick — importa pro cabeçalho refletir "seu relatório das 08h"
+   * mesmo quando o envio efetivo é um catch-up alguns minutos depois.
+   */
+  private buildUnifiedMessage(
+    sectors: SectorMeta[],
+    alertsBySector: Map<string, UnifiedSectorAlerts>,
+    now: Date,
+    slotLabel: string,
+    cashView?: TmsCashView | null,
+  ): string {
+    const dateShort = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const lines: string[] = [`⚠️ *HiperTMS — Pendências · ${dateShort} ${slotLabel}*\n`];
+
+    // T8.6: bloco do caixa vai ACIMA dos blocos de setor (formato aprovado).
+    if (cashView) {
+      lines.push(this.buildCashViewBlock(cashView));
+    }
+
+    for (const sector of sectors) {
+      const entry = alertsBySector.get(sector.key);
+      if (!entry || entry.total === 0) continue;
+      lines.push(`${sector.emoji} *${sector.label} (${entry.total})*`);
+      entry.shown.forEach((a) => lines.push(`${UNIFIED_SEVERITY_EMOJI[a.severity] ?? '⚪'} ${a.title}`));
+      const overflow = entry.total - entry.shown.length;
+      if (overflow > 0) lines.push(`… e mais ${overflow} pendência${overflow !== 1 ? 's' : ''}`);
+      lines.push('');
+    }
+
+    lines.push('Acesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
+    return lines.join('\n');
+  }
+
+  /**
+   * T8.6 (opção 1 aprovada, seguir à risca) — bloco "💰 SEU CAIXA" anexado à
+   * última mensagem de pendências do dia. Saldo (inflow − outflow) derivado
+   * aqui — NÃO vem no payload do TMS.
+   */
+  private buildCashViewBlock(cash: TmsCashView): string {
+    const balance = cash.inflow15d.amount - cash.outflow15d.amount;
+    const balanceLine =
+      balance >= 0
+        ? `✅ Sobra: ${formatBRL(balance)}`
+        : `🔴 Falta: ${formatBRL(Math.abs(balance))}`;
+
+    return [
+      '💰 *SEU CAIXA — próximos 15 dias*',
+      `⬇️ Entra: ${formatBRL(cash.inflow15d.amount)} (${cash.inflow15d.count} conta${cash.inflow15d.count !== 1 ? 's' : ''} a receber)`,
+      `⬆️ Sai: ${formatBRL(cash.outflow15d.amount)} (${cash.outflow15d.count} conta${cash.outflow15d.count !== 1 ? 's' : ''} a pagar)`,
+      '━━━━━━━━━━━━━━━',
+      balanceLine,
+      `⚠️ Vencido sem receber: ${formatBRL(cash.overdueReceivable.amount)} (${cash.overdueReceivable.count} cliente${cash.overdueReceivable.count !== 1 ? 's' : ''})`,
+      `🍯 CT-e emitidos sem faturar: ${formatBRL(cash.unbilledCte.amount)} (${cash.unbilledCte.count} CT-e)`,
+      `🧾 Faturado no mês: ${formatBRL(cash.invoicedMonth.amount)}`,
+      '',
+    ].join('\n');
+  }
+
+  /** T8.6 — versão HTML do bloco "💰 SEU CAIXA", inserida acima das seções de setor no e-mail. */
+  private buildCashViewSectionHtml(cash: TmsCashView): string {
+    const balance = cash.inflow15d.amount - cash.outflow15d.amount;
+    const balanceLine =
+      balance >= 0
+        ? `✅ Sobra: ${formatBRL(balance)}`
+        : `🔴 Falta: ${formatBRL(Math.abs(balance))}`;
+    const cashAccent = '#10b981';
+
+    return `
+    <!-- T8.6: Visão do caixa -->
+    <tr>
+      <td style="padding:16px 28px 4px">
+        <p style="margin:0 0 8px;padding-left:10px;border-left:4px solid ${cashAccent};color:#18181b;font-size:15px;font-weight:700">
+          💰 SEU CAIXA &nbsp;<span style="color:#71717a;font-weight:400;font-size:12px">(próximos 15 dias)</span>
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#3f3f46">
+          <tr><td style="padding:2px 0">⬇️ Entra: ${formatBRL(cash.inflow15d.amount)} (${cash.inflow15d.count} conta${cash.inflow15d.count !== 1 ? 's' : ''} a receber)</td></tr>
+          <tr><td style="padding:2px 0">⬆️ Sai: ${formatBRL(cash.outflow15d.amount)} (${cash.outflow15d.count} conta${cash.outflow15d.count !== 1 ? 's' : ''} a pagar)</td></tr>
+          <tr><td style="padding:4px 0;font-weight:700">${balanceLine}</td></tr>
+          <tr><td style="padding:2px 0">⚠️ Vencido sem receber: ${formatBRL(cash.overdueReceivable.amount)} (${cash.overdueReceivable.count} cliente${cash.overdueReceivable.count !== 1 ? 's' : ''})</td></tr>
+          <tr><td style="padding:2px 0">🍯 CT-e emitidos sem faturar: ${formatBRL(cash.unbilledCte.amount)} (${cash.unbilledCte.count} CT-e)</td></tr>
+          <tr><td style="padding:2px 0">🧾 Faturado no mês: ${formatBRL(cash.invoicedMonth.amount)}</td></tr>
+        </table>
+      </td>
+    </tr>`;
   }
 
   private buildGlobalMessage(
@@ -733,20 +926,12 @@ export class ConsolidationService {
   };
 
   /**
-   * Monta o template HTML "Executivo com tabela" para e-mails de alerta.
-   * Usa somente estilos inline e layout table-based para máxima compatibilidade
-   * com clientes de e-mail corporativo (Outlook, Apple Mail, Gmail).
+   * Miolo compartilhado (HTML) — chips de resumo por severidade. Extraído em T7
+   * pra ser reaproveitado pelo modo per-sector legado (`buildSectorEmailHtml`,
+   * saída INTOCADA) e pelo modo per-contato unificado (`buildUnifiedEmailHtml`).
    */
-  private buildSectorEmailHtml(
-    sector: SectorMeta,
-    alerts: Array<{ severity: string; title: string; description?: string | null }>,
-    now: Date,
-  ): string {
-    const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-    const accent = this.SECTOR_ACCENT[sector.key] ?? '#3b82f6';
-
-    // ── Chips de resumo por severidade ────────────────────────────────────────
-    const chipRows = SEVERITY_ORDER.map((sev) => {
+  private buildSeverityChipsHtml(alerts: Array<{ severity: string; title: string }>): string {
+    return SEVERITY_ORDER.map((sev) => {
       const count = alerts.filter((a) => a.severity === sev).length;
       if (!count) return '';
       const color = this.SEVERITY_COLOR[sev] ?? '#71717a';
@@ -758,9 +943,16 @@ export class ConsolidationService {
           </span>
         </td>`;
     }).join('');
+  }
 
-    // ── Linhas da tabela de alertas ───────────────────────────────────────────
-    const tableRows = alerts.map((a) => {
+  /**
+   * Miolo compartilhado (HTML) — linhas da tabela de alertas. Ver
+   * `buildSeverityChipsHtml` acima (mesmo motivo da extração).
+   */
+  private buildAlertsTableRowsHtml(
+    alerts: Array<{ severity: string; title: string; description?: string | null }>,
+  ): string {
+    return alerts.map((a) => {
       const bg = this.SEVERITY_BG[a.severity] ?? '#ffffff';
       const color = this.SEVERITY_COLOR[a.severity] ?? '#71717a';
       const label = SEVERITY_LABEL_PT[a.severity] ?? a.severity;
@@ -779,6 +971,22 @@ export class ConsolidationService {
           </td>
         </tr>`;
     }).join('');
+  }
+
+  /**
+   * Monta o template HTML "Executivo com tabela" para e-mails de alerta.
+   * Usa somente estilos inline e layout table-based para máxima compatibilidade
+   * com clientes de e-mail corporativo (Outlook, Apple Mail, Gmail).
+   */
+  private buildSectorEmailHtml(
+    sector: SectorMeta,
+    alerts: Array<{ severity: string; title: string; description?: string | null }>,
+    now: Date,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const accent = this.SECTOR_ACCENT[sector.key] ?? '#3b82f6';
+    const chipRows = this.buildSeverityChipsHtml(alerts);
+    const tableRows = this.buildAlertsTableRowsHtml(alerts);
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -843,7 +1051,151 @@ export class ConsolidationService {
 </html>`;
   }
 
+  /** Accent neutro do cabeçalho do e-mail consolidado (T7) — não é de nenhum setor específico. */
+  private readonly UNIFIED_ACCENT = '#3b82f6';
+
+  /**
+   * T7: e-mail único do modo per-contato, com uma seção (subcabeçalho + chips +
+   * tabela) por setor habilitado que tem pendência no slot — mesmo formato
+   * aprovado do WhatsApp (`buildUnifiedMessage`): setor sem pendência não gera
+   * seção, e cada setor mostra no máximo `MAX_ITEMS_PER_SECTOR_UNIFIED` linhas
+   * na tabela + uma nota de overflow "… e mais N pendências" quando o total
+   * excede o exibido. Nota: a paleta de cores/emoji da tabela HTML permanece a
+   * legada (`SEVERITY_COLOR`/`SEVERITY_LABEL_PT`/`SEVERITY_EMOJI`, 4 níveis) —
+   * o "formato aprovado" com 3 níveis (🔴🟠🟡) era especificado só pro texto
+   * WhatsApp; CRITICAL já não aparece aqui de qualquer forma (filtrado antes,
+   * ver `processPerContact`), então a diferença é só nos rótulos/cores visuais.
+   */
+  private buildUnifiedEmailHtml(
+    sectors: SectorMeta[],
+    alertsBySector: Map<string, UnifiedSectorAlerts>,
+    now: Date,
+    slotLabel: string,
+    cashView?: TmsCashView | null,
+  ): string {
+    const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const totalAlerts = [...alertsBySector.values()].reduce((sum, entry) => sum + entry.total, 0);
+    const cashSection = cashView ? this.buildCashViewSectionHtml(cashView) : '';
+
+    const sections = sectors
+      .map((sector) => {
+        const entry = alertsBySector.get(sector.key);
+        if (!entry || entry.total === 0) return '';
+        const accent = this.SECTOR_ACCENT[sector.key] ?? this.UNIFIED_ACCENT;
+        const chipRows = this.buildSeverityChipsHtml(entry.shown);
+        const tableRows = this.buildAlertsTableRowsHtml(entry.shown);
+        const overflow = entry.total - entry.shown.length;
+        const overflowRow =
+          overflow > 0
+            ? `<tr><td colspan="2" style="padding:8px 12px;font-size:12px;color:#71717a;font-style:italic;border-top:1px solid #e4e4e7">… e mais ${overflow} pendência${overflow !== 1 ? 's' : ''}</td></tr>`
+            : '';
+        return `
+    <!-- Seção: ${sector.label} -->
+    <tr>
+      <td style="padding:16px 28px 4px">
+        <p style="margin:0 0 8px;padding-left:10px;border-left:4px solid ${accent};color:#18181b;font-size:15px;font-weight:700">
+          ${sector.emoji} ${sector.label} &nbsp;<span style="color:#71717a;font-weight:400;font-size:12px">(${entry.total} pendência${entry.total !== 1 ? 's' : ''})</span>
+        </p>
+        <table cellpadding="0" cellspacing="0"><tr>${chipRows}</tr></table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 28px 4px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e4e4e7;border-radius:6px;overflow:hidden">
+          <tr style="background:#f4f4f5">
+            <th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px;width:110px;border-bottom:1px solid #e4e4e7">Severidade</th>
+            <th style="text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e4e4e7">Ocorrência</th>
+          </tr>
+          ${tableRows}
+          ${overflowRow}
+        </table>
+      </td>
+    </tr>`;
+      })
+      .join('');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HiperTMS — Pendências</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:24px 16px">
+  <tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e4e4e7">
+
+    <!-- Cabeçalho -->
+    <tr>
+      <td style="background:#18181b;padding:24px 28px;border-bottom:4px solid ${this.UNIFIED_ACCENT}">
+        <p style="margin:0;color:#a1a1aa;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase">MONITOR PROATIVO · HIPERTMS</p>
+        <p style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.2">⚠️ HiperTMS — Pendências</p>
+        <p style="margin:6px 0 0;color:#a1a1aa;font-size:13px">${date} · ${slotLabel} &nbsp;·&nbsp; ${totalAlerts} pendência${totalAlerts !== 1 ? 's' : ''} em ${sectors.filter((s) => (alertsBySector.get(s.key)?.total ?? 0) > 0).length} setor(es)</p>
+      </td>
+    </tr>
+
+    ${cashSection}
+    ${sections}
+
+    <!-- CTA -->
+    <tr>
+      <td style="padding:16px 28px 24px;text-align:center">
+        <a href="https://www.hipertms.com.br" style="display:inline-block;background:${this.UNIFIED_ACCENT};color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:700">Ver no HiperTMS →</a>
+      </td>
+    </tr>
+
+    <!-- Rodapé -->
+    <tr>
+      <td style="padding:14px 28px;background:#fafafa;border-top:1px solid #e4e4e7">
+        <p style="margin:0;color:#a1a1aa;font-size:11px">Lia · Monitor Proativo HiperTMS &nbsp;|&nbsp; <a href="https://www.hipertms.com.br" style="color:#a1a1aa;text-decoration:none">hipertms.com.br</a></p>
+        <p style="margin:4px 0 0;color:#a1a1aa;font-size:11px">Este e-mail foi gerado automaticamente. Gerencie suas notificações no painel do HiperTMS.</p>
+      </td>
+    </tr>
+
+  </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * T8.6: true quando `t` é o horário MAIOR (mais tarde) entre os `sendTimes` do
+   * contato — é o único slot em que o bloco "💰 SEU CAIXA" pode ser anexado.
+   */
+  private isLastSlotForContact(contact: ContactRecipient, t: ContactSendTime): boolean {
+    const times = contact.sendTimes?.length ? contact.sendTimes : DEFAULT_SEND_TIMES;
+    const toMinutes = (x: ContactSendTime) => x.hour * 60 + x.minute;
+    const maxMinutes = Math.max(...times.map(toMinutes));
+    return toMinutes(t) === maxMinutes;
+  }
+
+  /**
+   * T8.6: busca a visão do caixa no TMS, cacheada em memória por tenant+dia —
+   * 1 chamada TMS por tenant por dia, disparada pelo primeiro contato elegível
+   * do dia (os demais reaproveitam o cache, mesmo tenant nunca chama de novo).
+   * TMS null/erro também é cacheado (evita repetir a chamada o resto do dia) —
+   * o digest sai normal sem o bloco (ver `buildUnifiedMessage`).
+   */
+  private async getCashViewForTenant(tenantId: string, now: Date): Promise<TmsCashView | null> {
+    const todayStr = this.toDateStr(now);
+    const cached = this.cashViewCache.get(tenantId);
+    if (cached && cached.date === todayStr) return cached.value;
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+    if (!tenant) {
+      this.cashViewCache.set(tenantId, { date: todayStr, value: null });
+      return null;
+    }
+
+    const externalTenantId = resolveTmsTenantId(tenant.slug);
+    const value = await this.tms.getCashView(externalTenantId);
+    this.cashViewCache.set(tenantId, { date: todayStr, value });
+    return value;
+  }
 
   /**
    * Retorna a data como string 'YYYY-MM-DD' no fuso local do servidor.

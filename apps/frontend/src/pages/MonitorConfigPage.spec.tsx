@@ -590,6 +590,70 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     expect(screen.getByLabelText('Minuto do horário 1')).toHaveValue('30');
   });
 
+  // T8.5/T8.6: seletores de "Resumo de fechamento" e "Visão do caixa" — teste (h) do doc.
+  it('contato novo nasce com "Resumo de fechamento" = Mensal e "Visão do caixa" = Desligado; salvar envia os valores', async () => {
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
+
+    // Decisão de negócio (2026-07-16): contato NOVO já nasce com Mensal pré-selecionado.
+    expect(screen.getByLabelText('Resumo de fechamento')).toHaveValue('monthly');
+    expect(screen.getByLabelText('Visão do caixa')).toHaveValue('off');
+
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
+    fireEvent.change(screen.getByLabelText('Resumo de fechamento'), { target: { value: 'biweekly' } });
+    fireEvent.change(screen.getByLabelText('Visão do caixa'), { target: { value: 'lastSlot' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar WhatsApp' }));
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    const [, payload] = mockPut.mock.calls[0];
+    expect(payload.contacts[0]).toMatchObject({ closingReport: 'biweekly', cashView: 'lastSlot' });
+  });
+
+  it('editar contato existente re-hidrata "Resumo de fechamento" e "Visão do caixa" salvos', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'biweekly',
+        cashView: 'lastSlot',
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
+
+    expect(screen.getByLabelText('Resumo de fechamento')).toHaveValue('biweekly');
+    expect(screen.getByLabelText('Visão do caixa')).toHaveValue('lastSlot');
+  });
+
+  it('badge "Fechamento: quinzenal" e "💰 Caixa" aparecem na linha da lista quando ligados', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'biweekly',
+        cashView: 'lastSlot',
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos com horário próprio');
+
+    expect(await screen.findByText(/Fechamento: quinzenal/i)).toBeInTheDocument();
+    expect(screen.getByText('💰 Caixa')).toBeInTheDocument();
+  });
+
   it('editar e-mail abre o módulo de e-mail (não mostra o campo de WhatsApp)', async () => {
     mockConfigWithContacts([
       {

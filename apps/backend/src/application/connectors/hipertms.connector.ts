@@ -898,6 +898,67 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       return [];
     }
   }
+
+  // T8.2 — Fechamento quinzenal/mensal (Nexa scheduler, ClosingReportService).
+  // Endpoint: GET /nexa/proactivity/closing-report?tenantId=...&kind=biweekly|monthly&refDate=YYYY-MM-DD
+  // Contrato fixo — ver hipertms_v12/docs/features/automation/t8-fechamento-endpoint-2026-07.md.
+  // Erro/404/timeout → null + warn (NUNCA lança) — o scheduler trata null como
+  // "não envia nada neste ciclo", permitindo deployar o Nexa antes do endpoint existir.
+  async getClosingReport(
+    externalTenantId: string,
+    kind: 'biweekly' | 'monthly',
+    refDate: string,
+  ): Promise<TmsClosingReport | null> {
+    if (!this.configured) {
+      this.logger.warn('getClosingReport: TMS não configurado');
+      return null;
+    }
+    try {
+      const url =
+        `${this.baseUrl}/nexa/proactivity/closing-report` +
+        `?tenantId=${encodeURIComponent(externalTenantId)}` +
+        `&kind=${encodeURIComponent(kind)}` +
+        `&refDate=${encodeURIComponent(refDate)}`;
+      const res = await fetch(url, {
+        headers: this.authHeader,
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`getClosingReport: TMS retornou ${res.status} (tenant=${externalTenantId}, kind=${kind}, refDate=${refDate})`);
+        return null;
+      }
+      return (await res.json()) as TmsClosingReport;
+    } catch (err: any) {
+      this.logger.warn(`getClosingReport falhou (tenant=${externalTenantId}, kind=${kind}): ${err?.message}`);
+      return null;
+    }
+  }
+
+  // T8.2b — Visão do caixa (snapshot do dia, sem parâmetros de período).
+  // Endpoint: GET /nexa/proactivity/cash-view?tenantId=...
+  // Mesma regra de erro: null + warn, nunca lança — o bloco "💰 SEU CAIXA" some
+  // do digest quando null, a mensagem de pendências sai normal (ver T8.6).
+  async getCashView(externalTenantId: string): Promise<TmsCashView | null> {
+    if (!this.configured) {
+      this.logger.warn('getCashView: TMS não configurado');
+      return null;
+    }
+    try {
+      const url = `${this.baseUrl}/nexa/proactivity/cash-view?tenantId=${encodeURIComponent(externalTenantId)}`;
+      const res = await fetch(url, {
+        headers: this.authHeader,
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`getCashView: TMS retornou ${res.status} (tenant=${externalTenantId})`);
+        return null;
+      }
+      return (await res.json()) as TmsCashView;
+    } catch (err: any) {
+      this.logger.warn(`getCashView falhou (tenant=${externalTenantId}): ${err?.message}`);
+      return null;
+    }
+  }
 }
 
 // Shape do evento de proatividade retornado pelo TMS.
@@ -914,4 +975,48 @@ export interface TmsProactivityEvent {
   adminName?: string;
   /** Company/transportadora name (used in message context). */
   companyName?: string;
+}
+
+// T8.1 — Contrato fixo do TMS (não renomear campos — ver
+// hipertms_v12/docs/features/automation/t8-fechamento-endpoint-2026-07.md).
+// Margem NÃO vem no payload — derivada no Nexa (revenue - costs).
+export interface TmsClosingReportPeriod {
+  start: string;
+  end: string;
+  label: string;
+}
+
+export interface TmsClosingReport {
+  period: TmsClosingReportPeriod;
+  previous: TmsClosingReportPeriod;
+  revenue: { current: number; previous: number };
+  costs: { current: number; previous: number };
+  sales: {
+    quotesCreated: number;
+    quotesConverted: number;
+    conversionRate: number;
+    avgTicket: { current: number; previous: number };
+    shipmentsCreated: number;
+    shipmentsCompleted: number;
+  };
+  cash: {
+    receivedInPeriod: number;
+    overdueOpenAmount: number;
+    overdueOpenCount: number;
+    delinquencyRate: number;
+  };
+  /** Omitido se caro de calcular (ver doc do TMS) — tratar como ausente. */
+  highlights?: { topCustomer?: { name: string; revenue: number } };
+  /** Só presente no caso kind=biweekly + refDate dia 1º (2ª quinzena + mês anterior completo). */
+  monthSummary?: { revenue: number; costs: number };
+}
+
+// T8.2b — Contrato fixo do TMS para a visão do caixa. Saldo (inflow − outflow)
+// NÃO vem no payload — derivado no Nexa.
+export interface TmsCashView {
+  inflow15d: { amount: number; count: number };
+  outflow15d: { amount: number; count: number };
+  overdueReceivable: { amount: number; count: number };
+  unbilledCte: { amount: number; count: number };
+  invoicedMonth: { amount: number };
 }

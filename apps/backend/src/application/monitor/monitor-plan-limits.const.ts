@@ -20,6 +20,7 @@
  * Email recipients have no per-plan limit (only the 10/sector technical cap).
  */
 import { normalizePhone } from '@/shared/utils/phone.util';
+import { MAX_SEND_TIMES_PER_CONTACT } from './contact-recipient.types';
 
 /** WhatsApp numbers included per plan (case-insensitive key). */
 export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
@@ -54,6 +55,25 @@ export function monitorWaLimit(
   const key = (plan ?? 'free').toLowerCase();
   const included = MONITOR_WA_INCLUDED[key] ?? 0;
   return included + Math.max(0, extras);
+}
+
+/**
+ * T7.2 (2026-07-16): máximo de horários próprios por contato, por plano.
+ *
+ * Hoje TODOS os planos usam o mesmo teto (`MAX_SEND_TIMES_PER_CONTACT`, = 3) —
+ * a variação por plano ainda não existe. Existe como função (em vez de só usar
+ * a constante direto) porque o plano Corporativo vai ganhar um modo "turbinado"
+ * com horários ilimitados no futuro (decisão de negócio aprovada pelo Abel em
+ * 2026-07-16 — NÃO implementar agora, só deixar o gancho). Quando isso
+ * acontecer, só este `switch` muda — nenhum outro ponto do código (DTO,
+ * sanitizeContacts, scheduler) precisa saber de plano.
+ *
+ * TODO(turbinado-corporativo): plano 'enterprise'/'corporativo'/'corporate' com
+ * add-on "turbinado" → retornar Infinity (ou um teto alto configurável). Ver
+ * decisão de negócio de 2026-07-16.
+ */
+export function maxContactTimes(_plan: string | null | undefined): number {
+  return MAX_SEND_TIMES_PER_CONTACT;
 }
 
 /** Plans that have Monitor Proativo included (free/starter = blocked). */

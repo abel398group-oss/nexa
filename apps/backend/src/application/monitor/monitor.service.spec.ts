@@ -885,3 +885,154 @@ describe('MonitorService.getExternalConfig/updateExternalConfig — paridade TMS
     await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
   });
 });
+
+// ── T7.2: teto de horários por contato (paridade com MonitorController) ──────
+
+describe('MonitorService.updateExternalConfig — T7.2 teto de horários por contato', () => {
+  beforeEach(() => {
+    process.env[TMS_TENANT_ID_ENV] = TMS_TENANT_ID;
+  });
+  afterEach(() => {
+    delete process.env[TMS_TENANT_ID_ENV];
+  });
+
+  it('contato com 4 horários (> maxContactTimes) → 400 com mensagem clara, ANTES de salvar', async () => {
+    const { svc, prisma } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: null },
+    });
+    const input = {
+      contacts: [
+        {
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [
+            { hour: 7, minute: 0 },
+            { hour: 12, minute: 0 },
+            { hour: 18, minute: 0 },
+            { hour: 20, minute: 0 },
+          ],
+          sendDays: [1, 2, 3, 4, 5],
+        },
+      ],
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow(BadRequestException);
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow(/no máximo 3 horário/i);
+    // Nunca chega a salvar — a validação corta antes do upsert.
+    expect(prisma.tenantNotificationConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('contato com exatamente 3 horários (teto) → OK', async () => {
+    const { svc } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: null },
+    });
+    const input = {
+      contacts: [
+        {
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [
+            { hour: 7, minute: 0 },
+            { hour: 12, minute: 0 },
+            { hour: 18, minute: 0 },
+          ],
+          sendDays: [1, 2, 3, 4, 5],
+        },
+      ],
+    };
+    await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).resolves.not.toThrow();
+  });
+});
+
+// T8-FIX (2026-07-16): bug real de teste manual — editar um contato PELO TMS
+// (este proxy) sem reenviar closingReport/cashView estava resetando os dois pra
+// 'off', porque sanitizeContacts tratava ausente sempre como 'off'. Corrigido em
+// contact-recipient.types.ts (resolveOptionalEnum) — teste aqui cobre o caminho
+// real onde o bug foi encontrado (updateExternalConfig), não só a função pura.
+describe('MonitorService.updateExternalConfig — T8-FIX preserva closingReport/cashView em edição parcial', () => {
+  beforeEach(() => {
+    process.env[TMS_TENANT_ID_ENV] = TMS_TENANT_ID;
+  });
+  afterEach(() => {
+    delete process.env[TMS_TENANT_ID_ENV];
+  });
+
+  it('editar um contato pelo TMS sem reenviar closingReport/cashView preserva o valor salvo', async () => {
+    const existingContacts = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'biweekly',
+        cashView: 'lastSlot',
+      },
+    ];
+    const { svc, prisma } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: existingContacts },
+    });
+    // TMS reenvia o contato só pra mudar o horário — não manda closingReport/cashView.
+    const input = {
+      contacts: [
+        {
+          id: 'c1',
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [{ hour: 9, minute: 0 }],
+          sendDays: [1, 2, 3, 4, 5],
+        },
+      ],
+    };
+    await svc.updateExternalConfig(TMS_TENANT_ID, input);
+
+    const saved = prisma.tenantNotificationConfig.upsert.mock.calls[0][0].update.contacts[0];
+    expect(saved.closingReport).toBe('biweekly'); // preservado, não resetou pra 'off'
+    expect(saved.cashView).toBe('lastSlot');
+    expect(saved.sendTimes).toEqual([{ hour: 9, minute: 0 }]); // a mudança pedida foi aplicada normalmente
+  });
+
+  it('editar com closingReport/cashView="off" EXPLÍCITO desliga de verdade', async () => {
+    const existingContacts = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'biweekly',
+        cashView: 'lastSlot',
+      },
+    ];
+    const { svc, prisma } = makeExternalService({
+      planLimit: { plan: 'essencial', monitorExtraNumbers: 0 },
+      config: { monitorOverride: false, sectorConfig: null, notificationPhone: null, contacts: existingContacts },
+    });
+    const input = {
+      contacts: [
+        {
+          id: 'c1',
+          whatsapp: '5511999990001',
+          emails: [],
+          sectors: ['fiscal'],
+          sendTimes: [{ hour: 8, minute: 0 }],
+          sendDays: [1, 2, 3, 4, 5],
+          closingReport: 'off',
+          cashView: 'off',
+        },
+      ],
+    };
+    await svc.updateExternalConfig(TMS_TENANT_ID, input);
+
+    const saved = prisma.tenantNotificationConfig.upsert.mock.calls[0][0].update.contacts[0];
+    expect(saved.closingReport).toBe('off');
+    expect(saved.cashView).toBe('off');
+  });
+});
