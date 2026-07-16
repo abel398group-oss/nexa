@@ -480,7 +480,20 @@ export function MonitorConfigPage() {
           : {}),
         // T6: só envia contatos que tenham pelo menos 1 canal e 1 setor — evita
         // mandar rascunhos inválidos que o backend descartaria silenciosamente.
-        contacts: contacts.filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0),
+        // BUGFIX (2026-07): monta só os campos que o DTO conhece — `contacts` no
+        // estado local carrega `lastDigestDate` vindo do GET (usado pro catch-up
+        // do scheduler) e o backend rejeita esse campo extra (forbidNonWhitelisted).
+        // Ver nota igual em persistContacts().
+        contacts: contacts
+          .filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0)
+          .map((c) => ({
+            id: c.id,
+            whatsapp: c.whatsapp,
+            emails: c.emails,
+            sectors: c.sectors,
+            sendTimes: c.sendTimes,
+            sendDays: c.sendDays,
+          })),
       };
       await api.put('/monitor/config', payload);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });
@@ -723,10 +736,27 @@ export function MonitorConfigPage() {
    * contato "sumia" ao atualizar a página porque nunca tinha sido persistido.
    * Agora cada operação grava direto no backend (payload mínimo, só `contacts`,
    * sem reenviar sectorConfig — ver nota em saveConfig).
+   *
+   * BUGFIX (2026-07): o GET /monitor/config devolve `lastDigestDate` nos contatos
+   * que já passaram por um envio real (o backend usa esse campo pro catch-up do
+   * scheduler). Esse campo não existe no ContactRecipientDto do backend — reenviar
+   * ele batia no forbidNonWhitelisted do ValidationPipe e dava 400 ("property
+   * lastDigestDate should not exist") em QUALQUER save, mesmo de um contato
+   * diferente do que tinha o campo, porque a lista inteira é reenviada junto.
+   * Por isso montamos aqui explicitamente só os campos que o DTO conhece.
    */
   async function persistContacts(next: ContactRecipient[]): Promise<boolean> {
     try {
-      const filtered = next.filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0);
+      const filtered = next
+        .filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0)
+        .map((c) => ({
+          id: c.id,
+          whatsapp: c.whatsapp,
+          emails: c.emails,
+          sectors: c.sectors,
+          sendTimes: c.sendTimes,
+          sendDays: c.sendDays,
+        }));
       await api.put('/monitor/config', { contacts: filtered });
       setContacts(next);
       qc.invalidateQueries({ queryKey: ['monitor-config'] });

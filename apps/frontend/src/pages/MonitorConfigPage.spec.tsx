@@ -459,8 +459,11 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     await screen.findByText('Contatos com horário próprio');
 
     fireEvent.click(screen.getByRole('button', { name: /novo whatsapp/i }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Novo WhatsApp')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    // Escopado ao dialog — o botão "+ Novo WhatsApp" fora do modal também contém
+    // um nó de texto "Novo WhatsApp", então um getByText global bate nos dois.
+    expect(within(dialog).getByText('Novo WhatsApp')).toBeInTheDocument();
     // Módulo de WhatsApp não mostra o campo de e-mail.
     expect(screen.queryByLabelText('Adicionar e-mail')).not.toBeInTheDocument();
 
@@ -481,8 +484,11 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
     await screen.findByText('Contatos com horário próprio');
 
     fireEvent.click(screen.getByRole('button', { name: /novo e-mail/i }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Novo e-mail')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    // Escopado ao dialog — o botão "+ Novo e-mail" fora do modal também contém
+    // um nó de texto "Novo e-mail", então um getByText global bate nos dois.
+    expect(within(dialog).getByText('Novo e-mail')).toBeInTheDocument();
     // Módulo de e-mail não mostra o campo de WhatsApp.
     expect(screen.queryByLabelText('WhatsApp do contato')).not.toBeInTheDocument();
 
@@ -600,9 +606,12 @@ describe('MonitorConfigPage — T6 Contatos com horário próprio', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar fiscal@empresa\.com/i }));
 
-    expect(screen.getByText('Editar e-mail')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Editar e-mail')).toBeInTheDocument();
     expect(screen.queryByLabelText('WhatsApp do contato')).not.toBeInTheDocument();
-    expect(screen.getByText('fiscal@empresa.com')).toBeInTheDocument();
+    // Escopado ao dialog — a linha da lista por trás do modal também mostra
+    // "fiscal@empresa.com", então um getByText global bate nos dois (lista + tag do modal).
+    expect(within(dialog).getByText('fiscal@empresa.com')).toBeInTheDocument();
   });
 
   // TEMP (teste do Abel) — minuto voltou temporariamente; tirar o skip acima quando remover.
