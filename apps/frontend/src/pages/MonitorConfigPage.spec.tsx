@@ -115,6 +115,17 @@ function allSelects() {
   return screen.getAllByRole('combobox');
 }
 
+/** Mocks GET /monitor/config with the given contacts + config overrides. */
+function mockConfigWithContacts(contacts: unknown[], overrides: Record<string, unknown> = {}) {
+  mockGet.mockImplementation((url: string) => {
+    if (url === '/monitor/config') return Promise.resolve({ data: makeConfig({ contacts, ...overrides }) });
+    if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
+    if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
+    if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
+    return Promise.resolve({ data: {} });
+  });
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -373,16 +384,6 @@ describe.skip('MonitorConfigPage — UX limite WA (N3.4)', () => {
 // ── T9-WIZARD: contato unificado, wizard de 3 passos (2026-07-17) ───────────
 
 describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
-  function mockConfigWithContacts(contacts: unknown[], overrides: Record<string, unknown> = {}) {
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/monitor/config') return Promise.resolve({ data: makeConfig({ contacts, ...overrides }) });
-      if (url === '/monitor/prefill') return Promise.resolve({ data: { email: null, phone: null } });
-      if (url === '/monitor/alerts') return Promise.resolve({ data: [] });
-      if (url.startsWith('/monitor/notification-logs')) return Promise.resolve({ data: [] });
-      return Promise.resolve({ data: {} });
-    });
-  }
-
   /** Passo 1→2 ou 2→3 — só existe um botão "Avançar" por vez. */
   function advance() {
     fireEvent.click(screen.getByRole('button', { name: 'Avançar' }));
