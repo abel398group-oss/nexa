@@ -180,6 +180,10 @@ export function RecipientTagsInput({
                 setError(null);
               }}
               onKeyDown={onKeyDown}
+              // Inline mode has no "+ Adicionar" button: commit pending text on blur so
+              // leaving the field (e.g. clicking "Avançar" in the wizard) doesn't silently
+              // drop a typed-but-not-Entered contact. addContact no-ops on empty/invalid.
+              onBlur={addContact}
               placeholder={value.length === 0 ? defaultPlaceholder : '+ adicionar...'}
               disabled={disabled}
               className="min-w-[140px] flex-1 bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/40"
