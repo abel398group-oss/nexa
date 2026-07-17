@@ -8,7 +8,7 @@
  * sempre vira 'off'; ausente em contato NOVO (sem `prior`) também vira 'off'.
  */
 import { describe, it, expect } from 'vitest';
-import { sanitizeContacts, type ContactRecipient } from './contact-recipient.types';
+import { sanitizeContacts, cashViewIsOn, type ContactRecipient } from './contact-recipient.types';
 
 function makeExisting(overrides?: Partial<ContactRecipient>): ContactRecipient {
   return {
@@ -86,7 +86,7 @@ describe('sanitizeContacts — closingReport/cashView (T8-FIX)', () => {
         sectors: ['fiscal'],
         sendTimes: [{ hour: 8, minute: 0 }],
         sendDays: [1, 2, 3, 4, 5],
-        closingReport: 'weekly', // inválido
+        closingReport: 'yearly', // inválido
         cashView: 'always', // inválido
       },
     ];
@@ -126,5 +126,66 @@ describe('sanitizeContacts — closingReport/cashView (T8-FIX)', () => {
     const [result] = sanitizeContacts(input, existing);
     expect(result.closingReport).toBe('off');
     expect(result.cashView).toBe('off');
+  });
+});
+
+describe('T9-ADENDO (2026-07-17) — cashView on/off + compat lastSlot, closingReport weekly', () => {
+  it("cashViewIsOn: true para 'on' e para o alias legado 'lastSlot'; false para 'off'/undefined", () => {
+    expect(cashViewIsOn('on')).toBe(true);
+    expect(cashViewIsOn('lastSlot')).toBe(true);
+    expect(cashViewIsOn('off')).toBe(false);
+    expect(cashViewIsOn(undefined)).toBe(false);
+  });
+
+  it("edição envia 'lastSlot' explicitamente → sanitize normaliza para 'on' (higiene de dados daqui pra frente)", () => {
+    const existing = [makeExisting({ cashView: 'off' })];
+    const input = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        cashView: 'lastSlot',
+      },
+    ];
+    const [result] = sanitizeContacts(input, existing);
+    expect(result.cashView).toBe('on');
+  });
+
+  it("contato antigo com prior 'lastSlot' preservado (edição sem reenviar o campo) continua legível via cashViewIsOn", () => {
+    const existing = [makeExisting({ cashView: 'lastSlot' })];
+    const input = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 9, minute: 0 }], // não reenvia cashView
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ];
+    const [result] = sanitizeContacts(input, existing);
+    // prior NÃO é normalizado — continua 'lastSlot', mas cashViewIsOn trata como 'on'.
+    expect(result.cashView).toBe('lastSlot');
+    expect(cashViewIsOn(result.cashView)).toBe(true);
+  });
+
+  it("closingReport aceita 'weekly' como valor explícito válido", () => {
+    const existing = [makeExisting({ closingReport: 'off' })];
+    const input = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'weekly',
+      },
+    ];
+    const [result] = sanitizeContacts(input, existing);
+    expect(result.closingReport).toBe('weekly');
   });
 });

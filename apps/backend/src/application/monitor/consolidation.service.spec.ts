@@ -865,7 +865,29 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     invoicedMonth: { amount: 148200 },
   };
 
-  it('T8.6: bloco "💰 SEU CAIXA" aparece só no ÚLTIMO horário do dia do contato', async () => {
+  it('T9-ADENDO: bloco "💰 SEU CAIXA" aparece em TODOS os horários do dia do contato (não só no último)', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK);
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }, { hour: 18, minute: 0 }],
+      cashView: 'on',
+    });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
+    expect(msgFirst).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msgFirst).toContain('✅ Sobra:');
+
+    await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
+    const [, , msgLast] = notification.notifyPhone.mock.calls[1];
+    expect(msgLast).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msgLast).toContain('✅ Sobra:');
+  });
+
+  it("T9-ADENDO: compat — cashView='lastSlot' (alias legado) continua ligando o bloco em TODOS os horários", async () => {
     const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
     const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK);
     const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
@@ -878,12 +900,59 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
-    expect(msgFirst).not.toContain('SEU CAIXA');
+    expect(msgFirst).toContain('💰 *SEU CAIXA — próximos 15 dias*');
 
     await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
     const [, , msgLast] = notification.notifyPhone.mock.calls[1];
     expect(msgLast).toContain('💰 *SEU CAIXA — próximos 15 dias*');
-    expect(msgLast).toContain('✅ Sobra:');
+  });
+
+  it('T9-ADENDO: "Faturado hoje"/"Gasto hoje" aparecem quando o TMS manda invoicedToday/paidToday', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue({
+      ...CASH_VIEW_OK,
+      invoicedToday: { amount: 8400, count: 3 },
+      paidToday: { amount: 5100, count: 2 },
+    });
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'on' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('🧾 Faturado hoje: R$ 8.400,00 (3 faturas)');
+    expect(msg).toContain('💸 Gasto hoje: R$ 5.100,00 (2 pagamentos)');
+  });
+
+  it('T9-ADENDO: TMS antigo sem invoicedToday/paidToday → linhas do dia omitidas, resto do bloco intacto', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue(CASH_VIEW_OK); // sem invoicedToday/paidToday
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'on' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).not.toContain('Faturado hoje');
+    expect(msg).not.toContain('Gasto hoje');
+    expect(msg).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msg).toContain('✅ Sobra:');
+  });
+
+  it('T9-ADENDO: apenas invoicedToday presente (sem paidToday) → só a linha de faturado aparece', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const getCashView = vi.fn().mockResolvedValue({
+      ...CASH_VIEW_OK,
+      invoicedToday: { amount: 1200, count: 1 },
+    });
+    const { svc, notification } = makeService({ prismaFindMany: findMany, getCashView });
+    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }], cashView: 'on' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    const [, , msg] = notification.notifyPhone.mock.calls[0];
+    expect(msg).toContain('🧾 Faturado hoje: R$ 1.200,00 (1 fatura)');
+    expect(msg).not.toContain('Gasto hoje');
   });
 
   it('T8.6: cashView ausente/off → bloco nunca aparece, mesmo no último horário', async () => {

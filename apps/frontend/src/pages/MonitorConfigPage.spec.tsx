@@ -566,15 +566,17 @@ describe('MonitorConfigPage — T9 Contato unificado', () => {
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
     fireEvent.click(screen.getByRole('button', { name: /^📄 Fiscal$/ }));
     fireEvent.change(screen.getByLabelText('Resumo de fechamento'), { target: { value: 'biweekly' } });
-    fireEvent.change(screen.getByLabelText('Visão do caixa'), { target: { value: 'lastSlot' } });
+    fireEvent.change(screen.getByLabelText('Visão do caixa'), { target: { value: 'on' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }));
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     const [, payload] = mockPut.mock.calls[0];
-    expect(payload.contacts[0]).toMatchObject({ closingReport: 'biweekly', cashView: 'lastSlot' });
+    expect(payload.contacts[0]).toMatchObject({ closingReport: 'biweekly', cashView: 'on' });
   });
 
-  it('editar contato existente re-hidrata "Resumo de fechamento" e "Visão do caixa" salvos', async () => {
+  // T9-ADENDO (2026-07-17): seletor só tem 'off'/'on' — legado 'lastSlot' é
+  // normalizado para 'on' ao popular o modal de edição (ver `openEditContact`).
+  it('editar contato existente re-hidrata "Resumo de fechamento" e "Visão do caixa" salvos (compat lastSlot→on)', async () => {
     mockConfigWithContacts([
       {
         id: 'c1',
@@ -593,7 +595,29 @@ describe('MonitorConfigPage — T9 Contato unificado', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
 
     expect(screen.getByLabelText('Resumo de fechamento')).toHaveValue('biweekly');
-    expect(screen.getByLabelText('Visão do caixa')).toHaveValue('lastSlot');
+    expect(screen.getByLabelText('Visão do caixa')).toHaveValue('on');
+  });
+
+  it('editar contato existente com "Resumo de fechamento" = weekly re-hidrata corretamente', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+        closingReport: 'weekly',
+        cashView: 'on',
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
+
+    expect(screen.getByLabelText('Resumo de fechamento')).toHaveValue('weekly');
+    expect(screen.getByLabelText('Visão do caixa')).toHaveValue('on');
   });
 
   // (a) contato antigo sem `delivery` → comportamento idêntico ao atual (derivação em runtime).
@@ -834,7 +858,10 @@ describe('MonitorConfigPage — T9 Contato unificado', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
-    expect(screen.getByText('so-email@empresa.com')).toBeInTheDocument();
+    // Renderizado como "✉️ so-email@empresa.com" (ver MonitorConfigPage.tsx:1062)
+    // — exact match falha por causa do emoji, mesmo padrão dos outros testes
+    // deste arquivo que checam e-mail na tabela (ex.: linha "(g) carrega...").
+    expect(screen.getByText(/so-email@empresa\.com/)).toBeInTheDocument();
   });
 
   // (d) UI: horário fora da janela mostra aviso não-bloqueante.
@@ -855,7 +882,11 @@ describe('MonitorConfigPage — T9 Contato unificado', () => {
     renderPage();
     await screen.findByText('Contatos');
 
-    expect(await screen.findByText(/fora da janela/i)).toBeInTheDocument();
+    // Regex ancorado no ⚠️: `/fora da janela/i` batia também no label estático
+    // "Crítico fora da janela:" do seletor de config geral — ambíguo, quebrava
+    // com "Found multiple elements". O aviso de fato (linha do contato na lista)
+    // sempre vem prefixado com o emoji ⚠️ (ver MonitorConfigPage.tsx:1069-1071).
+    expect(await screen.findByText(/⚠️ fora da janela/i)).toBeInTheDocument();
   });
 
   it('config da janela de envio carrega e salva sendWindowStart/sendWindowEnd/criticalOutsideWindow', async () => {

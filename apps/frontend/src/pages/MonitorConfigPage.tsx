@@ -55,10 +55,17 @@ interface ContactSendTime {
   minute: number;
 }
 
-/** T8: resumo de fechamento — 'off' (default) | 'biweekly' (dias 16 e 1º) | 'monthly' (só dia 1º). */
-type ClosingReportKind = 'off' | 'biweekly' | 'monthly';
-/** T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia — 'off' (default) | 'lastSlot'. */
-type CashViewMode = 'off' | 'lastSlot';
+/**
+ * T8/T9-ADENDO: resumo de fechamento — 'off' (default) | 'weekly' (toda
+ * segunda) | 'biweekly' (dias 16 e 1º) | 'monthly' (só dia 1º).
+ */
+type ClosingReportKind = 'off' | 'weekly' | 'biweekly' | 'monthly';
+/**
+ * T9-ADENDO (2026-07-17): anexa o bloco "💰 SEU CAIXA" em TODOS os horários
+ * do dia — 'off' (default) | 'on'. `'lastSlot'` é alias legado mantido só
+ * por compat com dados antigos (nunca mais escrito por esta UI).
+ */
+type CashViewMode = 'off' | 'on' | 'lastSlot';
 
 /** T9: flags de canal — usado nas 3 linhas da matriz de entrega (digest/closing/cash). */
 interface ChannelFlags {
@@ -94,13 +101,23 @@ const CONTACT_NAME_MAX_LENGTH = 60;
 
 const CLOSING_REPORT_OPTIONS: { value: ClosingReportKind; label: string }[] = [
   { value: 'off', label: 'Desligado' },
+  { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Quinzenal' },
   { value: 'monthly', label: 'Mensal' },
 ];
 const CASH_VIEW_OPTIONS: { value: CashViewMode; label: string }[] = [
   { value: 'off', label: 'Desligado' },
-  { value: 'lastSlot', label: 'No último horário' },
+  { value: 'on', label: 'Ligado' },
 ];
+
+/**
+ * T9-ADENDO (2026-07-17): único ponto de verificação "caixa está ligado" —
+ * espelha `cashViewIsOn` do backend. 'lastSlot' é o alias legado, tratado
+ * igual a 'on'. Nunca comparar `cashView === 'on'` direto fora daqui.
+ */
+function cashViewIsOn(mode: CashViewMode | undefined): boolean {
+  return mode === 'on' || mode === 'lastSlot';
+}
 
 /** T9: as 3 linhas da matriz de entrega, na ordem em que aparecem no modal. */
 const DELIVERY_ROWS: { key: keyof DeliveryMatrix; label: string }[] = [
@@ -578,7 +595,10 @@ export function MonitorConfigPage() {
       sendDays: c.sendDays?.length ? c.sendDays : WEEKDAYS,
       // T8: contato EXISTENTE preserva o que já tinha — 'off' se nunca configurado.
       closingReport: c.closingReport ?? 'off',
-      cashView: c.cashView ?? 'off',
+      // T9-ADENDO: o seletor só tem 'off'/'on' — normaliza o alias legado
+      // 'lastSlot' pra 'on' na hora de popular o modal (o dado salvo em si só
+      // é normalizado no backend quando o usuário reenviar explicitamente).
+      cashView: cashViewIsOn(c.cashView) ? 'on' : 'off',
       // T9: preserva a matriz explícita se já existir; senão deriva do compat
       // (mesmo princípio do backend `effectiveDelivery`, só que aqui é só pra
       // pré-popular o modal — o backend recalcula/força ao salvar de qualquer forma).
@@ -588,7 +608,7 @@ export function MonitorConfigPage() {
           whatsapp: hasWa && c.closingReport !== undefined && c.closingReport !== 'off',
           email: hasEmail && c.closingReport !== undefined && c.closingReport !== 'off',
         },
-        cash: { whatsapp: hasWa && c.cashView === 'lastSlot', email: hasEmail && c.cashView === 'lastSlot' },
+        cash: { whatsapp: hasWa && cashViewIsOn(c.cashView), email: hasEmail && cashViewIsOn(c.cashView) },
       },
       error: null,
     });
@@ -994,7 +1014,7 @@ export function MonitorConfigPage() {
                       whatsapp: hasWa && !!c.closingReport && c.closingReport !== 'off',
                       email: hasEmail && !!c.closingReport && c.closingReport !== 'off',
                     },
-                    cash: { whatsapp: hasWa && c.cashView === 'lastSlot', email: hasEmail && c.cashView === 'lastSlot' },
+                    cash: { whatsapp: hasWa && cashViewIsOn(c.cashView), email: hasEmail && cashViewIsOn(c.cashView) },
                   };
                   const parts: string[] = [];
                   if (d.digest.whatsapp || d.digest.email) parts.push('Pendências');
@@ -1443,11 +1463,11 @@ export function MonitorConfigPage() {
                 options={CLOSING_REPORT_OPTIONS}
               />
               <p className="mt-1.5 text-[11px] text-base-content/35">
-                Quinzenal: dias 16 e 1º às 07h · Mensal: dia 1º às 07h
+                Semanal: toda segunda às 07h · Quinzenal: dias 16 e 1º às 07h · Mensal: dia 1º às 07h
               </p>
             </div>
 
-            {/* T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia deste contato. */}
+            {/* T9-ADENDO (2026-07-17): anexa o bloco "💰 SEU CAIXA" a TODOS os horários do dia deste contato. */}
             <div className="border-t border-base-200 pt-6">
               <p className="text-sm font-medium text-base-content/70 mb-1.5">💰 Visão do caixa</p>
               <SelectField
@@ -1457,7 +1477,7 @@ export function MonitorConfigPage() {
                 options={CASH_VIEW_OPTIONS}
               />
               <p className="mt-1.5 text-[11px] text-base-content/35">
-                Anexa o resumo financeiro à última mensagem do dia deste contato
+                Anexa o resumo financeiro a todas as mensagens de pendências do dia deste contato
               </p>
             </div>
 

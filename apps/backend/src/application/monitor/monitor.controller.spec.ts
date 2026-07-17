@@ -425,13 +425,25 @@ describe('MonitorController — T8.1 closingReport/cashView no contato', () => {
   }
 
   it('aceita closingReport/cashView válidos e persiste como enviado', async () => {
-    const saved = await saveAndGetContact(baseDto({ closingReport: 'biweekly', cashView: 'lastSlot' }));
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'biweekly', cashView: 'on' }));
     expect(saved.closingReport).toBe('biweekly');
-    expect(saved.cashView).toBe('lastSlot');
+    expect(saved.cashView).toBe('on');
+  });
+
+  // T9-ADENDO (2026-07-17): compat — 'lastSlot' explícito no payload é normalizado
+  // para o valor canônico 'on' pelo sanitizeContacts (ver contact-recipient.types.ts).
+  it("compat: 'lastSlot' explícito no payload é normalizado para 'on'", async () => {
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'biweekly', cashView: 'lastSlot' }));
+    expect(saved.cashView).toBe('on');
+  });
+
+  it("aceita closingReport='weekly' (T9-ADENDO) e persiste como enviado", async () => {
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'weekly', cashView: 'off' }));
+    expect(saved.closingReport).toBe('weekly');
   });
 
   it('valor fora do enum vira "off" (sanitizeContacts é a rede de segurança, não só o DTO)', async () => {
-    const saved = await saveAndGetContact(baseDto({ closingReport: 'weekly', cashView: 'always' }));
+    const saved = await saveAndGetContact(baseDto({ closingReport: 'yearly', cashView: 'always' }));
     expect(saved.closingReport).toBe('off');
     expect(saved.cashView).toBe('off');
   });

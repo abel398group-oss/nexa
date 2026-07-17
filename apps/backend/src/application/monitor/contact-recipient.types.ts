@@ -33,13 +33,32 @@ export const DEFAULT_SEND_TIMES: ContactSendTime[] = [
 
 export const DEFAULT_SEND_DAYS = [1, 2, 3, 4, 5]; // dias úteis
 
-/** T8: opção de resumo de fechamento por contato. Ausente/valor inválido = 'off'. */
-export type ClosingReportKind = 'off' | 'biweekly' | 'monthly';
-export const CLOSING_REPORT_KINDS: ClosingReportKind[] = ['off', 'biweekly', 'monthly'];
+/**
+ * T8/T9-ADENDO (2026-07-17): opção de resumo de fechamento por contato.
+ * Ausente/valor inválido = 'off'. 'weekly' (adendo): toda segunda-feira 07h,
+ * período = semana anterior (seg–dom) — ver ClosingReportService.runDailyLocked.
+ */
+export type ClosingReportKind = 'off' | 'weekly' | 'biweekly' | 'monthly';
+export const CLOSING_REPORT_KINDS: ClosingReportKind[] = ['off', 'weekly', 'biweekly', 'monthly'];
 
-/** T8.6: opção de anexar o bloco "💰 SEU CAIXA" ao último digest do dia. Ausente/valor inválido = 'off'. */
-export type CashViewMode = 'off' | 'lastSlot';
-export const CASH_VIEW_MODES: CashViewMode[] = ['off', 'lastSlot'];
+/**
+ * T8.6/T9-ADENDO (2026-07-17): opção de anexar o bloco "💰 SEU CAIXA" às
+ * mensagens de pendências do contato. Ausente/valor inválido = 'off'.
+ *
+ * Adendo 2026-07-17: antes só entrava no ÚLTIMO horário do dia ('lastSlot');
+ * agora entra em TODOS os horários quando ligado — o valor canônico passou a
+ * ser 'on'. 'lastSlot' continua sendo um alias de entrada/leitura por
+ * compatibilidade (contatos já salvos antes do adendo, sem migração de dado) —
+ * sempre tratar como equivalente a 'on' via `cashViewIsOn()`, nunca comparar
+ * `cashView === 'lastSlot'` diretamente em código novo.
+ */
+export type CashViewMode = 'off' | 'on' | 'lastSlot';
+export const CASH_VIEW_MODES: CashViewMode[] = ['off', 'on', 'lastSlot'];
+
+/** T9-ADENDO: true para 'on' OU o alias legado 'lastSlot' — único ponto de checagem. */
+export function cashViewIsOn(mode: CashViewMode | undefined): boolean {
+  return mode === 'on' || mode === 'lastSlot';
+}
 
 /** T9 (2026-07-17): nome de exibição do contato — máx. 60 caracteres. */
 export const CONTACT_NAME_MAX_LENGTH = 60;
@@ -93,9 +112,10 @@ export interface ContactRecipient {
    */
   lastDigestDate?: Record<string, string>;
   /**
-   * T8 (2026-07-16): resumo de fechamento quinzenal/mensal (receita × custo ×
-   * margem, vendas e caixa) — 'off' (default) | 'biweekly' (dias 16 e 1º às 07h)
-   * | 'monthly' (só dia 1º às 07h). Independente dos `sendTimes` de pendências
+   * T8/T9-ADENDO (2026-07-17): resumo de fechamento (receita × custo × margem,
+   * vendas e caixa) — 'off' (default) | 'weekly' (toda segunda às 07h, semana
+   * anterior) | 'biweekly' (dias 16 e 1º às 07h) | 'monthly' (só dia 1º às
+   * 07h). Independente dos `sendTimes` de pendências
    * (T7). Contato NOVO sem o campo = 'off' — ninguém nasce recebendo sem
    * escolher. Contato EXISTENTE editado sem reenviar o campo PRESERVA o valor
    * anterior (não reseta) — só um valor enviado fora do enum vira 'off' (ver
@@ -110,9 +130,11 @@ export interface ContactRecipient {
    */
   closingReport?: ClosingReportKind;
   /**
-   * T8.6 (2026-07-16): anexa o bloco "💰 SEU CAIXA" ao digest de pendências (T7)
-   * só no ÚLTIMO horário do dia deste contato. 'off' (default) | 'lastSlot'.
-   * Mesma semântica de preservação de `closingReport` acima: contato novo sem o
+   * T8.6/T9-ADENDO (2026-07-17): anexa o bloco "💰 SEU CAIXA" ao digest de
+   * pendências (T7) em TODOS os horários do dia deste contato quando ligado.
+   * 'off' (default) | 'on'. 'lastSlot' é aceito na leitura como alias legado
+   * (ver `cashViewIsOn`), mas nunca mais escrito por um save novo. Mesma
+   * semântica de preservação de `closingReport` acima: contato novo sem o
    * campo = 'off'; contato existente editado sem reenviar o campo preserva o
    * valor anterior (ver `sanitizeContacts`/`resolveOptionalEnum`).
    */
@@ -145,7 +167,8 @@ export interface ContactRecipient {
  * migrar nada no banco —
  *   - digest:  true nos canais que o contato TEM (comportamento T7 atual);
  *   - closing: canais do contato SE `closingReport` != 'off'/ausente;
- *   - cash:    canais do contato SE `cashView` === 'lastSlot'.
+ *   - cash:    canais do contato SE `cashViewIsOn(cashView)` (T9-ADENDO: 'on'
+ *     ou o alias legado 'lastSlot').
  * Em ambos os casos, uma trava defensiva final zera qualquer canal que o
  * contato não tenha de fato (ex.: `delivery` salvo antes de remover o
  * WhatsApp do contato) — nunca confia cegamente no JSON persistido.
@@ -153,8 +176,8 @@ export interface ContactRecipient {
 export function effectiveDelivery(contact: ContactRecipient): DeliveryMatrix {
   const hasWa = !!contact.whatsapp?.trim();
   const hasEmail = Array.isArray(contact.emails) && contact.emails.length > 0;
-  const closingOn = contact.closingReport === 'biweekly' || contact.closingReport === 'monthly';
-  const cashOn = contact.cashView === 'lastSlot';
+  const closingOn = !!contact.closingReport && contact.closingReport !== 'off';
+  const cashOn = cashViewIsOn(contact.cashView);
 
   const base: DeliveryMatrix = contact.delivery ?? {
     digest: { whatsapp: hasWa, email: hasEmail },
@@ -256,7 +279,13 @@ export function sanitizeContacts(
       // T6. Só um valor PRESENTE mas fora do enum vira 'off'; contato NOVO (sem
       // `prior`) sem o campo também cai em 'off' (ninguém nasce ligado sem escolher).
       const closingReport = resolveOptionalEnum(c.closingReport, CLOSING_REPORT_KINDS, prior?.closingReport, 'off');
-      const cashView = resolveOptionalEnum(c.cashView, CASH_VIEW_MODES, prior?.cashView, 'off');
+      // T9-ADENDO: normaliza o alias legado 'lastSlot' -> 'on' quando enviado
+      // explicitamente — daqui pra frente qualquer save grava o valor canônico.
+      // `prior` NÃO é normalizado aqui (pode continuar 'lastSlot' de antes do
+      // adendo, sem migração) — `cashViewIsOn()` trata os dois como equivalentes
+      // em todo o resto do código, então preservá-lo como está é seguro.
+      const cashViewRaw = c.cashView === 'lastSlot' ? 'on' : c.cashView;
+      const cashView = resolveOptionalEnum(cashViewRaw, CASH_VIEW_MODES, prior?.cashView, 'off');
 
       // T9: matriz de entrega — ausente preserva a anterior (mesmo princípio dos
       // campos acima); presente é saneada (booleans + canal que o contato não

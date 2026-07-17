@@ -900,13 +900,14 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
   }
 
   // T8.2 — Fechamento quinzenal/mensal (Nexa scheduler, ClosingReportService).
-  // Endpoint: GET /nexa/proactivity/closing-report?tenantId=...&kind=biweekly|monthly&refDate=YYYY-MM-DD
-  // Contrato fixo — ver hipertms_v12/docs/features/automation/t8-fechamento-endpoint-2026-07.md.
+  // Endpoint: GET /nexa/proactivity/closing-report?tenantId=...&kind=weekly|biweekly|monthly&refDate=YYYY-MM-DD
+  // Contrato fixo — ver hipertms_v12/docs/features/automation/t8-fechamento-endpoint-2026-07.md
+  // (T9-ADENDO 2026-07-17 no doc do TMS: kind=weekly, refDate deve ser segunda-feira).
   // Erro/404/timeout → null + warn (NUNCA lança) — o scheduler trata null como
   // "não envia nada neste ciclo", permitindo deployar o Nexa antes do endpoint existir.
   async getClosingReport(
     externalTenantId: string,
-    kind: 'biweekly' | 'monthly',
+    kind: 'weekly' | 'biweekly' | 'monthly',
     refDate: string,
   ): Promise<TmsClosingReport | null> {
     if (!this.configured) {
@@ -1019,4 +1020,13 @@ export interface TmsCashView {
   overdueReceivable: { amount: number; count: number };
   unbilledCte: { amount: number; count: number };
   invoicedMonth: { amount: number };
+  /**
+   * T9-ADENDO (2026-07-17): resumo do DIA — campos ADICIONADOS ao contrato,
+   * opcionais. TMS antigo (sem o adendo) não manda — o Nexa omite as duas
+   * linhas correspondentes no bloco "💰 SEU CAIXA" (graceful degradation,
+   * nunca quebra). Ver hipertms_v12/docs/features/automation/
+   * t8-fechamento-endpoint-2026-07.md, ADENDO 2026-07-17, item B.
+   */
+  invoicedToday?: { amount: number; count: number };
+  paidToday?: { amount: number; count: number };
 }

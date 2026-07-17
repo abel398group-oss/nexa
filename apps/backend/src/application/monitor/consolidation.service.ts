@@ -46,6 +46,7 @@ import {
   digestSlotKey,
   unifiedDigestSlotKey,
   effectiveDelivery,
+  cashViewIsOn,
   type ContactRecipient,
   type ContactSendTime,
 } from './contact-recipient.types';
@@ -643,13 +644,15 @@ export class ConsolidationService {
           });
         }
 
-        // T8.6: bloco "💰 SEU CAIXA" só no ÚLTIMO horário do dia do contato, e só
-        // quando ligado (cashView='lastSlot'). NÃO cria um novo gatilho de envio —
-        // só decora um digest que já ia sair (não mexe no fluxo de pendências/T7).
-        const cashView =
-          contact.cashView === 'lastSlot' && this.isLastSlotForContact(contact, t)
-            ? await this.getCashViewForTenant(tenantId, now)
-            : null;
+        // T9-ADENDO (2026-07-17): bloco "💰 SEU CAIXA" entra em TODOS os horários
+        // do contato quando ligado (`cashViewIsOn` — 'on' ou o alias legado
+        // 'lastSlot'), não só no último (supera o T8.6 original). NÃO cria um
+        // novo gatilho de envio — só decora um digest que já ia sair (não mexe
+        // no fluxo de pendências/T7). Cache de 1 chamada TMS/tenant/dia continua
+        // valendo (getCashViewForTenant), mesmo com múltiplos slots no dia.
+        const cashView = cashViewIsOn(contact.cashView)
+          ? await this.getCashViewForTenant(tenantId, now)
+          : null;
 
         // T9: matriz efetiva de entrega — único ponto de derivação (nunca
         // reimplementar, ver `effectiveDelivery`). Gate por canal: WhatsApp e
@@ -872,8 +875,24 @@ export class ConsolidationService {
         ? `✅ Sobra: ${formatBRL(balance)}`
         : `🔴 Falta: ${formatBRL(Math.abs(balance))}`;
 
+    // T9-ADENDO (2026-07-17) item B: resumo do DIA, logo após o cabeçalho,
+    // antes de "Entra/Sai". Campos opcionais no contrato — TMS antigo não
+    // manda, cada linha é omitida independentemente (nunca quebra).
+    const todayLines: string[] = [];
+    if (cash.invoicedToday) {
+      todayLines.push(
+        `🧾 Faturado hoje: ${formatBRL(cash.invoicedToday.amount)} (${cash.invoicedToday.count} fatura${cash.invoicedToday.count !== 1 ? 's' : ''})`,
+      );
+    }
+    if (cash.paidToday) {
+      todayLines.push(
+        `💸 Gasto hoje: ${formatBRL(cash.paidToday.amount)} (${cash.paidToday.count} pagamento${cash.paidToday.count !== 1 ? 's' : ''})`,
+      );
+    }
+
     return [
       '💰 *SEU CAIXA — próximos 15 dias*',
+      ...todayLines,
       `⬇️ Entra: ${formatBRL(cash.inflow15d.amount)} (${cash.inflow15d.count} conta${cash.inflow15d.count !== 1 ? 's' : ''} a receber)`,
       `⬆️ Sai: ${formatBRL(cash.outflow15d.amount)} (${cash.outflow15d.count} conta${cash.outflow15d.count !== 1 ? 's' : ''} a pagar)`,
       '━━━━━━━━━━━━━━━',
@@ -894,6 +913,21 @@ export class ConsolidationService {
         : `🔴 Falta: ${formatBRL(Math.abs(balance))}`;
     const cashAccent = '#10b981';
 
+    // T9-ADENDO (2026-07-17) item B: resumo do DIA, logo após o cabeçalho,
+    // antes de "Entra/Sai". Cada linha omitida independentemente se o campo
+    // não vier do TMS (graceful degradation, nunca quebra).
+    const todayRowsHtml: string[] = [];
+    if (cash.invoicedToday) {
+      todayRowsHtml.push(
+        `<tr><td style="padding:2px 0">🧾 Faturado hoje: ${formatBRL(cash.invoicedToday.amount)} (${cash.invoicedToday.count} fatura${cash.invoicedToday.count !== 1 ? 's' : ''})</td></tr>`,
+      );
+    }
+    if (cash.paidToday) {
+      todayRowsHtml.push(
+        `<tr><td style="padding:2px 0">💸 Gasto hoje: ${formatBRL(cash.paidToday.amount)} (${cash.paidToday.count} pagamento${cash.paidToday.count !== 1 ? 's' : ''})</td></tr>`,
+      );
+    }
+
     return `
     <!-- T8.6: Visão do caixa -->
     <tr>
@@ -902,6 +936,7 @@ export class ConsolidationService {
           💰 SEU CAIXA &nbsp;<span style="color:#71717a;font-weight:400;font-size:12px">(próximos 15 dias)</span>
         </p>
         <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#3f3f46">
+          ${todayRowsHtml.join('\n          ')}
           <tr><td style="padding:2px 0">⬇️ Entra: ${formatBRL(cash.inflow15d.amount)} (${cash.inflow15d.count} conta${cash.inflow15d.count !== 1 ? 's' : ''} a receber)</td></tr>
           <tr><td style="padding:2px 0">⬆️ Sai: ${formatBRL(cash.outflow15d.amount)} (${cash.outflow15d.count} conta${cash.outflow15d.count !== 1 ? 's' : ''} a pagar)</td></tr>
           <tr><td style="padding:4px 0;font-weight:700">${balanceLine}</td></tr>
@@ -1196,17 +1231,6 @@ export class ConsolidationService {
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────────────────
-
-  /**
-   * T8.6: true quando `t` é o horário MAIOR (mais tarde) entre os `sendTimes` do
-   * contato — é o único slot em que o bloco "💰 SEU CAIXA" pode ser anexado.
-   */
-  private isLastSlotForContact(contact: ContactRecipient, t: ContactSendTime): boolean {
-    const times = contact.sendTimes?.length ? contact.sendTimes : DEFAULT_SEND_TIMES;
-    const toMinutes = (x: ContactSendTime) => x.hour * 60 + x.minute;
-    const maxMinutes = Math.max(...times.map(toMinutes));
-    return toMinutes(t) === maxMinutes;
-  }
 
   /**
    * T8.6: busca a visão do caixa no TMS, cacheada em memória por tenant+dia —

@@ -38,8 +38,10 @@ name?: string;              // exibição; sanitize: trim, máx 60 chars
 delivery?: {
   digest:  { whatsapp: boolean; email: boolean };
   closing: { whatsapp: boolean; email: boolean };
-  cash:    { whatsapp: boolean; email: boolean };
 };
+// Visão do caixa NÃO tem canais próprios (decisão 2026-07-17): viaja DENTRO do
+// digest de pendências, nos mesmos canais de `delivery.digest`. Liga/desliga
+// via `cashView: 'on' | 'off'` (ver ADENDO A).
 ```
 
 - Compat (contatos existentes SEM `delivery`): derivar no runtime —
@@ -70,20 +72,41 @@ delivery?: {
 - UI valida horário de contato fora da janela: aviso não-bloqueante
   ("18:30 está fora da janela 06:00–20:00 — esse envio não sairá").
 
-## T9.3 — UI (MonitorConfigPage)
+## T9.3 — UI (MonitorConfigPage) — WIZARD DE 3 PASSOS (protótipo aprovado 2026-07-17)
 
-1. **Módulo único "Contatos"** substitui os dois módulos: botão "+ Novo
-   contato", lista com colunas Contato (nome + canais embaixo) / Setores /
-   Horários / Recebe (resumo: "Pendências, Fechamento, Caixa"). Ações
-   editar/remover como hoje. Mockup aprovado com o Abel (ele tem o print).
-2. **Modal**: Nome → WhatsApp + E-mails lado a lado → setores → horários (até
-   3) + dias → matriz por canal (3 linhas × 2 colunas) → seletores de
-   periodicidade (fechamento) e caixa já existentes. Validações atuais mantidas.
-3. **Contador**: "X de Y números do plano · **N disponíveis**" (N = Y−X, mínimo
-   0); no limite, manter upsell R$ 29,90 e bloquear só a ADIÇÃO de número novo
-   (contato só-e-mail continua livre).
-4. **Remover** o bloco "Setores monitorados"/checkboxes global (decisão 5).
-5. Tudo no design system (`components/ui/`).
+O modal de contato vira um **assistente de 3 passos** (o Abel tem o protótipo
+clicável — pedir print/gravação se precisar). Indicador de progresso no topo
+(1—2—3, passo feito vira ✓), botões Voltar/Avançar, "Salvar contato" no passo 3.
+
+**Passo 1 — "Quem recebe":** Nome + 📱 WhatsApp (opcional) + ✉️ E-mail
+(opcional), empilhados. Validação: pelo menos um canal. Rodapé discreto:
+"X de Y números do plano · **N disponíveis**" (N = Y−X, mín. 0); no limite,
+bloquear só a adição de número NOVO (contato só-e-mail livre) + upsell
+R$ 29,90/mês com link pra assinatura.
+
+**Passo 2 — "O que recebe":** DOIS cartões, cada um com pills de canal
+📱 Zap / ✉️ E-mail no canto (aceso = recebe; toque alterna → `delivery`):
+- ⚠️ Pendências do dia (subtítulo: "Até 3 relatórios/dia nos horários do passo 3")
+- 📊 Receita × despesa, com chips de periodicidade inline (Semanal / Quinzenal /
+  Mensal — seleção única → `closingReport`; nenhum canal ligado = 'off')
+Nota no rodapé do passo: "A 💰 Visão do caixa você escolhe no próximo passo,
+junto dos setores."
+
+**Passo 3 — "Quando recebe e o que entra":**
+- Chips do que entra no relatório de pendências: os 4 setores + chip
+  **🍯 Visão do caixa** (estilo verde/success pra diferenciar → `cashView`).
+  Legenda: "A Visão do caixa entra como bloco extra no topo do relatório".
+- Horários (até 3): chips com ✕ (não remove o último) + "+ adicionar horário"
+  (some no 3º).
+- Dias: 7 bolinhas + atalhos "Dias úteis" / "Todos".
+
+**Lista:** módulo único "Contatos", uma linha por pessoa — Contato (nome em
+destaque + canais embaixo) / Setores / Horários / Recebe (resumo tipo
+"Pendências, Receita × despesa, Caixa"). Editar reabre o wizard no passo 1 com
+tudo hidratado.
+
+**Remover** o bloco "Setores monitorados"/checkboxes global (decisão 5).
+Tudo no design system (`components/ui/`).
 
 ## O que NÃO fazer
 
@@ -100,6 +123,40 @@ delivery?: {
 sufixo; com send → sai na hora; (e) contador "N disponíveis" e bloqueio só de
 número novo no limite; (f) DTOs aceitam `name`/`delivery`/janela e sanitizam;
 (g) UI: linha única por pessoa, matriz salva e re-hidrata.
+
+## ADENDO 2026-07-17 (aprovado pelo Abel — substitui o que conflitar acima/no T8)
+
+**A. Bloco financeiro em TODOS os 3 envios (fim do "último horário").**
+`cashView` muda de `'off' | 'lastSlot'` para `'off' | 'on'` (compat: `'lastSlot'`
+existente é tratado como `'on'` — sem migração). Quando `on`, o bloco
+"💰 SEU CAIXA" entra em TODAS as mensagens de pendências do contato (os até 3
+horários), não só na última. Cache de 1 chamada TMS/tenant/dia continua valendo
+(o dado é o mesmo o dia todo; se o TMS expuser variação intradia, ainda assim 1
+chamada por slot no máximo).
+
+**B. Duas linhas novas no bloco do caixa — resumo do DIA:**
+
+```
+🧾 Faturado hoje: R$ {invoicedToday.amount} ({count} faturas)
+💸 Gasto hoje: R$ {paidToday.amount} ({count} pagamentos)
+```
+
+Entram logo após o cabeçalho do bloco, antes de "Entra/Sai". Os campos vêm do
+endpoint `cash-view` do TMS (adendo no doc do TMS) — se ausentes na resposta
+(TMS antigo), omitir as linhas, nunca quebrar.
+
+**C. Fechamento ganha SEMANAL.** `closingReport: 'off'|'weekly'|'biweekly'|'monthly'`.
+Semanal = toda segunda-feira 07:00, período = semana anterior (seg–dom),
+comparativo vs semana retrasada. Scheduler: dia de semana 1 (segunda) dispara
+os `weekly`; dias 16 e 1º seguem como estão. Dedup por `lastClosingDate` cobre
+o caso segunda dia 16 (dois relatórios distintos: weekly e biweekly — contato
+com weekly recebe só o weekly; kinds diferentes não se misturam num contato).
+UI: seletor passa a 4 opções (Desligado / Semanal / Quinzenal / Mensal), legenda
+atualizada. DTOs e sanitize acompanham (Regra 1).
+
+**Testes do adendo:** compat `'lastSlot'`→`'on'`; bloco em todos os slots;
+linhas do dia omitidas quando TMS não manda os campos; weekly dispara segunda e
+não dispara em outros dias; segunda dia 16 não duplica pro mesmo contato.
 
 ## Gates
 

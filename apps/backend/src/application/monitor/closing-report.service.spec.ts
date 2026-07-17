@@ -206,4 +206,58 @@ describe('ClosingReportService', () => {
     await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
     expect(tms.getClosingReport).not.toHaveBeenCalled();
   });
+
+  // ── T9-ADENDO (2026-07-17) item C: fechamento semanal ──────────────────────
+
+  it("T9-ADENDO: segunda-feira comum (não é dia 1º/16) → dispara SÓ 'weekly' pros contatos elegíveis", async () => {
+    // 2026-07-06 é uma segunda-feira que não cai em dia 1º nem 16.
+    const contacts = [
+      makeContact({ id: 'c-week', closingReport: 'weekly' }),
+      makeContact({ id: 'c-bi', whatsapp: '5511999990002', closingReport: 'biweekly' }),
+    ];
+    const { svc, tms, notification } = makeService({ contacts });
+    const result = await svc.runDailyLocked(new Date(2026, 6, 6, 7, 0));
+
+    expect(tms.getClosingReport).toHaveBeenCalledOnce();
+    expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'weekly', expect.any(String));
+    expect(notification.notifyPhone).toHaveBeenCalledOnce();
+    expect(notification.notifyPhone).toHaveBeenCalledWith('tenant-1', '5511999990001', expect.any(String));
+    expect(result).toEqual({ tenants: 1, sent: 1 });
+  });
+
+  it("T9-ADENDO: dia comum que NÃO é segunda nem 1º/16 → 'weekly' nunca dispara", async () => {
+    // 2026-07-07 é terça-feira — nem segunda, nem dia 1º/16.
+    const { svc, tms } = makeService({ contacts: [makeContact({ closingReport: 'weekly' })] });
+    const result = await svc.runDailyLocked(new Date(2026, 6, 7, 7, 0));
+    expect(result).toEqual({ tenants: 0, sent: 0 });
+    expect(tms.getClosingReport).not.toHaveBeenCalled();
+  });
+
+  it("T9-ADENDO: segunda dia 16 (2026-02-16) — 'weekly' e 'biweekly' disparam juntos, sem duplicar pro mesmo contato", async () => {
+    const contacts = [
+      makeContact({ id: 'c-week', closingReport: 'weekly' }),
+      makeContact({ id: 'c-bi', whatsapp: '5511999990002', closingReport: 'biweekly' }),
+    ];
+    const getClosingReport = vi.fn().mockImplementation((_id: string, kind: string) =>
+      Promise.resolve(
+        kind === 'weekly'
+          ? makeReport({ period: { start: '2026-02-09', end: '2026-02-15', label: 'Semana de 09/02 a 15/02' } })
+          : makeReport(),
+      ),
+    );
+    const { svc, tms, notification } = makeService({ contacts, getClosingReport });
+    const result = await svc.runDailyLocked(new Date(2026, 1, 16, 7, 0));
+
+    expect(tms.getClosingReport).toHaveBeenCalledTimes(2);
+    expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'weekly', expect.any(String));
+    expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'biweekly', expect.any(String));
+
+    // Cada contato recebe exatamente 1 mensagem — kinds não se misturam.
+    expect(notification.notifyPhone).toHaveBeenCalledTimes(2);
+    const weekCalls = notification.notifyPhone.mock.calls.filter((c: any[]) => c[1] === '5511999990001');
+    const biCalls = notification.notifyPhone.mock.calls.filter((c: any[]) => c[1] === '5511999990002');
+    expect(weekCalls).toHaveLength(1);
+    expect(biCalls).toHaveLength(1);
+    expect(result.sent).toBe(2);
+  });
 });

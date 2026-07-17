@@ -7,10 +7,15 @@
  * hipertms_v12/docs/features/automation/t8-fechamento-endpoint-2026-07.md (TMS).
  *
  * Cron diário às 07:00 America/Sao_Paulo — só roda se `MONITOR_ENABLED=true`.
- *   - Dia 16   → só contatos com `closingReport='biweekly'`.
+ *   - Segunda-feira → contatos com `closingReport='weekly'` (semana anterior,
+ *                seg-dom, comparativo vs semana retrasada — T9-ADENDO 2026-07-17).
+ *   - Dia 16   → contatos com `closingReport='biweekly'`.
  *   - Dia 1º   → contatos 'biweekly' (mensagem única: fechamento da 2ª quinzena
  *                + bloco do mês, via `monthSummary`) E 'monthly' (mês completo).
- *   - Qualquer outro dia → no-op (log debug, sem tocar no TMS).
+ *   - Gatilhos são ADITIVOS (ex.: segunda dia 16 dispara weekly + biweekly).
+ *     `closingReport` de cada contato é um valor único, então kinds diferentes
+ *     nunca se misturam num mesmo contato.
+ *   - Nenhum dos gatilhos acima → no-op (log debug, sem tocar no TMS).
  *
  * UMA chamada ao TMS por (tenant, kind) — nunca uma por contato (T8.3). Dedup
  * por `contact.lastClosingDate` (YYYY-MM-DD), claim-before-send: persiste ANTES
@@ -75,8 +80,12 @@ export class ClosingReportService {
     }
 
     const day = now.getDate();
-    if (day !== 1 && day !== 16) {
-      this.logger.debug(`closing-report: dia ${day} não é 1º nem 16 — nada a fazer`);
+    // T9-ADENDO (2026-07-17) item C: segunda-feira dispara os `weekly`, em
+    // ADIÇÃO aos gatilhos de dia 1º/16 já existentes — não substitui.
+    const isMonday = now.getDay() === 1;
+    const isClosingDay = day === 1 || day === 16;
+    if (!isMonday && !isClosingDay) {
+      this.logger.debug(`closing-report: dia ${day} (não é segunda nem 1º/16) — nada a fazer`);
       return { tenants: 0, sent: 0 };
     }
 
@@ -91,7 +100,14 @@ export class ClosingReportService {
 
     let sentTotal = 0;
     let tenantsWithSend = 0;
-    const kinds: ClosingReportKind[] = day === 16 ? ['biweekly'] : ['biweekly', 'monthly'];
+    // Gatilhos independentes — segunda dia 16 dispara ['weekly','biweekly'];
+    // qualquer outra segunda só ['weekly']. `closingReport` de cada contato é
+    // um valor único, então kinds diferentes nunca se misturam num contato
+    // (dedup por lastClosingDate + filtro de elegibilidade por kind cobre o resto).
+    const kinds: ClosingReportKind[] = [];
+    if (isMonday) kinds.push('weekly');
+    if (day === 16) kinds.push('biweekly');
+    if (day === 1) kinds.push('biweekly', 'monthly');
 
     for (const cfg of configs) {
       try {
@@ -116,6 +132,7 @@ export class ClosingReportService {
         let tenantSent = 0;
         for (const kind of kinds) {
           if (kind === 'monthly' && day !== 1) continue; // segurança extra — monthly só no dia 1º
+          if (kind === 'weekly' && !isMonday) continue; // segurança extra — weekly só na segunda
           const eligible = allContacts.filter((c) => c.closingReport === kind);
           if (!eligible.length) continue; // sem contato pra este kind → nunca chama o TMS
           tenantSent += await this.processTenantKind(cfg.tenantId, tenant.slug, allContacts, eligible, kind, now);
@@ -149,7 +166,14 @@ export class ClosingReportService {
     if (!pending.length) return 0;
 
     const externalTenantId = resolveTmsTenantId(slug);
-    const report = await this.tms.getClosingReport(externalTenantId, kind === 'biweekly' ? 'biweekly' : 'monthly', todayStr);
+    // T9-ADENDO item C: `kind` aqui nunca é 'off' (só chega via `kinds` em
+    // runDailyLocked, que nunca inclui 'off') — repassar direto pro TMS em vez
+    // de colapsar em 'monthly' (bug que faria weekly virar monthly).
+    const report = await this.tms.getClosingReport(
+      externalTenantId,
+      kind as 'weekly' | 'biweekly' | 'monthly',
+      todayStr,
+    );
     if (!report) {
       this.logger.warn(
         `closing-report: TMS retornou null pra tenant ${tenantId} (kind=${kind}, refDate=${todayStr}) — nenhum envio`,
