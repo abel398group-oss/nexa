@@ -101,9 +101,11 @@ export class ContactRecipientDto {
   @IsOptional() @IsIn(CASH_VIEW_MODES) cashView?: string;
   // T9: contato = pessoa — nome de exibição opcional. Sanitize (trim + cap 60) em sanitizeContacts.
   @IsOptional() @IsString() name?: string;
-  // T9: matriz "o que enviar em cada canal" (digest/closing/cash × whatsapp/email).
-  // Sem ValidateNested de propósito — mesmo padrão do sectorConfig abaixo: shape
-  // solto no DTO, sanitização/força real em sanitizeContacts→sanitizeDelivery.
+  // T9-WIZARD (2026-07-17): matriz "o que enviar em cada canal" — só
+  // digest/closing × whatsapp/email; caixa não tem canal próprio, herda do
+  // digest (ver `effectiveDelivery`/`sanitizeDelivery`). Sem ValidateNested de
+  // propósito — mesmo padrão do sectorConfig abaixo: shape solto no DTO,
+  // sanitização/força real em sanitizeContacts→sanitizeDelivery.
   @IsOptional() delivery?: DeliveryMatrix;
 }
 

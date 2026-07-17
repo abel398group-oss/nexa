@@ -63,16 +63,32 @@ export function cashViewIsOn(mode: CashViewMode | undefined): boolean {
 /** T9 (2026-07-17): nome de exibição do contato — máx. 60 caracteres. */
 export const CONTACT_NAME_MAX_LENGTH = 60;
 
-/** T9: flags de canal — usado nas 3 linhas da matriz de entrega (digest/closing/cash). */
+/** T9: flags de canal — usado nas linhas da matriz de entrega (digest/closing). */
 export interface ChannelFlags {
   whatsapp: boolean;
   email: boolean;
 }
 
-/** T9: matriz "o que enviar em cada canal" — 3 linhas (digest/closing/cash) × 2 colunas (whatsapp/email). */
+/**
+ * T9-WIZARD (2026-07-17): matriz PERSISTIDA "o que enviar em cada canal" — só
+ * 2 linhas (digest/closing) × 2 colunas (whatsapp/email). Visão do caixa NÃO
+ * tem canal próprio (decisão do protótipo aprovado): ela viaja dentro do
+ * digest de pendências, nos mesmos canais de `digest`, ligada/desligada só
+ * por `cashView` ('on'/'off', ver `cashViewIsOn`). Ver `EffectiveDeliveryMatrix`
+ * pro shape COMPUTADO em runtime (esse sim ainda tem `cash`, derivado — nunca
+ * persistido).
+ */
 export interface DeliveryMatrix {
   digest: ChannelFlags;
   closing: ChannelFlags;
+}
+
+/**
+ * T9-WIZARD: shape retornado por `effectiveDelivery()` — igual a `DeliveryMatrix`
+ * mais o `cash` COMPUTADO (nunca lido/gravado do JSON persistido): herda os
+ * canais efetivos do `digest`, condicionado a `cashViewIsOn(contact.cashView)`.
+ */
+export interface EffectiveDeliveryMatrix extends DeliveryMatrix {
   cash: ChannelFlags;
 }
 
@@ -152,28 +168,33 @@ export interface ContactRecipient {
    * comportamento equivalente ao pré-T9 a partir de `closingReport`/`cashView`/
    * canais do contato. Ausente em edição preserva o valor anterior (mesmo
    * princípio de `closingReport`/`cashView`).
+   *
+   * T9-WIZARD (2026-07-17): só `digest`/`closing` — Visão do caixa não tem
+   * canal próprio, ver `EffectiveDeliveryMatrix`/`effectiveDelivery`.
    */
   delivery?: DeliveryMatrix;
 }
 
 /**
- * T9: resolve a matriz EFETIVA de entrega por canal pra um contato — ÚNICO
- * ponto de derivação, usado por `ConsolidationService` (digest/cash) e
+ * T9/T9-WIZARD: resolve a matriz EFETIVA de entrega por canal pra um contato —
+ * ÚNICO ponto de derivação, usado por `ConsolidationService` (digest/cash) e
  * `ClosingReportService` (closing). NUNCA reimplementar esta lógica em outro
  * lugar (regra do doc T9).
  *
- * Com `delivery` explícito (contato editado na UI nova): usa a matriz salva.
- * Sem `delivery` (compat — contato de antes do T9): deriva em runtime, sem
- * migrar nada no banco —
+ * Com `delivery` explícito (contato editado na UI nova): usa a matriz salva
+ * (só `digest`/`closing` — `cash` nunca é lido do JSON, é sempre computado
+ * abaixo). Sem `delivery` (compat — contato de antes do T9): deriva em
+ * runtime, sem migrar nada no banco —
  *   - digest:  true nos canais que o contato TEM (comportamento T7 atual);
- *   - closing: canais do contato SE `closingReport` != 'off'/ausente;
- *   - cash:    canais do contato SE `cashViewIsOn(cashView)` (T9-ADENDO: 'on'
- *     ou o alias legado 'lastSlot').
- * Em ambos os casos, uma trava defensiva final zera qualquer canal que o
- * contato não tenha de fato (ex.: `delivery` salvo antes de remover o
- * WhatsApp do contato) — nunca confia cegamente no JSON persistido.
+ *   - closing: canais do contato SE `closingReport` != 'off'/ausente.
+ * `cash`, em AMBOS os casos, herda os canais EFETIVOS do `digest` (pós-trava),
+ * condicionado a `cashViewIsOn(cashView)` (T9-ADENDO: 'on' ou o alias legado
+ * 'lastSlot') — decisão do wizard 2026-07-17: caixa não escolhe canal próprio.
+ * Uma trava defensiva final zera qualquer canal que o contato não tenha de
+ * fato (ex.: `delivery` salvo antes de remover o WhatsApp do contato) — nunca
+ * confia cegamente no JSON persistido.
  */
-export function effectiveDelivery(contact: ContactRecipient): DeliveryMatrix {
+export function effectiveDelivery(contact: ContactRecipient): EffectiveDeliveryMatrix {
   const hasWa = !!contact.whatsapp?.trim();
   const hasEmail = Array.isArray(contact.emails) && contact.emails.length > 0;
   const closingOn = !!contact.closingReport && contact.closingReport !== 'off';
@@ -182,14 +203,13 @@ export function effectiveDelivery(contact: ContactRecipient): DeliveryMatrix {
   const base: DeliveryMatrix = contact.delivery ?? {
     digest: { whatsapp: hasWa, email: hasEmail },
     closing: { whatsapp: hasWa && closingOn, email: hasEmail && closingOn },
-    cash: { whatsapp: hasWa && cashOn, email: hasEmail && cashOn },
   };
 
-  return {
-    digest: { whatsapp: base.digest.whatsapp && hasWa, email: base.digest.email && hasEmail },
-    closing: { whatsapp: base.closing.whatsapp && hasWa, email: base.closing.email && hasEmail },
-    cash: { whatsapp: base.cash.whatsapp && hasWa, email: base.cash.email && hasEmail },
-  };
+  const digest: ChannelFlags = { whatsapp: base.digest.whatsapp && hasWa, email: base.digest.email && hasEmail };
+  const closing: ChannelFlags = { whatsapp: base.closing.whatsapp && hasWa, email: base.closing.email && hasEmail };
+  const cash: ChannelFlags = { whatsapp: digest.whatsapp && cashOn, email: digest.email && cashOn };
+
+  return { digest, closing, cash };
 }
 
 /**
@@ -370,17 +390,19 @@ function sanitizeChannelFlags(raw: unknown): ChannelFlags {
  * retorna `undefined` (caller decide preservar o `prior`, mesmo padrão de
  * `resolveOptionalEnum`); presente normaliza cada flag pra boolean estrito e
  * força `false` num canal que o contato não tem de fato (`hasWa`/`hasEmail`).
+ *
+ * T9-WIZARD (2026-07-17): só lê `digest`/`closing` do payload — um `cash`
+ * eventualmente enviado por um cliente antigo (ou pelo TMS antes de
+ * atualizar) é ignorado de propósito, nunca persistido (ver `DeliveryMatrix`).
  */
 function sanitizeDelivery(raw: unknown, hasWa: boolean, hasEmail: boolean): DeliveryMatrix | undefined {
   if (raw === undefined || raw === null) return undefined;
   const r = typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const digest = sanitizeChannelFlags(r.digest);
   const closing = sanitizeChannelFlags(r.closing);
-  const cash = sanitizeChannelFlags(r.cash);
   return {
     digest: { whatsapp: digest.whatsapp && hasWa, email: digest.email && hasEmail },
     closing: { whatsapp: closing.whatsapp && hasWa, email: closing.email && hasEmail },
-    cash: { whatsapp: cash.whatsapp && hasWa, email: cash.email && hasEmail },
   };
 }
 

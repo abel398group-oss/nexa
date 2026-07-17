@@ -67,17 +67,21 @@ type ClosingReportKind = 'off' | 'weekly' | 'biweekly' | 'monthly';
  */
 type CashViewMode = 'off' | 'on' | 'lastSlot';
 
-/** T9: flags de canal — usado nas 3 linhas da matriz de entrega (digest/closing/cash). */
+/** T9: flags de canal — usado nas linhas da matriz de entrega (digest/closing). */
 interface ChannelFlags {
   whatsapp: boolean;
   email: boolean;
 }
 
-/** T9: matriz "o que enviar em cada canal" — 3 linhas × 2 colunas (whatsapp/email). */
+/**
+ * T9-WIZARD (2026-07-17): matriz "o que enviar em cada canal" — só 2 linhas
+ * (digest/closing) × 2 colunas (whatsapp/email). Visão do caixa NÃO tem canal
+ * próprio (protótipo aprovado): herda os canais do digest de pendências,
+ * liga/desliga só por `cashView` — ver passo 3 do wizard.
+ */
 interface DeliveryMatrix {
   digest: ChannelFlags;
   closing: ChannelFlags;
-  cash: ChannelFlags;
 }
 
 interface ContactRecipient {
@@ -99,15 +103,11 @@ const MAX_CONTACT_TIMES = 3;
 const DEFAULT_CONTACT_TIME: ContactSendTime = { hour: 8, minute: 0 };
 const CONTACT_NAME_MAX_LENGTH = 60;
 
-const CLOSING_REPORT_OPTIONS: { value: ClosingReportKind; label: string }[] = [
-  { value: 'off', label: 'Desligado' },
+/** T9-WIZARD: legenda do chip de periodicidade no passo 2 (card "Receita × despesa"). */
+const CLOSING_PERIODICITY_OPTIONS: { value: Exclude<ClosingReportKind, 'off'>; label: string }[] = [
   { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Quinzenal' },
   { value: 'monthly', label: 'Mensal' },
-];
-const CASH_VIEW_OPTIONS: { value: CashViewMode; label: string }[] = [
-  { value: 'off', label: 'Desligado' },
-  { value: 'on', label: 'Ligado' },
 ];
 
 /**
@@ -119,29 +119,32 @@ function cashViewIsOn(mode: CashViewMode | undefined): boolean {
   return mode === 'on' || mode === 'lastSlot';
 }
 
-/** T9: as 3 linhas da matriz de entrega, na ordem em que aparecem no modal. */
+/** T9-WIZARD: as 2 linhas da matriz de entrega (passo 2 — pills por card). */
 const DELIVERY_ROWS: { key: keyof DeliveryMatrix; label: string }[] = [
   { key: 'digest', label: '⚠️ Pendências do dia' },
-  { key: 'closing', label: '📊 Resumo de fechamento' },
-  { key: 'cash', label: '💰 Visão do caixa' },
+  { key: 'closing', label: '📊 Receita × despesa' },
 ];
 
 /**
- * T9: matriz default de contato NOVO — digest sempre ligado (mesmo comportamento
- * pré-T9); fechamento ligado porque `closingReport` nasce 'monthly' (ver
- * openNewContact); caixa desligado porque `cashView` nasce 'off'. As flags só
- * "pegam" de verdade no canal que o contato realmente tiver — a trava final em
- * `saveContactModal` zera qualquer canal ausente antes de persistir.
+ * T9-WIZARD: matriz default de contato NOVO — digest e closing ligados nos
+ * dois canais (mesmo comportamento pré-T9/pré-wizard; a periodicidade default
+ * é 'monthly', ver `openNewContact`). Caixa não entra aqui — é o chip
+ * `cashView` do passo 3, que nasce 'off'. As flags só "pegam" de verdade no
+ * canal que o contato realmente tiver — a trava final em `saveContactModal`
+ * zera qualquer canal ausente antes de persistir.
  */
 function defaultDeliveryMatrix(): DeliveryMatrix {
   return {
     digest: { whatsapp: true, email: true },
     closing: { whatsapp: true, email: true },
-    cash: { whatsapp: false, email: false },
   };
 }
 
+/** T9-WIZARD: os 3 passos do assistente de contato. */
+type WizardStep = 1 | 2 | 3;
+
 interface ContactModalState {
+  step: WizardStep;
   editId: string | null;
   name: string;
   whatsapp: string;
@@ -149,9 +152,16 @@ interface ContactModalState {
   sectors: SectorKey[];
   sendTimes: ContactSendTime[];
   sendDays: number[];
-  closingReport: ClosingReportKind;
+  /** T9-WIZARD: periodicidade escolhida no chip do passo 2 — sempre tem um valor,
+   *  mesmo com o card "Receita × despesa" sem nenhum canal ligado (nesse caso o
+   *  `closingReport` salvo vira 'off' de qualquer forma, ver saveContactModal). */
+  closingPeriodicity: Exclude<ClosingReportKind, 'off'>;
   cashView: CashViewMode;
   delivery: DeliveryMatrix;
+  /** T9-WIZARD: WhatsApp já preenchido quando o modal abriu — usado pra só
+   *  bloquear ADIÇÃO de número novo no limite do plano, nunca a edição de um
+   *  contato que já tinha número (ver passo 1, "N3.4"). */
+  startedWithWa: boolean;
   error: string | null;
   /** true enquanto o PUT de salvar o contato está em voo (ver saveContactModal). */
   saving?: boolean;
@@ -543,6 +553,8 @@ export function MonitorConfigPage() {
   const waNumbersUsed  = cfg.waNumbersUsed  ?? 0;
   const waNumbersLimit = cfg.waNumbersLimit ?? 0;
   const atWaLimit      = planAllowed && waNumbersLimit > 0 && waNumbersUsed >= waNumbersLimit;
+  /** T9-WIZARD: "N disponíveis" — reaproveitado no rodapé da lista e no passo 1 do wizard. */
+  const waAvailable    = Math.max(waNumbersLimit - waNumbersUsed, 0);
 
   /**
    * T9: janela de envio efetiva (config geral) — usada pro aviso não-bloqueante
@@ -561,9 +573,10 @@ export function MonitorConfigPage() {
 
   // ─── T6/T9: CRUD de contatos ────────────────────────────────────────────────
 
-  /** T9: contato = pessoa — nome + WhatsApp e/ou e-mails, um módulo único. */
+  /** T9-WIZARD: contato = pessoa — abre o assistente de 3 passos no passo 1. */
   function openNewContact() {
     setContactModal({
+      step: 1,
       editId: null,
       name: '',
       whatsapp: '',
@@ -574,18 +587,21 @@ export function MonitorConfigPage() {
       // T8: contato NOVO nasce com fechamento Mensal pré-selecionado (decisão de
       // negócio 2026-07-16) — o usuário ainda vê e pode desligar antes de salvar.
       // Visão do caixa nasce sempre desligada (ninguém liga sem pedir).
-      closingReport: 'monthly',
+      closingPeriodicity: 'monthly',
       cashView: 'off',
       delivery: defaultDeliveryMatrix(),
+      startedWithWa: false,
       error: null,
     });
   }
 
-  /** T9: edita a pessoa inteira num modal só — preserva o que já tinha (nome, matriz etc.). */
+  /** T9-WIZARD: edita a pessoa inteira — reabre o assistente no passo 1, tudo hidratado. */
   function openEditContact(c: ContactRecipient) {
     const hasWa = !!c.whatsapp;
     const hasEmail = c.emails.length > 0;
+    const closingOn = c.closingReport !== undefined && c.closingReport !== 'off';
     setContactModal({
+      step: 1,
       editId: c.id,
       name: c.name ?? '',
       whatsapp: c.whatsapp ?? '',
@@ -593,23 +609,25 @@ export function MonitorConfigPage() {
       sectors: c.sectors,
       sendTimes: c.sendTimes.length ? c.sendTimes : [DEFAULT_CONTACT_TIME],
       sendDays: c.sendDays?.length ? c.sendDays : WEEKDAYS,
-      // T8: contato EXISTENTE preserva o que já tinha — 'off' se nunca configurado.
-      closingReport: c.closingReport ?? 'off',
-      // T9-ADENDO: o seletor só tem 'off'/'on' — normaliza o alias legado
+      // T9-WIZARD: chip de periodicidade sempre tem um valor — usa o que já
+      // estava salvo se for uma periodicidade real; 'off'/ausente cai no
+      // default 'monthly' (mesma decisão de negócio de contato novo, só que
+      // aqui é só a pré-seleção do chip — o card pode estar com os 2 canais
+      // desligados, o que persiste como 'off' de qualquer forma ao salvar).
+      closingPeriodicity: closingOn ? (c.closingReport as Exclude<ClosingReportKind, 'off'>) : 'monthly',
+      // T9-ADENDO: o chip do passo 3 só tem 'off'/'on' — normaliza o alias legado
       // 'lastSlot' pra 'on' na hora de popular o modal (o dado salvo em si só
       // é normalizado no backend quando o usuário reenviar explicitamente).
       cashView: cashViewIsOn(c.cashView) ? 'on' : 'off',
-      // T9: preserva a matriz explícita se já existir; senão deriva do compat
-      // (mesmo princípio do backend `effectiveDelivery`, só que aqui é só pra
-      // pré-popular o modal — o backend recalcula/força ao salvar de qualquer forma).
+      // T9-WIZARD: preserva a matriz explícita se já existir (só digest/closing
+      // agora); senão deriva do compat (mesmo princípio do backend
+      // `effectiveDelivery`, só que aqui é só pra pré-popular o modal — o
+      // backend recalcula/força ao salvar de qualquer forma).
       delivery: c.delivery ?? {
         digest: { whatsapp: hasWa, email: hasEmail },
-        closing: {
-          whatsapp: hasWa && c.closingReport !== undefined && c.closingReport !== 'off',
-          email: hasEmail && c.closingReport !== undefined && c.closingReport !== 'off',
-        },
-        cash: { whatsapp: hasWa && cashViewIsOn(c.cashView), email: hasEmail && cashViewIsOn(c.cashView) },
+        closing: { whatsapp: hasWa && closingOn, email: hasEmail && closingOn },
       },
+      startedWithWa: hasWa,
       error: null,
     });
   }
@@ -664,6 +682,54 @@ export function MonitorConfigPage() {
     setContactModal((m) => (m ? { ...m, emails: items.map((i) => i.contact), error: null } : m));
   }
 
+  /** T9-WIZARD: chip "🍯 Visão do caixa" do passo 3 — liga/desliga (sem canal próprio). */
+  function toggleCashChip() {
+    setContactModal((m) => (m ? { ...m, cashView: m.cashView === 'off' ? 'on' : 'off', error: null } : m));
+  }
+
+  /**
+   * T9-WIZARD: validação do passo 1 ("Quem recebe") — mesma regra do backend
+   * (`validateContactHasChannel`): pelo menos um canal, telefone com DDI+DDD+
+   * número, sem duplicar WhatsApp de outro contato. Roda ao clicar "Avançar".
+   */
+  function validateStep1(m: ContactModalState): string | null {
+    const digits = m.whatsapp.replace(/\D/g, '');
+    const hasWa = !!digits;
+    const hasEmail = m.emails.length > 0;
+    if (hasWa && digits.length < 12) {
+      return 'Telefone inválido — use DDI + DDD + número (ex: 5511999999999).';
+    }
+    if (!hasWa && !hasEmail) {
+      return 'Informe pelo menos um canal — WhatsApp ou e-mail.';
+    }
+    const dup = hasWa && contacts.some((c) => c.id !== m.editId && c.whatsapp === digits);
+    if (dup) {
+      return 'Esse WhatsApp já está cadastrado em outro contato.';
+    }
+    return null;
+  }
+
+  /** T9-WIZARD: avança pro próximo passo — valida o passo atual antes (só passo 1 bloqueia). */
+  function advanceStep() {
+    setContactModal((m) => {
+      if (!m) return m;
+      if (m.step === 1) {
+        const err = validateStep1(m);
+        if (err) return { ...m, error: err };
+        return { ...m, step: 2, error: null };
+      }
+      if (m.step === 2) {
+        return { ...m, step: 3, error: null };
+      }
+      return m;
+    });
+  }
+
+  /** T9-WIZARD: volta um passo (sem validação — dados já digitados ficam preservados). */
+  function goBackStep() {
+    setContactModal((m) => (m && m.step > 1 ? { ...m, step: (m.step - 1) as WizardStep, error: null } : m));
+  }
+
   /**
    * BUGFIX (2026-07): salvar/remover um contato só atualizava o estado local
    * `contacts` — só ia pro banco se o usuário clicasse no "Salvar" principal da
@@ -711,33 +777,30 @@ export function MonitorConfigPage() {
     }
   }
 
+  /** T9-WIZARD: passo 3 ("Quando recebe") — só falta validar setores; passo 1 já bloqueou antes de chegar aqui. */
   async function saveContactModal() {
     if (!contactModal) return;
     const digits = contactModal.whatsapp.replace(/\D/g, '');
     const hasWa = !!digits;
     const hasEmail = contactModal.emails.length > 0;
 
-    if (hasWa && digits.length < 12) {
-      setContactModal({ ...contactModal, error: 'Telefone inválido — use DDI + DDD + número (ex: 5511999999999).' });
-      return;
-    }
-    // T9: contato = pessoa — precisa de pelo menos um canal (mesma validação do backend,
-    // ver validateContactHasChannel).
-    if (!hasWa && !hasEmail) {
-      setContactModal({ ...contactModal, error: 'Informe pelo menos um canal — WhatsApp ou e-mail.' });
-      return;
-    }
     if (contactModal.sectors.length === 0) {
       setContactModal({ ...contactModal, error: 'Selecione ao menos um setor.' });
       return;
     }
-    const dup = hasWa && contacts.some((c) => c.id !== contactModal.editId && c.whatsapp === digits);
-    if (dup) {
-      setContactModal({ ...contactModal, error: 'Esse WhatsApp já está cadastrado em outro contato.' });
-      return;
-    }
 
     const name = contactModal.name.trim().slice(0, CONTACT_NAME_MAX_LENGTH) || undefined;
+    // T9-WIZARD: força false em qualquer canal que o contato não tenha de fato —
+    // mesma trava defensiva do backend (`effectiveDelivery`), aplicada aqui
+    // também pra não mandar uma matriz inconsistente (ex.: WhatsApp removido
+    // mas ainda marcado na matriz).
+    const digest: ChannelFlags = { whatsapp: contactModal.delivery.digest.whatsapp && hasWa, email: contactModal.delivery.digest.email && hasEmail };
+    const closing: ChannelFlags = { whatsapp: contactModal.delivery.closing.whatsapp && hasWa, email: contactModal.delivery.closing.email && hasEmail };
+    // T9-WIZARD: "nenhum canal ligado = 'off'" (doc, passo 2) — a periodicidade
+    // do chip só vira `closingReport` de verdade se pelo menos 1 canal do card
+    // "Receita × despesa" estiver aceso.
+    const closingReport: ClosingReportKind = closing.whatsapp || closing.email ? contactModal.closingPeriodicity : 'off';
+
     const saved: ContactRecipient = {
       id: contactModal.editId ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name,
@@ -746,17 +809,9 @@ export function MonitorConfigPage() {
       sectors: contactModal.sectors,
       sendTimes: contactModal.sendTimes,
       sendDays: contactModal.sendDays,
-      closingReport: contactModal.closingReport,
+      closingReport,
       cashView: contactModal.cashView,
-      // T9: força false em qualquer canal que o contato não tenha de fato — mesma
-      // trava defensiva do backend (`effectiveDelivery`), aplicada aqui também
-      // pra não mandar uma matriz inconsistente (ex.: WhatsApp removido mas ainda
-      // marcado na matriz).
-      delivery: {
-        digest: { whatsapp: contactModal.delivery.digest.whatsapp && hasWa, email: contactModal.delivery.digest.email && hasEmail },
-        closing: { whatsapp: contactModal.delivery.closing.whatsapp && hasWa, email: contactModal.delivery.closing.email && hasEmail },
-        cash: { whatsapp: contactModal.delivery.cash.whatsapp && hasWa, email: contactModal.delivery.cash.email && hasEmail },
-      },
+      delivery: { digest, closing },
     };
 
     const next = contactModal.editId
@@ -1014,12 +1069,15 @@ export function MonitorConfigPage() {
                       whatsapp: hasWa && !!c.closingReport && c.closingReport !== 'off',
                       email: hasEmail && !!c.closingReport && c.closingReport !== 'off',
                     },
-                    cash: { whatsapp: hasWa && cashViewIsOn(c.cashView), email: hasEmail && cashViewIsOn(c.cashView) },
                   };
+                  // T9-WIZARD: caixa não tem canal próprio — herda os canais efetivos
+                  // do digest, mesma fórmula do backend (`effectiveDelivery`).
+                  const cashOn = cashViewIsOn(c.cashView);
+                  const cash = { whatsapp: d.digest.whatsapp && cashOn, email: d.digest.email && cashOn };
                   const parts: string[] = [];
                   if (d.digest.whatsapp || d.digest.email) parts.push('Pendências');
-                  if (d.closing.whatsapp || d.closing.email) parts.push('Fechamento');
-                  if (d.cash.whatsapp || d.cash.email) parts.push('Caixa');
+                  if (d.closing.whatsapp || d.closing.email) parts.push('Receita × despesa');
+                  if (cash.whatsapp || cash.email) parts.push('Caixa');
                   return parts.length ? parts.join(', ') : '—';
                 };
 
