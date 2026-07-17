@@ -36,6 +36,11 @@ function makeService(configOverrides: Record<string, any> = {}) {
     sectorConfig: null,
     immediateSeverity: 'CRITICAL',
     monitorOverride: false,
+    // T9: janela aberta 24h nos testes que não são sobre janela — evita
+    // flakiness por horário real do relógio (default seria 06h-20h).
+    sendWindowStart: 0,
+    sendWindowEnd: 24,
+    criticalOutsideWindow: 'hold',
     ...configOverrides,
   };
 
@@ -53,9 +58,10 @@ function makeService(configOverrides: Record<string, any> = {}) {
 
   const channel = { sendTo: vi.fn().mockResolvedValue({ sent: true }) } as any;
   const tms = {} as any;
+  const dispatch = { enqueue: vi.fn(), pending: 0 } as any;
 
-  const svc = new MonitorService(prisma, tms, channel);
-  return { svc, prisma, channel, config };
+  const svc = new MonitorService(prisma, tms, channel, dispatch);
+  return { svc, prisma, channel, config, dispatch };
 }
 
 // ─── G2: buildAlertMessage cap ───────────────────────────────────────────────
@@ -331,6 +337,10 @@ function makeServiceR(configOverrides: Record<string, any> = {}) {
     financeEnabled: true,
     sectorConfig: null,
     immediateSeverity: 'CRITICAL',
+    // T9: janela aberta 24h — mesmo motivo do outro makeService acima.
+    sendWindowStart: 0,
+    sendWindowEnd: 24,
+    criticalOutsideWindow: 'hold',
     ...configOverrides,
   };
 
@@ -355,8 +365,9 @@ function makeServiceR(configOverrides: Record<string, any> = {}) {
 
   const channel = { sendTo: vi.fn().mockResolvedValue({ sent: true }) } as any;
   const tms     = { getProactivityEvents: vi.fn().mockResolvedValue([]) } as any;
+  const dispatch = { enqueue: vi.fn(), pending: 0 } as any;
 
-  const svc = new MonitorService(prisma, tms, channel);
+  const svc = new MonitorService(prisma, tms, channel, dispatch);
 
   const logLog  = vi.fn();
   const logWarn = vi.fn();
@@ -649,7 +660,8 @@ function makeExternalService(overrides: { planLimit?: any; config?: any } = {}) 
 
   const channel = { sendTo: vi.fn() } as any;
   const tms = {} as any;
-  const svc = new MonitorService(prisma, tms, channel);
+  const dispatch = { enqueue: vi.fn(), pending: 0 } as any;
+  const svc = new MonitorService(prisma, tms, channel, dispatch);
   return { svc, prisma };
 }
 

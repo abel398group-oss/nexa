@@ -37,8 +37,19 @@ import {
   sanitizeContacts,
   deriveSectorConfigFallback,
   validateContactSendTimesLimit,
+  validateContactHasChannel,
   type ContactRecipient,
+  type DeliveryMatrix,
 } from './contact-recipient.types';
+import { MonitorDispatchService } from './monitor-dispatch.service';
+import {
+  isWithinSendWindow,
+  nextWindowOpen,
+  formatHourMinute,
+  DEFAULT_SEND_WINDOW_START,
+  DEFAULT_SEND_WINDOW_END,
+  DEFAULT_CRITICAL_OUTSIDE_WINDOW,
+} from './send-window.util';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
 const EXTERNAL_CONFIG_SELECT = {
@@ -80,6 +91,10 @@ interface ContactRecipientInput {
   closingReport?: string;
   /** T8.6: idem. */
   cashView?: string;
+  /** T9: mesmo campo do painel próprio — paridade TMS↔Nexa (Regra 1). */
+  name?: string;
+  /** T9: idem — matriz por canal. */
+  delivery?: DeliveryMatrix;
 }
 
 export interface ExternalMonitorConfigInput {
@@ -146,6 +161,8 @@ export class MonitorService implements OnModuleInit {
     private readonly tms: HiperTmsConnector,
     // A2: canal agnóstico de provedor — sendAlertsToAdmins usa o channel, não o WAHA direto
     @Inject(NOTIFICATION_CHANNEL) private readonly channel: NotificationChannel,
+    // T9: fila com notBefore explícito — usada pro "hold" de CRITICAL fora da janela de envio.
+    private readonly dispatch: MonitorDispatchService,
   ) {}
 
   /**
@@ -380,6 +397,10 @@ export class MonitorService implements OnModuleInit {
     if (input.contacts !== undefined) {
       const sendTimesError = validateContactSendTimesLimit(input.contacts, maxContactTimes(planLimit?.plan));
       if (sendTimesError) throw new BadRequestException(sendTimesError);
+
+      // T9: mesma validação de canal obrigatório do painel próprio (paridade TMS↔Nexa).
+      const channelError = validateContactHasChannel(input.contacts);
+      if (channelError) throw new BadRequestException(channelError);
     }
 
     // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)
@@ -603,6 +624,16 @@ export class MonitorService implements OnModuleInit {
       return 0;
     }
 
+    // T9: janela geral de envio — imediatos CRITICAL fora dela seguem
+    // `criticalOutsideWindow`: 'hold' (default, segura e reagenda pra próxima
+    // abertura via MonitorDispatchService com notBefore explícito) ou 'send'
+    // (fura a janela, comportamento pré-T9, inalterado abaixo).
+    const now = new Date();
+    const windowStart = (config as any)?.sendWindowStart ?? DEFAULT_SEND_WINDOW_START;
+    const windowEnd = (config as any)?.sendWindowEnd ?? DEFAULT_SEND_WINDOW_END;
+    const criticalOutsideWindow = (config as any)?.criticalOutsideWindow ?? DEFAULT_CRITICAL_OUTSIDE_WINDOW;
+    const inWindow = isWithinSendWindow(now, windowStart, windowEnd);
+
     // G3 — resolve destinatários por setor
     const sectorCfg = config?.sectorConfig as Record<string, any> | null | undefined;
 
@@ -650,6 +681,27 @@ export class MonitorService implements OnModuleInit {
       // H1: mesmo corpo do digest agendado (severidade agrupada + link do painel),
       // só o título de topo muda para "⚡ Alerta imediato · {Setor}".
       const msg = this.buildImmediateMessage(category, sectorEvents);
+
+      // T9: fora da janela com hold → segura no MonitorDispatchService com
+      // notBefore = próxima abertura, mensagem ganha sufixo "(ocorrido às HH:MM)".
+      // Nunca aplica retroativamente a jobs já enfileirados (só decide aqui, na hora).
+      if (!inWindow && criticalOutsideWindow === 'hold') {
+        const openAt = nextWindowOpen(now, windowStart);
+        const heldMsg = `${msg}\n\n_(ocorrido às ${formatHourMinute(now)})_`;
+        this.dispatch.enqueue({
+          tenantId,
+          to: phone,
+          message: heldMsg,
+          origin: `immediate-hold:${category}`,
+          notBefore: openAt.getTime(),
+        });
+        this.logger.log(
+          `Monitor: alerta imediato SEGURADO — fora da janela ${windowStart}h-${windowEnd}h, ` +
+          `reagendado para ${openAt.toISOString()} (to=${phone} tenant=${tenantId} setor=${category})`,
+        );
+        continue;
+      }
+
       const r = await this.channel.sendTo(tenantId, phone, msg);
       if (r.sent) {
         this.logger.log(`Monitor: ${sectorEvents.length} alerta(s) imediato(s) enviado(s) para ${phone} (tenant=${tenantId})`);

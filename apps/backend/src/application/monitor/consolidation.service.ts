@@ -45,9 +45,15 @@ import {
   DEFAULT_SEND_TIMES,
   digestSlotKey,
   unifiedDigestSlotKey,
+  effectiveDelivery,
   type ContactRecipient,
   type ContactSendTime,
 } from './contact-recipient.types';
+import {
+  isWithinSendWindow,
+  DEFAULT_SEND_WINDOW_START,
+  DEFAULT_SEND_WINDOW_END,
+} from './send-window.util';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -506,6 +512,14 @@ export class ConsolidationService {
     let totalSent = 0;
     const todayStr = this.toDateStr(now);
 
+    // T9: janela geral de envio — digest e caixa (T8.6) NUNCA disparam fora dela,
+    // nem em catch-up (doc T9: "inclusive catch-up"). `force` (envio manual de
+    // teste/admin) segue bypassando, mesmo princípio dos outros gates de `force`
+    // já existentes neste método.
+    const windowStart = config?.sendWindowStart ?? DEFAULT_SEND_WINDOW_START;
+    const windowEnd = config?.sendWindowEnd ?? DEFAULT_SEND_WINDOW_END;
+    const inSendWindow = isWithinSendWindow(now, windowStart, windowEnd);
+
     const skipReasons: Record<string, string> = {};
 
     for (const contact of contacts) {
@@ -557,6 +571,12 @@ export class ConsolidationService {
         if (!force) {
           if (alreadySentToday) {
             skipReasons[skipKey] = 'ja_enviado_hoje';
+            continue;
+          }
+
+          // T9: fora da janela geral de envio → nada dispara, nem catch-up.
+          if (!inSendWindow) {
+            skipReasons[skipKey] = `fora_da_janela_de_envio(${windowStart}h-${windowEnd}h)`;
             continue;
           }
 
@@ -631,7 +651,16 @@ export class ConsolidationService {
             ? await this.getCashViewForTenant(tenantId, now)
             : null;
 
-        const message = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashView);
+        // T9: matriz efetiva de entrega — único ponto de derivação (nunca
+        // reimplementar, ver `effectiveDelivery`). Gate por canal: WhatsApp e
+        // e-mail podem receber conteúdo diferente (digest ligado/desligado
+        // independente do bloco de caixa) — cada builder recebe só o cashView
+        // que o canal em questão está autorizado a ver.
+        const delivery = effectiveDelivery(contact);
+        const cashViewForWa = delivery.cash.whatsapp ? cashView : null;
+        const cashViewForEmail = delivery.cash.email ? cashView : null;
+
+        const message = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashViewForWa);
         const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
 
         // Mesmo princípio do BUG FIX per-sector (2026-07-14): reivindica o slot e
@@ -646,16 +675,22 @@ export class ConsolidationService {
           await this.persistContacts(tenantId, contacts);
         }
 
-        if (contact.whatsapp) {
+        // T9: digest via WhatsApp só se a matriz efetiva permitir para este canal.
+        if (contact.whatsapp && delivery.digest.whatsapp) {
           await this.notification.notifyPhone(tenantId, contact.whatsapp, message, force ? 0 : 120_000);
           this.logger.log(
             `[${tenantId}] contato ${contact.id}@${slotLabel}: ${nonCriticalAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
           );
+        } else if (contact.whatsapp) {
+          this.logger.debug(
+            `[${tenantId}] contato ${contact.id}@${slotLabel}: digest via WhatsApp desligado na matriz de entrega — não enviado`,
+          );
         }
 
-        if (contact.emails?.length) {
+        // T9: digest via e-mail só se a matriz efetiva permitir para este canal.
+        if (contact.emails?.length && delivery.digest.email) {
           const subject = `⚠️ HiperTMS — Pendências · ${now.toLocaleDateString('pt-BR')} ${slotLabel}`;
-          const html = this.buildUnifiedEmailHtml(enabledSectors, alertsBySector, now, slotLabel, cashView);
+          const html = this.buildUnifiedEmailHtml(enabledSectors, alertsBySector, now, slotLabel, cashViewForEmail);
           for (const email of contact.emails) {
             const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
             if (result.sent) {

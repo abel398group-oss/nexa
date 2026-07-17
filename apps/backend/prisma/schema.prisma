@@ -824,6 +824,13 @@ model TenantNotificationConfig {
   // 'CRITICAL' (default) = só alertas CRITICAL notificam imediatamente.
   // 'all' = todo evento novo notifica (comportamento pré-G4).
   immediateSeverity  String   @default("CRITICAL") @map("immediate_severity")
+  // T9 (2026-07-17): janela geral de envio — nada dispara fora dela (digest,
+  // fechamento e caixa respeitam sempre, inclusive catch-up). Imediatos CRITICAL
+  // seguem `criticalOutsideWindow`: 'hold' (default, segura até abrir) ou 'send'
+  // (fura a janela, comportamento pré-T9). Granularidade de hora.
+  sendWindowStart        Int    @default(6)    @map("send_window_start")
+  sendWindowEnd          Int    @default(20)   @map("send_window_end")
+  criticalOutsideWindow  String @default("hold") @map("critical_outside_window")
   monitorOverride Boolean  @default(false) @map("monitor_override") // platform-admin override: unlock monitor regardless of plan
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")

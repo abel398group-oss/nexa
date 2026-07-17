@@ -1,15 +1,15 @@
 /**
  * MonitorConfigPage — /settings/monitor
- * Monitor Proativo: alertas automáticos do TMS por setor.
+ * Monitor Proativo: alertas automáticos do TMS, um contato por pessoa (T9).
  *
  * Funcionalidades:
- *  - Tags removíveis para WhatsApp e E-mail por setor (RecipientTagsInput)
- *  - Auto-fill de telefone/e-mail a partir do cadastro do usuário (GET /monitor/prefill)
- *  - Default Dom-Sáb (todos os dias) para novos setores
- *  - Plan gate: exibe banner + bloqueia edição quando plano não permite
- *  - Override de plano: visível apenas para platform admins
+ *  - Contatos: nome + WhatsApp e/ou e-mails, setores, até 3 horários, matriz de
+ *    entrega por canal (pendências/fechamento/caixa × WhatsApp/e-mail) — T9.
+ *  - Janela geral de envio (config do Monitor) + hold de críticos fora dela.
+ *  - Plan gate: exibe banner + bloqueia edição quando plano não permite.
+ *  - Override de plano: visível apenas para platform admins.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
@@ -40,53 +40,15 @@ import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTag
 
 type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
 
-/** Estado interno de um setor — usa recipients[] em vez de strings CSV. */
-interface SectorDetail {
-  /** Destinatários (WhatsApp + e-mail combinados). */
-  recipients: Recipient[];
-  sendHour: number;
-  sendMinute: number;
-  /** Dias da semana de envio (0=dom … 6=sáb). */
-  sendDays: number[];
-}
-
-/** Shape do sectorConfig vindo do backend (pode ter campos legados ou recipients[]). */
-interface BackendSectorDetail {
-  phone?: string;
-  email?: string;
-  recipients?: Recipient[];
-  sendHour?: number;
-  sendMinute?: number;
-  sendDays?: number[];
-}
-
-/**
- * Converte SectorDetail em payload para o backend.
- * Mantém phone/email = primeiro de cada canal (retrocompat já existente no backend).
- * Sempre envia recipients[] — o backend usa esse campo prioritariamente.
- */
-function sectorToPayload(d: SectorDetail): BackendSectorDetail & { recipients: Recipient[] } {
-  const waFirst  = d.recipients.find((r) => r.channel === 'whatsapp')?.contact ?? '';
-  const emlFirst = d.recipients.find((r) => r.channel === 'email')?.contact ?? '';
-  return {
-    ...d,
-    phone: waFirst,
-    email: emlFirst,
-    recipients: d.recipients,
-  };
-}
-
 const ALL_DAYS  = [0, 1, 2, 3, 4, 5, 6];
 const WEEKDAYS  = [1, 2, 3, 4, 5];
 const DAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const DAY_TITLES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-type SectorConfigMap = Record<SectorKey, SectorDetail>;
-
-// ─── T6: contatos com horário próprio ───────────────────────────────────────
-// Um contato (1 WhatsApp e/ou N e-mails) marca em quais setores recebe alerta
-// e até 3 horários próprios — independente do horário dos cards de setor acima.
-// Quando presente, tem prioridade no backend sobre o sectorConfig legado.
+// ─── T6/T9: contatos com horário próprio ────────────────────────────────────
+// Um contato (T9: uma PESSOA — nome + WhatsApp e/ou N e-mails) marca em quais
+// setores recebe alerta, até 3 horários próprios e uma matriz de entrega por
+// canal (T9). Tem prioridade no backend sobre o sectorConfig legado.
 
 interface ContactSendTime {
   hour: number;
@@ -98,8 +60,23 @@ type ClosingReportKind = 'off' | 'biweekly' | 'monthly';
 /** T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia — 'off' (default) | 'lastSlot'. */
 type CashViewMode = 'off' | 'lastSlot';
 
+/** T9: flags de canal — usado nas 3 linhas da matriz de entrega (digest/closing/cash). */
+interface ChannelFlags {
+  whatsapp: boolean;
+  email: boolean;
+}
+
+/** T9: matriz "o que enviar em cada canal" — 3 linhas × 2 colunas (whatsapp/email). */
+interface DeliveryMatrix {
+  digest: ChannelFlags;
+  closing: ChannelFlags;
+  cash: ChannelFlags;
+}
+
 interface ContactRecipient {
   id: string;
+  /** T9: nome de exibição — opcional (contato legado pode não ter). */
+  name?: string;
   whatsapp?: string;
   emails: string[];
   sectors: SectorKey[];
@@ -107,10 +84,13 @@ interface ContactRecipient {
   sendDays: number[];
   closingReport?: ClosingReportKind;
   cashView?: CashViewMode;
+  /** T9: matriz explícita — ausente = deriva do comportamento pré-T9 (compat, ver backend `effectiveDelivery`). */
+  delivery?: DeliveryMatrix;
 }
 
 const MAX_CONTACT_TIMES = 3;
 const DEFAULT_CONTACT_TIME: ContactSendTime = { hour: 8, minute: 0 };
+const CONTACT_NAME_MAX_LENGTH = 60;
 
 const CLOSING_REPORT_OPTIONS: { value: ClosingReportKind; label: string }[] = [
   { value: 'off', label: 'Desligado' },
@@ -122,10 +102,31 @@ const CASH_VIEW_OPTIONS: { value: CashViewMode; label: string }[] = [
   { value: 'lastSlot', label: 'No último horário' },
 ];
 
+/** T9: as 3 linhas da matriz de entrega, na ordem em que aparecem no modal. */
+const DELIVERY_ROWS: { key: keyof DeliveryMatrix; label: string }[] = [
+  { key: 'digest', label: '⚠️ Pendências do dia' },
+  { key: 'closing', label: '📊 Resumo de fechamento' },
+  { key: 'cash', label: '💰 Visão do caixa' },
+];
+
+/**
+ * T9: matriz default de contato NOVO — digest sempre ligado (mesmo comportamento
+ * pré-T9); fechamento ligado porque `closingReport` nasce 'monthly' (ver
+ * openNewContact); caixa desligado porque `cashView` nasce 'off'. As flags só
+ * "pegam" de verdade no canal que o contato realmente tiver — a trava final em
+ * `saveContactModal` zera qualquer canal ausente antes de persistir.
+ */
+function defaultDeliveryMatrix(): DeliveryMatrix {
+  return {
+    digest: { whatsapp: true, email: true },
+    closing: { whatsapp: true, email: true },
+    cash: { whatsapp: false, email: false },
+  };
+}
+
 interface ContactModalState {
   editId: string | null;
-  /** Módulo de cadastro é separado por canal — o modal só mostra o campo do canal ativo. */
-  channel: 'whatsapp' | 'email';
+  name: string;
   whatsapp: string;
   emails: string[];
   sectors: SectorKey[];
@@ -133,10 +134,15 @@ interface ContactModalState {
   sendDays: number[];
   closingReport: ClosingReportKind;
   cashView: CashViewMode;
+  delivery: DeliveryMatrix;
   error: string | null;
   /** true enquanto o PUT de salvar o contato está em voo (ver saveContactModal). */
   saving?: boolean;
 }
+
+/** T9: janela geral de envio do Monitor — nada dispara fora dela (ver send-window.util.ts no backend). */
+const DEFAULT_SEND_WINDOW_START = 6;
+const DEFAULT_SEND_WINDOW_END = 20;
 
 interface MonitorConfig {
   enabled: boolean;
@@ -150,9 +156,14 @@ interface MonitorConfig {
   logisticEnabled: boolean;
   frotaEnabled: boolean;
   financeEnabled: boolean;
-  sectorConfig?: Record<string, BackendSectorDetail> | null;
+  sectorConfig?: Record<string, unknown> | null;
   /** T6: contatos com horário próprio — fonte de verdade quando presente (ver ConsolidationService). */
   contacts?: ContactRecipient[];
+  /** T9: janela geral de envio (default 06:00–20:00). */
+  sendWindowStart?: number;
+  sendWindowEnd?: number;
+  /** T9: imediatos CRITICAL fora da janela — 'hold' (default) segura, 'send' fura. */
+  criticalOutsideWindow?: 'hold' | 'send';
   /** Computed by backend: true if tenant plan allows Monitor (or override active). */
   planAllowed?: boolean;
   /** True if platform admin enabled override for this tenant. */
@@ -236,14 +247,6 @@ const SECTORS: Array<{
     badgeClass: 'bg-emerald-500/20 text-emerald-400',
   },
 ];
-
-/**
- * Standby (2026-07): grade "Alertas por setor" (horário padrão + 4 cards por setor)
- * tirada de tela a pedido do Abel — a tela de contatos (T6) cobre o fluxo principal
- * agora. Código mantido intacto (não removido) porque a intenção é reativar essa
- * grade depois, possivelmente lado a lado com os contatos. Reative trocando para `true`.
- */
-const SECTOR_GRID_ENABLED = false;
 
 const SEVERITY_BADGE: Record<string, string> = {
   CRITICAL: 'badge-error',
@@ -361,37 +364,24 @@ const DEFAULT_CONFIG: MonitorConfig = {
   frotaEnabled: true,
   financeEnabled: true,
   sectorConfig: null,
+  sendWindowStart: DEFAULT_SEND_WINDOW_START,
+  sendWindowEnd: DEFAULT_SEND_WINDOW_END,
+  criticalOutsideWindow: 'hold',
   planAllowed: false,
   monitorOverride: false,
 };
-
-/** Cria sectorConfig vazio com dias Dom-Sáb por padrão. */
-const makeSectorConfig = (defaultHour = 7, defaultMinute = 0): SectorConfigMap => ({
-  fiscal:   { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  logistic: { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  frota:    { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-  finance:  { recipients: [], sendHour: defaultHour, sendMinute: defaultMinute, sendDays: ALL_DAYS },
-});
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
 export function MonitorConfigPage() {
   const [cfg, setCfg]       = useState<MonitorConfig>(DEFAULT_CONFIG);
-  const [sectors, setSectors] = useState<SectorConfigMap>(makeSectorConfig());
   const [saving, setSaving] = useState(false);
 
-  // T6: contatos com horário próprio (até 3 horários, opcional, tem prioridade no backend).
+  // T6/T9: contatos com horário próprio (até 3 horários, opcional, tem prioridade no backend).
   const [contacts, setContacts] = useState<ContactRecipient[]>([]);
   const [contactModal, setContactModal] = useState<ContactModalState | null>(null);
-  /** Aba ativa da lista de contatos: 'all' ou um setor específico (filtro, "lista única, canal misto"). */
+  /** Aba ativa da lista de contatos: 'all' ou um setor específico. */
   const [contactTab, setContactTab] = useState<'all' | SectorKey>('all');
-
-  /** Horário padrão: referência para "Aplicar a todos" e badge "personalizado". */
-  const [defaultSchedule, setDefaultSchedule] = useState<{
-    sendHour: number;
-    sendMinute: number;
-    sendDays: number[];
-  }>({ sendHour: 7, sendMinute: 0, sendDays: ALL_DAYS });
 
   const toast           = useToast();
   const confirm         = useConfirm();
@@ -406,69 +396,10 @@ export function MonitorConfigPage() {
     queryFn: () => api.get('/monitor/config').then((r) => r.data),
   });
 
-  const { data: prefill } = useQuery<{ email: string | null; phone: string | null }>({
-    queryKey: ['monitor-prefill'],
-    queryFn: () => api.get('/monitor/prefill').then((r) => r.data),
-    staleTime: Infinity,
-  });
-
   useEffect(() => {
     if (!config) return;
     setCfg({ ...DEFAULT_CONFIG, ...config });
     setContacts(Array.isArray(config.contacts) ? config.contacts : []);
-
-    const sc          = config.sectorConfig as Record<string, BackendSectorDetail> | null | undefined;
-    const h           = config.sendHour ?? 7;
-    const m           = config.sendMinute ?? 0;
-    const legacyDays  = (config.sendWeekends ?? true) ? ALL_DAYS : WEEKDAYS;
-
-    /**
-     * Constrói SectorDetail a partir do payload do backend.
-     * Prioridade: recipients[] → migra phone/email legados (e CSV antigo) → vazio.
-     */
-    const withRecipients = (detail?: BackendSectorDetail): SectorDetail => {
-      const recips: Recipient[] = Array.isArray(detail?.recipients) ? detail!.recipients! : [];
-
-      // Migração legada: sem recipients[] mas tem phone/email (string ou CSV)
-      if (recips.length === 0 && detail) {
-        if (detail.phone) {
-          detail.phone
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .forEach((contact) => recips.push({ contact, channel: 'whatsapp' }));
-        }
-        if (detail.email) {
-          detail.email
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .forEach((contact) => recips.push({ contact, channel: 'email' }));
-        }
-      }
-
-      return {
-        recipients: recips,
-        sendHour:   detail?.sendHour ?? h,
-        sendMinute: detail?.sendMinute ?? m,
-        sendDays:   detail?.sendDays?.length ? detail.sendDays : legacyDays,
-      };
-    };
-
-    setSectors({
-      fiscal:   withRecipients(sc?.fiscal),
-      logistic: withRecipients(sc?.logistic),
-      frota:    withRecipients(sc?.frota),
-      finance:  withRecipients(sc?.finance),
-    });
-
-    // Inicializa o horário padrão a partir do global do backend.
-    // sendDays não existe no nível global → padrão ALL_DAYS.
-    setDefaultSchedule({
-      sendHour:   config.sendHour   ?? 7,
-      sendMinute: config.sendMinute ?? 0,
-      sendDays:   ALL_DAYS,
-    });
   }, [config]);
 
   const { data: alerts = [], isLoading: loadingAlerts } = useQuery<AlertState[]>({
@@ -496,25 +427,10 @@ export function MonitorConfigPage() {
             !['sectorConfig', 'planAllowed', 'monitorOverride', 'waNumbersUsed', 'waNumbersLimit'].includes(k),
           ),
         ),
-        // BUGFIX (2026-07): com a grade "Alertas por setor" em standby
-        // (SECTOR_GRID_ENABLED=false), o estado local `sectors` fica parado — ainda
-        // carrega os números antigos que vieram no último GET, mas o usuário não
-        // consegue mais editá-los. Reenviar esse `sectorConfig` congelado a cada save
-        // fazia o backend contar os números antigos + os novos contatos juntos no
-        // limite de WhatsApp do plano, bloqueando o save do contato com 400 mesmo sem
-        // nenhum número novo de fato ter sido adicionado além do necessário. Enquanto
-        // a grade estiver oculta, não reenviamos sectorConfig — o backend preserva o
-        // que já está salvo e só deriva phone/email a partir de `contacts`.
-        ...(SECTOR_GRID_ENABLED
-          ? {
-              sectorConfig: {
-                fiscal:   sectorToPayload(sectors.fiscal),
-                logistic: sectorToPayload(sectors.logistic),
-                frota:    sectorToPayload(sectors.frota),
-                finance:  sectorToPayload(sectors.finance),
-              },
-            }
-          : {}),
+        // BUGFIX (2026-07): a grade legada "Alertas por setor" foi removida da tela
+        // (T9, decisão 5 — cada contato já escolhe setores). Nunca reenviamos
+        // sectorConfig — o backend preserva o que já está salvo e só deriva
+        // phone/email a partir de `contacts` (deriveSectorConfigFallback).
         // T6: só envia contatos que tenham pelo menos 1 canal e 1 setor — evita
         // mandar rascunhos inválidos que o backend descartaria silenciosamente.
         // BUGFIX (2026-07): monta só os campos que o DTO conhece — `contacts` no
@@ -525,6 +441,7 @@ export function MonitorConfigPage() {
           .filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0)
           .map((c) => ({
             id: c.id,
+            name: c.name,
             whatsapp: c.whatsapp,
             emails: c.emails,
             sectors: c.sectors,
@@ -533,6 +450,8 @@ export function MonitorConfigPage() {
             // T8: ver nota igual em persistContacts() — mesmo motivo.
             closingReport: c.closingReport ?? 'off',
             cashView: c.cashView ?? 'off',
+            // T9: ver nota igual em persistContacts() — mesmo motivo.
+            delivery: c.delivery,
           })),
       };
       await api.put('/monitor/config', payload);
@@ -609,108 +528,27 @@ export function MonitorConfigPage() {
   const atWaLimit      = planAllowed && waNumbersLimit > 0 && waNumbersUsed >= waNumbersLimit;
 
   /**
-   * Retorna true quando o setor tem hora/minuto/dias diferentes do horário padrão.
-   * Usado para exibir o badge "personalizado" em cada card de setor.
+   * T9: janela de envio efetiva (config geral) — usada pro aviso não-bloqueante
+   * de horário fora da janela no modal de contato.
    */
-  function isSectorCustomized(sc: SectorDetail): boolean {
-    if (sc.sendHour !== defaultSchedule.sendHour) return true;
-    if (sc.sendMinute !== defaultSchedule.sendMinute) return true;
-    const a = [...(sc.sendDays ?? ALL_DAYS)].sort((x, y) => x - y).join(',');
-    const b = [...defaultSchedule.sendDays].sort((x, y) => x - y).join(',');
-    return a !== b;
-  }
+  const sendWindowStart = cfg.sendWindowStart ?? DEFAULT_SEND_WINDOW_START;
+  const sendWindowEnd   = cfg.sendWindowEnd   ?? DEFAULT_SEND_WINDOW_END;
 
-  /** Liga/desliga um dia no horário padrão (mínimo 1 dia). */
-  function toggleDefaultDay(day: number) {
-    setDefaultSchedule((s) => {
-      const next = s.sendDays.includes(day)
-        ? s.sendDays.filter((d) => d !== day)
-        : [...s.sendDays, day].sort((a, b) => a - b);
-      if (next.length === 0) return s;
-      return { ...s, sendDays: next };
-    });
-  }
-
-  /** Copia defaultSchedule para os 4 setores (com confirmação). */
-  async function applyScheduleToAll() {
-    const ok = await confirm({
-      title: 'Aplicar horário padrão a todos os setores?',
-      message:
-        'Isso substitui os horários individuais dos 4 setores. ' +
-        'Você ainda pode ajustar qualquer setor individualmente depois.',
-      confirmLabel: 'Aplicar a todos',
-      variant: 'warning',
-    });
-    if (!ok) return;
-    setSectors((s) => {
-      const updated = { ...s };
-      for (const key of Object.keys(updated) as SectorKey[]) {
-        updated[key] = { ...updated[key], ...defaultSchedule };
-      }
-      return updated;
-    });
-    // Mantém cfg global em sincronia (sendHour/sendMinute vão no payload)
-    set('sendHour', defaultSchedule.sendHour);
-    set('sendMinute', defaultSchedule.sendMinute);
+  /** true quando um horário (hour) cai fora da janela geral de envio [start, end). */
+  function isOutsideSendWindow(hour: number): boolean {
+    return !(hour >= sendWindowStart && hour < sendWindowEnd);
   }
 
   const set = <K extends keyof MonitorConfig>(key: K, val: MonitorConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
-  const setSectorField = (
-    key: SectorKey,
-    field: 'sendHour' | 'sendMinute',
-    val: number,
-  ) => setSectors((s) => ({ ...s, [key]: { ...s[key], [field]: val } }));
+  // ─── T6/T9: CRUD de contatos ────────────────────────────────────────────────
 
-  const setSectorRecipients = (key: SectorKey, recipients: Recipient[]) =>
-    setSectors((s) => ({ ...s, [key]: { ...s[key], recipients } }));
-
-  /** Liga/desliga um dia do setor. Impede deixar zero dias (mínimo 1). */
-  const toggleSectorDay = (key: SectorKey, day: number) =>
-    setSectors((s) => {
-      const current = s[key].sendDays ?? ALL_DAYS;
-      const next = current.includes(day)
-        ? current.filter((d) => d !== day)
-        : [...current, day].sort((a, b) => a - b);
-      if (next.length === 0) return s;
-      return { ...s, [key]: { ...s[key], sendDays: next } };
-    });
-
-  /**
-   * Auto-fill: adiciona telefone/e-mail do cadastro nos setores que ainda não
-   * têm nenhum destinatário do canal correspondente.
-   */
-  function fillAllSectorsFromPrefill() {
-    if (!prefill) return;
-    setSectors((s) => {
-      const updated = { ...s };
-      for (const key of Object.keys(updated) as SectorKey[]) {
-        const existing = updated[key].recipients;
-        const hasWa    = existing.some((r) => r.channel === 'whatsapp');
-        const hasEmail = existing.some((r) => r.channel === 'email');
-        const toAdd: Recipient[] = [];
-        if (!hasWa    && prefill.phone) toAdd.push({ contact: prefill.phone, channel: 'whatsapp' });
-        if (!hasEmail && prefill.email) toAdd.push({ contact: prefill.email, channel: 'email' });
-        if (toAdd.length > 0) {
-          updated[key] = {
-            ...updated[key],
-            recipients: [...existing, ...toAdd].slice(0, 10),
-          };
-        }
-      }
-      return updated;
-    });
-    toast.success('Dados pré-preenchidos a partir do seu cadastro.');
-  }
-
-  // ─── T6: CRUD de contatos ───────────────────────────────────────────────────
-
-  /** Cadastro é um módulo por canal — abre só o campo do canal escolhido. */
-  function openNewContact(channel: 'whatsapp' | 'email') {
+  /** T9: contato = pessoa — nome + WhatsApp e/ou e-mails, um módulo único. */
+  function openNewContact() {
     setContactModal({
       editId: null,
-      channel,
+      name: '',
       whatsapp: '',
       emails: [],
       sectors: [],
@@ -721,15 +559,18 @@ export function MonitorConfigPage() {
       // Visão do caixa nasce sempre desligada (ninguém liga sem pedir).
       closingReport: 'monthly',
       cashView: 'off',
+      delivery: defaultDeliveryMatrix(),
       error: null,
     });
   }
 
-  /** Editar também é por canal — mexe só no campo do canal daquela linha, preserva o outro canal intacto. */
-  function openEditContact(c: ContactRecipient, channel: 'whatsapp' | 'email') {
+  /** T9: edita a pessoa inteira num modal só — preserva o que já tinha (nome, matriz etc.). */
+  function openEditContact(c: ContactRecipient) {
+    const hasWa = !!c.whatsapp;
+    const hasEmail = c.emails.length > 0;
     setContactModal({
       editId: c.id,
-      channel,
+      name: c.name ?? '',
       whatsapp: c.whatsapp ?? '',
       emails: c.emails,
       sectors: c.sectors,
@@ -738,8 +579,34 @@ export function MonitorConfigPage() {
       // T8: contato EXISTENTE preserva o que já tinha — 'off' se nunca configurado.
       closingReport: c.closingReport ?? 'off',
       cashView: c.cashView ?? 'off',
+      // T9: preserva a matriz explícita se já existir; senão deriva do compat
+      // (mesmo princípio do backend `effectiveDelivery`, só que aqui é só pra
+      // pré-popular o modal — o backend recalcula/força ao salvar de qualquer forma).
+      delivery: c.delivery ?? {
+        digest: { whatsapp: hasWa, email: hasEmail },
+        closing: {
+          whatsapp: hasWa && c.closingReport !== undefined && c.closingReport !== 'off',
+          email: hasEmail && c.closingReport !== undefined && c.closingReport !== 'off',
+        },
+        cash: { whatsapp: hasWa && c.cashView === 'lastSlot', email: hasEmail && c.cashView === 'lastSlot' },
+      },
       error: null,
     });
+  }
+
+  /** T9: liga/desliga um canal numa linha da matriz de entrega. */
+  function toggleDeliveryFlag(row: keyof DeliveryMatrix, channel: keyof ChannelFlags) {
+    setContactModal((m) =>
+      m
+        ? {
+            ...m,
+            delivery: {
+              ...m.delivery,
+              [row]: { ...m.delivery[row], [channel]: !m.delivery[row][channel] },
+            },
+          }
+        : m,
+    );
   }
 
   function toggleContactSector(key: SectorKey) {
@@ -799,6 +666,7 @@ export function MonitorConfigPage() {
         .filter((c) => (c.whatsapp || c.emails.length > 0) && c.sectors.length > 0)
         .map((c) => ({
           id: c.id,
+          name: c.name,
           whatsapp: c.whatsapp,
           emails: c.emails,
           sectors: c.sectors,
@@ -809,6 +677,8 @@ export function MonitorConfigPage() {
           // (mesmo bug de origem do incidente T6 — ver REGRAS-SQUAD Regra 1).
           closingReport: c.closingReport ?? 'off',
           cashView: c.cashView ?? 'off',
+          // T9: idem — matriz de entrega sempre junto (mesmo motivo acima).
+          delivery: c.delivery,
         }));
       await api.put('/monitor/config', { contacts: filtered });
       setContacts(next);
@@ -824,44 +694,49 @@ export function MonitorConfigPage() {
   async function saveContactModal() {
     if (!contactModal) return;
     const digits = contactModal.whatsapp.replace(/\D/g, '');
-    const isWhatsapp = contactModal.channel === 'whatsapp';
+    const hasWa = !!digits;
+    const hasEmail = contactModal.emails.length > 0;
 
-    if (isWhatsapp && !digits) {
-      setContactModal({ ...contactModal, error: 'Informe um número de WhatsApp.' });
-      return;
-    }
-    if (isWhatsapp && digits.length < 12) {
+    if (hasWa && digits.length < 12) {
       setContactModal({ ...contactModal, error: 'Telefone inválido — use DDI + DDD + número (ex: 5511999999999).' });
       return;
     }
-    if (!isWhatsapp && contactModal.emails.length === 0) {
-      setContactModal({ ...contactModal, error: 'Informe pelo menos um e-mail.' });
+    // T9: contato = pessoa — precisa de pelo menos um canal (mesma validação do backend,
+    // ver validateContactHasChannel).
+    if (!hasWa && !hasEmail) {
+      setContactModal({ ...contactModal, error: 'Informe pelo menos um canal — WhatsApp ou e-mail.' });
       return;
     }
     if (contactModal.sectors.length === 0) {
       setContactModal({ ...contactModal, error: 'Selecione ao menos um setor.' });
       return;
     }
-    const dup = isWhatsapp && contacts.some((c) => c.id !== contactModal.editId && c.whatsapp === digits);
+    const dup = hasWa && contacts.some((c) => c.id !== contactModal.editId && c.whatsapp === digits);
     if (dup) {
       setContactModal({ ...contactModal, error: 'Esse WhatsApp já está cadastrado em outro contato.' });
       return;
     }
 
-    // Módulo de cadastro é por canal: salvar no módulo WhatsApp só grava/edita o
-    // whatsapp; salvar no módulo E-mail só grava/edita os e-mails. Se o registro
-    // já tinha o OUTRO canal preenchido (ex.: contato antigo, de antes dessa
-    // separação), preserva esse outro canal intacto em vez de apagar.
-    const existing = contactModal.editId ? contacts.find((c) => c.id === contactModal.editId) : undefined;
+    const name = contactModal.name.trim().slice(0, CONTACT_NAME_MAX_LENGTH) || undefined;
     const saved: ContactRecipient = {
       id: contactModal.editId ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      whatsapp: isWhatsapp ? digits : existing?.whatsapp,
-      emails: isWhatsapp ? (existing?.emails ?? []) : contactModal.emails,
+      name,
+      whatsapp: hasWa ? digits : undefined,
+      emails: contactModal.emails,
       sectors: contactModal.sectors,
       sendTimes: contactModal.sendTimes,
       sendDays: contactModal.sendDays,
       closingReport: contactModal.closingReport,
       cashView: contactModal.cashView,
+      // T9: força false em qualquer canal que o contato não tenha de fato — mesma
+      // trava defensiva do backend (`effectiveDelivery`), aplicada aqui também
+      // pra não mandar uma matriz inconsistente (ex.: WhatsApp removido mas ainda
+      // marcado na matriz).
+      delivery: {
+        digest: { whatsapp: contactModal.delivery.digest.whatsapp && hasWa, email: contactModal.delivery.digest.email && hasEmail },
+        closing: { whatsapp: contactModal.delivery.closing.whatsapp && hasWa, email: contactModal.delivery.closing.email && hasEmail },
+        cash: { whatsapp: contactModal.delivery.cash.whatsapp && hasWa, email: contactModal.delivery.cash.email && hasEmail },
+      },
     };
 
     const next = contactModal.editId
@@ -881,7 +756,7 @@ export function MonitorConfigPage() {
   async function removeContact(c: ContactRecipient) {
     const ok = await confirm({
       title: 'Remover contato',
-      message: `${c.whatsapp || c.emails[0] || 'Este contato'} deixará de receber os alertas configurados nele.`,
+      message: `${c.name || c.whatsapp || c.emails[0] || 'Este contato'} deixará de receber os alertas configurados nele.`,
       confirmLabel: 'Remover',
       variant: 'danger',
     });
@@ -1002,301 +877,67 @@ export function MonitorConfigPage() {
             </div>
           </div>
 
-          {/* ─── Grid de setores (standby — ver SECTOR_GRID_ENABLED) ───────── */}
-          {SECTOR_GRID_ENABLED && (
-          <div className={`transition-opacity ${cfg.enabled && planAllowed ? '' : 'opacity-40 pointer-events-none'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-base-content/40">
-                Alertas por setor
-              </p>
-              {prefill && (prefill.phone || prefill.email) && (
-                <button
-                  type="button"
-                  className="text-xs text-brand-500 hover:text-brand-400 transition-colors flex items-center gap-1"
-                  onClick={fillAllSectorsFromPrefill}
-                  title="Preenche com seus dados de cadastro nos setores em branco"
-                >
-                  <Icon name="users" className="h-3 w-3" />
-                  Usar dados do meu cadastro
-                </button>
-              )}
-            </div>
-
-            {/* ─── Horário padrão ───────────────────────────────────────────── */}
-            <div className="card px-5 py-4 mb-4 border border-base-200">
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-sm font-semibold text-base-content">Horário padrão (todos os setores)</p>
-                  <p className="text-xs text-base-content/50 mt-0.5">
-                    Horário base para os alertas. "Aplicar a todos" copia para os 4 setores; cada setor ainda pode ter horário individual.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={applyScheduleToAll}
-                  className="shrink-0 rounded-md border border-base-300 bg-white px-3 py-1.5 text-xs font-medium text-base-content/70 shadow-sm hover:border-brand-500 hover:text-brand-600 transition-colors"
-                >
-                  Aplicar a todos os setores
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Hora */}
+          {/* ─── T9: Janela de envio (config geral do Monitor) ─────────────── */}
+          <div className={`card px-5 py-4 ${!planAllowed ? 'opacity-50 pointer-events-none' : ''}`}>
+            <p className="text-sm font-semibold text-base-content">Janela de envio</p>
+            <p className="text-xs text-base-content/50 mt-0.5 mb-3">
+              Nada dispara fora dela — pendências, fechamento e caixa (inclusive reenvios atrasados).
+              Alertas críticos imediatos seguem a opção abaixo.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-base-content/50">
+                <span>Das</span>
                 <select
                   className="select select-bordered select-sm"
-                  value={defaultSchedule.sendHour}
-                  onChange={(e) =>
-                    setDefaultSchedule((s) => ({ ...s, sendHour: Number(e.target.value) }))
-                  }
-                  aria-label="Hora padrão"
+                  aria-label="Início da janela de envio"
+                  value={sendWindowStart}
+                  onChange={(e) => set('sendWindowStart', Number(e.target.value))}
                 >
                   {HOURS.map((h) => (
                     <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
                   ))}
                 </select>
-
-                {/* Minuto */}
+                <span>às</span>
                 <select
-                  className="select select-bordered select-sm w-28"
-                  value={defaultSchedule.sendMinute}
-                  onChange={(e) =>
-                    setDefaultSchedule((s) => ({ ...s, sendMinute: Number(e.target.value) }))
-                  }
-                  aria-label="Minuto padrão"
+                  className="select select-bordered select-sm"
+                  aria-label="Fim da janela de envio"
+                  value={sendWindowEnd}
+                  onChange={(e) => set('sendWindowEnd', Number(e.target.value))}
                 >
-                  {MINUTES.map((mm) => (
-                    <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
                   ))}
                 </select>
-
-                {/* Dias */}
-                <div className="flex items-center gap-1.5">
-                  {ALL_DAYS.map((day) => {
-                    const active = defaultSchedule.sendDays.includes(day);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        title={DAY_TITLES[day]}
-                        aria-pressed={active}
-                        onClick={() => toggleDefaultDay(day)}
-                        className={`h-7 w-7 rounded-full text-[11px] font-semibold transition-colors ${
-                          active
-                            ? 'bg-brand-500 text-white'
-                            : 'bg-base-200 text-base-content/40 hover:bg-base-300'
-                        }`}
-                      >
-                        {DAY_LABELS[day]}
-                      </button>
-                    );
-                  })}
-                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-base-content/50">
+                <span>Crítico fora da janela:</span>
+                <SelectField
+                  aria-label="Crítico fora da janela"
+                  value={cfg.criticalOutsideWindow ?? 'hold'}
+                  onValueChange={(v) => set('criticalOutsideWindow', v as 'hold' | 'send')}
+                  options={[
+                    { value: 'hold', label: 'Segura até abrir' },
+                    { value: 'send', label: 'Envia na hora' },
+                  ]}
+                />
               </div>
             </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {SECTORS.map((sector) => {
-                const enabled = !!cfg[sector.enabledKey];
-                const sc      = sectors[sector.key];
-                const waRecips    = sc.recipients.filter((r) => r.channel === 'whatsapp');
-                const emailRecips = sc.recipients.filter((r) => r.channel === 'email');
-
-                return (
-                  <div
-                    key={sector.key}
-                    className={`card overflow-hidden ${sector.borderClass}`}
-                  >
-                    {/* Cabeçalho colorido */}
-                    <div className={`flex items-center justify-between gap-3 px-5 py-4 ${sector.headerClass} border-b border-base-200`}>
-                      <div className="flex items-center gap-3">
-                        <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${sector.badgeClass}`}>
-                          {sector.emoji}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-base-content">{sector.label}</p>
-                            {isSectorCustomized(sc) && (
-                              <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
-                                personalizado
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-base-content/50">{sector.sub}</p>
-                        </div>
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <span className="text-xs text-base-content/40">
-                          {enabled ? 'Ativo' : 'Inativo'}
-                        </span>
-                        <input
-                          type="checkbox"
-                          className="toggle toggle-primary toggle-sm"
-                          checked={enabled}
-                          onChange={(e) => set(sector.enabledKey, e.target.checked as any)}
-                        />
-                      </label>
-                    </div>
-
-                    {/* Corpo */}
-                    <div className={`px-5 py-5 space-y-5 transition-opacity ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
-
-                      {/* Horário */}
-                      <div>
-                        <p className="text-xs font-medium text-base-content/60 mb-2">
-                          Horário do alerta (Brasília)
-                        </p>
-                        <div className="flex gap-2">
-                          <select
-                            className="select select-bordered select-sm flex-1"
-                            value={sc.sendHour}
-                            onChange={(e) => setSectorField(sector.key, 'sendHour', Number(e.target.value))}
-                          >
-                            {HOURS.map((h) => (
-                              <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
-                            ))}
-                          </select>
-                          <select
-                            className="select select-bordered select-sm w-28"
-                            value={sc.sendMinute}
-                            onChange={(e) => setSectorField(sector.key, 'sendMinute', Number(e.target.value))}
-                          >
-                            {MINUTES.map((mm) => (
-                              <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Contador de números WhatsApp — visível só quando o plano tem limite */}
-                      {planAllowed && waNumbersLimit > 0 && (
-                        <div className="flex items-center justify-between text-xs text-base-content/50">
-                          <span>📱 Números WhatsApp no plano</span>
-                          <span className={atWaLimit ? 'font-semibold text-warning' : ''}>
-                            {waNumbersUsed} / {waNumbersLimit}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Bloco de upsell — só no primeiro setor ao atingir o limite */}
-                      {atWaLimit && sector.key === 'fiscal' && (
-                        <div className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning/90">
-                          <p className="font-semibold mb-0.5">Limite de números atingido</p>
-                          <p>
-                            Adicione mais números por{' '}
-                            <span className="font-medium">R$ 29,90/número/mês</span> em{' '}
-                            <a
-                              href="https://app.hipertms.com.br/configuracoes/assinatura"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline hover:opacity-80"
-                            >
-                              Configurações → Assinatura
-                            </a>{' '}
-                            no HiperTMS.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* WhatsApp — RecipientTagsInput */}
-                      {/* N3.4: disabled only when sector is off; removal always allowed.
-                          Additions are blocked in onChange when tenant is at the WA limit. */}
-                      <RecipientTagsInput
-                        channel="whatsapp"
-                        label="📱 WhatsApp (com DDI)"
-                        value={waRecips}
-                        onChange={(newWa) => {
-                          // Block only ADDITION when at limit; removal is always allowed.
-                          if (newWa.length > waRecips.length && atWaLimit) return;
-                          setSectorRecipients(sector.key, [
-                            ...newWa,
-                            ...emailRecips,
-                          ]);
-                        }}
-                        disabled={!enabled}
-                        max={10}
-                      />
-
-                      {/* E-mail — RecipientTagsInput */}
-                      <RecipientTagsInput
-                        channel="email"
-                        label="✉️ E-mail (opcional — canal dual)"
-                        value={emailRecips}
-                        onChange={(newEmail) =>
-                          setSectorRecipients(sector.key, [
-                            ...waRecips,
-                            ...newEmail,
-                          ])
-                        }
-                        disabled={!enabled}
-                        max={10}
-                      />
-
-                      {/* Dias de envio */}
-                      <div>
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="text-xs font-medium text-base-content/60">Dias de envio</p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
-                              onClick={() => setSectors((s) => ({ ...s, [sector.key]: { ...s[sector.key], sendDays: WEEKDAYS } }))}
-                            >
-                              Dias úteis
-                            </button>
-                            <button
-                              type="button"
-                              className="text-[11px] text-base-content/40 hover:text-base-content/70 transition-colors"
-                              onClick={() => setSectors((s) => ({ ...s, [sector.key]: { ...s[sector.key], sendDays: ALL_DAYS } }))}
-                            >
-                              Todos
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex gap-1.5">
-                          {ALL_DAYS.map((day) => {
-                            const active = (sc.sendDays ?? ALL_DAYS).includes(day);
-                            return (
-                              <button
-                                key={day}
-                                type="button"
-                                title={DAY_TITLES[day]}
-                                aria-pressed={active}
-                                onClick={() => toggleSectorDay(sector.key, day)}
-                                className={`h-7 w-7 rounded-full text-[11px] font-semibold transition-colors ${
-                                  active
-                                    ? 'bg-brand-500 text-white'
-                                    : 'bg-base-200 text-base-content/40 hover:bg-base-300'
-                                }`}
-                              >
-                                {DAY_LABELS[day]}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Histórico de envios do setor */}
-                    <SectorNotifStrip sectorKey={sector.key} />
-                  </div>
-                );
-              })}
-            </div>
           </div>
-          )}
 
-          {/* ─── T6: Contatos com horário próprio — lista única, canal misto ── */}
+          {/* ─── T9: Contatos — módulo único, uma linha por pessoa ─────────── */}
           <div className={`transition-opacity ${cfg.enabled && planAllowed ? '' : 'opacity-40 pointer-events-none'}`}>
             <div className="card px-5 py-4">
-              <div className="mb-1">
-                <p className="text-sm font-semibold text-base-content">Contatos com horário próprio</p>
-                <p className="text-xs text-base-content/50 mt-0.5">
-                  Opcional. Cadastre WhatsApp e e-mail em módulos separados — cada um pode ter até 3
-                  horários independentes por dia (ex.: 08h, 13h, 18h) e escolher em quais setores recebe
-                  alerta. Em cada horário, o contato recebe um relatório único com os setores que assina
-                  (no máximo 3 relatórios por dia — não 1 por setor). Contatos cadastrados aqui têm
-                  prioridade sobre o horário dos cards de setor acima.
-                </p>
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <div>
+                  <p className="text-sm font-semibold text-base-content">Contatos</p>
+                  <p className="text-xs text-base-content/50 mt-0.5">
+                    Cada contato é uma pessoa (WhatsApp e/ou e-mail), com até 3 horários próprios (ex.: 08h,
+                    13h, 18h), setores que assina e o que recebe em cada canal (pendências, fechamento, caixa).
+                  </p>
+                </div>
+                <Button type="button" variant="primary" size="sm" onClick={openNewContact}>
+                  <Icon name="plus" className="h-3.5 w-3.5" /> Novo contato
+                </Button>
               </div>
 
               {/* Abas: Todos + um por setor */}
@@ -1331,9 +972,9 @@ export function MonitorConfigPage() {
               </div>
 
               {(() => {
-                const bySector = (c: ContactRecipient) => contactTab === 'all' || c.sectors.includes(contactTab);
-                const waContacts    = contacts.filter((c) => !!c.whatsapp && bySector(c));
-                const emailContacts = contacts.filter((c) => c.emails.length > 0 && bySector(c));
+                const list = contacts.filter(
+                  (c) => contactTab === 'all' || c.sectors.includes(contactTab),
+                );
 
                 /** Resumo compacto dos dias de envio pra linha da lista. */
                 const daySummary = (days: number[]) => {
@@ -1343,187 +984,154 @@ export function MonitorConfigPage() {
                   return sorted.map((d) => DAY_TITLES[d]?.slice(0, 3)).join(', ');
                 };
 
-                const renderRows = (
-                  list: ContactRecipient[],
-                  channel: 'whatsapp' | 'email',
-                  contactCell: (c: ContactRecipient) => ReactNode,
-                ) =>
-                  list.map((c) => {
-                    const idLabel = c.whatsapp || c.emails[0] || 'contato';
-                    return (
-                      <TR key={c.id}>
-                        <TD className="min-w-0">{contactCell(c)}</TD>
-                        <TD>
-                          <div className="flex flex-wrap gap-1">
-                            {c.sectors.map((key) => {
-                              const meta = SECTORS.find((s) => s.key === key);
-                              return (
-                                <Badge key={key} className={meta?.badgeClass}>
-                                  {meta?.label ?? key}
-                                </Badge>
-                              );
-                            })}
-                            {/* T8.5/T8.6: badges discretos — só aparecem quando ligados. */}
-                            {c.closingReport && c.closingReport !== 'off' && (
-                              <Badge variant="info">
-                                Fechamento: {c.closingReport === 'biweekly' ? 'quinzenal' : 'mensal'}
-                              </Badge>
-                            )}
-                            {c.cashView === 'lastSlot' && <Badge variant="neutral">💰 Caixa</Badge>}
-                          </div>
-                        </TD>
-                        <TD>
-                          <div className="flex flex-col gap-1">
-                            {/* Texto dos horários fica num único nó (join ' · ') — os testes dependem disso. */}
-                            <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-base-200/60 px-2 py-1 text-[11px] font-medium text-base-content/60 whitespace-nowrap">
-                              <Icon name="clock" className="h-3 w-3 opacity-60" />
-                              {c.sendTimes
-                                .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
-                                .join(' · ')}
-                            </span>
-                            <span className="text-[10px] text-base-content/35 pl-0.5">{daySummary(c.sendDays)}</span>
-                          </div>
-                        </TD>
-                        <TD>
-                          <div className="flex gap-1 justify-end shrink-0">
-                            <IconButton
-                              variant="ghost"
-                              size="icon-xs"
-                              label={`Editar ${idLabel}`}
-                              title="Editar"
-                              onClick={() => openEditContact(c, channel)}
-                            >
-                              <Icon name="edit" className="h-3.5 w-3.5" />
-                            </IconButton>
-                            <IconButton
-                              variant="ghost"
-                              size="icon-xs"
-                              className="!text-error hover:!text-error"
-                              label={`Remover ${idLabel}`}
-                              title="Remover"
-                              onClick={() => removeContact(c)}
-                            >
-                              <Icon name="trash" className="h-3.5 w-3.5" />
-                            </IconButton>
-                          </div>
-                        </TD>
-                      </TR>
-                    );
-                  });
+                /** T9: resumo do que o contato recebe (compat quando não tem `delivery` explícito). */
+                const receivesSummary = (c: ContactRecipient): string => {
+                  const hasWa = !!c.whatsapp;
+                  const hasEmail = c.emails.length > 0;
+                  const d = c.delivery ?? {
+                    digest: { whatsapp: hasWa, email: hasEmail },
+                    closing: {
+                      whatsapp: hasWa && !!c.closingReport && c.closingReport !== 'off',
+                      email: hasEmail && !!c.closingReport && c.closingReport !== 'off',
+                    },
+                    cash: { whatsapp: hasWa && c.cashView === 'lastSlot', email: hasEmail && c.cashView === 'lastSlot' },
+                  };
+                  const parts: string[] = [];
+                  if (d.digest.whatsapp || d.digest.email) parts.push('Pendências');
+                  if (d.closing.whatsapp || d.closing.email) parts.push('Fechamento');
+                  if (d.cash.whatsapp || d.cash.email) parts.push('Caixa');
+                  return parts.length ? parts.join(', ') : '—';
+                };
 
-                const tableHead = (firstCol: string) => (
-                  <THead>
-                    <TR>
-                      <TH>{firstCol}</TH>
-                      <TH>Setores</TH>
-                      <TH>Horários</TH>
-                      <TH />
-                    </TR>
-                  </THead>
-                );
+                if (list.length === 0) {
+                  return (
+                    <EmptyState
+                      icon={<Icon name="users" className="h-8 w-8" />}
+                      title="Nenhum contato cadastrado."
+                      description={'Clique em "+ Novo contato" para criar uma pessoa com WhatsApp e/ou e-mail.'}
+                    />
+                  );
+                }
 
                 return (
-                  <div className="mt-3 space-y-4">
-                    {/* Módulo WhatsApp — cadastro e lista próprios, independentes do e-mail. */}
-                    <div className="rounded-lg border border-base-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-sm">
-                            📱
-                          </span>
-                          <p className="text-sm font-semibold text-base-content">WhatsApp</p>
-                          {waContacts.length > 0 && <Badge variant="neutral">{waContacts.length}</Badge>}
+                  <div className="mt-3 rounded-lg border border-base-200 overflow-hidden">
+                    <Table>
+                      <THead>
+                        <TR>
+                          <TH>Contato</TH>
+                          <TH>Setores</TH>
+                          <TH>Horários</TH>
+                          <TH>Recebe</TH>
+                          <TH />
+                        </TR>
+                      </THead>
+                      <TBody>
+                        {list.map((c) => {
+                          const idLabel = c.name || c.whatsapp || c.emails[0] || 'contato';
+                          return (
+                            <TR key={c.id}>
+                              <TD className="min-w-0">
+                                {c.name && (
+                                  <p className="text-sm font-medium text-base-content truncate">{c.name}</p>
+                                )}
+                                <div className="flex flex-col gap-0.5">
+                                  {c.whatsapp && (
+                                    <span className="text-xs text-base-content/60 truncate">📱 {c.whatsapp}</span>
+                                  )}
+                                  {c.emails.map((e) => (
+                                    <span key={e} className="text-xs text-base-content/60 truncate">✉️ {e}</span>
+                                  ))}
+                                </div>
+                              </TD>
+                              <TD>
+                                <div className="flex flex-wrap gap-1">
+                                  {c.sectors.map((key) => {
+                                    const meta = SECTORS.find((s) => s.key === key);
+                                    return (
+                                      <Badge key={key} className={meta?.badgeClass}>
+                                        {meta?.label ?? key}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              </TD>
+                              <TD>
+                                <div className="flex flex-col gap-1">
+                                  {/* Texto dos horários fica num único nó (join ' · ') — os testes dependem disso. */}
+                                  <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-base-200/60 px-2 py-1 text-[11px] font-medium text-base-content/60 whitespace-nowrap">
+                                    <Icon name="clock" className="h-3 w-3 opacity-60" />
+                                    {c.sendTimes
+                                      .map((t) => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`)
+                                      .join(' · ')}
+                                  </span>
+                                  <span className="text-[10px] text-base-content/35 pl-0.5">{daySummary(c.sendDays)}</span>
+                                  {c.sendTimes.some((t) => isOutsideSendWindow(t.hour)) && (
+                                    <span className="text-[10px] text-warning/80 pl-0.5">
+                                      ⚠️ fora da janela ({String(sendWindowStart).padStart(2, '0')}h–{String(sendWindowEnd).padStart(2, '0')}h)
+                                    </span>
+                                  )}
+                                </div>
+                              </TD>
+                              <TD>
+                                <p className="text-xs text-base-content/60">{receivesSummary(c)}</p>
+                              </TD>
+                              <TD>
+                                <div className="flex gap-1 justify-end shrink-0">
+                                  <IconButton
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    label={`Editar ${idLabel}`}
+                                    title="Editar"
+                                    onClick={() => openEditContact(c)}
+                                  >
+                                    <Icon name="edit" className="h-3.5 w-3.5" />
+                                  </IconButton>
+                                  <IconButton
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="!text-error hover:!text-error"
+                                    label={`Remover ${idLabel}`}
+                                    title="Remover"
+                                    onClick={() => removeContact(c)}
+                                  >
+                                    <Icon name="trash" className="h-3.5 w-3.5" />
+                                  </IconButton>
+                                </div>
+                              </TD>
+                            </TR>
+                          );
+                        })}
+                      </TBody>
+                    </Table>
+                    {planAllowed && waNumbersLimit > 0 && (
+                      <div className="flex items-center gap-3 px-4 py-2.5 border-t border-base-200">
+                        <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-base-200">
+                          <div
+                            className={`h-full rounded-full transition-all ${atWaLimit ? 'bg-warning' : 'bg-emerald-500/70'}`}
+                            style={{
+                              width: `${
+                                waNumbersUsed > 0
+                                  ? Math.max(6, Math.min(100, Math.round((waNumbersUsed / waNumbersLimit) * 100)))
+                                  : 0
+                              }%`,
+                            }}
+                          />
                         </div>
-                        <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('whatsapp')}>
-                          <Icon name="plus" className="h-3.5 w-3.5" /> Novo WhatsApp
-                        </Button>
+                        <p className={`text-[11px] ${atWaLimit ? 'font-medium text-warning' : 'text-base-content/40'}`}>
+                          {waNumbersUsed} de {waNumbersLimit} números do plano · {Math.max(waNumbersLimit - waNumbersUsed, 0)} disponíve{Math.max(waNumbersLimit - waNumbersUsed, 0) === 1 ? 'l' : 'is'}
+                        </p>
+                        {atWaLimit && (
+                          <a
+                            href="https://app.hipertms.com.br/configuracoes/assinatura"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-auto text-[11px] font-medium text-brand-500 underline hover:text-brand-400"
+                          >
+                            Adicionar número — R$ 29,90/mês
+                          </a>
+                        )}
                       </div>
-                      {waContacts.length === 0 ? (
-                        <EmptyState
-                          icon={<span aria-hidden="true" className="text-2xl">📱</span>}
-                          title="Nenhum WhatsApp cadastrado."
-                          description={'Clique em "+ Novo WhatsApp" para criar um contato com horários e setores próprios.'}
-                        />
-                      ) : (
-                        <Table>
-                          {tableHead('WhatsApp')}
-                          <TBody>
-                            {renderRows(waContacts, 'whatsapp', (c) => (
-                              <p className="text-sm font-medium text-base-content truncate">{c.whatsapp}</p>
-                            ))}
-                          </TBody>
-                        </Table>
-                      )}
-                      {planAllowed && waNumbersLimit > 0 && (
-                        <div className="flex items-center gap-3 px-4 py-2.5 border-t border-base-200">
-                          <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-base-200">
-                            <div
-                              className={`h-full rounded-full transition-all ${atWaLimit ? 'bg-warning' : 'bg-emerald-500/70'}`}
-                              style={{
-                                width: `${
-                                  waNumbersUsed > 0
-                                    ? Math.max(6, Math.min(100, Math.round((waNumbersUsed / waNumbersLimit) * 100)))
-                                    : 0
-                                }%`,
-                              }}
-                            />
-                          </div>
-                          <p className={`text-[11px] ${atWaLimit ? 'font-medium text-warning' : 'text-base-content/40'}`}>
-                            {waNumbersUsed} de {waNumbersLimit} números de WhatsApp
-                            {atWaLimit ? ' — limite do plano atingido' : ''}
-                          </p>
-                          {atWaLimit && (
-                            <a
-                              href="https://app.hipertms.com.br/configuracoes/assinatura"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-auto text-[11px] font-medium text-brand-500 underline hover:text-brand-400"
-                            >
-                              Adicionar número — R$ 29,90/mês
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Módulo E-mail — cadastro e lista próprios, independentes do WhatsApp. */}
-                    <div className="rounded-lg border border-base-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-base-200">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/20 text-sm">
-                            <Icon name="mail" className="h-3.5 w-3.5" />
-                          </span>
-                          <p className="text-sm font-semibold text-base-content">E-mail</p>
-                          {emailContacts.length > 0 && <Badge variant="neutral">{emailContacts.length}</Badge>}
-                        </div>
-                        <Button type="button" variant="primary" size="sm" onClick={() => openNewContact('email')}>
-                          <Icon name="plus" className="h-3.5 w-3.5" /> Novo e-mail
-                        </Button>
-                      </div>
-                      {emailContacts.length === 0 ? (
-                        <EmptyState
-                          icon={<Icon name="mail" className="h-8 w-8" />}
-                          title="Nenhum e-mail cadastrado."
-                          description={'Clique em "+ Novo e-mail" para criar um contato com horários e setores próprios.'}
-                        />
-                      ) : (
-                        <Table>
-                          {tableHead('E-mail')}
-                          <TBody>
-                            {renderRows(emailContacts, 'email', (c) => (
-                              <>
-                                {c.emails.map((e) => (
-                                  <p key={e} className="text-sm font-medium text-base-content truncate">{e}</p>
-                                ))}
-                              </>
-                            ))}
-                          </TBody>
-                        </Table>
-                      )}
-                      <p className="text-[11px] text-base-content/40 px-4 py-2 border-t border-base-200">
-                        E-mails ilimitados
-                      </p>
-                    </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1596,15 +1204,11 @@ export function MonitorConfigPage() {
         </div>
       )}
 
-      {/* ─── T6: Módulo de cadastro — um modal por canal (WhatsApp / E-mail), nunca os dois juntos ── */}
+      {/* ─── T9: Módulo de cadastro único — contato = pessoa (nome + WhatsApp + e-mails) ── */}
       <Modal
         open={!!contactModal}
         onClose={() => setContactModal(null)}
-        title={
-          contactModal?.channel === 'whatsapp'
-            ? (contactModal?.editId ? 'Editar WhatsApp' : 'Novo WhatsApp')
-            : (contactModal?.editId ? 'Editar e-mail' : 'Novo e-mail')
-        }
+        title={contactModal?.editId ? 'Editar contato' : 'Novo contato'}
         size="xl"
         footer={
           <>
@@ -1612,15 +1216,27 @@ export function MonitorConfigPage() {
               Cancelar
             </Button>
             <Button type="button" onClick={saveContactModal} loading={!!contactModal?.saving} disabled={!!contactModal?.saving}>
-              {contactModal?.channel === 'whatsapp' ? 'Salvar WhatsApp' : 'Salvar e-mail'}
+              Salvar contato
             </Button>
           </>
         }
       >
         {contactModal && (
           <div className="space-y-6">
-            {/* Módulo de cadastro é por canal — só mostra o campo do canal ativo, nunca os dois juntos. */}
-            {contactModal.channel === 'whatsapp' ? (
+            <div>
+              <p className="text-sm font-medium text-base-content/70 mb-1.5">Nome</p>
+              <input
+                type="text"
+                className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
+                placeholder="Ex.: Maria (Financeiro)"
+                maxLength={CONTACT_NAME_MAX_LENGTH}
+                value={contactModal.name}
+                onChange={(e) => setContactModal({ ...contactModal, name: e.target.value })}
+                aria-label="Nome do contato"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp</p>
                 <input
@@ -1633,10 +1249,9 @@ export function MonitorConfigPage() {
                   aria-label="WhatsApp do contato"
                 />
                 <p className="mt-1.5 text-[11px] text-base-content/35">
-                  Só dígitos: DDI + DDD + número. Ex.: 5511999999999
+                  Opcional. Só dígitos: DDI + DDD + número.
                 </p>
               </div>
-            ) : (
               <div>
                 <RecipientTagsInput
                   channel="email"
@@ -1646,7 +1261,7 @@ export function MonitorConfigPage() {
                   max={999}
                 />
               </div>
-            )}
+            </div>
 
             <div className="border-t border-base-200 pt-6">
               <p className="text-sm font-medium text-base-content/70 mb-2">Recebe alertas de</p>
@@ -1724,6 +1339,13 @@ export function MonitorConfigPage() {
                   </div>
                 ))}
               </div>
+              {/* T9: aviso não-bloqueante — horário fora da janela geral de envio não sai. */}
+              {contactModal.sendTimes.some((t) => isOutsideSendWindow(t.hour)) && (
+                <p className="mt-2 text-[11px] text-warning/90">
+                  ⚠️ Algum horário está fora da janela de envio ({String(sendWindowStart).padStart(2, '0')}h–
+                  {String(sendWindowEnd).padStart(2, '0')}h) configurada acima — esse envio não sairá.
+                </p>
+              )}
             </div>
 
             <div className="border-t border-base-200 pt-6">
@@ -1765,6 +1387,50 @@ export function MonitorConfigPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* T9: matriz "o que enviar em cada canal" — 3 linhas × 2 colunas. */}
+            <div className="border-t border-base-200 pt-6">
+              <p className="text-sm font-medium text-base-content/70 mb-2">Recebe em cada canal</p>
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Conteúdo</TH>
+                    <TH>📱 WhatsApp</TH>
+                    <TH>✉️ E-mail</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {DELIVERY_ROWS.map((row) => (
+                    <TR key={row.key}>
+                      <TD>{row.label}</TD>
+                      <TD>
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm"
+                          aria-label={`${row.label} via WhatsApp`}
+                          checked={contactModal.delivery[row.key].whatsapp}
+                          disabled={!contactModal.whatsapp}
+                          onChange={() => toggleDeliveryFlag(row.key, 'whatsapp')}
+                        />
+                      </TD>
+                      <TD>
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm"
+                          aria-label={`${row.label} via e-mail`}
+                          checked={contactModal.delivery[row.key].email}
+                          disabled={contactModal.emails.length === 0}
+                          onChange={() => toggleDeliveryFlag(row.key, 'email')}
+                        />
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+              <p className="mt-1.5 text-[11px] text-base-content/35">
+                A periodicidade do fechamento e o horário do caixa continuam nos seletores abaixo.
+              </p>
             </div>
 
             {/* T8.5: resumo de fechamento — independente dos horários de pendências (T7). */}

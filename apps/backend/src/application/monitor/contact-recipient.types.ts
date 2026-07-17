@@ -41,9 +41,33 @@ export const CLOSING_REPORT_KINDS: ClosingReportKind[] = ['off', 'biweekly', 'mo
 export type CashViewMode = 'off' | 'lastSlot';
 export const CASH_VIEW_MODES: CashViewMode[] = ['off', 'lastSlot'];
 
+/** T9 (2026-07-17): nome de exibição do contato — máx. 60 caracteres. */
+export const CONTACT_NAME_MAX_LENGTH = 60;
+
+/** T9: flags de canal — usado nas 3 linhas da matriz de entrega (digest/closing/cash). */
+export interface ChannelFlags {
+  whatsapp: boolean;
+  email: boolean;
+}
+
+/** T9: matriz "o que enviar em cada canal" — 3 linhas (digest/closing/cash) × 2 colunas (whatsapp/email). */
+export interface DeliveryMatrix {
+  digest: ChannelFlags;
+  closing: ChannelFlags;
+  cash: ChannelFlags;
+}
+
 export interface ContactRecipient {
   /** Estável entre saves — usado como chave de dedup/catch-up do scheduler. Gerado no 1º save se ausente. */
   id: string;
+  /**
+   * T9 (2026-07-17): nome de exibição — contato agora é "uma pessoa" (nome +
+   * canais), não mais dois módulos separados de WhatsApp/e-mail. Opcional (nem
+   * todo contato legado tem) — sanitize: trim, máx. `CONTACT_NAME_MAX_LENGTH`.
+   * Ausente em edição preserva o valor anterior (mesmo princípio de
+   * closingReport/cashView — ver `sanitizeContacts`).
+   */
+  name?: string;
   /** Número de WhatsApp (normalizado). Um contato tem no máximo 1 número — para múltiplos números, cadastre outro contato. */
   whatsapp?: string;
   /** E-mails associados a este contato (0..N) — ex.: 1 WhatsApp + 2 e-mails em cópia. */
@@ -99,6 +123,50 @@ export interface ContactRecipient {
    * é por HH:MM). Reivindicado ANTES de enviar (claim-before-send, mesmo padrão).
    */
   lastClosingDate?: string;
+  /**
+   * T9 (2026-07-17): matriz explícita "o que enviar em cada canal". Ausente
+   * (contato de antes do T9, ou nunca editado na UI nova) → NÃO assumir 'off'
+   * em tudo — usar sempre `effectiveDelivery(contact)`, que deriva o
+   * comportamento equivalente ao pré-T9 a partir de `closingReport`/`cashView`/
+   * canais do contato. Ausente em edição preserva o valor anterior (mesmo
+   * princípio de `closingReport`/`cashView`).
+   */
+  delivery?: DeliveryMatrix;
+}
+
+/**
+ * T9: resolve a matriz EFETIVA de entrega por canal pra um contato — ÚNICO
+ * ponto de derivação, usado por `ConsolidationService` (digest/cash) e
+ * `ClosingReportService` (closing). NUNCA reimplementar esta lógica em outro
+ * lugar (regra do doc T9).
+ *
+ * Com `delivery` explícito (contato editado na UI nova): usa a matriz salva.
+ * Sem `delivery` (compat — contato de antes do T9): deriva em runtime, sem
+ * migrar nada no banco —
+ *   - digest:  true nos canais que o contato TEM (comportamento T7 atual);
+ *   - closing: canais do contato SE `closingReport` != 'off'/ausente;
+ *   - cash:    canais do contato SE `cashView` === 'lastSlot'.
+ * Em ambos os casos, uma trava defensiva final zera qualquer canal que o
+ * contato não tenha de fato (ex.: `delivery` salvo antes de remover o
+ * WhatsApp do contato) — nunca confia cegamente no JSON persistido.
+ */
+export function effectiveDelivery(contact: ContactRecipient): DeliveryMatrix {
+  const hasWa = !!contact.whatsapp?.trim();
+  const hasEmail = Array.isArray(contact.emails) && contact.emails.length > 0;
+  const closingOn = contact.closingReport === 'biweekly' || contact.closingReport === 'monthly';
+  const cashOn = contact.cashView === 'lastSlot';
+
+  const base: DeliveryMatrix = contact.delivery ?? {
+    digest: { whatsapp: hasWa, email: hasEmail },
+    closing: { whatsapp: hasWa && closingOn, email: hasEmail && closingOn },
+    cash: { whatsapp: hasWa && cashOn, email: hasEmail && cashOn },
+  };
+
+  return {
+    digest: { whatsapp: base.digest.whatsapp && hasWa, email: base.digest.email && hasEmail },
+    closing: { whatsapp: base.closing.whatsapp && hasWa, email: base.closing.email && hasEmail },
+    cash: { whatsapp: base.cash.whatsapp && hasWa, email: base.cash.email && hasEmail },
+  };
 }
 
 /**
@@ -169,6 +237,16 @@ export function sanitizeContacts(
 
       const prior = existingById.get(id);
 
+      // T9: nome ausente em edição preserva o anterior (mesmo princípio de
+      // closingReport/cashView); string enviada (mesmo vazia) é honrada —
+      // enviar "" limpa o nome de propósito.
+      const name =
+        c.name === undefined
+          ? prior?.name
+          : typeof c.name === 'string'
+            ? c.name.trim().slice(0, CONTACT_NAME_MAX_LENGTH) || undefined
+            : undefined;
+
       // T8-FIX (bug real, 2026-07-16): campo AUSENTE (`undefined`) em contato
       // EXISTENTE preserva o valor anterior — mesmo princípio de `lastDigestDate`/
       // `lastClosingDate` logo abaixo. Antes desta correção, um PUT parcial (ex.:
@@ -180,8 +258,14 @@ export function sanitizeContacts(
       const closingReport = resolveOptionalEnum(c.closingReport, CLOSING_REPORT_KINDS, prior?.closingReport, 'off');
       const cashView = resolveOptionalEnum(c.cashView, CASH_VIEW_MODES, prior?.cashView, 'off');
 
+      // T9: matriz de entrega — ausente preserva a anterior (mesmo princípio dos
+      // campos acima); presente é saneada (booleans + canal que o contato não
+      // tem força false). Nunca reimplementar essa derivação fora daqui/effectiveDelivery.
+      const delivery = sanitizeDelivery(c.delivery, !!whatsapp, emails.length > 0) ?? prior?.delivery;
+
       const contact: ContactRecipient = {
         id,
+        name,
         whatsapp,
         emails,
         sectors,
@@ -191,6 +275,7 @@ export function sanitizeContacts(
         closingReport,
         cashView,
         lastClosingDate: prior?.lastClosingDate,
+        delivery,
       };
       return contact;
     })
@@ -244,6 +329,53 @@ export function deriveSectorConfigFallback(
     };
   }
   return out;
+}
+
+function sanitizeChannelFlags(raw: unknown): ChannelFlags {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return { whatsapp: r.whatsapp === true, email: r.email === true };
+}
+
+/**
+ * Saneia a matriz de entrega enviada no payload: ausente (`undefined`/`null`)
+ * retorna `undefined` (caller decide preservar o `prior`, mesmo padrão de
+ * `resolveOptionalEnum`); presente normaliza cada flag pra boolean estrito e
+ * força `false` num canal que o contato não tem de fato (`hasWa`/`hasEmail`).
+ */
+function sanitizeDelivery(raw: unknown, hasWa: boolean, hasEmail: boolean): DeliveryMatrix | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const r = typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const digest = sanitizeChannelFlags(r.digest);
+  const closing = sanitizeChannelFlags(r.closing);
+  const cash = sanitizeChannelFlags(r.cash);
+  return {
+    digest: { whatsapp: digest.whatsapp && hasWa, email: digest.email && hasEmail },
+    closing: { whatsapp: closing.whatsapp && hasWa, email: closing.email && hasEmail },
+    cash: { whatsapp: cash.whatsapp && hasWa, email: cash.email && hasEmail },
+  };
+}
+
+/**
+ * T9: valida que TODO contato enviado tenha pelo menos 1 canal (WhatsApp ou
+ * algum e-mail) — ANTES de `sanitizeContacts`, que hoje descarta silenciosamente
+ * contatos sem canal (mesmo motivo de `validateContactSendTimesLimit`: um corte
+ * silencioso vira um contato "sumido" sem explicação nenhuma pro usuário).
+ * Retorna `null` quando tudo OK.
+ */
+export function validateContactHasChannel(contacts: unknown): string | null {
+  if (!Array.isArray(contacts)) return null;
+  for (const c of contacts) {
+    if (!c || typeof c !== 'object') continue;
+    const raw = c as Record<string, unknown>;
+    const hasWa = typeof raw.whatsapp === 'string' && raw.whatsapp.trim().length > 0;
+    const hasEmail =
+      Array.isArray(raw.emails) && raw.emails.some((e) => typeof e === 'string' && e.includes('@'));
+    if (!hasWa && !hasEmail) {
+      const label = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Um dos contatos enviados';
+      return `${label} precisa de pelo menos um canal (WhatsApp ou e-mail) — adicione um antes de salvar.`;
+    }
+  }
+  return null;
 }
 
 /**

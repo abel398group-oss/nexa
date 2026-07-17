@@ -32,7 +32,8 @@ import { EmailReplyService } from '@/application/email/email-reply.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { resolveTmsTenantId } from './tms-tenant-id.util';
 import { formatBRL, formatPct, variationPct, variationPts } from './money-format.util';
-import type { ContactRecipient, ClosingReportKind } from './contact-recipient.types';
+import { effectiveDelivery, type ContactRecipient, type ClosingReportKind } from './contact-recipient.types';
+import { isWithinSendWindow, DEFAULT_SEND_WINDOW_START, DEFAULT_SEND_WINDOW_END } from './send-window.util';
 
 @Injectable()
 export class ClosingReportService {
@@ -85,7 +86,7 @@ export class ClosingReportService {
     });
     const configs = await this.prisma.tenantNotificationConfig.findMany({
       where: { enabled: true },
-      select: { tenantId: true, contacts: true },
+      select: { tenantId: true, contacts: true, sendWindowStart: true, sendWindowEnd: true },
     });
 
     let sentTotal = 0;
@@ -99,6 +100,18 @@ export class ClosingReportService {
 
         const allContacts = (cfg.contacts as ContactRecipient[] | null) ?? [];
         if (!allContacts.length) continue;
+
+        // T9: janela geral de envio — fechamento NUNCA dispara fora dela (mesmo
+        // princípio do digest T7/T8.6 em ConsolidationService), mesmo que o cron
+        // rode fixo às 07:00 — um tenant pode ter configurado janela diferente.
+        const windowStart = (cfg as any).sendWindowStart ?? DEFAULT_SEND_WINDOW_START;
+        const windowEnd = (cfg as any).sendWindowEnd ?? DEFAULT_SEND_WINDOW_END;
+        if (!isWithinSendWindow(now, windowStart, windowEnd)) {
+          this.logger.log(
+            `closing-report: tenant ${cfg.tenantId} fora da janela de envio (${windowStart}h-${windowEnd}h) — pulando`,
+          );
+          continue;
+        }
 
         let tenantSent = 0;
         for (const kind of kinds) {
@@ -155,10 +168,20 @@ export class ClosingReportService {
         contact.lastClosingDate = todayStr;
         await this.persistContacts(tenantId, allContacts);
 
-        if (contact.whatsapp) {
+        // T9: matriz efetiva de entrega — único ponto de derivação (nunca
+        // reimplementar, ver `effectiveDelivery`). Ex. do doc: closing com
+        // whatsapp=false e email=true → só e-mails.
+        const delivery = effectiveDelivery(contact);
+
+        if (contact.whatsapp && delivery.closing.whatsapp) {
           await this.notification.notifyPhone(tenantId, contact.whatsapp, message);
+          this.logger.log(`closing-report: contato ${contact.id} (kind=${kind}) → WhatsApp ${contact.whatsapp}`);
+        } else if (contact.whatsapp) {
+          this.logger.debug(
+            `closing-report: contato ${contact.id} (kind=${kind}) — WhatsApp desligado na matriz de entrega, não enviado`,
+          );
         }
-        if (contact.emails?.length) {
+        if (contact.emails?.length && delivery.closing.email) {
           const subject = `📊 HiperTMS — Fechamento ${report.period.label}`;
           for (const email of contact.emails) {
             const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId);
@@ -168,9 +191,6 @@ export class ClosingReportService {
               this.logger.warn(`closing-report: falha e-mail contato ${contact.id} → ${email}: ${result.reason}`);
             }
           }
-        }
-        if (contact.whatsapp) {
-          this.logger.log(`closing-report: contato ${contact.id} (kind=${kind}) → WhatsApp ${contact.whatsapp}`);
         }
         sentCount++;
       } catch (e: any) {

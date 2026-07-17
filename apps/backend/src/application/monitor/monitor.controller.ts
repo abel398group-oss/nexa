@@ -57,8 +57,15 @@ import {
   sanitizeContacts,
   deriveSectorConfigFallback,
   validateContactSendTimesLimit,
+  validateContactHasChannel,
   type ContactRecipient,
+  type DeliveryMatrix,
 } from './contact-recipient.types';
+import {
+  DEFAULT_SEND_WINDOW_START,
+  DEFAULT_SEND_WINDOW_END,
+  DEFAULT_CRITICAL_OUTSIDE_WINDOW,
+} from './send-window.util';
 
 // Converte null → undefined para que @IsOptional() pule a validação.
 // Necessário porque o ValidationPipe global tem transform:true (class-transformer ativo)
@@ -92,6 +99,12 @@ export class ContactRecipientDto {
   @IsOptional() @IsIn(CLOSING_REPORT_KINDS) closingReport?: string;
   // T8.6: anexa o bloco "💰 SEU CAIXA" ao último horário do dia — 'off' (default) | 'lastSlot'.
   @IsOptional() @IsIn(CASH_VIEW_MODES) cashView?: string;
+  // T9: contato = pessoa — nome de exibição opcional. Sanitize (trim + cap 60) em sanitizeContacts.
+  @IsOptional() @IsString() name?: string;
+  // T9: matriz "o que enviar em cada canal" (digest/closing/cash × whatsapp/email).
+  // Sem ValidateNested de propósito — mesmo padrão do sectorConfig abaixo: shape
+  // solto no DTO, sanitização/força real em sanitizeContacts→sanitizeDelivery.
+  @IsOptional() delivery?: DeliveryMatrix;
 }
 
 class UpdateConfigDto {
@@ -116,6 +129,12 @@ class UpdateConfigDto {
   // sectorConfig continua sendo derivado automaticamente (phone/email) para compat.
   @IsArray() @IsOptional() @ValidateNested({ each: true }) @Type(() => ContactRecipientDto)
   contacts?: ContactRecipientDto[];
+  // T9: janela geral de envio — nada dispara fora dela (digest/closing/cash, inclusive
+  // catch-up). Default 06:00–20:00 (ver send-window.util.ts). Granularidade de hora.
+  @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendWindowStart?: number;
+  @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendWindowEnd?: number;
+  // Imediatos CRITICAL fora da janela: 'hold' (default, segura até abrir) ou 'send' (fura).
+  @IsIn(['hold', 'send']) @IsOptional() @nullToUndefined() criticalOutsideWindow?: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -151,6 +170,9 @@ export class MonitorController {
           sectorConfig: true,
           contacts: true,
           monitorOverride: true,
+          sendWindowStart: true,
+          sendWindowEnd: true,
+          criticalOutsideWindow: true,
         },
       }),
       this.prisma.planLimit.findUnique({
@@ -188,6 +210,9 @@ export class MonitorController {
       sectorConfig: null,
       contacts: [],
       monitorOverride: false,
+      sendWindowStart: DEFAULT_SEND_WINDOW_START,
+      sendWindowEnd: DEFAULT_SEND_WINDOW_END,
+      criticalOutsideWindow: DEFAULT_CRITICAL_OUTSIDE_WINDOW,
     };
 
     return {
@@ -224,6 +249,11 @@ export class MonitorController {
     if (dto.contacts !== undefined) {
       const sendTimesError = validateContactSendTimesLimit(dto.contacts, maxContactTimes(planLimit?.plan));
       if (sendTimesError) throw new BadRequestException(sendTimesError);
+
+      // T9: contato = pessoa — precisa de pelo menos um canal (WhatsApp ou e-mail).
+      // Rejeita no PUT (400 claro) em vez de sanitizeContacts descartar silenciosamente.
+      const channelError = validateContactHasChannel(dto.contacts);
+      if (channelError) throw new BadRequestException(channelError);
     }
 
     // T6: saneia contacts (gera id, cap 3 horários, preserva lastDigestDate em edições)

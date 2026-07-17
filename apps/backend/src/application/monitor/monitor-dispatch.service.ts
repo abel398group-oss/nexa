@@ -62,12 +62,26 @@ export class MonitorDispatchService implements OnModuleDestroy {
     return Number(process.env.DISPATCH_MAX_ATTEMPTS ?? 3);
   }
 
-  /** Enfileira um envio. jitterMs > 0 espalha o disparo em até jitterMs. */
+  /**
+   * Enfileira um envio. jitterMs > 0 espalha o disparo em até jitterMs.
+   *
+   * T9: se o CALLER já mandar um `job.notBefore` explícito (ex.: "hold" de um
+   * CRITICAL fora da janela de envio, reagendado pra próxima abertura —
+   * ver `MonitorService.sendAlertsToAdmins`), ele é respeitado tal como está —
+   * NUNCA sobrescrito pelo jitter. Sem `notBefore` explícito, mantém o
+   * comportamento pré-T9 (jitter a partir de agora).
+   */
   enqueue(job: DispatchJob, jitterMs = 0): void {
+    const hasExplicitNotBefore = job.notBefore !== undefined;
     const delay = jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0;
-    this.queue.push({ ...job, attempt: job.attempt ?? 0, notBefore: Date.now() + delay });
+    const notBefore = hasExplicitNotBefore ? job.notBefore! : Date.now() + delay;
+    this.queue.push({ ...job, attempt: job.attempt ?? 0, notBefore });
     this.logger.debug(
-      `enqueued to=${job.to} tenant=${job.tenantId} origin=${job.origin ?? '-'} delay=${delay}ms fila=${this.queue.length}`,
+      `enqueued to=${job.to} tenant=${job.tenantId} origin=${job.origin ?? '-'} ` +
+        (hasExplicitNotBefore
+          ? `notBefore=${new Date(notBefore).toISOString()} (hold)`
+          : `delay=${delay}ms`) +
+        ` fila=${this.queue.length}`,
     );
   }
 
