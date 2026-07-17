@@ -102,6 +102,28 @@ const MAX_CONTACT_TIMES = 3;
 const DEFAULT_CONTACT_TIME: ContactSendTime = { hour: 8, minute: 0 };
 const CONTACT_NAME_MAX_LENGTH = 60;
 
+/** T10 (2026-07-17): validação de e-mail do cadastro rápido "Só por e-mail". */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * T10 (2026-07-17): estado do cadastro rápido "Só por e-mail". E-mail é
+ * ilimitado (não gasta número do plano) — cria um contato email-only. Se o
+ * e-mail já existe em outro contato, VINCULA (soma setores + liga digest por
+ * e-mail nele) em vez de duplicar — regra: um e-mail = uma pessoa.
+ */
+interface EmailQuickAddState {
+  name: string;
+  email: string;
+  sectors: SectorKey[];
+  sendTimes: ContactSendTime[];
+  sendDays: number[];
+  error: string | null;
+  saving?: boolean;
+}
+function makeEmptyEmailForm(): EmailQuickAddState {
+  return { name: '', email: '', sectors: [], sendTimes: [DEFAULT_CONTACT_TIME], sendDays: WEEKDAYS, error: null };
+}
+
 /** T9-WIZARD: legenda do chip de periodicidade no passo 2 (card "Receita × despesa"). */
 const CLOSING_PERIODICITY_OPTIONS: { value: Exclude<ClosingReportKind, 'off'>; label: string }[] = [
   { value: 'weekly', label: 'Semanal' },
@@ -415,6 +437,8 @@ export function MonitorConfigPage() {
   const [contactModal, setContactModal] = useState<ContactModalState | null>(null);
   /** Aba ativa da lista de contatos: 'all' ou um setor específico. */
   const [contactTab, setContactTab] = useState<'all' | SectorKey>('all');
+  /** T10: form do cadastro rápido "Só por e-mail". */
+  const [emailForm, setEmailForm] = useState<EmailQuickAddState>(makeEmptyEmailForm);
 
   const toast           = useToast();
   const confirm         = useConfirm();
@@ -847,6 +871,92 @@ export function MonitorConfigPage() {
     if (success) toast.success('Contato removido.');
   }
 
+  // ─── T10: cadastro rápido só-e-mail (e-mail é ilimitado) ────────────────────
+
+  /** Contato existente que já usa o e-mail digitado — null se e-mail livre/vazio. */
+  const emailDupContact = (() => {
+    const e = emailForm.email.trim().toLowerCase();
+    if (!e) return null;
+    return contacts.find((c) => c.emails.some((x) => x.toLowerCase() === e)) ?? null;
+  })();
+
+  function toggleEmailFormSector(key: SectorKey) {
+    setEmailForm((f) => {
+      const has = f.sectors.includes(key);
+      return { ...f, sectors: has ? f.sectors.filter((s) => s !== key) : [...f.sectors, key], error: null };
+    });
+  }
+  function addEmailFormTime() {
+    setEmailForm((f) => (f.sendTimes.length < MAX_CONTACT_TIMES ? { ...f, sendTimes: [...f.sendTimes, DEFAULT_CONTACT_TIME] } : f));
+  }
+  function removeEmailFormTime(idx: number) {
+    setEmailForm((f) => (f.sendTimes.length > 1 ? { ...f, sendTimes: f.sendTimes.filter((_, i) => i !== idx) } : f));
+  }
+  function updateEmailFormTime(idx: number, field: 'hour' | 'minute', val: number) {
+    setEmailForm((f) => ({ ...f, sendTimes: f.sendTimes.map((t, i) => (i === idx ? { ...t, [field]: val } : t)) }));
+  }
+  function toggleEmailFormDay(day: number) {
+    setEmailForm((f) => {
+      const next = f.sendDays.includes(day) ? f.sendDays.filter((d) => d !== day) : [...f.sendDays, day].sort((a, b) => a - b);
+      return next.length === 0 ? f : { ...f, sendDays: next };
+    });
+  }
+
+  /**
+   * T10: salva o cadastro rápido só-e-mail. E-mail já existente NÃO duplica —
+   * vincula (soma setores + liga digest por e-mail) no contato existente.
+   */
+  async function saveEmailOnly() {
+    const email = emailForm.email.trim();
+    if (!EMAIL_RE.test(email)) {
+      setEmailForm((f) => ({ ...f, error: 'E-mail inválido.' }));
+      return;
+    }
+    if (emailForm.sectors.length === 0) {
+      setEmailForm((f) => ({ ...f, error: 'Escolha ao menos um setor.' }));
+      return;
+    }
+    setEmailForm((f) => ({ ...f, error: null, saving: true }));
+
+    let next: ContactRecipient[];
+    if (emailDupContact) {
+      // Vincular: soma setores no contato existente e garante digest por e-mail.
+      const mergedSectors = Array.from(new Set([...emailDupContact.sectors, ...emailForm.sectors])) as SectorKey[];
+      const base = emailDupContact.delivery ?? {
+        digest: { whatsapp: !!emailDupContact.whatsapp, email: true },
+        closing: { whatsapp: false, email: false },
+      };
+      const linked: ContactRecipient = {
+        ...emailDupContact,
+        sectors: mergedSectors,
+        delivery: { ...base, digest: { ...base.digest, email: true } },
+      };
+      next = contacts.map((c) => (c.id === emailDupContact.id ? linked : c));
+    } else {
+      const created: ContactRecipient = {
+        id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: emailForm.name.trim().slice(0, CONTACT_NAME_MAX_LENGTH) || undefined,
+        whatsapp: undefined,
+        emails: [email],
+        sectors: emailForm.sectors,
+        sendTimes: emailForm.sendTimes,
+        sendDays: emailForm.sendDays,
+        closingReport: 'off',
+        cashView: 'off',
+        delivery: { digest: { whatsapp: false, email: true }, closing: { whatsapp: false, email: false } },
+      };
+      next = [...contacts, created];
+    }
+
+    const ok = await persistContacts(next);
+    if (!ok) {
+      setEmailForm((f) => ({ ...f, saving: false, error: 'Não foi possível salvar — veja o erro acima e tente de novo.' }));
+      return;
+    }
+    toast.success(emailDupContact ? 'E-mail vinculado ao contato existente!' : 'Contato por e-mail adicionado!');
+    setEmailForm(makeEmptyEmailForm());
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -1209,6 +1319,189 @@ export function MonitorConfigPage() {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+
+          {/* ─── T10: Cadastro rápido só-e-mail (ilimitado) ──────────────── */}
+          <div className={`transition-opacity ${cfg.enabled && planAllowed ? '' : 'opacity-40 pointer-events-none'}`}>
+            <div className="card px-5 py-4">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <p className="text-sm font-semibold text-base-content">Só por e-mail</p>
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-500">
+                  ilimitado · não gasta número
+                </span>
+              </div>
+              <p className="text-xs text-base-content/50 mb-3">
+                Pra quando o plano não tem mais número de WhatsApp — cadastre a pessoa só com e-mail.
+              </p>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium text-base-content/70 mb-1.5">Nome</p>
+                  <input
+                    type="text"
+                    className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
+                    placeholder="Ex.: João (Fiscal)"
+                    maxLength={CONTACT_NAME_MAX_LENGTH}
+                    value={emailForm.name}
+                    onChange={(e) => setEmailForm((f) => ({ ...f, name: e.target.value }))}
+                    aria-label="Nome do contato por e-mail"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-base-content/70 mb-1.5">✉️ E-mail</p>
+                  <input
+                    type="email"
+                    className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
+                    placeholder="joao@empresa.com"
+                    value={emailForm.email}
+                    onChange={(e) => setEmailForm((f) => ({ ...f, email: e.target.value, error: null }))}
+                    aria-label="E-mail do contato"
+                  />
+                </div>
+              </div>
+
+              {emailDupContact && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                  <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                  <p className="text-xs text-warning">
+                    Esse e-mail já está no contato{' '}
+                    <strong className="font-medium">{emailDupContact.name || emailDupContact.whatsapp || emailDupContact.emails[0]}</strong>.{' '}
+                    Vincular soma os setores escolhidos nele, sem duplicar.
+                  </p>
+                </div>
+              )}
+
+              <p className="text-sm font-medium text-base-content/70 mt-4 mb-1.5">O que enviar (setores)</p>
+              <div className="flex flex-wrap gap-2">
+                {SECTORS.map((s) => {
+                  const active = emailForm.sectors.includes(s.key);
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggleEmailFormSector(s.key)}
+                      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                        active ? `border-transparent ${s.badgeClass}` : 'border-base-300 text-base-content/50 hover:bg-base-200'
+                      }`}
+                    >
+                      {s.emoji} {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-base-content/70">Horários de envio (até 3)</p>
+                  {emailForm.sendTimes.length < MAX_CONTACT_TIMES && (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-brand-500 hover:text-brand-400 transition-colors"
+                      onClick={addEmailFormTime}
+                    >
+                      + adicionar horário
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {emailForm.sendTimes.map((t, i) => (
+                    <div key={i} className="flex items-center gap-1.5 rounded-lg border border-base-200 bg-base-200/30 px-2.5 py-1.5">
+                      <Icon name="clock" className="h-3.5 w-3.5 text-base-content/30" />
+                      <select
+                        className="select select-bordered h-10 w-22"
+                        aria-label={`Hora do horário ${i + 1}`}
+                        value={t.hour}
+                        onChange={(e) => updateEmailFormTime(i, 'hour', Number(e.target.value))}
+                      >
+                        {HOURS.map((h) => (
+                          <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
+                        ))}
+                      </select>
+                      <select
+                        className="select select-bordered h-10 w-22"
+                        aria-label={`Minuto do horário ${i + 1}`}
+                        value={t.minute}
+                        onChange={(e) => updateEmailFormTime(i, 'minute', Number(e.target.value))}
+                      >
+                        {MINUTES.map((mm) => (
+                          <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
+                        ))}
+                      </select>
+                      {emailForm.sendTimes.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Remover horário ${i + 1}`}
+                          className="ml-0.5 text-base-content/30 hover:text-error transition-colors"
+                          onClick={() => removeEmailFormTime(i)}
+                        >
+                          <Icon name="close" className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {emailForm.sendTimes.some((t) => isOutsideSendWindow(t.hour)) && (
+                  <p className="mt-2 text-[11px] text-warning/90">
+                    ⚠️ Algum horário está fora da janela de envio ({String(sendWindowStart).padStart(2, '0')}h–{String(sendWindowEnd).padStart(2, '0')}h) — esse envio não sairá.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-base-content/70">Dias de envio</p>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                      onClick={() => setEmailForm((f) => ({ ...f, sendDays: [1, 2, 3, 4, 5] }))}
+                    >
+                      Dias úteis
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                      onClick={() => setEmailForm((f) => ({ ...f, sendDays: [...ALL_DAYS] }))}
+                    >
+                      Todos
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {ALL_DAYS.map((day) => {
+                    const active = emailForm.sendDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        title={DAY_TITLES[day]}
+                        aria-pressed={active}
+                        onClick={() => toggleEmailFormDay(day)}
+                        className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
+                          active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/40 hover:bg-base-300'
+                        }`}
+                      >
+                        {DAY_LABELS[day]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {emailForm.error && (
+                <div role="alert" className="mt-3 flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
+                  <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-error" />
+                  <p className="text-sm text-error">{emailForm.error}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end mt-4">
+                <Button type="button" onClick={saveEmailOnly} loading={!!emailForm.saving} disabled={!!emailForm.saving}>
+                  <Icon name="plus" className="h-3.5 w-3.5" /> {emailDupContact ? 'Vincular ao contato' : 'Adicionar por e-mail'}
+                </Button>
+              </div>
             </div>
           </div>
 
