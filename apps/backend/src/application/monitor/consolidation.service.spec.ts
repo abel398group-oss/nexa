@@ -1015,3 +1015,166 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     expect(getCashView).toHaveBeenCalledOnce(); // cacheado por tenant+dia — não 1 por contato
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grupo 5 — T9-FIX (2026-07-17): investigação "envios parados"
+//
+// Causa raiz encontrada: `processPerContact` reivindicava o slot de dedup
+// (dedupKey + lastDigestDate) e contava os alertas em `totalSent` ANTES de
+// checar se `effectiveDelivery(contact).digest` tinha algum canal de fato
+// ligado — um contato com o digest desligado nos dois canais (JSON salvo
+// assim, ou uma regressão futura na derivação) "consumia" o horário do dia
+// silenciosamente: nada saía, e o único log era nível debug (invisível no log
+// level padrão de produção). Mesmo padrão existia em `closing-report.service`
+// pra `lastClosingDate`. Fix: trava defensiva ANTES do claim + log explícito.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('T9-FIX (2026-07-17) — trava defensiva de delivery zerado + log de skip da janela', () => {
+  function makeContact(overrides?: Partial<ContactRecipient>): ContactRecipient {
+    return {
+      id: 'c1',
+      whatsapp: '5511999990001',
+      emails: [],
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }],
+      sendDays: [0, 1, 2, 3, 4, 5, 6],
+      ...overrides,
+    };
+  }
+
+  function makeContactsConfig(contacts: ContactRecipient[], extra?: Record<string, any>) {
+    return {
+      tenantId: TENANT,
+      enabled: true,
+      fiscalEnabled: true,
+      logisticEnabled: true,
+      frotaEnabled: true,
+      financeEnabled: true,
+      contacts,
+      ...extra,
+    };
+  }
+
+  const FISCAL_ALERT = { id: 'a1', category: 'fiscal', severity: 'OVERDUE', title: 'CT-e vencido', snoozedUntil: null };
+
+  async function callPerContact(svc: any, {
+    now, contacts, config, force = false,
+  }: { now: Date; contacts: ContactRecipient[]; config: Record<string, any>; force?: boolean }) {
+    return svc['processPerContact'](TENANT, config, contacts, now, now.getHours(), now.getMinutes(), force);
+  }
+
+  it(
+    'suspeito (b) — contato EXATAMENTE como os de produção (sem `delivery`, com whatsapp e emails, ' +
+      'closingReport/cashView presentes) RECEBE o digest normalmente',
+    async () => {
+      const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        whatsapp: '5511999990001',
+        emails: ['financeiro@empresa.com.br'],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        closingReport: 'monthly',
+        cashView: 'on',
+        // delivery: AUSENTE de propósito — é exatamente o caso descrito por Abel.
+      });
+      const cfg = makeContactsConfig([contact]);
+
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, phone] = notification.notifyPhone.mock.calls[0];
+      expect(phone).toBe('5511999990001');
+    },
+  );
+
+  it('trava: delivery.digest desligado nos DOIS canais → nada é enviado, slot NÃO é reivindicado, warn logado', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const update = vi.fn().mockResolvedValue({});
+    const { svc, notification, emailReply, logWarn } = makeService({ prismaFindMany: findMany, prismaUpdate: update });
+    const contact = makeContact({
+      whatsapp: '5511999990001',
+      emails: ['financeiro@empresa.com.br'],
+      delivery: {
+        digest: { whatsapp: false, email: false },
+        closing: { whatsapp: true, email: true },
+      },
+    });
+    const cfg = makeContactsConfig([contact]);
+
+    const sent = await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    expect(notification.notifyPhone).not.toHaveBeenCalled();
+    expect(emailReply.sendAlertEmail).not.toHaveBeenCalled();
+    expect(sent).toBe(0);
+
+    // Slot NÃO reivindicado: nenhum update grava lastDigestDate pro slot 08:00.
+    const persistedLastDigest = update.mock.calls.map((c: any[]) => c[0]?.data?.contacts?.[0]?.lastDigestDate);
+    expect(persistedLastDigest.every((d: any) => !d?.['all|08:00'])).toBe(true);
+
+    expect(logWarn).toHaveBeenCalled();
+    const warnMsg = logWarn.mock.calls.map((c: any[]) => c[0]).find((m: string) => m.includes('delivery.digest sem canal habilitado'));
+    expect(warnMsg).toBeDefined();
+    expect(warnMsg).toMatch(/slot 08:00 pulado/);
+    expect(warnMsg).toContain(`tenant=${TENANT}`);
+    expect(warnMsg).toContain('contato=c1');
+  });
+
+  it('trava: contato com só WhatsApp desligado (e-mail ligado) ainda envia por e-mail normalmente (não é bloqueado)', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const { svc, notification, emailReply } = makeService({
+      prismaFindMany: findMany,
+      // sendAlertEmail precisa "ter sucesso" pra este teste — default do mock é sent:false.
+    });
+    (emailReply.sendAlertEmail as any).mockResolvedValue({ sent: true });
+    const contact = makeContact({
+      whatsapp: '5511999990001',
+      emails: ['financeiro@empresa.com.br'],
+      delivery: {
+        digest: { whatsapp: false, email: true },
+        closing: { whatsapp: false, email: false },
+      },
+    });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    expect(notification.notifyPhone).not.toHaveBeenCalled();
+    expect(emailReply.sendAlertEmail).toHaveBeenCalledOnce();
+  });
+
+  it('suspeito (a) — janela de envio: skip da janela loga IMEDIATAMENTE (não só no resumo agregado do fim do tick)', async () => {
+    const { svc, logLog } = makeService();
+    const contact = makeContact({ sendTimes: [{ hour: 8, minute: 0 }] });
+    // Config com janela custom 9h-18h — 8h00 fica FORA da janela.
+    const cfg = makeContactsConfig([contact], { sendWindowStart: 9, sendWindowEnd: 18 });
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+    const explicitSkipLog = logLog.mock.calls
+      .map((c: any[]) => c[0])
+      .find((m: string) => typeof m === 'string' && m.startsWith('Monitor: slot 08:00 pulado'));
+    expect(explicitSkipLog).toBeDefined();
+    expect(explicitSkipLog).toContain('fora da janela de envio (9-18h)');
+    expect(explicitSkipLog).toContain(`tenant=${TENANT}`);
+    expect(explicitSkipLog).toContain('contato=c1');
+  });
+
+  it('suspeito (c) — dedup por slot não quebra com cashView=\'on\' (compat pós \'lastSlot\'→\'on\'): 2º tick no mesmo slot não duplica', async () => {
+    const findMany = vi.fn().mockResolvedValue([FISCAL_ALERT]);
+    const update = vi.fn().mockResolvedValue({});
+    const { svc, notification } = makeService({ prismaFindMany: findMany, prismaUpdate: update });
+    const contact = makeContact({ sendTimes: [{ hour: 8, minute: 0 }], cashView: 'on' });
+    const cfg = makeContactsConfig([contact]);
+
+    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+    expect(notification.notifyPhone).toHaveBeenCalledTimes(1);
+
+    const persistedContact = update.mock.calls[0][0].data.contacts[0];
+    expect(persistedContact.lastDigestDate).toEqual({ 'all|08:00': '2026-07-13' });
+
+    // Mesmo slot, 3min depois (mesmo tick de 5min) — não deve duplicar.
+    await callPerContact(svc, { now: makeNow(8, 3), contacts: [persistedContact], config: makeContactsConfig([persistedContact]) });
+    expect(notification.notifyPhone).toHaveBeenCalledTimes(1);
+  });
+});

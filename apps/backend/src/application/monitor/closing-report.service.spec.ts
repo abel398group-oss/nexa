@@ -260,4 +260,34 @@ describe('ClosingReportService', () => {
     expect(biCalls).toHaveLength(1);
     expect(result.sent).toBe(2);
   });
+
+  it(
+    'T9-FIX: delivery.closing desligado nos DOIS canais → nada é enviado, `lastClosingDate` NÃO é ' +
+      'reivindicado (mesma trava do digest), warn logado',
+    async () => {
+      const contact = makeContact({
+        delivery: {
+          digest: { whatsapp: true, email: false },
+          closing: { whatsapp: false, email: false },
+        },
+      });
+      const { svc, tms, notification, emailReply, update, logWarn } = makeService({ contacts: [contact] });
+
+      const result = await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+
+      expect(tms.getClosingReport).toHaveBeenCalledOnce(); // já tinha buscado o relatório antes de checar delivery
+      expect(notification.notifyPhone).not.toHaveBeenCalled();
+      expect(emailReply.sendAlertEmail).not.toHaveBeenCalled();
+      expect(result.sent).toBe(0);
+
+      // lastClosingDate NÃO gravado — dia continua disponível pro próximo tick.
+      expect(update).not.toHaveBeenCalled();
+
+      expect(logWarn).toHaveBeenCalled();
+      const warnMsg = logWarn.mock.calls.map((c: any[]) => c[0]).find((m: string) => m.includes('delivery.closing sem canal habilitado'));
+      expect(warnMsg).toBeDefined();
+      expect(warnMsg).toContain('tenant=tenant-1');
+      expect(warnMsg).toContain('contato=c1');
+    },
+  );
 });

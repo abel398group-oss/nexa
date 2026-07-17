@@ -1055,14 +1055,13 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     renderPage();
     await screen.findByText('Contatos');
 
-    // Regex ancorado no ⚠️: `/fora da janela/i` batia também no label estático
-    // "Crítico fora da janela:" do seletor de config geral — ambíguo, quebrava
-    // com "Found multiple elements". O aviso de fato (linha do contato na lista)
-    // sempre vem prefixado com o emoji ⚠️ (ver MonitorConfigPage.tsx).
+    // Regex ancorado no ⚠️: antes de T9-FIX, `/fora da janela/i` batia também no
+    // label estático "Crítico fora da janela:" do seletor de config geral (agora
+    // removido — ver bloco T9-FIX abaixo). Mantido ancorado por segurança.
     expect(await screen.findByText(/⚠️ fora da janela/i)).toBeInTheDocument();
   });
 
-  it('config da janela de envio carrega e salva sendWindowStart/sendWindowEnd/criticalOutsideWindow', async () => {
+  it('config da janela de envio carrega e salva sendWindowStart/sendWindowEnd', async () => {
     mockConfigWithContacts([], { sendWindowStart: 6, sendWindowEnd: 20, criticalOutsideWindow: 'hold' });
     renderPage();
     await screen.findByText('Janela de envio');
@@ -1074,7 +1073,31 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     expect(payload).toMatchObject({
       sendWindowStart: 6,
       sendWindowEnd: 20,
-      criticalOutsideWindow: 'hold',
     });
+  });
+});
+
+describe('MonitorConfigPage — T9-FIX (2026-07-17): seletor "Crítico fora da janela" removido', () => {
+  it('não renderiza mais o seletor "Crítico fora da janela" — comportamento é fixo (hold)', async () => {
+    mockConfigWithContacts([], { sendWindowStart: 6, sendWindowEnd: 20, criticalOutsideWindow: 'hold' });
+    renderPage();
+    await screen.findByText('Janela de envio');
+
+    expect(screen.queryByLabelText('Crítico fora da janela')).not.toBeInTheDocument();
+    expect(screen.queryByText(/segura até abrir/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/envia na hora/i)).not.toBeInTheDocument();
+    // O card explica o comportamento fixo em texto corrido, não mais como opção.
+    expect(screen.getByText(/alertas críticos sempre seguram até a janela abrir/i)).toBeInTheDocument();
+  });
+
+  it('PUT com criticalOutsideWindow antigo (compat TMS) não quebra o salvamento — campo é aceito e ignorado', async () => {
+    mockConfigWithContacts([], { sendWindowStart: 6, sendWindowEnd: 20, criticalOutsideWindow: 'send' });
+    renderPage();
+    await screen.findByText('Janela de envio');
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    // Não lança/mostra erro — o save completa normalmente mesmo com o valor legado 'send' em memória.
+    expect(screen.queryByText(/erro ao salvar/i)).not.toBeInTheDocument();
   });
 });

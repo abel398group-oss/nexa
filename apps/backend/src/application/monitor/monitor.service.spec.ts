@@ -1048,3 +1048,60 @@ describe('MonitorService.updateExternalConfig — T8-FIX preserva closingReport/
     expect(saved.cashView).toBe('off');
   });
 });
+
+// ─── T9-FIX (2026-07-17, item 2): "Crítico fora da janela" sai da UI —
+// comportamento fixo em 'hold', `criticalOutsideWindow` do config/DTO passa a
+// ser aceito-e-ignorado (compat com PUTs antigos do TMS). ─────────────────────
+
+describe('MonitorService.sendAlertsToAdmins — T9-FIX: hold fixo fora da janela', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fora da janela + config legado criticalOutsideWindow="send" — AINDA segura (hold é fixo, campo é ignorado)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 13, 22, 0, 0)); // 22h — fora de 9h-18h
+    const { svc, channel, dispatch } = makeService({
+      sendWindowStart: 9,
+      sendWindowEnd: 18,
+      criticalOutsideWindow: 'send', // valor legado que ANTES furava a janela — agora ignorado
+    });
+    const events = [makeEvent({ severity: 'CRITICAL' })];
+
+    await svc['sendAlertsToAdmins']('t1', events);
+
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(dispatch.enqueue).toHaveBeenCalledOnce();
+    const [job] = dispatch.enqueue.mock.calls[0];
+    expect(job.notBefore).toBeGreaterThan(Date.now());
+  });
+
+  it('fora da janela + config SEM criticalOutsideWindow (campo nunca enviado) — segura normalmente', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 13, 22, 0, 0));
+    const { svc, channel, dispatch, config } = makeService({ sendWindowStart: 9, sendWindowEnd: 18 });
+    delete (config as any).criticalOutsideWindow;
+    const events = [makeEvent({ severity: 'CRITICAL' })];
+
+    await svc['sendAlertsToAdmins']('t1', events);
+
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(dispatch.enqueue).toHaveBeenCalledOnce();
+  });
+
+  it('dentro da janela — envia na hora normalmente, independente do valor de criticalOutsideWindow', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 13, 12, 0, 0)); // 12h — dentro de 9h-18h
+    const { svc, channel, dispatch } = makeService({
+      sendWindowStart: 9,
+      sendWindowEnd: 18,
+      criticalOutsideWindow: 'send',
+    });
+    const events = [makeEvent({ severity: 'CRITICAL' })];
+
+    await svc['sendAlertsToAdmins']('t1', events);
+
+    expect(channel.sendTo).toHaveBeenCalledOnce();
+    expect(dispatch.enqueue).not.toHaveBeenCalled();
+  });
+});

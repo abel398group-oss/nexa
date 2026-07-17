@@ -135,7 +135,12 @@ class UpdateConfigDto {
   // catch-up). Default 06:00–20:00 (ver send-window.util.ts). Granularidade de hora.
   @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendWindowStart?: number;
   @IsInt() @Min(0) @Max(23) @IsOptional() @nullToUndefined() sendWindowEnd?: number;
-  // Imediatos CRITICAL fora da janela: 'hold' (default, segura até abrir) ou 'send' (fura).
+  // T9-FIX (2026-07-17, decisão do Abel): a escolha "Crítico fora da janela" SAIU
+  // da UI — comportamento agora é FIXO em 'hold' (MonitorService nunca mais lê
+  // este valor pra decidir nada, ver monitor.service.ts). Campo mantido no DTO
+  // só ACEITO-E-IGNORADO por compat com PUTs antigos do TMS que ainda mandam
+  // 'hold'/'send' (Regra 1 do REGRAS-SQUAD: nunca quebrar o emissor) — não
+  // remover sem uma depreciação formal.
   @IsIn(['hold', 'send']) @IsOptional() @nullToUndefined() criticalOutsideWindow?: string;
 }
 

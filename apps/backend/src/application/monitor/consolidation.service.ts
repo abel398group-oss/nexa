@@ -575,9 +575,15 @@ export class ConsolidationService {
             continue;
           }
 
-          // T9: fora da janela geral de envio → nada dispara, nem catch-up.
+          // T9-FIX (2026-07-17): fora da janela geral de envio → nada dispara, nem
+          // catch-up. Antes só entrava no resumo agregado no fim da função (uma
+          // linha só, no fim do tick) — log explícito e imediato aqui, no formato
+          // pedido pelo Abel, pra aparecer na hora do skip e não só num resumo.
           if (!inSendWindow) {
             skipReasons[skipKey] = `fora_da_janela_de_envio(${windowStart}h-${windowEnd}h)`;
+            this.logger.log(
+              `Monitor: slot ${slotLabel} pulado — fora da janela de envio (${windowStart}-${windowEnd}h) tenant=${tenantId} contato=${contact.id}`,
+            );
             continue;
           }
 
@@ -662,6 +668,25 @@ export class ConsolidationService {
         const delivery = effectiveDelivery(contact);
         const cashViewForWa = delivery.cash.whatsapp ? cashView : null;
         const cashViewForEmail = delivery.cash.email ? cashView : null;
+
+        // T9-FIX (2026-07-17): trava defensiva encontrada na investigação do bug
+        // "envios parados" — SEM esta trava, um contato com `delivery.digest`
+        // zerado nos dois canais (ex.: JSON salvo com o digest desligado por
+        // engano, ou uma regressão futura em `effectiveDelivery`) ainda assim
+        // reivindicava o slot (dedupKey + lastDigestDate) e contava os alertas
+        // como "enviados" em `totalSent` MAIS ABAIXO, sem nenhum canal de fato
+        // notificado e só um log em nível debug (invisível no log level padrão
+        // de produção) — silêncio total, o pior cenário pra debugar. Agora o
+        // slot NÃO é reivindicado (fica disponível pro próximo tick/catch-up
+        // assim que a matriz de entrega for corrigida) e o log é warn (visível).
+        if (!delivery.digest.whatsapp && !delivery.digest.email) {
+          skipReasons[skipKey] = 'delivery_sem_canal_habilitado';
+          this.logger.warn(
+            `Monitor: slot ${slotLabel} pulado — delivery.digest sem canal habilitado (WhatsApp e e-mail desligados) ` +
+            `tenant=${tenantId} contato=${contact.id}, ${nonCriticalAlerts.length} alerta(s) pendente(s) NÃO enviado(s)`,
+          );
+          continue;
+        }
 
         const message = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashViewForWa);
         const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';

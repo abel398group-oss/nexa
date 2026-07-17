@@ -48,7 +48,6 @@ import {
   formatHourMinute,
   DEFAULT_SEND_WINDOW_START,
   DEFAULT_SEND_WINDOW_END,
-  DEFAULT_CRITICAL_OUTSIDE_WINDOW,
 } from './send-window.util';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
@@ -624,14 +623,15 @@ export class MonitorService implements OnModuleInit {
       return 0;
     }
 
-    // T9: janela geral de envio — imediatos CRITICAL fora dela seguem
-    // `criticalOutsideWindow`: 'hold' (default, segura e reagenda pra próxima
-    // abertura via MonitorDispatchService com notBefore explícito) ou 'send'
-    // (fura a janela, comportamento pré-T9, inalterado abaixo).
+    // T9-FIX (2026-07-17, decisão do Abel): a escolha "Crítico fora da janela"
+    // SAIU da interface — comportamento agora é FIXO em 'hold' (sempre segura e
+    // reagenda pra próxima abertura, com o sufixo "(ocorrido às HH:MM)"). O campo
+    // `criticalOutsideWindow` continua aceito no config/DTO só por compat com PUTs
+    // antigos do TMS (Regra 1 do repo: nunca quebrar o emissor) — é lido e
+    // IGNORADO de propósito, nunca mais decide o comportamento.
     const now = new Date();
     const windowStart = (config as any)?.sendWindowStart ?? DEFAULT_SEND_WINDOW_START;
     const windowEnd = (config as any)?.sendWindowEnd ?? DEFAULT_SEND_WINDOW_END;
-    const criticalOutsideWindow = (config as any)?.criticalOutsideWindow ?? DEFAULT_CRITICAL_OUTSIDE_WINDOW;
     const inWindow = isWithinSendWindow(now, windowStart, windowEnd);
 
     // G3 — resolve destinatários por setor
@@ -682,10 +682,11 @@ export class MonitorService implements OnModuleInit {
       // só o título de topo muda para "⚡ Alerta imediato · {Setor}".
       const msg = this.buildImmediateMessage(category, sectorEvents);
 
-      // T9: fora da janela com hold → segura no MonitorDispatchService com
-      // notBefore = próxima abertura, mensagem ganha sufixo "(ocorrido às HH:MM)".
-      // Nunca aplica retroativamente a jobs já enfileirados (só decide aqui, na hora).
-      if (!inWindow && criticalOutsideWindow === 'hold') {
+      // T9-FIX: fora da janela → SEMPRE segura (comportamento fixo, ver
+      // comentário acima) no MonitorDispatchService com notBefore = próxima
+      // abertura, mensagem ganha sufixo "(ocorrido às HH:MM)". Nunca aplica
+      // retroativamente a jobs já enfileirados (só decide aqui, na hora).
+      if (!inWindow) {
         const openAt = nextWindowOpen(now, windowStart);
         const heldMsg = `${msg}\n\n_(ocorrido às ${formatHourMinute(now)})_`;
         this.dispatch.enqueue({

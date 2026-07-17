@@ -31,7 +31,6 @@ import {
   Badge,
   EmptyState,
   IconButton,
-  SelectField,
 } from '@/shared/ui';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTagsInput';
@@ -964,7 +963,9 @@ export function MonitorConfigPage() {
             <p className="text-sm font-semibold text-base-content">Janela de envio</p>
             <p className="text-xs text-base-content/50 mt-0.5 mb-3">
               Nada dispara fora dela — pendências, fechamento e caixa (inclusive reenvios atrasados).
-              Alertas críticos imediatos seguem a opção abaixo.
+              {/* T9-FIX (2026-07-17): seletor "Crítico fora da janela" removido — comportamento
+                  fixo daqui pra frente (decisão do Abel), ver texto abaixo. */}
+              {' '}Alertas críticos sempre seguram até a janela abrir, com "(ocorrido às HH:MM)".
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5 text-xs text-base-content/50">
@@ -990,18 +991,6 @@ export function MonitorConfigPage() {
                     <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
                   ))}
                 </select>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-base-content/50">
-                <span>Crítico fora da janela:</span>
-                <SelectField
-                  aria-label="Crítico fora da janela"
-                  value={cfg.criticalOutsideWindow ?? 'hold'}
-                  onValueChange={(v) => set('criticalOutsideWindow', v as 'hold' | 'send')}
-                  options={[
-                    { value: 'hold', label: 'Segura até abrir' },
-                    { value: 'send', label: 'Envia na hora' },
-                  ]}
-                />
               </div>
             </div>
           </div>

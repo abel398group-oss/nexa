@@ -186,16 +186,31 @@ export class ClosingReportService {
 
     for (const contact of pending) {
       try {
+        // T9: matriz efetiva de entrega — único ponto de derivação (nunca
+        // reimplementar, ver `effectiveDelivery`). Ex. do doc: closing com
+        // whatsapp=false e email=true → só e-mails.
+        const delivery = effectiveDelivery(contact);
+
+        // T9-FIX (2026-07-17): mesma trava defensiva do digest em
+        // ConsolidationService — SEM ela, um contato com `delivery.closing`
+        // zerado nos dois canais ainda reivindicava `lastClosingDate` (claim
+        // ANTES de checar a matriz) e ficava marcado como "enviado hoje" pro
+        // resto do ciclo (semana/quinzena/mês), sem nenhum canal notificado e
+        // sem log visível. Agora só reivindica o dia se pelo menos um canal
+        // realmente vai receber.
+        if (!delivery.closing.whatsapp && !delivery.closing.email) {
+          this.logger.warn(
+            `Monitor: closing-report (kind=${kind}) pulado — delivery.closing sem canal habilitado ` +
+            `tenant=${tenantId} contato=${contact.id}, nada enviado, dia NÃO reivindicado`,
+          );
+          continue;
+        }
+
         // Claim-before-send — persiste ANTES de enviar (mesmo padrão do T7):
         // pior cenário de queda no meio do envio é 1 envio perdido (recuperável
         // no próximo dia 1º/16), nunca um duplicado.
         contact.lastClosingDate = todayStr;
         await this.persistContacts(tenantId, allContacts);
-
-        // T9: matriz efetiva de entrega — único ponto de derivação (nunca
-        // reimplementar, ver `effectiveDelivery`). Ex. do doc: closing com
-        // whatsapp=false e email=true → só e-mails.
-        const delivery = effectiveDelivery(contact);
 
         if (contact.whatsapp && delivery.closing.whatsapp) {
           await this.notification.notifyPhone(tenantId, contact.whatsapp, message);
