@@ -8,7 +8,7 @@
  * sempre vira 'off'; ausente em contato NOVO (sem `prior`) também vira 'off'.
  */
 import { describe, it, expect } from 'vitest';
-import { sanitizeContacts, cashViewIsOn, type ContactRecipient } from './contact-recipient.types';
+import { sanitizeContacts, cashViewIsOn, effectiveDelivery, type ContactRecipient } from './contact-recipient.types';
 
 function makeExisting(overrides?: Partial<ContactRecipient>): ContactRecipient {
   return {
@@ -187,5 +187,88 @@ describe('T9-ADENDO (2026-07-17) — cashView on/off + compat lastSlot, closingR
     ];
     const [result] = sanitizeContacts(input, existing);
     expect(result.closingReport).toBe('weekly');
+  });
+});
+
+describe('T9-WIZARD (2026-07-17) — effectiveDelivery: caixa herda os canais do digest', () => {
+  function makeContact(overrides?: Partial<ContactRecipient>): ContactRecipient {
+    return {
+      id: 'c1',
+      whatsapp: '5511999990001',
+      emails: ['a@b.com'],
+      sectors: ['fiscal'],
+      sendTimes: [{ hour: 8, minute: 0 }],
+      sendDays: [1, 2, 3, 4, 5],
+      ...overrides,
+    };
+  }
+
+  it("delivery explícito + cashView='on' → cash herda os canais efetivos do digest (não tem entrada própria no JSON)", () => {
+    const contact = makeContact({
+      cashView: 'on',
+      delivery: {
+        digest: { whatsapp: true, email: false },
+        closing: { whatsapp: false, email: false },
+      },
+    });
+    const result = effectiveDelivery(contact);
+    expect(result.cash).toEqual({ whatsapp: true, email: false });
+  });
+
+  it("cashView='off' → cash sempre {false,false}, mesmo com digest ligado nos dois canais", () => {
+    const contact = makeContact({
+      cashView: 'off',
+      delivery: {
+        digest: { whatsapp: true, email: true },
+        closing: { whatsapp: false, email: false },
+      },
+    });
+    const result = effectiveDelivery(contact);
+    expect(result.cash).toEqual({ whatsapp: false, email: false });
+  });
+
+  it("compat 'lastSlot' (alias legado) também liga o cash herdado do digest", () => {
+    const contact = makeContact({
+      cashView: 'lastSlot',
+      delivery: {
+        digest: { whatsapp: true, email: true },
+        closing: { whatsapp: false, email: false },
+      },
+    });
+    const result = effectiveDelivery(contact);
+    expect(result.cash).toEqual({ whatsapp: true, email: true });
+  });
+
+  it('digest sem nenhum canal → cash nunca liga, mesmo com cashView on (nada pra herdar)', () => {
+    const contact = makeContact({
+      cashView: 'on',
+      delivery: {
+        digest: { whatsapp: false, email: false },
+        closing: { whatsapp: true, email: true },
+      },
+    });
+    const result = effectiveDelivery(contact);
+    expect(result.cash).toEqual({ whatsapp: false, email: false });
+  });
+
+  it('sem `delivery` (compat pré-T9) — cash ainda deriva corretamente a partir dos canais reais do contato', () => {
+    const contact = makeContact({ whatsapp: '5511999990001', emails: [], cashView: 'on' });
+    const result = effectiveDelivery(contact);
+    expect(result.digest).toEqual({ whatsapp: true, email: false });
+    expect(result.cash).toEqual({ whatsapp: true, email: false });
+  });
+
+  it('trava defensiva: delivery salvo com WhatsApp mas contato não tem mais o canal → cash não vaza pra WhatsApp', () => {
+    const contact = makeContact({
+      whatsapp: undefined,
+      cashView: 'on',
+      delivery: {
+        digest: { whatsapp: true, email: true }, // salvo quando o contato ainda tinha WhatsApp
+        closing: { whatsapp: false, email: false },
+      },
+    });
+    const result = effectiveDelivery(contact);
+    expect(result.digest.whatsapp).toBe(false); // trava zera o canal que não existe mais
+    expect(result.cash).toEqual({ whatsapp: false, email: true });
   });
 });

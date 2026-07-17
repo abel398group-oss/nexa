@@ -119,10 +119,17 @@ function cashViewIsOn(mode: CashViewMode | undefined): boolean {
   return mode === 'on' || mode === 'lastSlot';
 }
 
-/** T9-WIZARD: as 2 linhas da matriz de entrega (passo 2 — pills por card). */
-const DELIVERY_ROWS: { key: keyof DeliveryMatrix; label: string }[] = [
-  { key: 'digest', label: '⚠️ Pendências do dia' },
+/** T9-WIZARD: os 2 cards do passo 2 — pills de canal por card. */
+const DELIVERY_ROWS: { key: keyof DeliveryMatrix; label: string; subtitle?: string }[] = [
+  { key: 'digest', label: '⚠️ Pendências do dia', subtitle: 'Até 3 relatórios/dia nos horários do passo 3' },
   { key: 'closing', label: '📊 Receita × despesa' },
+];
+
+/** T9-WIZARD: rótulos do indicador de progresso (protótipo aprovado 2026-07-17). */
+const WIZARD_STEPS: { step: WizardStep; label: string }[] = [
+  { step: 1, label: 'Quem recebe' },
+  { step: 2, label: 'O que recebe' },
+  { step: 3, label: 'Quando recebe' },
 ];
 
 /**
@@ -1282,262 +1289,353 @@ export function MonitorConfigPage() {
         </div>
       )}
 
-      {/* ─── T9: Módulo de cadastro único — contato = pessoa (nome + WhatsApp + e-mails) ── */}
+      {/* ─── T9-WIZARD: assistente de 3 passos — Quem recebe / O que recebe / Quando recebe ── */}
       <Modal
         open={!!contactModal}
         onClose={() => setContactModal(null)}
         title={contactModal?.editId ? 'Editar contato' : 'Novo contato'}
         size="xl"
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={() => setContactModal(null)} disabled={!!contactModal?.saving}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={saveContactModal} loading={!!contactModal?.saving} disabled={!!contactModal?.saving}>
-              Salvar contato
-            </Button>
-          </>
+          contactModal && (
+            <>
+              {contactModal.step > 1 && (
+                <Button type="button" variant="ghost" onClick={goBackStep} disabled={!!contactModal.saving}>
+                  Voltar
+                </Button>
+              )}
+              <Button type="button" variant="ghost" onClick={() => setContactModal(null)} disabled={!!contactModal.saving}>
+                Cancelar
+              </Button>
+              {contactModal.step < 3 ? (
+                <Button type="button" onClick={advanceStep}>
+                  Avançar
+                </Button>
+              ) : (
+                <Button type="button" onClick={saveContactModal} loading={!!contactModal.saving} disabled={!!contactModal.saving}>
+                  Salvar contato
+                </Button>
+              )}
+            </>
+          )
         }
       >
         {contactModal && (
           <div className="space-y-6">
-            <div>
-              <p className="text-sm font-medium text-base-content/70 mb-1.5">Nome</p>
-              <input
-                type="text"
-                className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
-                placeholder="Ex.: Maria (Financeiro)"
-                maxLength={CONTACT_NAME_MAX_LENGTH}
-                value={contactModal.name}
-                onChange={(e) => setContactModal({ ...contactModal, name: e.target.value })}
-                aria-label="Nome do contato"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp</p>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
-                  placeholder="5511999999999 (com DDI)"
-                  value={contactModal.whatsapp}
-                  onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
-                  aria-label="WhatsApp do contato"
-                />
-                <p className="mt-1.5 text-[11px] text-base-content/35">
-                  Opcional. Só dígitos: DDI + DDD + número.
-                </p>
-              </div>
-              <div>
-                <RecipientTagsInput
-                  channel="email"
-                  label="✉️ E-mails (ilimitado)"
-                  value={contactModal.emails.map((e) => ({ contact: e, channel: 'email' as const }))}
-                  onChange={updateContactEmails}
-                  max={999}
-                />
-              </div>
-            </div>
-
-            <div className="border-t border-base-200 pt-6">
-              <p className="text-sm font-medium text-base-content/70 mb-2">Recebe alertas de</p>
-              <div className="flex flex-wrap gap-2">
-                {SECTORS.map((s) => {
-                  const active = contactModal.sectors.includes(s.key);
-                  return (
+            {/* Indicador de progresso — 1—2—3, passo concluído vira ✓. Clique só volta pra um passo já visitado. */}
+            <div className="flex items-center gap-2" role="tablist" aria-label="Passos do cadastro de contato">
+              {WIZARD_STEPS.map((s, idx) => {
+                const done = contactModal.step > s.step;
+                const active = contactModal.step === s.step;
+                return (
+                  <div key={s.step} className="flex items-center gap-2 flex-1 last:flex-initial">
                     <button
-                      key={s.key}
                       type="button"
-                      aria-pressed={active}
-                      onClick={() => toggleContactSector(s.key)}
-                      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                        active ? `border-transparent ${s.badgeClass}` : 'border-base-300 text-base-content/50 hover:bg-base-200'
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={`Passo ${s.step}: ${s.label}`}
+                      disabled={s.step >= contactModal.step}
+                      onClick={() => setContactModal((m) => (m && s.step < m.step ? { ...m, step: s.step, error: null } : m))}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors disabled:cursor-default ${
+                        active
+                          ? 'bg-brand-500 text-white'
+                          : done
+                            ? 'bg-success/20 text-success'
+                            : 'bg-base-200 text-base-content/40'
                       }`}
                     >
-                      {s.emoji} {s.label}
+                      {done ? '✓' : s.step}
                     </button>
-                  );
-                })}
-              </div>
+                    <span className={`text-xs font-medium whitespace-nowrap ${active ? 'text-base-content' : 'text-base-content/40'}`}>
+                      {s.label}
+                    </span>
+                    {idx < WIZARD_STEPS.length - 1 && <div className="h-px flex-1 bg-base-200" />}
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="border-t border-base-200 pt-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-base-content/70">Horários de envio (até 3)</p>
-                {contactModal.sendTimes.length < MAX_CONTACT_TIMES && (
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-brand-500 hover:text-brand-400 transition-colors"
-                    onClick={addContactTime}
-                  >
-                    + adicionar horário
-                  </button>
+            {/* ── Passo 1 — Quem recebe ─────────────────────────────────────── */}
+            {contactModal.step === 1 && (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-sm font-medium text-base-content/70 mb-1.5">Nome</p>
+                  <input
+                    type="text"
+                    className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30"
+                    placeholder="Ex.: Maria (Financeiro)"
+                    maxLength={CONTACT_NAME_MAX_LENGTH}
+                    value={contactModal.name}
+                    onChange={(e) => setContactModal({ ...contactModal, name: e.target.value })}
+                    aria-label="Nome do contato"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp</p>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30 disabled:bg-base-200/60 disabled:text-base-content/40"
+                      placeholder="5511999999999 (com DDI)"
+                      value={contactModal.whatsapp}
+                      disabled={atWaLimit && !contactModal.startedWithWa}
+                      onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
+                      aria-label="WhatsApp do contato"
+                    />
+                    <p className="mt-1.5 text-[11px] text-base-content/35">
+                      Opcional. Só dígitos: DDI + DDD + número.
+                    </p>
+                    {atWaLimit && !contactModal.startedWithWa && (
+                      <p className="mt-1.5 text-[11px] text-warning">
+                        Limite de números do plano atingido — contatos só com e-mail continuam livres.{' '}
+                        <a
+                          href="https://app.hipertms.com.br/configuracoes/assinatura"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium underline hover:text-warning/80"
+                        >
+                          Adicionar número — R$ 29,90/mês
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <RecipientTagsInput
+                      channel="email"
+                      label="✉️ E-mails (ilimitado)"
+                      value={contactModal.emails.map((e) => ({ contact: e, channel: 'email' as const }))}
+                      onChange={updateContactEmails}
+                      max={999}
+                    />
+                  </div>
+                </div>
+
+                {planAllowed && waNumbersLimit > 0 && (
+                  <p className="text-[11px] text-base-content/40">
+                    {waNumbersUsed} de {waNumbersLimit} números do plano · {waAvailable} disponíve{waAvailable === 1 ? 'l' : 'is'}
+                  </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-3">
-                {contactModal.sendTimes.map((t, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1.5 rounded-lg border border-base-200 bg-base-200/30 px-2.5 py-1.5"
-                  >
-                    <Icon name="clock" className="h-3.5 w-3.5 text-base-content/30" />
-                    <select
-                      className="select select-bordered h-10 w-22"
-                      aria-label={`Hora do horário ${i + 1}`}
-                      value={t.hour}
-                      onChange={(e) => updateContactTime(i, 'hour', Number(e.target.value))}
-                    >
-                      {HOURS.map((h) => (
-                        <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
-                      ))}
-                    </select>
-                    {/* TEMP (teste do Abel) — minuto de volta por enquanto. Remover junto com esta nota. */}
-                    <select
-                      className="select select-bordered h-10 w-22"
-                      aria-label={`Minuto do horário ${i + 1}`}
-                      value={t.minute}
-                      onChange={(e) => updateContactTime(i, 'minute', Number(e.target.value))}
-                    >
-                      {MINUTES.map((mm) => (
-                        <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
-                      ))}
-                    </select>
-                    {contactModal.sendTimes.length > 1 && (
-                      <button
-                        type="button"
-                        aria-label={`Remover horário ${i + 1}`}
-                        className="ml-0.5 text-base-content/30 hover:text-error transition-colors"
-                        onClick={() => removeContactTime(i)}
-                      >
-                        <Icon name="close" className="h-4 w-4" />
-                      </button>
+            )}
+
+            {/* ── Passo 2 — O que recebe ────────────────────────────────────── */}
+            {contactModal.step === 2 && (
+              <div className="space-y-4">
+                {DELIVERY_ROWS.map((row) => (
+                  <div key={row.key} className="rounded-lg border border-base-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-base-content">{row.label}</p>
+                        {row.subtitle && (
+                          <p className="text-xs text-base-content/50 mt-0.5">{row.subtitle}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          aria-pressed={contactModal.delivery[row.key].whatsapp}
+                          aria-label={`${row.label} via WhatsApp`}
+                          disabled={!contactModal.whatsapp}
+                          onClick={() => toggleDeliveryFlag(row.key, 'whatsapp')}
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-colors disabled:opacity-30 ${
+                            contactModal.delivery[row.key].whatsapp
+                              ? 'border-transparent bg-brand-500 text-white'
+                              : 'border-base-300 text-base-content/40 hover:bg-base-200'
+                          }`}
+                        >
+                          📱
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={contactModal.delivery[row.key].email}
+                          aria-label={`${row.label} via e-mail`}
+                          disabled={contactModal.emails.length === 0}
+                          onClick={() => toggleDeliveryFlag(row.key, 'email')}
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-colors disabled:opacity-30 ${
+                            contactModal.delivery[row.key].email
+                              ? 'border-transparent bg-brand-500 text-white'
+                              : 'border-base-300 text-base-content/40 hover:bg-base-200'
+                          }`}
+                        >
+                          ✉️
+                        </button>
+                      </div>
+                    </div>
+
+                    {row.key === 'closing' && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {CLOSING_PERIODICITY_OPTIONS.map((opt) => {
+                          const active = contactModal.closingPeriodicity === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setContactModal((m) => (m ? { ...m, closingPeriodicity: opt.value } : m))}
+                              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/50 hover:bg-base-300'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 ))}
-              </div>
-              {/* T9: aviso não-bloqueante — horário fora da janela geral de envio não sai. */}
-              {contactModal.sendTimes.some((t) => isOutsideSendWindow(t.hour)) && (
-                <p className="mt-2 text-[11px] text-warning/90">
-                  ⚠️ Algum horário está fora da janela de envio ({String(sendWindowStart).padStart(2, '0')}h–
-                  {String(sendWindowEnd).padStart(2, '0')}h) configurada acima — esse envio não sairá.
+                <p className="text-[11px] text-base-content/35">
+                  A 💰 Visão do caixa você escolhe no próximo passo, junto dos setores.
                 </p>
-              )}
-            </div>
-
-            <div className="border-t border-base-200 pt-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-base-content/70">Dias de envio</p>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
-                    onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [1, 2, 3, 4, 5] } : m))}
-                  >
-                    Dias úteis
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
-                    onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [...ALL_DAYS] } : m))}
-                  >
-                    Todos
-                  </button>
-                </div>
               </div>
-              <div className="flex gap-2">
-                {ALL_DAYS.map((day) => {
-                  const active = contactModal.sendDays.includes(day);
-                  return (
+            )}
+
+            {/* ── Passo 3 — Quando recebe e o que entra ─────────────────────── */}
+            {contactModal.step === 3 && (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-sm font-medium text-base-content/70 mb-2">O que entra no relatório de pendências</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SECTORS.map((s) => {
+                      const active = contactModal.sectors.includes(s.key);
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => toggleContactSector(s.key)}
+                          className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                            active ? `border-transparent ${s.badgeClass}` : 'border-base-300 text-base-content/50 hover:bg-base-200'
+                          }`}
+                        >
+                          {s.emoji} {s.label}
+                        </button>
+                      );
+                    })}
+                    {/* T9-WIZARD: chip da Visão do caixa — estilo success pra diferenciar dos setores. */}
                     <button
-                      key={day}
                       type="button"
-                      title={DAY_TITLES[day]}
-                      aria-pressed={active}
-                      onClick={() => toggleContactDay(day)}
-                      className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
-                        active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/40 hover:bg-base-300'
+                      aria-pressed={cashViewIsOn(contactModal.cashView)}
+                      onClick={toggleCashChip}
+                      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                        cashViewIsOn(contactModal.cashView)
+                          ? 'border-transparent bg-success/20 text-success'
+                          : 'border-base-300 text-base-content/50 hover:bg-base-200'
                       }`}
                     >
-                      {DAY_LABELS[day]}
+                      🍯 Visão do caixa
                     </button>
-                  );
-                })}
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-base-content/35">
+                    A Visão do caixa entra como bloco extra no topo do relatório.
+                  </p>
+                </div>
+
+                <div className="border-t border-base-200 pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-base-content/70">Horários de envio (até 3)</p>
+                    {contactModal.sendTimes.length < MAX_CONTACT_TIMES && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-brand-500 hover:text-brand-400 transition-colors"
+                        onClick={addContactTime}
+                      >
+                        + adicionar horário
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {contactModal.sendTimes.map((t, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1.5 rounded-lg border border-base-200 bg-base-200/30 px-2.5 py-1.5"
+                      >
+                        <Icon name="clock" className="h-3.5 w-3.5 text-base-content/30" />
+                        <select
+                          className="select select-bordered h-10 w-22"
+                          aria-label={`Hora do horário ${i + 1}`}
+                          value={t.hour}
+                          onChange={(e) => updateContactTime(i, 'hour', Number(e.target.value))}
+                        >
+                          {HOURS.map((h) => (
+                            <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>
+                          ))}
+                        </select>
+                        <select
+                          className="select select-bordered h-10 w-22"
+                          aria-label={`Minuto do horário ${i + 1}`}
+                          value={t.minute}
+                          onChange={(e) => updateContactTime(i, 'minute', Number(e.target.value))}
+                        >
+                          {MINUTES.map((mm) => (
+                            <option key={mm} value={mm}>{String(mm).padStart(2, '0')}min</option>
+                          ))}
+                        </select>
+                        {contactModal.sendTimes.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label={`Remover horário ${i + 1}`}
+                            className="ml-0.5 text-base-content/30 hover:text-error transition-colors"
+                            onClick={() => removeContactTime(i)}
+                          >
+                            <Icon name="close" className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* T9: aviso não-bloqueante — horário fora da janela geral de envio não sai. */}
+                  {contactModal.sendTimes.some((t) => isOutsideSendWindow(t.hour)) && (
+                    <p className="mt-2 text-[11px] text-warning/90">
+                      ⚠️ Algum horário está fora da janela de envio ({String(sendWindowStart).padStart(2, '0')}h–
+                      {String(sendWindowEnd).padStart(2, '0')}h) configurada acima — esse envio não sairá.
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t border-base-200 pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-base-content/70">Dias de envio</p>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                        onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [1, 2, 3, 4, 5] } : m))}
+                      >
+                        Dias úteis
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full px-2.5 py-1 text-[11px] font-medium text-base-content/50 hover:bg-base-200 transition-colors"
+                        onClick={() => setContactModal((m) => (m ? { ...m, sendDays: [...ALL_DAYS] } : m))}
+                      >
+                        Todos
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {ALL_DAYS.map((day) => {
+                      const active = contactModal.sendDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          title={DAY_TITLES[day]}
+                          aria-pressed={active}
+                          onClick={() => toggleContactDay(day)}
+                          className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
+                            active ? 'bg-brand-500 text-white' : 'bg-base-200 text-base-content/40 hover:bg-base-300'
+                          }`}
+                        >
+                          {DAY_LABELS[day]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-
-            {/* T9: matriz "o que enviar em cada canal" — 3 linhas × 2 colunas. */}
-            <div className="border-t border-base-200 pt-6">
-              <p className="text-sm font-medium text-base-content/70 mb-2">Recebe em cada canal</p>
-              <Table>
-                <THead>
-                  <TR>
-                    <TH>Conteúdo</TH>
-                    <TH>📱 WhatsApp</TH>
-                    <TH>✉️ E-mail</TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {DELIVERY_ROWS.map((row) => (
-                    <TR key={row.key}>
-                      <TD>{row.label}</TD>
-                      <TD>
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm"
-                          aria-label={`${row.label} via WhatsApp`}
-                          checked={contactModal.delivery[row.key].whatsapp}
-                          disabled={!contactModal.whatsapp}
-                          onChange={() => toggleDeliveryFlag(row.key, 'whatsapp')}
-                        />
-                      </TD>
-                      <TD>
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm"
-                          aria-label={`${row.label} via e-mail`}
-                          checked={contactModal.delivery[row.key].email}
-                          disabled={contactModal.emails.length === 0}
-                          onChange={() => toggleDeliveryFlag(row.key, 'email')}
-                        />
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-              <p className="mt-1.5 text-[11px] text-base-content/35">
-                A periodicidade do fechamento e o horário do caixa continuam nos seletores abaixo.
-              </p>
-            </div>
-
-            {/* T8.5: resumo de fechamento — independente dos horários de pendências (T7). */}
-            <div className="border-t border-base-200 pt-6">
-              <p className="text-sm font-medium text-base-content/70 mb-1.5">📊 Resumo de fechamento</p>
-              <SelectField
-                aria-label="Resumo de fechamento"
-                value={contactModal.closingReport}
-                onValueChange={(v) => setContactModal((m) => (m ? { ...m, closingReport: v as ClosingReportKind } : m))}
-                options={CLOSING_REPORT_OPTIONS}
-              />
-              <p className="mt-1.5 text-[11px] text-base-content/35">
-                Semanal: toda segunda às 07h · Quinzenal: dias 16 e 1º às 07h · Mensal: dia 1º às 07h
-              </p>
-            </div>
-
-            {/* T9-ADENDO (2026-07-17): anexa o bloco "💰 SEU CAIXA" a TODOS os horários do dia deste contato. */}
-            <div className="border-t border-base-200 pt-6">
-              <p className="text-sm font-medium text-base-content/70 mb-1.5">💰 Visão do caixa</p>
-              <SelectField
-                aria-label="Visão do caixa"
-                value={contactModal.cashView}
-                onValueChange={(v) => setContactModal((m) => (m ? { ...m, cashView: v as CashViewMode } : m))}
-                options={CASH_VIEW_OPTIONS}
-              />
-              <p className="mt-1.5 text-[11px] text-base-content/35">
-                Anexa o resumo financeiro a todas as mensagens de pendências do dia deste contato
-              </p>
-            </div>
+            )}
 
             {contactModal.error && (
               <div role="alert" className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
