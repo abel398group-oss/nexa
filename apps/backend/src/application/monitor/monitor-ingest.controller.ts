@@ -77,6 +77,16 @@ export class ExternalConfigDto {
   // sectorConfig continua sendo derivado automaticamente (phone/email) para compat.
   @IsArray() @IsOptional() @ValidateNested({ each: true }) @Type(() => ContactRecipientDto)
   contacts?: ContactRecipientDto[];
+  /**
+   * T9-FIX (2026-07-18): janela geral de envio — o TMS envia os dois no PUT desde
+   * o card "Janela de envio". Faltavam aqui, e com `forbidNonWhitelisted` o
+   * ValidationPipe rejeitava TODO save vindo do TMS com 400 ("property
+   * sendWindowStart should not exist"). O proxy do TMS mostra `message` array
+   * como texto genérico, então o erro aparecia só como "Não foi possível salvar".
+   * REGRAS-SQUAD Regra 1: todo campo novo do contrato TMS↔Nexa entra no DTO.
+   */
+  @IsOptional() @IsInt() @Min(0) @Max(23) sendWindowStart?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(23) sendWindowEnd?: number;
 }
 
 @Controller('monitor')

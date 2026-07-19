@@ -122,6 +122,9 @@ export interface ExternalMonitorConfigInput {
   immediateSeverity?: 'CRITICAL' | 'all';
   /** T6: novo modelo por contato — mesmo shape do painel próprio do Nexa. */
   contacts?: ContactRecipientInput[];
+  /** T9: janela geral de envio (0-23) — enviada pelo TMS junto do save. */
+  sendWindowStart?: number;
+  sendWindowEnd?: number;
 }
 
 /** A1: saneia o sectorConfig antes de persistir — cap de 10 destinatários,
