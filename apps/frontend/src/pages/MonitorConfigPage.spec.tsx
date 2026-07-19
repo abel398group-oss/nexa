@@ -496,16 +496,21 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
   });
 
   // (c) contato sem canal → rejeitar (400 no backend; UI valida o mesmo antes de avançar do passo 1).
-  it('(c) exige pelo menos um canal (WhatsApp ou e-mail) — validação bloqueia o "Avançar" no passo 1', async () => {
+  it('(c) T10-WIZARD: cada ramo exige seu canal — validação bloqueia o "Avançar" no passo 1', async () => {
     renderPage();
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    // Ramo WhatsApp (default) sem número → bloqueia com pedido de WhatsApp.
     advance();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/pelo menos um canal/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe o WhatsApp/i);
     // Continua no passo 1 — não avançou.
     expect(screen.getByLabelText('Nome do contato')).toBeInTheDocument();
+
+    // Trocando pro ramo e-mail, a exigência passa a ser um e-mail.
+    fireEvent.click(screen.getByRole('button', { name: '✉️ E-mail' }));
+    advance();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Informe pelo menos um e-mail/i);
   });
 
   it('rejeita telefone inválido no passo 1', async () => {
@@ -987,6 +992,8 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    // T10-WIZARD: escolhe o ramo e-mail antes de digitar (WhatsApp fica oculto).
+    fireEvent.click(screen.getByRole('button', { name: '✉️ E-mail' }));
     const emailInput = screen.getByLabelText('Adicionar e-mail');
     fireEvent.change(emailInput, { target: { value: 'so-email@empresa.com' } });
     fireEvent.keyDown(emailInput, { key: 'Enter', code: 'Enter' });
