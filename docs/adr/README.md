@@ -46,6 +46,7 @@ e quais alternativas foram rejeitadas.
 | [031](031-cotacao-whatsapp.md) | Cotação de Frete via WhatsApp — dois modos: público (prospect) e personalizado (cliente) | Aceito |
 | [032](032-monitor-dual-channel-plan-gate.md) | Monitor Proativo — Dual-channel (email + WhatsApp) e gate por plano | Aceito (implementado) |
 | [033](033-integrations-plan-sync.md) | IntegrationsModule — Sincronização de Planos TMS → Nexa | Aceito (implementado) |
+| [034](034-atendimento-vendedor-canal-unico.md) | Atendimento do vendedor — canal único controlado pelo Nexa (deep link; relay adiado) | Aceito |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.
