@@ -9,6 +9,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationChannel } from './notification-channel.interface';
 
+/**
+ * Do-not-reply notice (2026-07-20 brainstorm, Abel's decision): every Monitor
+ * WhatsApp message opens with this line. Alerts are outbound-only — replies
+ * land in the shared Lia number and are discarded by the internal-numbers
+ * gate (InternalNumbersService), so we prevent them at the source. Prepended
+ * HERE (single choke point: direct sends AND the dispatch queue both call
+ * sendTo) instead of in each message builder, so e-mail bodies and specs that
+ * assert on builder output stay untouched.
+ */
+export const DO_NOT_REPLY_NOTICE = '🔕 _Mensagem automática — não é necessário responder._';
+
 @Injectable()
 export class WahaNotificationChannel implements NotificationChannel {
   private readonly logger = new Logger('WahaNotificationChannel');
@@ -16,7 +27,12 @@ export class WahaNotificationChannel implements NotificationChannel {
   constructor(private readonly waha: WahaClientService) {}
 
   async sendTo(tenantId: string, to: string, message: string): Promise<{ sent: boolean; reason?: string }> {
-    const result = await this.waha.sendText(to, message);
+    // Guard against double-prepend (e.g. a re-enqueued job whose message was
+    // already decorated on a previous attempt).
+    const text = message.startsWith(DO_NOT_REPLY_NOTICE)
+      ? message
+      : `${DO_NOT_REPLY_NOTICE}\n\n${message}`;
+    const result = await this.waha.sendText(to, text);
     if (!result.sent) {
       this.logger.warn(`WAHA: falha ao enviar para ${to} (tenant=${tenantId}): ${result.reason}`);
       return { sent: false, reason: result.reason ?? 'waha_send_failed' };

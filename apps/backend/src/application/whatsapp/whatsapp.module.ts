@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
+import { InternalNumbersService } from './internal-numbers.service';
 import { WahaBootstrapService } from './waha-bootstrap.service';
 import { WahaHealthService } from './waha-health.service';
 import { ContactsModule } from '@/application/contacts/contacts.module';
@@ -14,6 +15,6 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
 @Module({
   imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule, EmailCryptoModule],
   controllers: [WhatsappController, WhatsappStatusController],
-  providers: [WhatsappService, WahaBootstrapService, WahaHealthService],
+  providers: [WhatsappService, InternalNumbersService, WahaBootstrapService, WahaHealthService],
 })
 export class WhatsappModule {}

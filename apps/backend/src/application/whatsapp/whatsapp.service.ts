@@ -8,6 +8,7 @@ import { FollowUpService } from '@/application/followup/followup.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TranscriptionService } from '@/shared/ai/transcription.service';
+import { InternalNumbersService } from './internal-numbers.service';
 
 interface Normalized {
   phone: string;
@@ -42,6 +43,7 @@ export class WhatsappService {
     private readonly notifications: NotificationsService,
     private readonly transcription: TranscriptionService,
     private readonly emitter: EventEmitter2,
+    private readonly internalNumbers: InternalNumbersService,
   ) {}
 
   // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
@@ -289,6 +291,20 @@ export class WhatsappService {
         return { ignored: true, reason: `telefone inválido: ${n.phone}` };
       }
     }
+
+    // GATE de números internos (ADR 034/035, brainstorm 2026-07-20): vendedores
+    // e contatos de alerta do Monitor NUNCA viram contato/lead — quem responde
+    // "ok" a uma notificação de handoff ou a um digest não pode cair no funil
+    // da Lia. Descarte ANTES de transcrição/contato/conversa, com log explícito
+    // (regra do repo: nenhum drop silencioso).
+    const internal = await this.internalNumbers.classify(n.phone);
+    if (internal.internal) {
+      this.logger.warn(
+        `inbound descartado: número interno (${internal.reason}) — ${n.phone} não vira lead/conversa`,
+      );
+      return { ignored: true, reason: `numero interno: ${internal.reason}` };
+    }
+
     let inboundAudioUrl: string | null = null;
     if (n.isMedia) {
       // áudio (nota de voz): baixa do WAHA + transcreve. Se vier texto, segue o fluxo normal com ele.
