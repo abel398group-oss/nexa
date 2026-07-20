@@ -16,6 +16,8 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NOTIFICATION_CHANNEL, NotificationChannel } from './notification-channel.interface';
+import { phonesMatch } from '@/application/whatsapp/internal-numbers.service';
+import type { ContactRecipient } from './contact-recipient.types';
 
 export interface DispatchJob {
   tenantId: string;
@@ -126,6 +128,8 @@ export class MonitorDispatchService implements OnModuleDestroy {
 
     if (success) {
       await this.log(job, true);
+      // Rastreio (2026-07-20): sucesso limpa o selo de falha do contato, se houver.
+      await this.recordContactOutcome(job, true);
       return;
     }
 
@@ -144,6 +148,51 @@ export class MonitorDispatchService implements OnModuleDestroy {
       `envio DESISTIDO após ${this.maxAttempts} tentativas (to=${job.to} tenant=${job.tenantId} origin=${job.origin ?? '-'}): ${error}`,
     );
     await this.log(job, false, error);
+    // Rastreio (2026-07-20): falha DEFINITIVA vira selo visível no contato —
+    // antes disso, falha de envio morria no log do servidor (invisível pro
+    // admin; o contato achava que estava coberto e nunca recebeu nada).
+    await this.recordContactOutcome(job, false, error);
+  }
+
+  /**
+   * Rastreio de falha por contato (2026-07-20): grava/limpa
+   * `contacts[].lastSendFailure` no TenantNotificationConfig quando o
+   * destinatário do job é um contato cadastrado. Best-effort — nunca derruba
+   * o fluxo de envio; contato não encontrado (ex.: adminPhone legado) é
+   * simplesmente ignorado.
+   */
+  private async recordContactOutcome(job: DispatchJob, success: boolean, error?: string): Promise<void> {
+    try {
+      const cfg = await this.prisma.tenantNotificationConfig.findUnique({
+        where: { tenantId: job.tenantId },
+        select: { contacts: true },
+      });
+      const contacts = (cfg?.contacts as ContactRecipient[] | null) ?? [];
+      let touched = false;
+      for (const c of contacts) {
+        if (!c?.whatsapp || !phonesMatch(c.whatsapp, job.to)) continue;
+        if (success) {
+          if (c.lastSendFailure) {
+            c.lastSendFailure = null;
+            touched = true;
+          }
+        } else {
+          c.lastSendFailure = {
+            at: new Date().toISOString(),
+            reason: (error ?? 'motivo desconhecido').slice(0, 200),
+          };
+          touched = true;
+        }
+      }
+      if (touched) {
+        await this.prisma.tenantNotificationConfig.update({
+          where: { tenantId: job.tenantId },
+          data: { contacts: contacts as any },
+        });
+      }
+    } catch (e: any) {
+      this.logger.warn(`registro de resultado por contato falhou: ${e?.message}`);
+    }
   }
 
   private async log(job: DispatchJob, success: boolean, error?: string): Promise<void> {

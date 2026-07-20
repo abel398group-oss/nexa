@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
 
 export interface SupportEscalatedEvent {
   tenantId: string;
@@ -28,6 +29,7 @@ export class SupportEscalationListener {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailReplyService,
+    private readonly waha: WahaClientService,
   ) {}
 
   @OnEvent('support.escalated', { async: true })
@@ -76,7 +78,11 @@ export class SupportEscalationListener {
 
       const numero = c.ticketNumber ? `#${c.ticketNumber}` : event.conversationId.slice(0, 8);
       const origem = event.origin === 'portal' ? 'aberto pelo cliente no portal' : 'escalado pela Lia (chat)';
-      const base = (process.env.APP_BASE_URL ?? '').replace(/\/$/, '');
+      // Deep link no formato que o Inbox realmente entende (/inbox?c=<id> —
+      // ADR 034, mesmo padrão do handoff de vendas). O formato antigo
+      // (/inbox/<id>) não casava com nenhuma rota do frontend.
+      const base = (process.env.NEXA_APP_URL ?? process.env.APP_BASE_URL ?? '').trim().replace(/\/$/, '');
+      const inboxLink = base ? `${base}/inbox?c=${event.conversationId}` : '';
       const phone = c.phone && !String(c.phone).includes(':') ? c.phone : '-';
 
       const subject = `[Suporte] Chamado ${numero} ${origem}`;
@@ -88,10 +94,28 @@ export class SupportEscalationListener {
         `Categoria: ${category ?? '-'} | Prioridade: ${c.ticketPriority ?? 'normal'}`,
         `Origem: ${origem}`,
         '',
-        `Atenda no Inbox: ${base}/inbox/${event.conversationId}`,
+        inboxLink ? `Atenda no Inbox: ${inboxLink}` : 'Atenda pelo Inbox do painel Nexa.',
       ].join('\n');
 
       await this.email.sendAlertEmail(to, subject, text, event.tenantId);
+
+      // ADR 034 (2026-07-20): aviso também por WhatsApp quando SUPPORT_WHATSAPP
+      // está configurado — o atendente na rua abre o chamado pelo deep link no
+      // navegador do celular, igual ao vendedor. Sem env → segue só o e-mail.
+      // O número do suporte é tratado como interno pelo gate (InternalNumbers),
+      // então responder a esta notificação não vira lead.
+      const supportWa = (process.env.SUPPORT_WHATSAPP ?? '').replace(/\D/g, '');
+      if (supportWa) {
+        const waMsg =
+          `🛟 *Chamado ${numero}* — ${origem}\n` +
+          `Cliente: ${contact?.name ?? '-'} (${phone})\n` +
+          `Assunto: ${c.subject ?? '-'}\n` +
+          (inboxLink ? `👉 Atender agora: ${inboxLink}` : `👉 Atenda pelo Inbox do painel Nexa.`);
+        const r = await this.waha.sendText(supportWa, waMsg);
+        if (!r.sent) {
+          this.logger.warn(`WhatsApp de escalação falhou (conv=${event.conversationId}): ${r.reason}`);
+        }
+      }
     } catch (e: any) {
       // Nunca propaga: e-mail é notificação, não parte do fluxo do chamado.
       this.logger.warn(`Falha no e-mail de escalação (conv=${event.conversationId}): ${e?.message}`);

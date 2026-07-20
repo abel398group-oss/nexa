@@ -59,6 +59,26 @@ export class InternalNumbersService {
     const target = digits(phone);
     if (!target) return { internal: false };
 
+    // TEST WHITELIST (Abel, 2026-07-20): comma-separated phones in
+    // GATE_TEST_PHONES bypass the gate ON PURPOSE — the team's own numbers are
+    // registered as Monitor recipients/sellers, which would make testing Lia
+    // from their phones impossible. Deliberate, controlled hole in the gate:
+    // keep the list SHORT and remove numbers when testing ends.
+    const whitelist = (process.env.GATE_TEST_PHONES ?? '')
+      .split(',')
+      .map((p) => digits(p))
+      .filter(Boolean);
+    if (whitelist.some((w) => phonesMatch(target, w))) {
+      return { internal: false };
+    }
+
+    // Support-desk WhatsApp (SUPPORT_WHATSAPP — escalation notifications):
+    // replying to those notifications must never become a lead.
+    const supportWa = digits(process.env.SUPPORT_WHATSAPP ?? '');
+    if (supportWa && phonesMatch(target, supportWa)) {
+      return { internal: true, reason: 'WhatsApp do suporte (SUPPORT_WHATSAPP)' };
+    }
+
     // 1) Sellers — any tenant (single shared WhatsApp number).
     const sellers = await this.prisma.seller.findMany({
       select: { name: true, phone: true, tenantId: true },

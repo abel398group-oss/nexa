@@ -137,6 +137,15 @@ export interface ContactRecipient {
    */
   lastBandInclude?: Record<string, string>;
   /**
+   * Rastreio de falha de envio (2026-07-20): preenchido pelo
+   * MonitorDispatchService quando o WhatsApp deste contato falha em TODAS as
+   * tentativas (número errado, sem WhatsApp, WAHA fora); limpo no próximo
+   * envio bem-sucedido. Exibido como selo no painel de contatos (Nexa) e
+   * disponível pro TMS via GET external-config (JSON de contacts — sem
+   * mudança de contrato). Estado interno — preservado em edições.
+   */
+  lastSendFailure?: { at: string; reason: string } | null;
+  /**
    * T8/T9-ADENDO (2026-07-17): resumo de fechamento (receita × custo × margem,
    * vendas e caixa) — 'off' (default) | 'weekly' (toda segunda às 07h, semana
    * anterior) | 'biweekly' (dias 16 e 1º às 07h) | 'monthly' (só dia 1º às
@@ -333,6 +342,8 @@ export function sanitizeContacts(
         // 2026-07-20: estado do throttle por severidade — interno, sempre
         // preservado (mesmo princípio de lastDigestDate/lastClosingDate).
         lastBandInclude: prior?.lastBandInclude,
+        // 2026-07-20: rastreio de falha de envio — idem.
+        lastSendFailure: prior?.lastSendFailure,
         closingReport,
         cashView,
         lastClosingDate: prior?.lastClosingDate,

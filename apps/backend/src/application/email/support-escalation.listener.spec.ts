@@ -36,11 +36,12 @@ function makeDeps(
   } as any;
 
   const email = { sendAlertEmail: vi.fn().mockResolvedValue(undefined) } as any;
-  return { prisma, email };
+  const waha = { sendText: vi.fn().mockResolvedValue({ sent: true }) } as any;
+  return { prisma, email, waha };
 }
 
 const makeListener = (deps: ReturnType<typeof makeDeps>) =>
-  new SupportEscalationListener(deps.prisma, deps.email);
+  new SupportEscalationListener(deps.prisma, deps.email, deps.waha);
 
 const event = { tenantId: 't1', conversationId: 'conv-1', origin: 'portal' as const };
 
@@ -148,5 +149,54 @@ describe('SupportEscalationListener - roteamento por categoria', () => {
       expect.any(String),
       't1',
     );
+  });
+
+  // ── ADR 034 (2026-07-20): WhatsApp do suporte + deep link ──────────────────
+
+  describe('SUPPORT_WHATSAPP + deep link', () => {
+    afterEach(() => {
+      delete process.env.SUPPORT_WHATSAPP;
+      delete process.env.NEXA_APP_URL;
+    });
+
+    it('com SUPPORT_WHATSAPP → envia WhatsApp com deep link /inbox?c=<id>', async () => {
+      process.env.SUPPORT_EMAIL = 'env@suporte.com';
+      process.env.SUPPORT_WHATSAPP = '5511955554444';
+      process.env.NEXA_APP_URL = 'https://painel.exemplo.com.br';
+      const deps = makeDeps([]);
+      await makeListener(deps).handle(event);
+
+      expect(deps.waha.sendText).toHaveBeenCalledOnce();
+      const [to, msg] = deps.waha.sendText.mock.calls[0];
+      expect(to).toBe('5511955554444');
+      expect(msg).toContain('Chamado #42');
+      expect(msg).toContain('https://painel.exemplo.com.br/inbox?c=conv-1');
+    });
+
+    it('sem SUPPORT_WHATSAPP → só e-mail, nenhum WhatsApp', async () => {
+      process.env.SUPPORT_EMAIL = 'env@suporte.com';
+      const deps = makeDeps([]);
+      await makeListener(deps).handle(event);
+      expect(deps.email.sendAlertEmail).toHaveBeenCalledOnce();
+      expect(deps.waha.sendText).not.toHaveBeenCalled();
+    });
+
+    it('e-mail usa o mesmo deep link novo (/inbox?c=) — formato antigo /inbox/<id> não casava rota', async () => {
+      process.env.SUPPORT_EMAIL = 'env@suporte.com';
+      process.env.NEXA_APP_URL = 'https://painel.exemplo.com.br';
+      const deps = makeDeps([]);
+      await makeListener(deps).handle(event);
+      const [, , text] = deps.email.sendAlertEmail.mock.calls[0];
+      expect(text).toContain('https://painel.exemplo.com.br/inbox?c=conv-1');
+      expect(text).not.toContain('/inbox/conv-1');
+    });
+
+    it('falha do WAHA não derruba o fluxo (fire-and-forget)', async () => {
+      process.env.SUPPORT_EMAIL = 'env@suporte.com';
+      process.env.SUPPORT_WHATSAPP = '5511955554444';
+      const deps = makeDeps([]);
+      deps.waha.sendText.mockResolvedValue({ sent: false, reason: 'waha_down' });
+      await expect(makeListener(deps).handle(event)).resolves.toBeUndefined();
+    });
   });
 });

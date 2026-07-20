@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { InternalNumbersService, phonesMatch } from './internal-numbers.service';
 
 // ─── Gate de números internos (ADR 034/035, brainstorm 2026-07-20) ───────────
@@ -134,5 +134,40 @@ describe('InternalNumbersService.classify', () => {
       configs: [{ tenantId: 't1', notificationPhone: null, sectorConfig: null, contacts: null }],
     });
     expect((await svc.classify('5511922221111')).internal).toBe(false);
+  });
+
+  // ── GATE_TEST_PHONES: whitelist de teste (fura o gate de propósito) ────────
+  describe('whitelist de teste', () => {
+    const original = process.env.GATE_TEST_PHONES;
+    afterEach(() => {
+      if (original === undefined) delete process.env.GATE_TEST_PHONES;
+      else process.env.GATE_TEST_PHONES = original;
+    });
+
+    it('número interno na whitelist → passa pelo gate (vira lead normal)', async () => {
+      process.env.GATE_TEST_PHONES = '5511917747429';
+      const { svc } = makeService({
+        configs: [{ tenantId: 't1', notificationPhone: '5511917747429' }],
+      });
+      expect((await svc.classify('5511917747429')).internal).toBe(false);
+    });
+
+    it('whitelist tolera formatação e lista com vários números', async () => {
+      process.env.GATE_TEST_PHONES = ' +55 (11) 91774-7429 , 5511988073788 ';
+      const { svc } = makeService({
+        sellers: [{ name: 'João', phone: '5511988073788', tenantId: 't1' }],
+        configs: [{ tenantId: 't1', notificationPhone: '5511917747429' }],
+      });
+      expect((await svc.classify('5511917747429')).internal).toBe(false);
+      expect((await svc.classify('5511988073788')).internal).toBe(false);
+    });
+
+    it('número interno FORA da whitelist continua bloqueado', async () => {
+      process.env.GATE_TEST_PHONES = '5511917747429';
+      const { svc } = makeService({
+        sellers: [{ name: 'João', phone: '5511988073788', tenantId: 't1' }],
+      });
+      expect((await svc.classify('5511988073788')).internal).toBe(true);
+    });
   });
 });

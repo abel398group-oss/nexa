@@ -96,6 +96,8 @@ interface ContactRecipient {
   cashView?: CashViewMode;
   /** T9: matriz explícita — ausente = deriva do comportamento pré-T9 (compat, ver backend `effectiveDelivery`). */
   delivery?: DeliveryMatrix;
+  /** Rastreio (2026-07-20): última falha DEFINITIVA de WhatsApp deste contato — limpa no próximo sucesso. */
+  lastSendFailure?: { at: string; reason: string } | null;
 }
 
 const MAX_CONTACT_TIMES = 3;
@@ -1129,6 +1131,16 @@ export function MonitorConfigPage() {
                                 <div className="flex flex-col gap-0.5">
                                   {c.whatsapp && (
                                     <span className="text-xs text-base-content/60 truncate">📱 {c.whatsapp}</span>
+                                  )}
+                                  {/* Rastreio (2026-07-20): falha definitiva de envio vira selo visível —
+                                      antes morria no log do servidor e ninguém sabia que o contato não recebia. */}
+                                  {c.whatsapp && c.lastSendFailure && (
+                                    <span
+                                      className="text-[10px] text-error/90"
+                                      title={`Motivo: ${c.lastSendFailure.reason}. Corrija o número ou verifique o WhatsApp — o selo some no próximo envio bem-sucedido.`}
+                                    >
+                                      ⚠️ último WhatsApp falhou em {new Date(c.lastSendFailure.at).toLocaleDateString('pt-BR')}
+                                    </span>
                                   )}
                                   {c.emails.map((e) => (
                                     <span key={e} className="text-xs text-base-content/60 truncate">✉️ {e}</span>
