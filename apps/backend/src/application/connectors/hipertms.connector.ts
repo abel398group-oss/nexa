@@ -967,7 +967,8 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 export interface TmsProactivityEvent {
   id: string;
   severity: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
-  category: 'fiscal' | 'logistic' | 'frota' | 'finance';
+  // 2026-07-20: 'procurement' (Compras) — 5º setor, espelho do domínio novo do TMS.
+  category: 'fiscal' | 'logistic' | 'frota' | 'finance' | 'procurement';
   title: string;
   description?: string;
   /** Phone of the sub-client admin to notify via WhatsApp (e.g. "5511999990001"). */
