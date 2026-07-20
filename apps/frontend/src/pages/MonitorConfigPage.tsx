@@ -37,7 +37,8 @@ import { RecipientTagsInput, type Recipient } from '@/components/ui/RecipientTag
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
+// 2026-07-20: 'procurement' (Compras) — 5º setor, aceito antes do TMS enviar.
+type SectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance' | 'procurement';
 
 const ALL_DAYS  = [0, 1, 2, 3, 4, 5, 6];
 const WEEKDAYS  = [1, 2, 3, 4, 5];
@@ -195,6 +196,8 @@ interface MonitorConfig {
   logisticEnabled: boolean;
   frotaEnabled: boolean;
   financeEnabled: boolean;
+  /** Compras (2026-07-20): sem coluna no backend por enquanto — opcional; o setor é default-enabled lá. */
+  procurementEnabled?: boolean;
   sectorConfig?: Record<string, unknown> | null;
   /** T6: contatos com horário próprio — fonte de verdade quando presente (ver ConsolidationService). */
   contacts?: ContactRecipient[];
@@ -284,6 +287,18 @@ const SECTORS: Array<{
     borderClass: 'border-l-4 border-l-emerald-500',
     headerClass: 'bg-emerald-500/10',
     badgeClass: 'bg-emerald-500/20 text-emerald-400',
+  },
+  // 2026-07-20: Compras (procurement) — 5º setor. Sem card de toggle por tenant
+  // (enabledKey nunca é usado na renderização); o opt-in é a assinatura do contato.
+  {
+    key: 'procurement',
+    enabledKey: 'procurementEnabled',
+    label: 'Compras',
+    sub: 'cotações · pedidos',
+    emoji: '🛒',
+    borderClass: 'border-l-4 border-l-amber-500',
+    headerClass: 'bg-amber-500/10',
+    badgeClass: 'bg-amber-500/20 text-amber-400',
   },
 ];
 

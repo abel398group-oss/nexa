@@ -46,6 +46,21 @@ describe('sanitizeContacts — lastBandInclude (throttle do digest)', () => {
     expect(result.lastBandInclude).toEqual({ DUE_SOON: '2026-07-12', INFO: '2026-07-01' });
   });
 
+  it("setor 'procurement' (Compras, 2026-07-20) passa pelo sanitize — não é filtrado", () => {
+    const input = [
+      {
+        id: 'c-proc',
+        whatsapp: '5511999990003',
+        emails: [],
+        sectors: ['procurement', 'fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ];
+    const [result] = sanitizeContacts(input, null);
+    expect(result.sectors).toEqual(['procurement', 'fiscal']);
+  });
+
   it('contato novo nasce sem ciclo (primeira inclusão sempre sai)', () => {
     const input = [
       {

@@ -11,9 +11,11 @@
  * entre controller, service e o scheduler (ConsolidationService).
  */
 
-export type AlertSectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance';
+// 2026-07-20: 'procurement' (Compras) — 5º setor, espelho do domínio novo do
+// TMS. Nexa aceita ANTES do TMS enviar (deploy do receptor primeiro — Regra 1).
+export type AlertSectorKey = 'fiscal' | 'logistic' | 'frota' | 'finance' | 'procurement';
 
-export const CONTACT_SECTOR_KEYS: AlertSectorKey[] = ['fiscal', 'logistic', 'frota', 'finance'];
+export const CONTACT_SECTOR_KEYS: AlertSectorKey[] = ['fiscal', 'logistic', 'frota', 'finance', 'procurement'];
 
 /** Um horário de envio (granularidade de minuto — a janela do tick de 5min absorve o resto). */
 export interface ContactSendTime {

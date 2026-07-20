@@ -95,6 +95,18 @@ interface SectorMeta {
   enabledField: string;
   label: string;
   emoji: string;
+  /**
+   * 2026-07-20 (setor Compras): setores novos SEM coluna própria de flag no
+   * TenantNotificationConfig nascem habilitados por padrão — o opt-in real é a
+   * assinatura do contato (`contact.sectors`). Ausente = false (comportamento
+   * dos 4 setores originais, que têm coluna). Ver `sectorEnabled()`.
+   */
+  defaultEnabled?: boolean;
+}
+
+/** Único ponto de decisão "setor habilitado pro tenant?" — nunca reimplementar inline. */
+function sectorEnabled(config: Record<string, any> | null | undefined, sector: SectorMeta): boolean {
+  return Boolean(config?.[sector.enabledField] ?? sector.defaultEnabled ?? false);
 }
 
 /**
@@ -111,10 +123,13 @@ interface UnifiedSectorAlerts {
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
 const SECTORS: SectorMeta[] = [
-  { key: 'fiscal',   enabledField: 'fiscalEnabled',   label: 'Fiscal',     emoji: '📄' },
-  { key: 'logistic', enabledField: 'logisticEnabled', label: 'Logística',  emoji: '🚚' },
-  { key: 'frota',    enabledField: 'frotaEnabled',    label: 'Frota',      emoji: '🔧' },
-  { key: 'finance',  enabledField: 'financeEnabled',  label: 'Financeiro', emoji: '💰' },
+  { key: 'fiscal',      enabledField: 'fiscalEnabled',      label: 'Fiscal',     emoji: '📄' },
+  { key: 'logistic',    enabledField: 'logisticEnabled',    label: 'Logística',  emoji: '🚚' },
+  { key: 'frota',       enabledField: 'frotaEnabled',       label: 'Frota',      emoji: '🔧' },
+  { key: 'finance',     enabledField: 'financeEnabled',     label: 'Financeiro', emoji: '💰' },
+  // 2026-07-20: Compras (procurement) — sem coluna de flag (defaultEnabled);
+  // só entrega pra contato que assinou o setor. TMS começa a enviar depois.
+  { key: 'procurement', enabledField: 'procurementEnabled', label: 'Compras',    emoji: '🛒', defaultEnabled: true },
 ];
 
 const SEVERITY_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
@@ -346,8 +361,9 @@ export class ConsolidationService {
         continue;
       }
 
-      // Verifica se o setor está habilitado
-      if (!config[sector.enabledField]) {
+      // Verifica se o setor está habilitado (sectorEnabled: setores novos sem
+      // coluna própria usam defaultEnabled — ver SectorMeta).
+      if (!sectorEnabled(config, sector)) {
         skipReasons[sector.key] = 'desabilitado';
         continue;
       }
@@ -550,7 +566,7 @@ export class ConsolidationService {
       const enabledSectors = (contact.sectors ?? [])
         .filter((sectorKey) => CONTACT_SECTOR_KEYS.includes(sectorKey))
         .map((sectorKey) => SECTORS.find((s) => s.key === sectorKey))
-        .filter((s): s is SectorMeta => !!s && !!config[s.enabledField]);
+        .filter((s): s is SectorMeta => !!s && sectorEnabled(config, s));
 
       if (enabledSectors.length === 0) {
         skipReasons[`contato:${contact.id}`] = 'sem_setor_habilitado';
@@ -1089,10 +1105,11 @@ export class ConsolidationService {
   };
 
   private readonly SECTOR_ACCENT: Record<string, string> = {
-    fiscal:   '#3b82f6',
-    logistic: '#f97316',
-    frota:    '#a855f7',
-    finance:  '#10b981',
+    fiscal:      '#3b82f6',
+    logistic:    '#f97316',
+    frota:       '#a855f7',
+    finance:     '#10b981',
+    procurement: '#f59e0b', // Compras (2026-07-20)
   };
 
   /**

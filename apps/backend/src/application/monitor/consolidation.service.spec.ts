@@ -717,6 +717,49 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     }
   });
 
+  // ── Setor Compras / procurement (2026-07-20) ───────────────────────────────
+  // 5º setor SEM coluna procurementEnabled: default-enabled — o opt-in real é a
+  // assinatura do contato. Contato sem 'procurement' em sectors: intocado.
+
+  describe('setor Compras (procurement)', () => {
+    const PROC_ALERT = { id: 'p1', category: 'procurement', severity: 'OVERDUE', title: 'Cotação de pneus vencida', snoozedUntil: null };
+
+    it('contato assinante recebe digest de Compras SEM procurementEnabled no config', async () => {
+      const findMany = makeFindManyByCategory({ procurement: [PROC_ALERT] });
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['procurement'] as any, sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]); // sem procurementEnabled
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('Compras');
+      expect(msg).toContain('Cotação de pneus vencida');
+    });
+
+    it('procurementEnabled=false EXPLÍCITO desliga o setor (respeita opt-out futuro)', async () => {
+      const findMany = makeFindManyByCategory({ procurement: [PROC_ALERT] });
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['procurement'] as any, sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact], { procurementEnabled: false });
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+      expect(notification.notifyPhone).not.toHaveBeenCalled();
+    });
+
+    it('contato SEM procurement nos sectors não recebe alerta de Compras (retrocompat)', async () => {
+      const findMany = makeFindManyByCategory({ fiscal: [FISCAL_ALERT], procurement: [PROC_ALERT] });
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('CT-e vencido');
+      expect(msg).not.toContain('Cotação de pneus'); // Compras não assinada → fora
+    });
+  });
+
   // ── THROTTLE por severidade + assimetria de canal (2026-07-20) ─────────────
   // WhatsApp: CRITICAL/OVERDUE sempre; DUE_SOON a cada 7 dias; INFO a cada 28
   // — ciclo POR CONTATO em `lastBandInclude`. E-mail: SEM throttle, recebe tudo.

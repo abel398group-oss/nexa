@@ -34,7 +34,11 @@ import { ContactRecipientDto } from './monitor.controller';
 export class TmsEventDto {
   @IsString() id!: string;
   @IsIn(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']) severity!: 'CRITICAL' | 'OVERDUE' | 'DUE_SOON' | 'INFO';
-  @IsIn(['frota', 'logistic', 'finance', 'fiscal']) category!: 'fiscal' | 'frota' | 'logistic' | 'finance';
+  // 2026-07-20: 'procurement' (Compras) aceito ANTES do TMS enviar — sem isso,
+  // um lote com o setor novo tomaria 400 e derrubaria a remessa INTEIRA
+  // (forbidNonWhitelisted, mesma classe do incidente sendWindowStart).
+  @IsIn(['frota', 'logistic', 'finance', 'fiscal', 'procurement'])
+  category!: 'fiscal' | 'frota' | 'logistic' | 'finance' | 'procurement';
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
   /** Phone do admin do sub-cliente no formato E.164 sem "+" (ex: "5511999990001"). */

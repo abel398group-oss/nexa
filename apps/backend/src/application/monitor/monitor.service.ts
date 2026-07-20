@@ -737,6 +737,7 @@ export class MonitorService implements OnModuleInit {
   /** Rótulo e emoji por setor — mesmo vocabulário usado no digest agendado (ConsolidationService.SECTORS). */
   private readonly SECTOR_LABEL: Record<string, string> = {
     fiscal: 'Fiscal', logistic: 'Logística', frota: 'Frota', finance: 'Financeiro',
+    procurement: 'Compras', // 2026-07-20 — 5º setor
   };
 
   /**
