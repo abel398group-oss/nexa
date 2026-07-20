@@ -22,6 +22,14 @@ export async function sendMessage(id: string, content: string): Promise<void> {
   });
 }
 
+// ADR 035: "Devolver pra Lia" — libera o takeover humano; a Lia volta a atender.
+export async function returnConversationToAi(
+  id: string,
+): Promise<{ id: string; humanTakeoverAt: null; status: string }> {
+  const r = await api.post(`/conversations/${id}/return-to-ai`);
+  return r.data;
+}
+
 // Vendas: marcar o resultado do lead (ganho/perdido) ou limpar.
 export async function setConversationOutcome(
   id: string,

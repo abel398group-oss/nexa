@@ -338,6 +338,64 @@ describe('ConversationAgentService.handle()', () => {
     });
   });
 
+  // ── ADR 035: takeover humano por conversa ──────────────────────────────────
+  // Humano assumiu (humanTakeoverAt) ou conversa escalada → Lia gera o rascunho
+  // mas NUNCA auto-envia, mesmo com autonomia ON e supervisora aprovando.
+
+  describe('takeover humano (ADR 035)', () => {
+    it('does NOT auto-send when humanTakeoverAt is set (draft only)', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({
+        status: 'open',
+        humanTakeoverAt: new Date('2026-07-20T12:00:00Z'),
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/takeover/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      // o rascunho continua existindo (modo assistente)
+      expect(res.draft).toBeTruthy();
+    });
+
+    it('does NOT auto-send when the conversation is escalated', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({
+        status: 'escalated',
+        humanTakeoverAt: null,
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'ainda com problema', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/takeover/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+    });
+
+    it('auto-sends normally when takeover is released (null/open)', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({
+        status: 'open',
+        humanTakeoverAt: null,
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(true);
+      expect(mockConversations.addMessage).toHaveBeenCalledOnce();
+    });
+  });
+
   // ── handoff token & via-painel-tms ─────────────────────────────────────────
 
   describe('HANDOFF token', () => {

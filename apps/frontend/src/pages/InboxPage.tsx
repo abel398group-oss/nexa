@@ -20,6 +20,7 @@ import {
   listConversations,
   getConversationMessages,
   sendMessage,
+  returnConversationToAi,
   setConversationOutcome,
   assignSeller as reassignSeller,
   setConversationResolved,
@@ -377,8 +378,24 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   async function send() {
     if (!active || !text.trim()) return;
     await sendMessage(active.id, text);
+    // ADR 035: a primeira resposta humana ativa o takeover no backend — reflete
+    // aqui sem esperar o próximo fetch (badge "Você no comando" aparece na hora).
+    if (!active.humanTakeoverAt) {
+      const takenAt = new Date().toISOString();
+      setActive((a) => (a ? { ...a, humanTakeoverAt: takenAt } : a));
+      setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, humanTakeoverAt: takenAt } : c)));
+    }
     setText('');
     setLiaInfo('');
+  }
+
+  // ADR 035: "Devolver pra Lia" — libera o takeover; a Lia volta a atender sozinha.
+  async function returnToAi() {
+    if (!active) return;
+    const r = await returnConversationToAi(active.id);
+    const status = r?.status ?? active.status;
+    setActive((a) => (a ? { ...a, humanTakeoverAt: null, status } : a));
+    setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, humanTakeoverAt: null, status } : c)));
   }
 
   async function setOutcome(outcome: 'won' | 'lost' | null) {
@@ -769,6 +786,25 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 >
                   <span className="inline-flex items-center gap-1"><Icon name="knowledge" className="h-3.5 w-3.5" /> Timeline</span>
                 </button>
+
+                {/* ADR 035: takeover humano — badge + devolver pra Lia */}
+                {(active.humanTakeoverAt || active.status === 'escalated') && (
+                  <>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                      title="Você assumiu esta conversa — a Lia não responde sozinha aqui (só sugere rascunhos)"
+                    >
+                      <Icon name="users" className="h-3 w-3" /> Você no comando
+                    </span>
+                    <button
+                      onClick={returnToAi}
+                      className="rounded-md border border-base-300 px-2.5 py-1 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-100"
+                      title="Liberar a conversa — a Lia volta a atender sozinha"
+                    >
+                      <span className="inline-flex items-center gap-1"><Icon name="bot" className="h-3.5 w-3.5" /> Devolver pra Lia</span>
+                    </button>
+                  </>
+                )}
 
                 {scope === 'sales' && (
                   <>

@@ -106,6 +106,14 @@ export class ConversationsController {
     @Param('id') id: string,
     @Body() dto: { direction: 'inbound' | 'outbound'; content: string; intent?: string; metadata?: Record<string, unknown> },
   ) {
-    return this.conversations.addMessage(tenantId, id, dto);
+    // ADR 035: this route is the human inbox — an outbound here is a human
+    // reply and activates the per-conversation takeover (Lia goes draft-only).
+    return this.conversations.addMessage(tenantId, id, { ...dto, byHuman: dto.direction === 'outbound' });
+  }
+
+  // ADR 035: "Devolver pra Lia" — releases the takeover; Lia resumes auto-attendance.
+  @Post(':id/return-to-ai')
+  returnToAi(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.conversations.returnToAi(tenantId, id);
   }
 }

@@ -105,7 +105,9 @@ export class ConversationsService {
     await this.prisma.$transaction([
       this.prisma.aiConversation.update({
         where: { id },
-        data: { status: toStatus as any, outcome, outcomeAt: now, endedAt: now },
+        // ADR 035: closing releases the human takeover — if the customer comes
+        // back and the conversation reopens, Lia attends normally again.
+        data: { status: toStatus as any, outcome, outcomeAt: now, endedAt: now, humanTakeoverAt: null } as any,
       }),
       // Ajuste 4: grava histórico de mudança de status/outcome
       this.prisma.conversationStageHistory.create({
@@ -122,6 +124,46 @@ export class ConversationsService {
     ]);
 
     return { id, status: toStatus, outcome };
+  }
+
+  /**
+   * ADR 035 — "Devolver pra Lia": releases the human takeover. Clears
+   * humanTakeoverAt and, if the conversation was escalated, returns it to
+   * 'open' (with stage history). Lia resumes normal auto-attendance.
+   */
+  async returnToAi(tenantId: string, id: string) {
+    const conv = await this.findOne(tenantId, id);
+    const wasEscalated = (conv.status as string) === 'escalated';
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.update({
+        where: { id },
+        data: {
+          humanTakeoverAt: null,
+          ...(wasEscalated ? { status: 'open' as any } : {}),
+        } as any,
+      }),
+      ...(wasEscalated
+        ? [
+            this.prisma.conversationStageHistory.create({
+              data: {
+                conversationId: id,
+                fromStatus: 'escalated',
+                toStatus: 'open',
+                fromOutcome: conv.outcome ?? null,
+                toOutcome: conv.outcome ?? null,
+                reason: 'devolvido_para_lia',
+                changedAt: now,
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    this.logger.log(`ADR 035: conversa ${id} devolvida pra Lia (escalated=${wasEscalated})`);
+    this.events.emit('conversation.updated', { tenantId, conversationId: id });
+    return { id, humanTakeoverAt: null, status: wasEscalated ? 'open' : conv.status };
   }
 
   // Atalho para quando o vendedor marca won/lost no Inbox — fecha junto
@@ -352,9 +394,23 @@ export class ConversationsService {
       tokensIn?: number;
       tokensOut?: number;
       estimatedCostUsd?: number;
+      /** ADR 035: true only on the human inbox route — first human outbound activates takeover. */
+      byHuman?: boolean;
     },
   ) {
     const conv = await this.findOne(tenantId, conversationId);
+
+    // ADR 035: first outbound sent by a human activates the per-conversation
+    // takeover — Lia switches to draft-only mode until release (close or
+    // explicit return). Lia's own sends (metadata.aiGenerated) never set this.
+    if (dto.byHuman && dto.direction === 'outbound' && !(conv as any).humanTakeoverAt) {
+      await this.prisma.aiConversation.update({
+        where: { id: conv.id },
+        data: { humanTakeoverAt: new Date() } as any,
+      });
+      this.logger.log(`ADR 035: takeover humano ativado na conversa ${conv.id} — Lia em modo rascunho`);
+      this.events.emit('conversation.updated', { tenantId, conversationId: conv.id });
+    }
     // C3: espelha metadata.campaignId numa coluna dedicada indexada (evita filtrar JSON
     // sem índice em ai_messages). Derivado aqui → nenhum chamador precisa mudar.
     const campaignId = typeof (dto.metadata as any)?.campaignId === 'string'

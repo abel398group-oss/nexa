@@ -6,6 +6,7 @@ export {
   listConversations,
   getConversationMessages,
   sendMessage,
+  returnConversationToAi,
   setConversationOutcome,
   assignSeller,
   setConversationResolved,

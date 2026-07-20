@@ -157,8 +157,27 @@ export class ConversationAgentService {
     // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
     const SAFE_FALLBACK = route.agent === 'support' ? SAFE_FALLBACK_SUPPORT : SAFE_FALLBACK_SALES;
 
+    // ADR 035: takeover humano por conversa — humano assumiu (primeira resposta
+    // pelo inbox) ou chamado nasceu/foi escalado. A Lia continua gerando o
+    // rascunho acima (modo assistente), mas NUNCA auto-envia nesta conversa.
+    let humanTakeover = false;
     if (input.conversationId) {
-      if (!this.autonomy.isEnabled()) {
+      // `any` de ponta a ponta: o campo humanTakeoverAt só existe no client
+      // Prisma regenerado — o cast único mantém o build verde antes e depois
+      // do `prisma generate` (o select com cast fazia o TS inferir uniões
+      // malucas e quebrava o nest build).
+      const convState: any = await this.prisma.aiConversation.findUnique({
+        where: { id: input.conversationId },
+        select: { status: true, humanTakeoverAt: true } as any,
+      });
+      humanTakeover =
+        !!convState && ((convState.humanTakeoverAt ?? null) !== null || convState.status === 'escalated');
+    }
+
+    if (input.conversationId) {
+      if (humanTakeover) {
+        blockedReason = 'takeover humano ativo (ADR 035) — rascunho aguardando o atendente';
+      } else if (!this.autonomy.isEnabled()) {
         blockedReason = 'autonomia desligada (kill switch) — rascunho aguardando humano';
       } else if (await this.isOverMonthlyLimit(tenantId)) {
         // A6 (auditoria 2026-07-08): teto de mensagens/mês do plano atingido → pausa o

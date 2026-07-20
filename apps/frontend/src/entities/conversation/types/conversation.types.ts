@@ -16,6 +16,8 @@ export interface Conversation {
   rootCause?: string | null;
   contact?: { id?: string; name?: string | null; nameSource?: string | null; company?: string | null; tags?: string[] } | null;
   campaign?: { id: string; name: string } | null;
+  /** ADR 035: humano assumiu — Lia em modo rascunho até devolver/fechar. */
+  humanTakeoverAt?: string | null;
 }
 
 // Mensagem de uma conversa (timeline do Inbox).
