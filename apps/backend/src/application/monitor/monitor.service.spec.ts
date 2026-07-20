@@ -3,6 +3,12 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MonitorService } from './monitor.service';
 import type { TmsProactivityEvent } from '@/application/connectors/hipertms.connector';
 
+// STANDBY (2026-07-20): immediate alerts are disabled by default via
+// MONITOR_IMMEDIATE_ALERTS. These specs exercise the immediate path on purpose,
+// so the flag is forced ON here; the standby behaviour itself has its own
+// describe block below ("STANDBY flag").
+process.env.MONITOR_IMMEDIATE_ALERTS = 'true';
+
 // ─── MonitorService — G2/G3/G4 ───────────────────────────────────────────────
 // G2: buildAlertMessage cap 10 + overflow note
 // G3: destinatario por setor (recipients whatsapp) > sector.phone > adminPhone
@@ -166,6 +172,46 @@ describe('MonitorService.sendAlertsToAdmins — G4 immediateSeverity', () => {
     ];
     await svc['sendAlertsToAdmins']('t1', events);
     expect(channel.sendTo).not.toHaveBeenCalled();
+  });
+});
+
+// ─── STANDBY flag: MONITOR_IMMEDIATE_ALERTS ──────────────────────────────────
+// Decisão do Abel (2026-07-20, docs/STANDBY.md): imediato desligado por padrão.
+// Eventos continuam sincronizando no AlertState e saem no digest agendado.
+
+describe('MonitorService.sendAlertsToAdmins — STANDBY flag', () => {
+  const original = process.env.MONITOR_IMMEDIATE_ALERTS;
+
+  afterEach(() => {
+    process.env.MONITOR_IMMEDIATE_ALERTS = original;
+  });
+
+  it('flag ausente (default) → nao envia nem enfileira, retorna 0', async () => {
+    delete process.env.MONITOR_IMMEDIATE_ALERTS;
+    const { svc, channel, dispatch } = makeService();
+    const events: TmsProactivityEvent[] = [makeEvent({ id: 's1', severity: 'CRITICAL' })];
+    const notified = await svc['sendAlertsToAdmins']('t1', events);
+    expect(notified).toBe(0);
+    expect(channel.sendTo).not.toHaveBeenCalled();
+    expect(dispatch.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('flag com valor diferente de "true" → tambem fica em standby', async () => {
+    process.env.MONITOR_IMMEDIATE_ALERTS = 'false';
+    const { svc, channel } = makeService();
+    const events: TmsProactivityEvent[] = [makeEvent({ id: 's2', severity: 'CRITICAL' })];
+    const notified = await svc['sendAlertsToAdmins']('t1', events);
+    expect(notified).toBe(0);
+    expect(channel.sendTo).not.toHaveBeenCalled();
+  });
+
+  it('flag "true" → fluxo imediato funciona normalmente', async () => {
+    process.env.MONITOR_IMMEDIATE_ALERTS = 'true';
+    const { svc, channel } = makeService();
+    const events: TmsProactivityEvent[] = [makeEvent({ id: 's3', severity: 'CRITICAL' })];
+    const notified = await svc['sendAlertsToAdmins']('t1', events);
+    expect(notified).toBe(1);
+    expect(channel.sendTo).toHaveBeenCalledTimes(1);
   });
 });
 

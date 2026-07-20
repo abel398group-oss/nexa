@@ -69,6 +69,16 @@ const EXTERNAL_CONFIG_SELECT = {
 /** G4: severidades que disparam WhatsApp imediato. 'CRITICAL' = default conservador.
  *  'all' = comportamento legado (todo evento novo notifica). */
 const IMMEDIATE_SEVERITY_DEFAULT = 'CRITICAL';
+
+/**
+ * STANDBY (2026-07-20, Abel's decision — see docs/STANDBY.md): immediate
+ * out-of-cycle alerts are DISABLED by default. Events still sync to AlertState
+ * and are delivered by the scheduled digest (ConsolidationService); only the
+ * immediate WhatsApp dispatch is skipped. Reactivate with
+ * MONITOR_IMMEDIATE_ALERTS=true. Read per call (not module const) so tests can
+ * toggle it.
+ */
+const isImmediateAlertsEnabled = () => process.env.MONITOR_IMMEDIATE_ALERTS === 'true';
 const IMMEDIATE_ALL_SEVERITIES = new Set(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']);
 
 /**
@@ -609,6 +619,17 @@ export class MonitorService implements OnModuleInit {
    */
   private async sendAlertsToAdmins(tenantId: string, events: TmsProactivityEvent[]): Promise<number> {
     if (!events.length) return 0;
+
+    // STANDBY: immediate alerts are on hold (Abel, 2026-07-20). Events were
+    // already synced to AlertState above and WILL appear in the scheduled
+    // digest — only the out-of-cycle send is skipped. See docs/STANDBY.md.
+    if (!isImmediateAlertsEnabled()) {
+      this.logger.log(
+        `Monitor: ${events.length} evento(s) novo(s) NÃO enviados imediatamente — ` +
+          `alerta imediato em standby (MONITOR_IMMEDIATE_ALERTS != true, tenant=${tenantId}); aguardam o digest`,
+      );
+      return 0;
+    }
 
     const config = await this.getConfig(tenantId);
 
