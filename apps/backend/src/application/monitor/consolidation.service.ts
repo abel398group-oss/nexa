@@ -38,6 +38,8 @@ import { EmailReplyService } from '@/application/email/email-reply.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { HiperTmsConnector, type TmsCashView } from '@/application/connectors/hipertms.connector';
 import { resolveTmsTenantId } from './tms-tenant-id.util';
+import { isImmediateAlertsEnabled } from './monitor-flags.const';
+import { isBandDue, DIGEST_THROTTLE_DAYS } from './digest-throttle.const';
 import { formatBRL } from './money-format.util';
 import {
   CONTACT_SECTOR_KEYS,
@@ -131,14 +133,18 @@ const SEVERITY_LABEL_PT: Record<string, string> = {
 };
 /**
  * T7 (2026-07-16, formato aprovado pelo Abel): níveis de gravidade do relatório
- * UNIFICADO por contato — só 3, não os 4 do modo por setor legado. CRITICAL
- * fica de fora de propósito: já sai pelo canal imediato (ver MonitorService/
- * buildImmediateMessage), então não duplica aqui. Cores e rótulos são
- * PRÓPRIOS deste relatório — não usar SEVERITY_EMOJI/SEVERITY_LABEL_PT (legado,
- * usado pelo modo por setor, que continua com os 4 níveis originais e INTOCADO).
+ * UNIFICADO por contato. Cores e rótulos são PRÓPRIOS deste relatório — não
+ * usar SEVERITY_EMOJI/SEVERITY_LABEL_PT (legado, usado pelo modo por setor,
+ * que continua com os 4 níveis originais e INTOCADO).
+ *
+ * CRITICAL aqui é condicional (2026-07-20): com o canal imediato ATIVO
+ * (MONITOR_IMMEDIATE_ALERTS=true) ele fica fora do digest — já foi na hora.
+ * Com o imediato em STANDBY (default), o digest é o único canal e CRITICAL
+ * ENTRA, no topo. Ver monitor-flags.const.ts e docs/STANDBY.md.
  */
-const UNIFIED_SEVERITY_ORDER = ['OVERDUE', 'DUE_SOON', 'INFO'];
+const UNIFIED_SEVERITY_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
 const UNIFIED_SEVERITY_EMOJI: Record<string, string> = {
+  CRITICAL: '🚨', // críticas — só aparecem com o imediato em standby
   OVERDUE:  '🔴', // vencidas
   DUE_SOON: '🟠', // a vencer
   INFO:     '🟡', // avisos
@@ -612,43 +618,64 @@ export class ConsolidationService {
         }
 
         // T7: uma query só, com TODOS os setores habilitados do contato — antes
-        // era 1 query por (setor, horário). CRITICAL fica de fora do relatório
-        // programado (já foi mandado pelo canal imediato) — filtro no `where`
-        // como otimização, e repetido em memória logo abaixo porque o mock de
+        // era 1 query por (setor, horário).
+        // CRITICAL condicional (2026-07-20): com o canal imediato ATIVO, fica
+        // fora do relatório programado (já foi na hora). Com o imediato em
+        // STANDBY (default — docs/STANDBY.md), o digest é o ÚNICO canal e
+        // CRITICAL ENTRA — sem isso, crítico não sai em lugar nenhum (gap
+        // encontrado na revisão do throttle de 20/07). Filtro no `where` como
+        // otimização, e repetido em memória logo abaixo porque o mock de
         // Prisma dos testes não interpreta o `where`, só o `.filter()` real.
+        const excludeCritical = isImmediateAlertsEnabled();
         const alerts = await this.prisma.alertState.findMany({
           where: {
             tenantId,
             category: { in: enabledSectors.map((s) => s.key) },
             status: 'open',
-            severity: { notIn: ['CRITICAL'] },
+            ...(excludeCritical ? { severity: { notIn: ['CRITICAL'] } } : {}),
             OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: now } }],
           },
           orderBy: [{ severity: 'asc' }, { category: 'asc' }],
         });
 
-        const nonCriticalAlerts = alerts.filter((a) => a.severity !== 'CRITICAL');
+        const digestAlerts = excludeCritical ? alerts.filter((a) => a.severity !== 'CRITICAL') : alerts;
 
-        if (!nonCriticalAlerts.length) {
+        if (!digestAlerts.length) {
           skipReasons[skipKey] = 'sem_alertas';
           continue;
         }
+
+        // THROTTLE por severidade (2026-07-20, ver digest-throttle.const.ts):
+        // SÓ para o WhatsApp — e-mail recebe TUDO (assimetria de canal: ler
+        // e-mail é barato, WhatsApp interrompe). CRITICAL/OVERDUE entram em
+        // todo digest; DUE_SOON/INFO respeitam o ciclo POR CONTATO gravado em
+        // `contact.lastBandInclude`. O filtro lê a severidade ATUAL do
+        // AlertState — evento que agravou de faixa sobe automaticamente
+        // (o throttle gruda na faixa, nunca no evento).
+        const bandState = contact.lastBandInclude ?? {};
+        const waAlerts = digestAlerts.filter((a) => isBandDue(a.severity, bandState[a.severity], now));
 
         // Agrupa por setor e monta o formato aprovado: ordenado por gravidade
         // (UNIFIED_SEVERITY_ORDER), cap de MAX_ITEMS_PER_SECTOR_UNIFIED itens
         // exibidos + total pro "… e mais N pendências". Setor sem alerta
         // simplesmente não entra no Map (ver buildUnifiedMessage/buildUnifiedEmailHtml).
-        const alertsBySector = new Map<string, UnifiedSectorAlerts>();
-        for (const sector of enabledSectors) {
-          const sectorAlerts = nonCriticalAlerts
-            .filter((a) => a.category === sector.key)
-            .sort((a, b) => UNIFIED_SEVERITY_ORDER.indexOf(a.severity) - UNIFIED_SEVERITY_ORDER.indexOf(b.severity));
-          if (!sectorAlerts.length) continue;
-          alertsBySector.set(sector.key, {
-            shown: sectorAlerts.slice(0, MAX_ITEMS_PER_SECTOR_UNIFIED),
-            total: sectorAlerts.length,
-          });
-        }
+        // Dois conjuntos desde o throttle: WhatsApp (filtrado) × e-mail (completo).
+        const groupBySector = (list: typeof digestAlerts) => {
+          const map = new Map<string, UnifiedSectorAlerts>();
+          for (const sector of enabledSectors) {
+            const sectorAlerts = list
+              .filter((a) => a.category === sector.key)
+              .sort((a, b) => UNIFIED_SEVERITY_ORDER.indexOf(a.severity) - UNIFIED_SEVERITY_ORDER.indexOf(b.severity));
+            if (!sectorAlerts.length) continue;
+            map.set(sector.key, {
+              shown: sectorAlerts.slice(0, MAX_ITEMS_PER_SECTOR_UNIFIED),
+              total: sectorAlerts.length,
+            });
+          }
+          return map;
+        };
+        const alertsBySectorWa = groupBySector(waAlerts);
+        const alertsBySector = groupBySector(digestAlerts); // e-mail: sem throttle
 
         // T9-ADENDO (2026-07-17): bloco "💰 SEU CAIXA" entra em TODOS os horários
         // do contato quando ligado (`cashViewIsOn` — 'on' ou o alias legado
@@ -683,12 +710,33 @@ export class ConsolidationService {
           skipReasons[skipKey] = 'delivery_sem_canal_habilitado';
           this.logger.warn(
             `Monitor: slot ${slotLabel} pulado — delivery.digest sem canal habilitado (WhatsApp e e-mail desligados) ` +
-            `tenant=${tenantId} contato=${contact.id}, ${nonCriticalAlerts.length} alerta(s) pendente(s) NÃO enviado(s)`,
+            `tenant=${tenantId} contato=${contact.id}, ${digestAlerts.length} alerta(s) pendente(s) NÃO enviado(s)`,
           );
           continue;
         }
 
-        const message = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashViewForWa);
+        // THROTTLE: canais que de fato vão enviar neste slot. WhatsApp só sai
+        // se o conjunto filtrado tiver conteúdo (nunca mandar "resumo vazio"
+        // porque as faixas throttled estão no ciclo). E-mail segue completo.
+        const willSendWa = !!(contact.whatsapp && delivery.digest.whatsapp && waAlerts.length);
+        const willSendEmail = !!(contact.emails?.length && delivery.digest.email);
+
+        if (!willSendWa && !willSendEmail) {
+          // Tudo suprimido pelo throttle e sem e-mail habilitado → NÃO reivindica
+          // o slot (mesmo princípio da trava T9-FIX acima): quando o ciclo
+          // vencer ou um alerta subir de faixa, o próximo tick envia.
+          skipReasons[skipKey] = 'throttle_sem_conteudo_wa_e_sem_email';
+          this.logger.log(
+            `[${tenantId}] contato ${contact.id}@${slotLabel}: ${digestAlerts.length} alerta(s) todos em faixa ` +
+            `throttled (ciclo em curso) e sem e-mail habilitado — slot não reivindicado`,
+          );
+          continue;
+        }
+
+        const message = this.buildUnifiedMessage(enabledSectors, alertsBySectorWa, now, slotLabel, cashViewForWa);
+        // E-mail tem corpo próprio (texto + HTML) SEM throttle — nunca reaproveitar
+        // o texto do WhatsApp aqui, senão a assimetria de canal se perde no fallback.
+        const emailText = this.buildUnifiedMessage(enabledSectors, alertsBySector, now, slotLabel, cashViewForEmail);
         const catchUpSuffix = isCatchUp ? ' (catch-up)' : '';
 
         // Mesmo princípio do BUG FIX per-sector (2026-07-14): reivindica o slot e
@@ -700,14 +748,35 @@ export class ConsolidationService {
           const slotKeyNum = this.makeSlotKey(now, t.hour, currentMinute);
           this.sentThisHour.set(dedupKey, slotKeyNum);
           contact.lastDigestDate = { ...(contact.lastDigestDate ?? {}), [digestKey]: todayStr };
+          // THROTTLE: consome o ciclo das faixas throttled INCLUÍDAS no WhatsApp
+          // deste envio (claim-before-send, junto com o lastDigestDate). E-mail
+          // NÃO consome ciclo. Faixa sem alerta presente não consome (a semana
+          // "não gasta" se não havia DUE_SOON pra mostrar).
+          if (willSendWa) {
+            const bandsIncluded = Object.keys(DIGEST_THROTTLE_DAYS).filter((sev) =>
+              waAlerts.some((a) => a.severity === sev),
+            );
+            if (bandsIncluded.length) {
+              contact.lastBandInclude = {
+                ...(contact.lastBandInclude ?? {}),
+                ...Object.fromEntries(bandsIncluded.map((sev) => [sev, todayStr])),
+              };
+            }
+          }
           await this.persistContacts(tenantId, contacts);
         }
 
         // T9: digest via WhatsApp só se a matriz efetiva permitir para este canal.
-        if (contact.whatsapp && delivery.digest.whatsapp) {
-          await this.notification.notifyPhone(tenantId, contact.whatsapp, message, force ? 0 : 120_000);
+        if (willSendWa) {
+          await this.notification.notifyPhone(tenantId, contact.whatsapp!, message, force ? 0 : 120_000);
           this.logger.log(
-            `[${tenantId}] contato ${contact.id}@${slotLabel}: ${nonCriticalAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
+            `[${tenantId}] contato ${contact.id}@${slotLabel}: ${waAlerts.length}/${digestAlerts.length} alerta(s) ` +
+            `(pós-throttle) em ${enabledSectors.length} setor(es) → WhatsApp ${contact.whatsapp}${catchUpSuffix} (enfileirado)`,
+          );
+        } else if (contact.whatsapp && delivery.digest.whatsapp) {
+          this.logger.log(
+            `[${tenantId}] contato ${contact.id}@${slotLabel}: WhatsApp suprimido pelo throttle ` +
+            `(${digestAlerts.length} alerta(s), todos em faixa com ciclo em curso) — e-mail segue completo`,
           );
         } else if (contact.whatsapp) {
           this.logger.debug(
@@ -716,14 +785,15 @@ export class ConsolidationService {
         }
 
         // T9: digest via e-mail só se a matriz efetiva permitir para este canal.
-        if (contact.emails?.length && delivery.digest.email) {
+        // Assimetria (2026-07-20): e-mail SEM throttle — conjunto completo.
+        if (willSendEmail) {
           const subject = `⚠️ HiperTMS — Pendências · ${now.toLocaleDateString('pt-BR')} ${slotLabel}`;
           const html = this.buildUnifiedEmailHtml(enabledSectors, alertsBySector, now, slotLabel, cashViewForEmail);
           for (const email of contact.emails) {
-            const result = await this.emailReply.sendAlertEmail(email, subject, message, tenantId, html);
+            const result = await this.emailReply.sendAlertEmail(email, subject, emailText, tenantId, html);
             if (result.sent) {
               this.logger.log(
-                `[${tenantId}] contato ${contact.id}@${slotLabel}: ${nonCriticalAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → e-mail ${email}${catchUpSuffix}`,
+                `[${tenantId}] contato ${contact.id}@${slotLabel}: ${digestAlerts.length} alerta(s) em ${enabledSectors.length} setor(es) → e-mail ${email}${catchUpSuffix}`,
               );
             } else {
               this.logger.warn(
@@ -733,10 +803,14 @@ export class ConsolidationService {
           }
         }
 
-        const alertIds = nonCriticalAlerts.map((a) => a.id);
+        // THROTTLE: marca como notificados só os alertas que saíram em ALGUM
+        // canal — alerta suprimido no WhatsApp de um contato sem e-mail não
+        // pode contar pro ciclo de arquivamento (ARCHIVE_AFTER_NOTIFICATIONS).
+        const deliveredAlerts = willSendEmail ? digestAlerts : waAlerts;
+        const alertIds = deliveredAlerts.map((a) => a.id);
         await this.persistAlertUpdates(alertIds, now);
 
-        totalSent += nonCriticalAlerts.length;
+        totalSent += deliveredAlerts.length;
       }
     }
 
@@ -852,8 +926,9 @@ export class ConsolidationService {
    * contato assina num só envio. Setor sem pendência não gera seção. Lista
    * plana por setor (sem subtítulo por severidade, diferente do modo legado) —
    * ordenada por gravidade, cap de `MAX_ITEMS_PER_SECTOR_UNIFIED` itens com
-   * "… e mais N pendências" acima disso. CRITICAL não aparece aqui (ver
-   * `UNIFIED_SEVERITY_ORDER`) — já foi no canal imediato.
+   * "… e mais N pendências" acima disso. CRITICAL aparece aqui SOMENTE quando o
+   * canal imediato está em standby (ver `UNIFIED_SEVERITY_ORDER` e
+   * monitor-flags.const.ts) — com o imediato ativo, já foi na hora.
    *
    * `slotLabel` é o horário AGENDADO do contato (ex. "08:00"), não o horário
    * real do tick — importa pro cabeçalho refletir "seu relatório das 08h"

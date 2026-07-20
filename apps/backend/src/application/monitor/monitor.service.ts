@@ -49,6 +49,7 @@ import {
   DEFAULT_SEND_WINDOW_START,
   DEFAULT_SEND_WINDOW_END,
 } from './send-window.util';
+import { isImmediateAlertsEnabled } from './monitor-flags.const';
 
 /** Campos de configuração expostos ao TMS (subset seguro — sem ids/timestamps internos). */
 const EXTERNAL_CONFIG_SELECT = {
@@ -70,15 +71,9 @@ const EXTERNAL_CONFIG_SELECT = {
  *  'all' = comportamento legado (todo evento novo notifica). */
 const IMMEDIATE_SEVERITY_DEFAULT = 'CRITICAL';
 
-/**
- * STANDBY (2026-07-20, Abel's decision — see docs/STANDBY.md): immediate
- * out-of-cycle alerts are DISABLED by default. Events still sync to AlertState
- * and are delivered by the scheduled digest (ConsolidationService); only the
- * immediate WhatsApp dispatch is skipped. Reactivate with
- * MONITOR_IMMEDIATE_ALERTS=true. Read per call (not module const) so tests can
- * toggle it.
- */
-const isImmediateAlertsEnabled = () => process.env.MONITOR_IMMEDIATE_ALERTS === 'true';
+// STANDBY (2026-07-20): immediate alerts flag lives in monitor-flags.const.ts
+// (shared with ConsolidationService — the same flag decides whether the
+// scheduled digest carries CRITICAL). Imported at the top of this file.
 const IMMEDIATE_ALL_SEVERITIES = new Set(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']);
 
 /**

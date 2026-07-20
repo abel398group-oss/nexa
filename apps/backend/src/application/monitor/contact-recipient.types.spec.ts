@@ -24,6 +24,44 @@ function makeExisting(overrides?: Partial<ContactRecipient>): ContactRecipient {
   };
 }
 
+// ─── Throttle do digest (2026-07-20): lastBandInclude é estado interno ───────
+// e DEVE sobreviver a qualquer edição vinda do TMS (que nunca envia o campo) —
+// mesmo princípio de lastDigestDate/lastClosingDate. Sem isso, cada save do TMS
+// resetaria o ciclo e o throttle nunca throttlearia nada.
+
+describe('sanitizeContacts — lastBandInclude (throttle do digest)', () => {
+  it('edição vinda do TMS (sem o campo) preserva o ciclo do throttle', () => {
+    const existing = [makeExisting({ lastBandInclude: { DUE_SOON: '2026-07-12', INFO: '2026-07-01' } })];
+    const input = [
+      {
+        id: 'c1',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 9, minute: 0 }], // TMS só mudou o horário
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ];
+    const [result] = sanitizeContacts(input, existing);
+    expect(result.lastBandInclude).toEqual({ DUE_SOON: '2026-07-12', INFO: '2026-07-01' });
+  });
+
+  it('contato novo nasce sem ciclo (primeira inclusão sempre sai)', () => {
+    const input = [
+      {
+        id: 'novo',
+        whatsapp: '5511999990002',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 8, minute: 0 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ];
+    const [result] = sanitizeContacts(input, null);
+    expect(result.lastBandInclude).toBeUndefined();
+  });
+});
+
 describe('sanitizeContacts — closingReport/cashView (T8-FIX)', () => {
   it('(a) edição SEM o campo preserva o valor anterior (\'biweekly\'/\'lastSlot\')', () => {
     const existing = [makeExisting()];

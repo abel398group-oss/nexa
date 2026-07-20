@@ -630,32 +630,227 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
   // ── T7 reformat: CRITICAL excluído do relatório programado ──────────────
 
-  it('T7: alerta CRITICAL nunca aparece no relatório programado (já foi no canal imediato)', async () => {
-    const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
-    const findMany = vi.fn().mockResolvedValue([criticalAlert, FISCAL_ALERT]);
-    const { svc, notification } = makeService({ prismaFindMany: findMany });
-    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
-    const cfg = makeContactsConfig([contact]);
-    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+  // 2026-07-20: a exclusão de CRITICAL do digest agora é CONDICIONAL ao canal
+  // imediato estar ativo (MONITOR_IMMEDIATE_ALERTS=true). Com o imediato em
+  // standby (default), o digest é o único canal e CRITICAL ENTRA — ver
+  // monitor-flags.const.ts e docs/STANDBY.md.
 
-    expect(notification.notifyPhone).toHaveBeenCalledOnce();
-    const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('CT-e vencido'); // OVERDUE — aparece
-    expect(msg).not.toContain('CT-e cancelado'); // CRITICAL — filtrado
-    // where clause também exclui CRITICAL (otimização, além do filtro em memória)
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ severity: { notIn: ['CRITICAL'] } }),
-    }));
+  it('T7 (imediato ATIVO): alerta CRITICAL não aparece no relatório programado', async () => {
+    const original = process.env.MONITOR_IMMEDIATE_ALERTS;
+    process.env.MONITOR_IMMEDIATE_ALERTS = 'true';
+    try {
+      const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+      const findMany = vi.fn().mockResolvedValue([criticalAlert, FISCAL_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('CT-e vencido'); // OVERDUE — aparece
+      expect(msg).not.toContain('CT-e cancelado'); // CRITICAL — filtrado
+      // where clause também exclui CRITICAL (otimização, além do filtro em memória)
+      expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ severity: { notIn: ['CRITICAL'] } }),
+      }));
+    } finally {
+      process.env.MONITOR_IMMEDIATE_ALERTS = original;
+    }
   });
 
-  it('T7: só CRITICAL no setor habilitado → não envia nada (sem pendência não-crítica)', async () => {
-    const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
-    const findMany = vi.fn().mockResolvedValue([criticalAlert]);
-    const { svc, notification } = makeService({ prismaFindMany: findMany });
-    const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
-    const cfg = makeContactsConfig([contact]);
-    await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
-    expect(notification.notifyPhone).not.toHaveBeenCalled();
+  it('T7 (imediato ATIVO): só CRITICAL no setor habilitado → não envia nada', async () => {
+    const original = process.env.MONITOR_IMMEDIATE_ALERTS;
+    process.env.MONITOR_IMMEDIATE_ALERTS = 'true';
+    try {
+      const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+      const findMany = vi.fn().mockResolvedValue([criticalAlert]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+      expect(notification.notifyPhone).not.toHaveBeenCalled();
+    } finally {
+      process.env.MONITOR_IMMEDIATE_ALERTS = original;
+    }
+  });
+
+  it('STANDBY (default): CRITICAL ENTRA no digest — é o único canal ativo', async () => {
+    const original = process.env.MONITOR_IMMEDIATE_ALERTS;
+    delete process.env.MONITOR_IMMEDIATE_ALERTS;
+    try {
+      const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+      const findMany = vi.fn().mockResolvedValue([criticalAlert, FISCAL_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('CT-e cancelado'); // CRITICAL — presente
+      expect(msg).toContain('CT-e vencido');   // OVERDUE — presente
+      // where clause NÃO exclui CRITICAL no standby
+      const whereArg = findMany.mock.calls[0][0]?.where ?? {};
+      expect(whereArg.severity).toBeUndefined();
+    } finally {
+      process.env.MONITOR_IMMEDIATE_ALERTS = original;
+    }
+  });
+
+  it('STANDBY (default): só CRITICAL no setor → digest SAI mesmo assim', async () => {
+    const original = process.env.MONITOR_IMMEDIATE_ALERTS;
+    delete process.env.MONITOR_IMMEDIATE_ALERTS;
+    try {
+      const criticalAlert = { id: 'a9', category: 'fiscal', severity: 'CRITICAL', title: 'CT-e cancelado', snoozedUntil: null };
+      const findMany = vi.fn().mockResolvedValue([criticalAlert]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('CT-e cancelado');
+    } finally {
+      process.env.MONITOR_IMMEDIATE_ALERTS = original;
+    }
+  });
+
+  // ── THROTTLE por severidade + assimetria de canal (2026-07-20) ─────────────
+  // WhatsApp: CRITICAL/OVERDUE sempre; DUE_SOON a cada 7 dias; INFO a cada 28
+  // — ciclo POR CONTATO em `lastBandInclude`. E-mail: SEM throttle, recebe tudo.
+  // makeNow() = 2026-07-13.
+
+  describe('throttle por severidade (WhatsApp) × e-mail completo', () => {
+    const DUE_SOON_ALERT = { id: 't1', category: 'fiscal', severity: 'DUE_SOON', title: 'Cotação vencendo amanhã', snoozedUntil: null };
+    const OVERDUE_ALERT = { id: 't2', category: 'fiscal', severity: 'OVERDUE', title: 'CT-e vencido', snoozedUntil: null };
+    const INFO_ALERT = { id: 't3', category: 'fiscal', severity: 'INFO', title: 'Aviso de rotina', snoozedUntil: null };
+
+    it('DUE_SOON primeira vez: entra no WhatsApp e grava o ciclo no contato', async () => {
+      const findMany = vi.fn().mockResolvedValue([DUE_SOON_ALERT]);
+      const { svc, notification, prismaUpdate } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({ sendTimes: [{ hour: 8, minute: 0 }] }); // sem lastBandInclude
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('Cotação vencendo amanhã');
+      // ciclo consumido: persistido com a data de hoje
+      expect(contact.lastBandInclude?.DUE_SOON).toBe('2026-07-13');
+      expect(prismaUpdate).toHaveBeenCalled();
+    });
+
+    it('DUE_SOON com ciclo em curso (ontem): suprimida no WhatsApp; OVERDUE passa', async () => {
+      const findMany = vi.fn().mockResolvedValue([DUE_SOON_ALERT, OVERDUE_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { DUE_SOON: '2026-07-12' }, // ontem — dentro dos 7 dias
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('CT-e vencido');            // OVERDUE — sempre
+      expect(msg).not.toContain('Cotação vencendo');    // DUE_SOON — suprimida
+      // ciclo NÃO regravado (não incluiu a faixa neste envio)
+      expect(contact.lastBandInclude?.DUE_SOON).toBe('2026-07-12');
+    });
+
+    it('DUE_SOON com ciclo vencido (7 dias atrás): entra de novo', async () => {
+      const findMany = vi.fn().mockResolvedValue([DUE_SOON_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { DUE_SOON: '2026-07-06' }, // exatamente 7 dias
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      expect(contact.lastBandInclude?.DUE_SOON).toBe('2026-07-13');
+    });
+
+    it('INFO: ciclo de 28 dias (10 dias atrás → suprimida; 30 dias → entra)', async () => {
+      const findMany = vi.fn().mockResolvedValue([INFO_ALERT, OVERDUE_ALERT]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { INFO: '2026-07-03' }, // 10 dias — em curso
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).not.toContain('Aviso de rotina');
+
+      const findMany2 = vi.fn().mockResolvedValue([INFO_ALERT]);
+      const { svc: svc2, notification: notification2 } = makeService({ prismaFindMany: findMany2 });
+      const contact2 = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { INFO: '2026-06-13' }, // 30 dias — venceu
+      });
+      await callPerContact(svc2, { now: makeNow(8, 0), contacts: [contact2], config: makeContactsConfig([contact2]) });
+      const [, , msg2] = notification2.notifyPhone.mock.calls[0];
+      expect(msg2).toContain('Aviso de rotina');
+    });
+
+    it('tudo suprimido e SEM e-mail: WhatsApp não sai e o slot NÃO é reivindicado', async () => {
+      const findMany = vi.fn().mockResolvedValue([DUE_SOON_ALERT]);
+      const { svc, notification, prismaUpdate } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { DUE_SOON: '2026-07-12' },
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).not.toHaveBeenCalled();
+      expect(prismaUpdate).not.toHaveBeenCalled(); // slot livre pro próximo ciclo
+    });
+
+    it('assimetria: e-mail recebe o conjunto COMPLETO mesmo com WhatsApp suprimido', async () => {
+      const findMany = vi.fn().mockResolvedValue([DUE_SOON_ALERT, OVERDUE_ALERT]);
+      const { svc, notification, emailReply } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        emails: ['gestor@empresa.com.br'],
+        lastBandInclude: { DUE_SOON: '2026-07-12' }, // DUE_SOON suprimida no WA
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      // WhatsApp: só OVERDUE
+      const [, , waMsg] = notification.notifyPhone.mock.calls[0];
+      expect(waMsg).toContain('CT-e vencido');
+      expect(waMsg).not.toContain('Cotação vencendo');
+
+      // E-mail: texto e HTML completos, com a DUE_SOON suprimida do WA
+      expect(emailReply.sendAlertEmail).toHaveBeenCalledOnce();
+      const [, , emailText, , emailHtml] = emailReply.sendAlertEmail.mock.calls[0];
+      expect(emailText).toContain('Cotação vencendo amanhã');
+      expect(emailText).toContain('CT-e vencido');
+      expect(emailHtml).toContain('Cotação vencendo amanhã');
+    });
+
+    it('escalação de faixa: evento que virou OVERDUE sai mesmo com ciclos todos em curso', async () => {
+      // mesmo id que era DUE_SOON ontem — hoje o AlertState já está OVERDUE (sync atualiza severity)
+      const escalated = { id: 't1', category: 'fiscal', severity: 'OVERDUE', title: 'Cotação venceu', snoozedUntil: null };
+      const findMany = vi.fn().mockResolvedValue([escalated]);
+      const { svc, notification } = makeService({ prismaFindMany: findMany });
+      const contact = makeContact({
+        sendTimes: [{ hour: 8, minute: 0 }],
+        lastBandInclude: { DUE_SOON: '2026-07-12', INFO: '2026-07-12' },
+      });
+      const cfg = makeContactsConfig([contact]);
+      await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
+
+      expect(notification.notifyPhone).toHaveBeenCalledOnce();
+      const [, , msg] = notification.notifyPhone.mock.calls[0];
+      expect(msg).toContain('Cotação venceu');
+    });
   });
 
   // ── T7 reformat: cap de 6 pendências por setor + overflow ───────────────

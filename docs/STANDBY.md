@@ -26,6 +26,12 @@ resolve sozinho quando o cliente corrige o dado na origem.
 - Digest agendado por setor/contato (ConsolidationService) — canal único ativo
 - Relatório de fechamento (closing report) e e-mail
 
+**Correção (2026-07-20, revisão do throttle):** o digest unificado excluía
+CRITICAL por assumir o canal imediato ativo — com o standby, crítico não saía
+em canal nenhum. Corrigido: o flag `MONITOR_IMMEDIATE_ALERTS` agora decide o
+dono do CRITICAL — standby → digest inclui; ativo → imediato envia e o digest
+exclui (ver `monitor-flags.const.ts`).
+
 **Pré-condições para reativar:**
 
 1. Decidir o alcance do imediato (backlog A): todos os contatos do setor × só o

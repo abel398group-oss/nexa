@@ -128,6 +128,15 @@ export interface ContactRecipient {
    */
   lastDigestDate?: Record<string, string>;
   /**
+   * Throttle por severidade do digest WhatsApp (2026-07-20, ver
+   * `digest-throttle.const.ts`): data (YYYY-MM-DD) da última vez que cada faixa
+   * THROTTLED (DUE_SOON, INFO) foi incluída na mensagem de WhatsApp DESTE
+   * contato. CRITICAL/OVERDUE não têm entrada (sempre entram). E-mail não
+   * consome o ciclo (recebe tudo, sem throttle). Estado interno — preservado em
+   * edições como `lastDigestDate` (nunca enviado/zerado pelo TMS).
+   */
+  lastBandInclude?: Record<string, string>;
+  /**
    * T8/T9-ADENDO (2026-07-17): resumo de fechamento (receita × custo × margem,
    * vendas e caixa) — 'off' (default) | 'weekly' (toda segunda às 07h, semana
    * anterior) | 'biweekly' (dias 16 e 1º às 07h) | 'monthly' (só dia 1º às
@@ -321,6 +330,9 @@ export function sanitizeContacts(
         sendTimes: sendTimes.length ? sendTimes : DEFAULT_SEND_TIMES,
         sendDays: sendDays.length ? sendDays : DEFAULT_SEND_DAYS,
         lastDigestDate: prior?.lastDigestDate,
+        // 2026-07-20: estado do throttle por severidade — interno, sempre
+        // preservado (mesmo princípio de lastDigestDate/lastClosingDate).
+        lastBandInclude: prior?.lastBandInclude,
         closingReport,
         cashView,
         lastClosingDate: prior?.lastClosingDate,
