@@ -4,6 +4,8 @@ export interface Seller {
   name: string;
   phone: string;
   active: boolean;
+  /** ADR 034 ("Estou fora"): true → handoff também notifica no WhatsApp do vendedor. */
+  outOfOffice?: boolean;
   assignedCount: number;
   loginEmail?: string | null;
 }

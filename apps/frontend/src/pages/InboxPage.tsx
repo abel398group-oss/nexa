@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
@@ -310,6 +310,24 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = 0;
   }, [active?.id, messages.length]);
+
+  // ADR 034 — deep link: /inbox?c=<conversationId> (link "Atender agora" da
+  // notificação de handoff no WhatsApp do vendedor). Quando a lista carrega e
+  // o param está presente, abre a conversa direto e limpa o param (pra não
+  // reabrir em cada re-render/refresh de lista).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const target = searchParams.get('c');
+    if (!target || !convs.length) return;
+    const conv = convs.find((c) => c.id === target);
+    if (conv) {
+      openGroup({ rep: conv, convs: [{ id: conv.id }] });
+    }
+    // limpa o param mesmo se a conversa não existir mais (evita loop de busca)
+    searchParams.delete('c');
+    setSearchParams(searchParams, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convs.length, searchParams]);
 
   // contagem por status para os filtros
   const statusCounts = convs.reduce((acc, c) => {

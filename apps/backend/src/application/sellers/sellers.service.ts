@@ -57,6 +57,12 @@ export class SellersService {
     return this.prisma.seller.updateMany({ where: { id, tenantId }, data: { active } });
   }
 
+  // ADR 034 ("Estou fora"): true → handoff também vai pro WhatsApp do vendedor
+  // (com deep link do inbox); false → só o sino do portal notifica.
+  setOutOfOffice(tenantId: string, id: string, outOfOffice: boolean) {
+    return this.prisma.seller.updateMany({ where: { id, tenantId }, data: { outOfOffice } as any });
+  }
+
   async update(
     tenantId: string,
     id: string,
@@ -146,11 +152,20 @@ export class SellersService {
     if (existing) {
       const seller = await this.prisma.seller.findUnique({ where: { id: existing.sellerId } });
       if (seller?.phone) {
+        // ADR 034: WhatsApp só quando o vendedor está "fora" — no PC, o sino do
+        // portal (hot_lead, criado pelo ConversationAgent) já cobre.
+        if (!this.isOutOfOffice(seller)) {
+          this.logger.log(
+            `Re-engagement → ${seller.name}: "Estou fora" desligado — só sino do portal (sem WhatsApp)`,
+          );
+          return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
+        }
         const msg =
           `👋 *Lead voltou!* (score ${input.leadScore})\n` +
           `Cliente: ${input.contactPhone}\n` +
           (input.summary ? `Resumo: ${input.summary}\n` : '') +
-          `Este lead já é seu — ele enviou uma nova mensagem. Confira no Nexa.`;
+          `Este lead já é seu — ele enviou uma nova mensagem.\n` +
+          this.attendLine(input.conversationId);
         const sent = await this.waha.sendText(seller.phone, msg);
         this.logger.log(`Re-engagement → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
         return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: sent.sent };
@@ -184,15 +199,42 @@ export class SellersService {
       }),
     ]);
 
-    // notifica o vendedor no WhatsApp dele
+    // ADR 034: WhatsApp só quando o vendedor está "fora". O texto antigo dizia
+    // "Responda pelo WhatsApp" — mas responder ESTA notificação não fala com o
+    // cliente (cai no número do Nexa e é descartada pelo gate de números
+    // internos). O caminho é sempre o inbox — daí o deep link.
+    if (!this.isOutOfOffice(seller)) {
+      this.logger.log(
+        `Handoff → ${seller.name}: "Estou fora" desligado — só sino do portal (sem WhatsApp)`,
+      );
+      return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
+    }
     const msg =
       `🔥 *Novo lead quente!* (score ${input.leadScore})\n` +
       `Cliente: ${input.contactPhone}\n` +
       (input.summary ? `Resumo: ${input.summary}\n` : '') +
-      `Atendimento atribuído a você. Responda pelo WhatsApp ou pelo Nexa.`;
+      `Atendimento atribuído a você.\n` +
+      this.attendLine(input.conversationId);
     const sent = await this.waha.sendText(seller.phone, msg);
 
     this.logger.log(`Handoff → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
     return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: sent.sent };
+  }
+
+  /** ADR 034: default true (comportamento pré-ADR) quando o campo ainda não existe no client/banco. */
+  private isOutOfOffice(seller: { outOfOffice?: boolean } | Record<string, any>): boolean {
+    return (seller as any).outOfOffice !== false;
+  }
+
+  /**
+   * ADR 034: linha final da notificação — deep link direto pra conversa no
+   * inbox (abre no navegador do celular). Sem NEXA_APP_URL configurada, cai
+   * no texto sem link (nunca inventar URL).
+   */
+  private attendLine(conversationId: string): string {
+    const base = (process.env.NEXA_APP_URL ?? '').trim().replace(/\/$/, '');
+    return base
+      ? `👉 Atender agora: ${base}/inbox?c=${conversationId}`
+      : `👉 Atenda pelo painel Nexa (Inbox).`;
   }
 }

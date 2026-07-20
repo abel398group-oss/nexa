@@ -457,6 +457,10 @@ model Seller {
   name          String
   phone         String // WhatsApp do vendedor (ex 5511994327713)
   active        Boolean  @default(true)
+  // ADR 034 ("Estou fora"): true → handoff notifica também no WhatsApp do
+  // vendedor (com deep link pro inbox); false → só sino do portal. Default
+  // true preserva o comportamento pré-ADR (todo vendedor recebia WhatsApp).
+  outOfOffice   Boolean  @default(true) @map("out_of_office")
   assignedCount Int      @default(0) @map("assigned_count") // round-robin balanceado
   createdAt     DateTime @default(now()) @map("created_at")
 

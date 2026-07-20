@@ -14,6 +14,10 @@ class CreateSellerDto {
 class ActiveDto {
   @IsBoolean() active!: boolean;
 }
+// ADR 034 ("Estou fora"): controla se o handoff notifica o WhatsApp do vendedor.
+class OutOfOfficeDto {
+  @IsBoolean() outOfOffice!: boolean;
+}
 class BulkDeleteDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
 }
@@ -49,6 +53,12 @@ export class SellersController {
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
     return this.sellers.setActive(tenantId, id, dto.active);
+  }
+
+  // ADR 034: toggle "Estou fora" — true = handoff também no WhatsApp (com deep link).
+  @Patch(':id/out-of-office')
+  setOutOfOffice(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: OutOfOfficeDto) {
+    return this.sellers.setOutOfOffice(tenantId, id, dto.outOfOffice);
   }
 
   @Patch(':id')

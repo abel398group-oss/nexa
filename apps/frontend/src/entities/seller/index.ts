@@ -9,6 +9,7 @@ export {
   createSeller,
   updateSeller,
   toggleSellerActive,
+  toggleSellerOutOfOffice,
   deleteSeller,
   bulkDeleteSellers,
 } from './api/seller.api';

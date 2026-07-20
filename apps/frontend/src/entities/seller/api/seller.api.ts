@@ -33,6 +33,11 @@ export async function toggleSellerActive(id: string, active: boolean): Promise<v
   await api.patch(`/sellers/${id}/active`, { active });
 }
 
+// ADR 034 ("Estou fora"): true → handoff também notifica no WhatsApp do vendedor.
+export async function toggleSellerOutOfOffice(id: string, outOfOffice: boolean): Promise<void> {
+  await api.patch(`/sellers/${id}/out-of-office`, { outOfOffice });
+}
+
 export async function deleteSeller(id: string): Promise<void> {
   await api.delete(`/sellers/${id}`);
 }

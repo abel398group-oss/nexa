@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { displayPhone } from '@/shared/lib/phone';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
-import { Button, Input, Icon, Badge } from '@/shared/ui';
+import { Button, Input, Icon, Badge, Switch } from '@/shared/ui';
 import {
   type Seller,
   type SellerKpi,
@@ -15,6 +15,7 @@ import {
   createSeller,
   updateSeller,
   toggleSellerActive,
+  toggleSellerOutOfOffice,
   deleteSeller,
   bulkDeleteSellers,
 } from '@/entities/seller';
@@ -197,6 +198,15 @@ export function SellersPage() {
     await invalidate();
   }
 
+  // ADR 034 ("Estou fora"): ligado → handoff também chega no WhatsApp do
+  // vendedor (com link direto da conversa); desligado → só o sino do painel.
+  async function toggleOutOfOffice(s: Seller) {
+    const next = !(s.outOfOffice !== false);
+    await toggleSellerOutOfOffice(s.id, next);
+    toast.success(next ? `${s.name}: avisos também no WhatsApp.` : `${s.name}: avisos só no painel.`);
+    await invalidate();
+  }
+
   const columns: DataTableColumn<Seller>[] = [
     {
       id: 'select',
@@ -248,6 +258,16 @@ export function SellersPage() {
       header: 'Status',
       mobileLabel: 'Status',
       cell: (s) => <Badge variant={s.active ? 'success' : 'neutral'}>{s.active ? 'ativo' : 'inativo'}</Badge>,
+    },
+    {
+      id: 'outOfOffice',
+      header: 'Estou fora',
+      mobileLabel: 'Estou fora',
+      cell: (s) => (
+        <div title='Ligado: lead quente também avisa no WhatsApp do vendedor, com link direto da conversa. Desligado: só o sino do painel.'>
+          <Switch checked={s.outOfOffice !== false} onCheckedChange={() => toggleOutOfOffice(s)} />
+        </div>
+      ),
     },
     {
       id: 'toggle',
