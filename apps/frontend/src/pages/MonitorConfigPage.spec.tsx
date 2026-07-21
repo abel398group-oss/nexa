@@ -471,7 +471,8 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     expect(within(dialog).getByRole('tab', { name: 'Passo 1: Quem recebe' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('⚠️ Pendências do dia')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    // DDI fixo (2026-07-21): digita-se só DDD + número — o +55 é adorno do campo.
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
 
     // Passo 2 ativo — cards de matriz visíveis, campos do passo 1 somem.
@@ -492,7 +493,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     expect(await screen.findByText('⚠️ Pendências do dia')).toBeInTheDocument();
     back();
     expect(await screen.findByLabelText('Nome do contato')).toBeInTheDocument();
-    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('5511988880000');
+    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('11988880000');
   });
 
   // (c) contato sem canal → rejeitar (400 no backend; UI valida o mesmo antes de avançar do passo 1).
@@ -529,7 +530,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: 'Salvar contato' }));
@@ -543,7 +544,8 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('Nome do contato'), { target: { value: 'João' } });
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    // digita LOCAL (11 dígitos)...
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: /^📄 Fiscal$/ }));
@@ -553,6 +555,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
     expect(screen.getByText('João')).toBeInTheDocument();
+    // ...e PERSISTE com o DDI — a asserção do valor salvo continua com o 55.
     expect(screen.getByText(/5511988880000/)).toBeInTheDocument();
   });
 
@@ -561,7 +564,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
 
@@ -596,13 +599,67 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
     expect(screen.getByText('Editar contato')).toBeInTheDocument();
     expect(screen.getByLabelText('Nome do contato')).toHaveValue('Maria');
-    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('5511999990001');
+    // DDI fixo: o contato salvo tem o 55, mas o campo exibe só DDD + número
+    // (par exibir-sem-55/salvar-com-55 — sem isso, cada edição viraria 5555...).
+    expect(screen.getByLabelText('WhatsApp do contato')).toHaveValue('11999990001');
 
     advance();
     advance();
 
     expect(await screen.findByLabelText('Hora do horário 1')).toHaveValue('9');
     expect(screen.getByLabelText('Minuto do horário 1')).toHaveValue('30');
+  });
+
+  // ── DDI fixo (2026-07-21) — as duas armadilhas da mudança ──────────────────
+
+  it('DDI: editar e salvar SEM mexer no número não duplica o 55 (a armadilha)', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        name: 'Maria',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 9, minute: 30 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Editar Maria/i }));
+    advance();
+    advance();
+    fireEvent.click(await screen.findByRole('button', { name: 'Salvar contato' }));
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalled());
+    const body = mockPut.mock.calls[mockPut.mock.calls.length - 1][1];
+    const savedMaria = body.contacts.find((c: any) => c.id === 'c1');
+    // exibe sem 55, salva com UM 55 — nunca 5555...
+    expect(savedMaria.whatsapp).toBe('5511999990001');
+  });
+
+  it('DDI: duplicado é detectado mesmo com o salvo tendo 55 e o digitado sendo local', async () => {
+    mockConfigWithContacts([
+      {
+        id: 'c1',
+        name: 'Maria',
+        whatsapp: '5511999990001',
+        emails: [],
+        sectors: ['fiscal'],
+        sendTimes: [{ hour: 9, minute: 30 }],
+        sendDays: [1, 2, 3, 4, 5],
+      },
+    ]);
+    renderPage();
+    await screen.findByText('Contatos');
+
+    fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
+    // digita o MESMO número da Maria, mas no formato local (sem o 55)
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11999990001' } });
+    advance();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/já está cadastrado/i);
   });
 
   // ── Passo 2: pills de canal + periodicidade ──────────────────────────────
@@ -612,7 +669,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
 
     // Defaults do passo 2.
@@ -641,7 +698,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Semanal' }));
@@ -660,7 +717,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     const emailInput = screen.getByLabelText('Adicionar e-mail');
     fireEvent.change(emailInput, { target: { value: 'financeiro@empresa.com' } });
     fireEvent.keyDown(emailInput, { key: 'Enter', code: 'Enter' });
@@ -686,7 +743,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
 
@@ -853,7 +910,8 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    // DDI fixo: digita LOCAL; o payload persiste com o 55 (asserção abaixo inalterada).
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: /^📄 Fiscal$/ }));
@@ -880,7 +938,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: /^📄 Fiscal$/ }));
@@ -891,7 +949,8 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     back();
     back();
-    expect(await screen.findByLabelText('WhatsApp do contato')).toHaveValue('5511988880000');
+    // o campo guarda o formato LOCAL (o +55 é adorno)
+    expect(await screen.findByLabelText('WhatsApp do contato')).toHaveValue('11988880000');
   });
 
   it('payload do "Salvar" principal também inclui contacts com o shape esperado', async () => {
@@ -899,7 +958,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: /^📄 Fiscal$/ }));
@@ -947,7 +1006,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     await screen.findByText('Contatos');
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
-    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '5511988880000' } });
+    fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
     advance();
     advance();
     fireEvent.click(await screen.findByRole('button', { name: /^📄 Fiscal$/ }));

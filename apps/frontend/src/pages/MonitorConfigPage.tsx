@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
+import { toBrPhone, toLocalPhone } from '@/shared/lib/phone';
 import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
 import {
@@ -634,7 +635,10 @@ export function MonitorConfigPage() {
       // T10-WIZARD: canal principal deriva do que o contato tem — só-e-mail abre no ramo e-mail.
       channel: hasWa ? 'whatsapp' : 'email',
       name: c.name ?? '',
-      whatsapp: c.whatsapp ?? '',
+      // DDI fixo (2026-07-21, paridade com o TMS): o campo edita só DDD+número;
+      // o 55 salvo é removido AQUI e recolocado no save (par obrigatório —
+      // exibir cru + salvar com DDI duplicaria o 55 a cada edição).
+      whatsapp: toLocalPhone(c.whatsapp),
       emails: c.emails,
       sectors: c.sectors,
       sendTimes: c.sendTimes.length ? c.sendTimes : [DEFAULT_CONTACT_TIME],
@@ -737,12 +741,17 @@ export function MonitorConfigPage() {
       return null;
     }
     // Ramo WhatsApp — número obrigatório (o e-mail é canal secundário, opcional).
+    // DDI fixo (2026-07-21): o usuário digita só DDD + número (10/11 dígitos);
+    // o "+55" é adorno do input e entra na persistência via toBrPhone.
     const digits = m.whatsapp.replace(/\D/g, '');
     if (!digits) return 'Informe o WhatsApp — ou troque o canal para e-mail.';
-    if (digits.length < 12) {
-      return 'Telefone inválido — use DDI + DDD + número (ex: 5511999999999).';
+    if (digits.length < 10 || digits.length > 11) {
+      return 'Telefone inválido — use DDD + número (ex: 11999999999).';
     }
-    const dup = contacts.some((c) => c.id !== m.editId && c.whatsapp === digits);
+    // Duplicado: contatos salvos têm o DDI — normaliza os DOIS lados antes de
+    // comparar, senão "11999..." nunca bate com "5511999..." e o dup passa.
+    const stored = toBrPhone(digits);
+    const dup = contacts.some((c) => c.id !== m.editId && toBrPhone(c.whatsapp ?? '') === stored);
     if (dup) {
       return 'Esse WhatsApp já está cadastrado em outro contato.';
     }
@@ -820,7 +829,10 @@ export function MonitorConfigPage() {
   /** T9-WIZARD: passo 3 ("Quando recebe") — só falta validar setores; passo 1 já bloqueou antes de chegar aqui. */
   async function saveContactModal() {
     if (!contactModal) return;
-    const digits = contactModal.whatsapp.replace(/\D/g, '');
+    // DDI fixo (2026-07-21): o campo guarda só DDD+número — o 55 volta AQUI,
+    // na borda da persistência (toBrPhone só adiciona quando ainda não tem,
+    // então um valor legado com DDI que escape não vira 5555...).
+    const digits = toBrPhone(contactModal.whatsapp.replace(/\D/g, ''));
     // T10-WIZARD: no ramo e-mail o WhatsApp nunca conta como canal (fica undefined).
     const hasWa = contactModal.channel === 'whatsapp' && !!digits;
     const hasEmail = contactModal.emails.length > 0;
@@ -1442,18 +1454,31 @@ export function MonitorConfigPage() {
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                       <p className="text-sm font-medium text-base-content/70 mb-1.5">📱 WhatsApp</p>
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        className="h-11 w-full rounded-md border border-base-300 bg-white px-4 text-sm text-base-content shadow-sm outline-none transition-colors placeholder:text-base-content/40 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/30 disabled:bg-base-200/60 disabled:text-base-content/40"
-                        placeholder="5511999999999 (com DDI)"
-                        value={contactModal.whatsapp}
-                        disabled={atWaLimit && !contactModal.startedWithWa}
-                        onChange={(e) => setContactModal({ ...contactModal, whatsapp: e.target.value, error: null })}
-                        aria-label="WhatsApp do contato"
-                      />
+                      {/* DDI fixo (2026-07-21, paridade com a Automação do TMS): o "+55"
+                          é adorno não-editável; o usuário digita só DDD + número. */}
+                      <div className="flex h-11 w-full items-stretch overflow-hidden rounded-md border border-base-300 bg-white shadow-sm transition-colors focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/30">
+                        <span
+                          aria-hidden="true"
+                          className="flex select-none items-center border-r border-base-300 bg-base-200/60 px-3 text-sm font-medium text-base-content/60"
+                        >
+                          +55
+                        </span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={11}
+                          className="h-full w-full bg-transparent px-4 text-sm text-base-content outline-none placeholder:text-base-content/40 disabled:bg-base-200/60 disabled:text-base-content/40"
+                          placeholder="11999999999"
+                          value={contactModal.whatsapp}
+                          disabled={atWaLimit && !contactModal.startedWithWa}
+                          onChange={(e) =>
+                            setContactModal({ ...contactModal, whatsapp: e.target.value.replace(/\D/g, '').slice(0, 11), error: null })
+                          }
+                          aria-label="WhatsApp do contato"
+                        />
+                      </div>
                       <p className="mt-1.5 text-[11px] text-base-content/35">
-                        Só dígitos: DDI + DDD + número.
+                        Só dígitos: DDD + número (o +55 já está incluído).
                       </p>
                       {atWaLimit && !contactModal.startedWithWa && (
                         <p className="mt-1.5 text-[11px] text-warning">

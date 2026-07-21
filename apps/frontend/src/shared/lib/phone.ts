@@ -24,3 +24,20 @@ export function toBrPhone(input: string): string {
   if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) return `55${d}`;
   return d;
 }
+
+/**
+ * Par do `toBrPhone` para EXIBIÇÃO em campo editável (2026-07-21, paridade com
+ * a tela de Automação do TMS): valor salvo "5511999999999" → "11999999999"
+ * (DDD + número, sem máscara — o "+55" vira adorno fixo do input).
+ *
+ * A dupla exibir-sem-55 / salvar-com-55 é OBRIGATÓRIA em par: exibir o valor
+ * cru e recolocar o DDI no save duplicaria o 55 a cada edição (5555...).
+ * Só remove o 55 quando há MAIS de 11 dígitos — um número local de 11 dígitos
+ * que por coincidência começa com 55 (DDD 55 não existe no BR, mas defensivo)
+ * nunca é mutilado.
+ */
+export function toLocalPhone(stored: string | null | undefined): string {
+  const d = String(stored ?? '').replace(/\D/g, '');
+  if (d.startsWith('55') && d.length > 11) return d.slice(2);
+  return d;
+}
