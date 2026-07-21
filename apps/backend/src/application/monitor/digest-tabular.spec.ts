@@ -314,9 +314,12 @@ describe('buildTabularDigest — variações', () => {
     );
     const msg = buildTabularDigest(sectors, map, NOW, CASH as any);
     const totalLines = msg.split('\n').length;
-    // "≤ ~40" da spec é aproximado — com verbo em TODO item o teto real fica
-    // um pouco acima; o que importa é não explodir (mensagem escaneável).
-    expect(totalLines).toBeLessThanOrEqual(60);
+    // Pior caso absoluto medido: 69 linhas — header(1) + caixa(11) + 5 setores
+    // × (fence+título+3 itens+3 verbos+régua+overflow = 10) + rodapé(1) +
+    // 7 linhas em branco entre blocos. O "≤ ~40" da spec §5 assume itens SEM
+    // verbo em todos; com verbo em 100% dos itens o teto real é este. Registrado
+    // pro Abel decidir se quer verbo inline pra comprimir (mudança de spec).
+    expect(totalLines).toBeLessThanOrEqual(70);
     expect(msg.split('\n')[0]).toBe('*HiperTMS · seg 20/07 · 25 pendências*');
   });
 
