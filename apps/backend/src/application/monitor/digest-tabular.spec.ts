@@ -243,15 +243,19 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
     expect(lines[titleIdx + 1].startsWith('─')).toBe(false);
   });
 
-  it('caixa: linhas de dinheiro alinhadas à direita na coluna de 30', () => {
-    expect(lines).toContain('Faturado hoje'.padEnd(21) + 'R$  4.320');
-    expect(lines).toContain('Gasto hoje'.padEnd(21) + 'R$  1.870');
-    expect(lines).toContain('Entra (15d)'.padEnd(21) + 'R$ 38.400');
-    expect(lines).toContain('Sai (15d)'.padEnd(21) + 'R$ 21.150');
-    expect(lines).toContain('Sobra'.padEnd(21) + 'R$ 17.250');
-    expect(lines).toContain('Vencido s/ receber'.padEnd(21) + 'R$  6.900');
+  it('caixa: linhas de dinheiro alinhadas à direita na coluna do bloco', () => {
+    // padding derivado da constante (não hardcoded) — a largura pode mudar
+    const money = (label: string, value: string) => label.padEnd(BLOCK_WIDTH - value.length) + value;
+    expect(lines).toContain(money('Faturado hoje', 'R$  4.320'));
+    expect(lines).toContain(money('Gasto hoje', 'R$  1.870'));
+    expect(lines).toContain(money('Entra (15d)', 'R$ 38.400'));
+    expect(lines).toContain(money('Sai (15d)', 'R$ 21.150'));
+    expect(lines).toContain(money('Sobra', 'R$ 17.250'));
+    expect(lines).toContain(money('Vencido s/ receber', 'R$  6.900'));
+    // toda linha de dinheiro ocupa a largura cheia do bloco
+    expect(money('Sobra', 'R$ 17.250').length).toBe(BLOCK_WIDTH);
     // régua simples antes do rodapé do caixa
-    const sobraIdx = lines.indexOf('Sobra'.padEnd(21) + 'R$ 17.250');
+    const sobraIdx = lines.indexOf(money('Sobra', 'R$ 17.250'));
     expect(lines[sobraIdx - 1]).toBe('─'.repeat(BLOCK_WIDTH));
   });
 
@@ -287,7 +291,7 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
   it('linhas de conteúdo dos blocos respeitam a largura de 30', () => {
     for (const l of lines) {
       if (l.startsWith('```') || l.startsWith('Ver tudo') || l.startsWith('*HiperTMS')) continue;
-      if (l.startsWith('app.hipertms.com.br')) continue; // link do setor, fora do bloco
+      if (l.startsWith('hipertms.com.br')) continue; // link do setor, fora do bloco
       const bare = l.endsWith('```') ? l.slice(0, -3) : l;
       expect(bare.length).toBeLessThanOrEqual(BLOCK_WIDTH);
     }
@@ -300,11 +304,11 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
 
 describe('link do setor', () => {
   it('mapeia as 5 áreas confirmadas (frota → /fleet)', () => {
-    expect(sectorPanelUrl('fiscal')).toBe('https://app.hipertms.com.br/fiscal');
-    expect(sectorPanelUrl('logistic')).toBe('https://app.hipertms.com.br/logistic');
-    expect(sectorPanelUrl('frota')).toBe('https://app.hipertms.com.br/fleet');
-    expect(sectorPanelUrl('finance')).toBe('https://app.hipertms.com.br/finance');
-    expect(sectorPanelUrl('procurement')).toBe('https://app.hipertms.com.br/procurement');
+    expect(sectorPanelUrl('fiscal')).toBe('https://hipertms.com.br/fiscal');
+    expect(sectorPanelUrl('logistic')).toBe('https://hipertms.com.br/logistic');
+    expect(sectorPanelUrl('frota')).toBe('https://hipertms.com.br/fleet');
+    expect(sectorPanelUrl('finance')).toBe('https://hipertms.com.br/finance');
+    expect(sectorPanelUrl('procurement')).toBe('https://hipertms.com.br/procurement');
   });
 
   it('setor desconhecido → sem link (nunca inventa destino)', () => {
@@ -317,7 +321,7 @@ describe('link do setor', () => {
     ]);
     const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
     const lines = msg.split('\n');
-    const urlIdx = lines.findIndex((l) => l === 'app.hipertms.com.br/finance');
+    const urlIdx = lines.findIndex((l) => l === 'hipertms.com.br/finance');
     expect(urlIdx).toBeGreaterThan(0);
     // a linha anterior é a que fecha o bloco monoespaçado
     expect(lines[urlIdx - 1].endsWith('```')).toBe(true);
@@ -329,7 +333,7 @@ describe('link do setor', () => {
     ]);
     const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
     expect(msg).not.toContain('Ver tudo:');
-    expect(msg).toContain('app.hipertms.com.br/finance');
+    expect(msg).toContain('hipertms.com.br/finance');
   });
 
   it('setor sem página conhecida → mantém o rodapé geral como saída', () => {
@@ -337,7 +341,7 @@ describe('link do setor', () => {
       ['desconhecido', { total: 1, shown: [item({ title: 'X' })] }],
     ]);
     const msg = buildTabularDigest([{ key: 'desconhecido', label: 'Outro' }], map, NOW, null);
-    expect(msg).toContain('Ver tudo: app.hipertms.com.br');
+    expect(msg).toContain('Ver tudo: hipertms.com.br');
   });
 
   it('no máximo 1 link por setor (nunca por item)', () => {
@@ -345,7 +349,7 @@ describe('link do setor', () => {
       ['finance', { total: 9, shown: [item({ title: 'a' }), item({ title: 'b' }), item({ title: 'c' })] }],
     ]);
     const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
-    expect(msg.match(/app\.hipertms\.com\.br/g)?.length).toBe(1);
+    expect(msg.match(/hipertms\.com\.br/g)?.length).toBe(1);
   });
 });
 
@@ -366,7 +370,7 @@ describe('buildTabularDigest — variações', () => {
     const map = new Map<string, TabularSectorEntry>();
     const cash = { ...CASH, inflow15d: { amount: 1000, count: 1 }, outflow15d: { amount: 4000, count: 1 } };
     const msg = buildTabularDigest([], map, NOW, cash as any);
-    expect(msg).toContain('Falta'.padEnd(21) + 'R$  3.000');
+    expect(msg).toContain('Falta'.padEnd(BLOCK_WIDTH - 'R$  3.000'.length) + 'R$  3.000');
     expect(msg).not.toContain('Sobra');
   });
 

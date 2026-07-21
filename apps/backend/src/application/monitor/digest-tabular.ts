@@ -23,8 +23,13 @@ import type { TmsCashView } from '@/application/connectors/hipertms.connector';
 
 // ─── Tunables ────────────────────────────────────────────────────────────────
 
-/** Block width in chars. Spec: 30 (fallback 28 if wrap is reported on small phones). */
-export const BLOCK_WIDTH = 30;
+/**
+ * Block width in chars. Spec: 30; raised to 32 on 2026-07-21 to fill the bubble
+ * (the do-not-reply notice was shortened at the same time so both meet at the
+ * same width — no dead space on the right). Fallback to 28-30 if wrap is ever
+ * reported on small phones — wrapping breaks alignment and is worse than a gap.
+ */
+export const BLOCK_WIDTH = 32;
 
 /**
  * Sector → TMS panel hub page (2026-07-21, confirmed by Abel against the real
@@ -34,8 +39,15 @@ export const BLOCK_WIDTH = 30;
  *
  * At most 5 links per message (one per sector), never one per item.
  */
-const PANEL_BASE = (process.env.TMS_PANEL_BASE_URL ?? 'https://app.hipertms.com.br').replace(/\/$/, '');
+// 2026-07-21: base CONFERIDA no roteador do TMS pelo squad — domínio raiz, sem
+// o subdomínio `app.` (a primeira versão usava app.hipertms.com.br, deduzido do
+// closing report, e NENHUM link resolvia).
+const PANEL_BASE = (process.env.TMS_PANEL_BASE_URL ?? 'https://hipertms.com.br').replace(/\/$/, '');
 
+// Páginas-hub por área (todas resolvem — hub ou redirect). O squad também
+// mapeou destinos "lista" mais fundos (/logistic/shipments, /fleet/vehicles,
+// /fiscal/cte, /procurement/orders); ficamos no HUB de propósito — é um
+// destino melhor pra quem chega do alerta, e finance só tem hub.
 const SECTOR_PANEL_PATHS: Record<string, string> = {
   fiscal: '/fiscal',
   logistic: '/logistic',

@@ -56,7 +56,7 @@ Botões existem apenas na **Cloud API oficial** (interactive message /
 template com botão de URL), que o WAHA não entrega de forma confiável.
 
 **Estado atual (paliativo, já implementado):** no WhatsApp, a URL curta do setor
-(`app.hipertms.com.br/finance`) vai logo abaixo de cada bloco — fora do ``` pra
+(`hipertms.com.br/finance`) vai logo abaixo de cada bloco — fora do ``` pra
 continuar clicável. No **e-mail**, o botão "Ver mais — {Setor}" JÁ existe de
 verdade (HTML tem âncora), com a palavra clicável e sem URL exposta.
 

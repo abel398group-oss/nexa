@@ -18,7 +18,10 @@ import { NotificationChannel } from './notification-channel.interface';
  * sendTo) instead of in each message builder, so e-mail bodies and specs that
  * assert on builder output stay untouched.
  */
-export const DO_NOT_REPLY_NOTICE = '🔕 _Mensagem automática — não é necessário responder._';
+// 2026-07-21: encurtada. A bolha do WhatsApp tem a largura da linha MAIS LARGA
+// — a versão longa ("Mensagem automática — não é necessário responder") esticava
+// a bolha muito além dos blocos de 32 chars e deixava um vazio à direita.
+export const DO_NOT_REPLY_NOTICE = '🔕 _Automático — não responda._';
 
 @Injectable()
 export class WahaNotificationChannel implements NotificationChannel {
