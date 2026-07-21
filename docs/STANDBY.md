@@ -9,6 +9,40 @@
 |---|---|---|---|
 | Alerta imediato do Monitor (fora do ciclo do digest) | 2026-07-20 | `MONITOR_IMMEDIATE_ALERTS=true` (backend) | [docs/monitor/standby-alerta-imediato-2026-07.md](./monitor/standby-alerta-imediato-2026-07.md) |
 | Botão "Ver mais" por setor no digest WhatsApp | 2026-07-21 | (depende da migração pra API oficial) | este doc, seção abaixo |
+| Receptor de `metadata` no ingest TMS→Nexa | 2026-07-21 | decisão do Abel — revisar após 1 semana estável (a partir de 2026-07-21) | este doc, seção abaixo · TMS: ADR 022 |
+
+## Receptor de `metadata` no ingest (adiado, 2026-07-21)
+
+**O que seria:** campo opcional `metadata` no evento do `POST /monitor/ingest`
+(`ruleId`, `count`, `amount`, `accountType`, `hoursWaiting`, `daysLate`,
+`daysLeft`) — spec proposta e aprovada pelos dois lados.
+
+**Por que foi adiado (decisão do Abel):** o **link por setor** resolveu o
+principal SEM mudança de contrato — o Nexa já sabe o setor de cada evento, então
+o destino virou uma tabela fixa local (`SECTOR_PANEL_PATHS` em
+`digest-tabular.ts`: fiscal→/fiscal, logistic→/logistic, frota→/fleet,
+finance→/finance, procurement→/procurement). O que sobra pro `metadata` é
+**acabamento**, não funcionalidade quebrada:
+
+1. verbo `pagar` × `cobrar` no `installment.overdue` (hoje resolvido por
+   heurística de título — funciona, só não é infalível);
+2. desempate do ranking por métrica do setor (valor, horas, dias) — hoje
+   degrada para banda de severidade + idade, que já ordena bem.
+
+Não compensa abrir uma frente com migration em produção logo depois de a
+agregação e as regras novas do TMS subirem.
+
+**Gatilho de retomada:** revisar após **1 semana estável** contada de
+2026-07-21.
+
+**Ao retomar — ordem obrigatória (REGRA 1):** Nexa aceita o campo e deploya
+PRIMEIRO; só então o TMS começa a emitir. O código do Nexa já lê
+`metadata.accountType` e as métricas de desempate quando presentes (degrade
+gracioso), então o receptor é aditivo.
+
+**Registrado nos dois lados** — o TMS anotou o mesmo em
+`docs/architecture/decisions/022-proactive-engine.md`. Motivo: o `metadata`
+exige emissor + receptor; anotar só no receptor faria o emissor esquecer.
 
 ## Botão "Ver mais" no digest WhatsApp (requisito da API oficial)
 
