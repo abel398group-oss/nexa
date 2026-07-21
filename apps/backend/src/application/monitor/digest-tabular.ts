@@ -26,6 +26,35 @@ import type { TmsCashView } from '@/application/connectors/hipertms.connector';
 /** Block width in chars. Spec: 30 (fallback 28 if wrap is reported on small phones). */
 export const BLOCK_WIDTH = 30;
 
+/**
+ * Sector → TMS panel hub page (2026-07-21, confirmed by Abel against the real
+ * routes). NO contract change: the Nexa already knows each event's sector (it
+ * builds the blocks from it), so the destination is a fixed table here — the
+ * TMS never has to send a link.
+ *
+ * At most 5 links per message (one per sector), never one per item.
+ */
+const PANEL_BASE = (process.env.TMS_PANEL_BASE_URL ?? 'https://app.hipertms.com.br').replace(/\/$/, '');
+
+const SECTOR_PANEL_PATHS: Record<string, string> = {
+  fiscal: '/fiscal',
+  logistic: '/logistic',
+  frota: '/fleet',
+  finance: '/finance',
+  procurement: '/procurement',
+};
+
+/** Full panel URL for a sector, or undefined when the sector has no known page. */
+export function sectorPanelUrl(sectorKey: string): string | undefined {
+  const path = SECTOR_PANEL_PATHS[sectorKey];
+  return path ? `${PANEL_BASE}${path}` : undefined;
+}
+
+/** Display form used in the WhatsApp text (no scheme — WhatsApp still links it). */
+export function sectorPanelDisplayUrl(sectorKey: string): string | undefined {
+  return sectorPanelUrl(sectorKey)?.replace(/^https?:\/\//, '');
+}
+
 /** OVERDUE older than this many days is promoted to the top of its band (§2). */
 export const DIGEST_AGE_ESCALATION_DAYS = Number(process.env.DIGEST_AGE_ESCALATION_DAYS ?? 30);
 
@@ -269,7 +298,7 @@ function cashBlock(cash: TmsCashView): string {
   return monoBlock(lines);
 }
 
-function sectorBlock(label: string, entry: TabularSectorEntry): string {
+function sectorBlock(sectorKey: string, label: string, entry: TabularSectorEntry): string {
   const lines: string[] = [` ${label.toUpperCase()} (${entry.total})`];
   entry.shown.forEach((item, i) => {
     const prefix = `${i + 1}. `;
@@ -284,7 +313,11 @@ function sectorBlock(label: string, entry: TabularSectorEntry): string {
     lines.push(RULE_SINGLE);
     lines.push(`+${overflow} no site`);
   }
-  return monoBlock(lines);
+  // O link do setor fica FORA do bloco monoespaçado DE PROPÓSITO: dentro de
+  // ``` o WhatsApp não transforma URL em link clicável (vira texto morto).
+  // Colado logo abaixo, parece a última linha do card e continua tocável.
+  const url = sectorPanelDisplayUrl(sectorKey);
+  return url ? `${monoBlock(lines)}\n${url}` : monoBlock(lines);
 }
 
 /**
@@ -307,8 +340,13 @@ export function buildTabularDigest(
   for (const sector of sectors) {
     const entry = alertsBySector.get(sector.key);
     if (!entry || entry.total === 0) continue;
-    parts.push(sectorBlock(sector.label, entry));
+    parts.push(sectorBlock(sector.key, sector.label, entry));
   }
-  parts.push('Ver tudo: hipertms.com.br/painel');
+  // Rodapé geral só quando nenhum setor trouxe link próprio — evita repetir
+  // destino (os links por setor já levam ao painel).
+  const hasSectorLinks = sectors.some(
+    (s) => (alertsBySector.get(s.key)?.total ?? 0) > 0 && !!sectorPanelUrl(s.key),
+  );
+  if (!hasSectorLinks) parts.push(`Ver tudo: ${PANEL_BASE.replace(/^https?:\/\//, '')}`);
   return parts.join('\n\n');
 }

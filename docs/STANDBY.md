@@ -8,6 +8,28 @@
 | Função | Desde | Flag de reativação | Doc |
 |---|---|---|---|
 | Alerta imediato do Monitor (fora do ciclo do digest) | 2026-07-20 | `MONITOR_IMMEDIATE_ALERTS=true` (backend) | [docs/monitor/standby-alerta-imediato-2026-07.md](./monitor/standby-alerta-imediato-2026-07.md) |
+| Botão "Ver mais" por setor no digest WhatsApp | 2026-07-21 | (depende da migração pra API oficial) | este doc, seção abaixo |
+
+## Botão "Ver mais" no digest WhatsApp (requisito da API oficial)
+
+**O que se quer:** um botão CTA por setor no rodapé da mensagem — rótulo
+"Ver mais — {Setor}", clicável, abrindo a página do setor **sem URL exposta**
+no corpo (decisão do Abel, 2026-07-21).
+
+**Por que não está no ar:** o WhatsApp não tem âncora de texto — só URL escrita
+por extenso vira link, e dentro de bloco monoespaçado (```) nem isso funciona.
+Botões existem apenas na **Cloud API oficial** (interactive message /
+template com botão de URL), que o WAHA não entrega de forma confiável.
+
+**Estado atual (paliativo, já implementado):** no WhatsApp, a URL curta do setor
+(`app.hipertms.com.br/finance`) vai logo abaixo de cada bloco — fora do ``` pra
+continuar clicável. No **e-mail**, o botão "Ver mais — {Setor}" JÁ existe de
+verdade (HTML tem âncora), com a palavra clicável e sem URL exposta.
+
+**Ao migrar pra API oficial:** trocar a linha de URL do WhatsApp por botões
+`interactive.action.buttons` (máx. 3 por mensagem — priorizar os setores com
+mais pendências) usando o mesmo mapa setor→URL de
+`digest-tabular.ts` (`SECTOR_PANEL_PATHS`).
 
 ## Alerta imediato do Monitor
 

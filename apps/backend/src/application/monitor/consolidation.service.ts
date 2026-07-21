@@ -40,7 +40,7 @@ import { HiperTmsConnector, type TmsCashView } from '@/application/connectors/hi
 import { resolveTmsTenantId } from './tms-tenant-id.util';
 import { isImmediateAlertsEnabled } from './monitor-flags.const';
 import { isBandDue, DIGEST_THROTTLE_DAYS } from './digest-throttle.const';
-import { buildTabularDigest, rankSectorAlerts, type TabularAlertItem } from './digest-tabular';
+import { buildTabularDigest, rankSectorAlerts, sectorPanelUrl, type TabularAlertItem } from './digest-tabular';
 import { formatBRL } from './money-format.util';
 import {
   CONTACT_SECTOR_KEYS,
@@ -1222,6 +1222,19 @@ export class ConsolidationService {
           overflow > 0
             ? `<tr><td colspan="2" style="padding:8px 12px;font-size:12px;color:#71717a;font-style:italic;border-top:1px solid #e4e4e7">… e mais ${overflow} pendência${overflow !== 1 ? 's' : ''}</td></tr>`
             : '';
+        // 2026-07-21: botão "Ver mais" por setor — no e-mail o link tem ÂNCORA
+        // de verdade (a palavra é clicável, sem URL exposta), que é o que o
+        // WhatsApp não permite hoje. Destino: página-hub do setor no painel
+        // (tabela fixa em digest-tabular.ts — sem mudança de contrato).
+        const sectorUrl = sectorPanelUrl(sector.key);
+        const sectorCta = sectorUrl
+          ? `
+    <tr>
+      <td style="padding:10px 28px 4px" align="right">
+        <a href="${sectorUrl}" style="display:inline-block;padding:8px 16px;border:1px solid ${accent};border-radius:6px;color:${accent};font-size:13px;font-weight:700;text-decoration:none">Ver mais — ${sector.label} →</a>
+      </td>
+    </tr>`
+          : '';
         return `
     <!-- Seção: ${sector.label} -->
     <tr>
@@ -1243,7 +1256,7 @@ export class ConsolidationService {
           ${overflowRow}
         </table>
       </td>
-    </tr>`;
+    </tr>${sectorCta}`;
       })
       .join('');
 

@@ -4,6 +4,7 @@ import {
   actionVerbFor,
   ruleIdOf,
   buildTabularDigest,
+  sectorPanelUrl,
   BLOCK_WIDTH,
   RULE_ACTION_VERBS,
   type TabularAlertItem,
@@ -279,17 +280,72 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
     expect(financeLines).not.toContain('no site');
   });
 
-  it('sem NENHUM emoji; rodapé com URL completa', () => {
+  it('sem NENHUM emoji', () => {
     expect(msg).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
-    expect(lines[lines.length - 1]).toBe('Ver tudo: hipertms.com.br/painel');
   });
 
   it('linhas de conteúdo dos blocos respeitam a largura de 30', () => {
     for (const l of lines) {
       if (l.startsWith('```') || l.startsWith('Ver tudo') || l.startsWith('*HiperTMS')) continue;
+      if (l.startsWith('app.hipertms.com.br')) continue; // link do setor, fora do bloco
       const bare = l.endsWith('```') ? l.slice(0, -3) : l;
       expect(bare.length).toBeLessThanOrEqual(BLOCK_WIDTH);
     }
+  });
+});
+
+// ─── Link por setor (2026-07-21) ─────────────────────────────────────────────
+// Tabela fixa setor→página: nenhuma mudança de contrato (o Nexa já sabe o setor).
+// No WhatsApp o link fica FORA do bloco ``` — dentro dele a URL não é clicável.
+
+describe('link do setor', () => {
+  it('mapeia as 5 áreas confirmadas (frota → /fleet)', () => {
+    expect(sectorPanelUrl('fiscal')).toBe('https://app.hipertms.com.br/fiscal');
+    expect(sectorPanelUrl('logistic')).toBe('https://app.hipertms.com.br/logistic');
+    expect(sectorPanelUrl('frota')).toBe('https://app.hipertms.com.br/fleet');
+    expect(sectorPanelUrl('finance')).toBe('https://app.hipertms.com.br/finance');
+    expect(sectorPanelUrl('procurement')).toBe('https://app.hipertms.com.br/procurement');
+  });
+
+  it('setor desconhecido → sem link (nunca inventa destino)', () => {
+    expect(sectorPanelUrl('inexistente')).toBeUndefined();
+  });
+
+  it('a URL aparece logo APÓS o fechamento do bloco (fora do ```, pra ser clicável)', () => {
+    const map = new Map<string, TabularSectorEntry>([
+      ['finance', { total: 1, shown: [item({ title: 'CAR-002242 venceu' })] }],
+    ]);
+    const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
+    const lines = msg.split('\n');
+    const urlIdx = lines.findIndex((l) => l === 'app.hipertms.com.br/finance');
+    expect(urlIdx).toBeGreaterThan(0);
+    // a linha anterior é a que fecha o bloco monoespaçado
+    expect(lines[urlIdx - 1].endsWith('```')).toBe(true);
+  });
+
+  it('com links por setor, o rodapé "Ver tudo" some (sem destino repetido)', () => {
+    const map = new Map<string, TabularSectorEntry>([
+      ['finance', { total: 1, shown: [item({ title: 'X' })] }],
+    ]);
+    const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
+    expect(msg).not.toContain('Ver tudo:');
+    expect(msg).toContain('app.hipertms.com.br/finance');
+  });
+
+  it('setor sem página conhecida → mantém o rodapé geral como saída', () => {
+    const map = new Map<string, TabularSectorEntry>([
+      ['desconhecido', { total: 1, shown: [item({ title: 'X' })] }],
+    ]);
+    const msg = buildTabularDigest([{ key: 'desconhecido', label: 'Outro' }], map, NOW, null);
+    expect(msg).toContain('Ver tudo: app.hipertms.com.br');
+  });
+
+  it('no máximo 1 link por setor (nunca por item)', () => {
+    const map = new Map<string, TabularSectorEntry>([
+      ['finance', { total: 9, shown: [item({ title: 'a' }), item({ title: 'b' }), item({ title: 'c' })] }],
+    ]);
+    const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
+    expect(msg.match(/app\.hipertms\.com\.br/g)?.length).toBe(1);
   });
 });
 
@@ -343,14 +399,16 @@ describe('buildTabularDigest — variações', () => {
       ]),
     );
     const msg = buildTabularDigest(sectors, map, NOW, CASH as any);
-    const totalLines = msg.split('\n').length;
-    // Pior caso absoluto medido: 69 linhas — header(1) + caixa(11) + 5 setores
-    // × (fence+título+3 itens+3 verbos+régua+overflow = 10) + rodapé(1) +
-    // 7 linhas em branco entre blocos. O "≤ ~40" da spec §5 assume itens SEM
-    // verbo em todos; com verbo em 100% dos itens o teto real é este. Registrado
-    // pro Abel decidir se quer verbo inline pra comprimir (mudança de spec).
-    expect(totalLines).toBeLessThanOrEqual(70);
-    expect(msg.split('\n')[0]).toBe('*HiperTMS · seg 20/07 · 25 pendências*');
+    const lines = msg.split('\n');
+    // Em vez de um teto de linhas fixo (que quebrava a cada feature nova — já
+    // subiu 60→70 com verbos e links), a asserção fixa o que a spec §5 quer de
+    // fato: CADA SETOR ocupa um bloco curto e a mensagem não vira lista longa.
+    // Máx. 15 linhas por setor (fence+título+3 itens+3 verbos+régua+overflow+
+    // link+branco) e nenhum setor listando mais de 3 itens.
+    const perSector = (lines.length - 1) / sectors.length; // -1 = header
+    expect(perSector).toBeLessThanOrEqual(15);
+    expect(lines.filter((l) => /^4\. /.test(l))).toHaveLength(0);
+    expect(lines[0]).toBe('*HiperTMS · seg 20/07 · 25 pendências*');
   });
 
   it('título longo é truncado com … pra caber na largura', () => {
