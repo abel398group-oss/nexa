@@ -11,6 +11,10 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // NOTA (docs/infra/item1-pool-conexoes-2026-07.md): ao ativar o connection
+  // pool do DO, ADICIONAR aqui `directUrl = env("DIRECT_DATABASE_URL")` E
+  // definir a env no mesmo passo — declarar antes, com a env ausente, quebra
+  // `prisma generate`/CI. Por isso fica como nota até a ativação.
 }
 
 // ===================== ENUMS =====================
