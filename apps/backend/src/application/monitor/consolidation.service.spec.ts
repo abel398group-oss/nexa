@@ -618,8 +618,9 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).toContain('CT-e vencido');
     expect(msg).toContain('Embarque atrasado');
-    expect(msg).toContain('Fiscal');
-    expect(msg).toContain('Logística');
+    // T10: títulos de seção em CAIXA ALTA no formato tabular
+    expect(msg).toContain('FISCAL');
+    expect(msg).toContain('LOGÍSTICA');
 
     // 1 query só, com os dois setores no IN — não mais 1 query por (setor, horário).
     expect(findMany).toHaveBeenCalledOnce();
@@ -733,7 +734,7 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
       expect(notification.notifyPhone).toHaveBeenCalledOnce();
       const [, , msg] = notification.notifyPhone.mock.calls[0];
-      expect(msg).toContain('Compras');
+      expect(msg).toContain('COMPRAS'); // T10: título de seção em caixa alta
       expect(msg).toContain('Cotação de pneus vencida');
     });
 
@@ -898,7 +899,7 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
   // ── T7 reformat: cap de 6 pendências por setor + overflow ───────────────
 
-  it('T7: setor com mais de 6 pendências mostra só 6 + linha "… e mais N pendências"', async () => {
+  it('T10: setor com mais de 3 pendências mostra só 3 + rodapé "+N no site"', async () => {
     const manyAlerts = Array.from({ length: 8 }, (_, i) => ({
       id: `f${i}`,
       category: 'fiscal',
@@ -914,31 +915,30 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     expect(notification.notifyPhone).toHaveBeenCalledOnce();
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    // total do setor no cabeçalho de seção reflete os 8, não só os 6 exibidos
-    expect(msg).toContain('Fiscal (8)');
-    for (let i = 1; i <= 6; i++) expect(msg).toContain(`Pendência fiscal ${i}`);
-    expect(msg).not.toContain('Pendência fiscal 7');
-    expect(msg).not.toContain('Pendência fiscal 8');
-    expect(msg).toContain('… e mais 2 pendências');
+    // T10: cap caiu de 6 → 3; total do setor no título reflete os 8
+    expect(msg).toContain('FISCAL (8)');
+    for (let i = 1; i <= 3; i++) expect(msg).toContain(`Pendência fiscal ${i}`);
+    for (let i = 4; i <= 8; i++) expect(msg).not.toContain(`Pendência fiscal ${i}`);
+    expect(msg).toContain('+5 no site');
   });
 
-  it('T7: setor com exatamente 6 pendências não mostra linha de overflow', async () => {
-    const sixAlerts = Array.from({ length: 6 }, (_, i) => ({
+  it('T10: setor com exatamente 3 pendências não mostra rodapé "+N no site"', async () => {
+    const threeAlerts = Array.from({ length: 3 }, (_, i) => ({
       id: `f${i}`,
       category: 'fiscal',
       severity: 'OVERDUE',
       title: `Pendência fiscal ${i + 1}`,
       snoozedUntil: null,
     }));
-    const findMany = vi.fn().mockResolvedValue(sixAlerts);
+    const findMany = vi.fn().mockResolvedValue(threeAlerts);
     const { svc, notification } = makeService({ prismaFindMany: findMany });
     const contact = makeContact({ sectors: ['fiscal'], sendTimes: [{ hour: 8, minute: 0 }] });
     const cfg = makeContactsConfig([contact]);
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
 
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('Fiscal (6)');
-    expect(msg).not.toContain('… e mais');
+    expect(msg).toContain('FISCAL (3)');
+    expect(msg).not.toContain('no site');
   });
 
   // ── T7 (d): setor desabilitado no tenant fica fora do relatório ─────────
@@ -953,8 +953,8 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     expect(notification.notifyPhone).toHaveBeenCalledOnce();
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('Fiscal');
-    expect(msg).not.toContain('Logística');
+    expect(msg).toContain('FISCAL');
+    expect(msg).not.toContain('LOGÍSTICA');
     expect(msg).not.toContain('Embarque atrasado');
     // setor desabilitado nem entra na query — só fiscal é consultado.
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -1116,13 +1116,14 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
-    expect(msgFirst).toContain('💰 *SEU CAIXA — próximos 15 dias*');
-    expect(msgFirst).toContain('✅ Sobra:');
+    // T10: bloco do caixa no formato tabular (sem emoji)
+    expect(msgFirst).toContain(' SEU CAIXA — 15 dias');
+    expect(msgFirst).toContain('Sobra');
 
     await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
     const [, , msgLast] = notification.notifyPhone.mock.calls[1];
-    expect(msgLast).toContain('💰 *SEU CAIXA — próximos 15 dias*');
-    expect(msgLast).toContain('✅ Sobra:');
+    expect(msgLast).toContain(' SEU CAIXA — 15 dias');
+    expect(msgLast).toContain('Sobra');
   });
 
   it("T9-ADENDO: compat — cashView='lastSlot' (alias legado) continua ligando o bloco em TODOS os horários", async () => {
@@ -1138,11 +1139,11 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
-    expect(msgFirst).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msgFirst).toContain(' SEU CAIXA — 15 dias');
 
     await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
     const [, , msgLast] = notification.notifyPhone.mock.calls[1];
-    expect(msgLast).toContain('💰 *SEU CAIXA — próximos 15 dias*');
+    expect(msgLast).toContain(' SEU CAIXA — 15 dias');
   });
 
   it('T9-ADENDO: "Faturado hoje"/"Gasto hoje" aparecem quando o TMS manda invoicedToday/paidToday', async () => {
@@ -1158,8 +1159,11 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('🧾 Faturado hoje: R$ 8.400,00 (3 faturas)');
-    expect(msg).toContain('💸 Gasto hoje: R$ 5.100,00 (2 pagamentos)');
+    // T10: linhas do dia no formato coluna (inteiro BRL alinhado à direita)
+    expect(msg).toContain('Faturado hoje');
+    expect(msg).toContain('R$  8.400');
+    expect(msg).toContain('Gasto hoje');
+    expect(msg).toContain('R$  5.100');
   });
 
   it('T9-ADENDO: TMS antigo sem invoicedToday/paidToday → linhas do dia omitidas, resto do bloco intacto', async () => {
@@ -1173,8 +1177,8 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).not.toContain('Faturado hoje');
     expect(msg).not.toContain('Gasto hoje');
-    expect(msg).toContain('💰 *SEU CAIXA — próximos 15 dias*');
-    expect(msg).toContain('✅ Sobra:');
+    expect(msg).toContain(' SEU CAIXA — 15 dias');
+    expect(msg).toContain('Sobra');
   });
 
   it('T9-ADENDO: apenas invoicedToday presente (sem paidToday) → só a linha de faturado aparece', async () => {
@@ -1189,7 +1193,8 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('🧾 Faturado hoje: R$ 1.200,00 (1 fatura)');
+    expect(msg).toContain('Faturado hoje');
+    expect(msg).toContain('R$  1.200');
     expect(msg).not.toContain('Gasto hoje');
   });
 
@@ -1234,8 +1239,10 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msg] = notification.notifyPhone.mock.calls[0];
-    expect(msg).toContain('🔴 Falta: R$ 15.000,00');
-    expect(msg).not.toContain('✅ Sobra');
+    // T10: coluna de dinheiro — "Falta" com valor inteiro alinhado
+    expect(msg).toContain('Falta');
+    expect(msg).toContain('R$ 15.000');
+    expect(msg).not.toContain('Sobra');
   });
 
   it('T8.6: cache — 1 chamada TMS por tenant por dia mesmo com 2 contatos elegíveis no mesmo tenant', async () => {

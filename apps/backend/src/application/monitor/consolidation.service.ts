@@ -40,6 +40,7 @@ import { HiperTmsConnector, type TmsCashView } from '@/application/connectors/hi
 import { resolveTmsTenantId } from './tms-tenant-id.util';
 import { isImmediateAlertsEnabled } from './monitor-flags.const';
 import { isBandDue, DIGEST_THROTTLE_DAYS } from './digest-throttle.const';
+import { buildTabularDigest, rankSectorAlerts, type TabularAlertItem } from './digest-tabular';
 import { formatBRL } from './money-format.util';
 import {
   CONTACT_SECTOR_KEYS,
@@ -116,7 +117,9 @@ function sectorEnabled(config: Record<string, any> | null | undefined, sector: S
  * cabeçalho da seção e no cálculo do "… e mais N").
  */
 interface UnifiedSectorAlerts {
-  shown: Array<{ severity: string; title: string; description?: string | null }>;
+  // T10: itens carregam também tmsEventId/createdAt/escalatedAgeDays — o
+  // formato tabular precisa deles pro verbo de ação e pra escalada por idade.
+  shown: TabularAlertItem[];
   total: number;
 }
 
@@ -157,15 +160,13 @@ const SEVERITY_LABEL_PT: Record<string, string> = {
  * Com o imediato em STANDBY (default), o digest é o único canal e CRITICAL
  * ENTRA, no topo. Ver monitor-flags.const.ts e docs/STANDBY.md.
  */
-const UNIFIED_SEVERITY_ORDER = ['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO'];
-const UNIFIED_SEVERITY_EMOJI: Record<string, string> = {
-  CRITICAL: '🚨', // críticas — só aparecem com o imediato em standby
-  OVERDUE:  '🔴', // vencidas
-  DUE_SOON: '🟠', // a vencer
-  INFO:     '🟡', // avisos
-};
-/** Máximo de pendências listadas por setor no relatório unificado — acima disso, "… e mais N". */
-const MAX_ITEMS_PER_SECTOR_UNIFIED = 6;
+// T10 (2026-07-20): a ordem/emoji do relatório unificado migraram pro formato
+// tabular (digest-tabular.ts — SEVERITY_BAND, sem emojis por decisão da spec).
+// CRITICAL continua condicional ao standby do imediato (query em
+// processPerContact + monitor-flags.const.ts).
+/** T10 (2026-07-20): máximo de pendências por setor no relatório unificado —
+ *  6 → 3 (limite de memória de trabalho ~4 chunks, spec §1); acima, "+N no site". */
+const MAX_ITEMS_PER_SECTOR_UNIFIED = 3;
 
 const ARCHIVE_AFTER_NOTIFICATIONS = 2;
 const ARCHIVE_AFTER_HOURS = 48;
@@ -671,17 +672,22 @@ export class ConsolidationService {
         const bandState = contact.lastBandInclude ?? {};
         const waAlerts = digestAlerts.filter((a) => isBandDue(a.severity, bandState[a.severity], now));
 
-        // Agrupa por setor e monta o formato aprovado: ordenado por gravidade
-        // (UNIFIED_SEVERITY_ORDER), cap de MAX_ITEMS_PER_SECTOR_UNIFIED itens
-        // exibidos + total pro "… e mais N pendências". Setor sem alerta
-        // simplesmente não entra no Map (ver buildUnifiedMessage/buildUnifiedEmailHtml).
+        // Agrupa por setor: cap de MAX_ITEMS_PER_SECTOR_UNIFIED itens exibidos
+        // + total pro "+N no site". Setor sem alerta não entra no Map (ver
+        // buildUnifiedMessage/buildUnifiedEmailHtml).
         // Dois conjuntos desde o throttle: WhatsApp (filtrado) × e-mail (completo).
+        // T10: ordenação por setor sai do sort simples por severidade e vira o
+        // ranking completo da spec (§2): banda > desempate por métrica do setor
+        // (metadata, degrade gracioso) > mais antigo, com escalada por idade
+        // pra OVERDUE > DIGEST_AGE_ESCALATION_DAYS.
         const groupBySector = (list: typeof digestAlerts) => {
           const map = new Map<string, UnifiedSectorAlerts>();
           for (const sector of enabledSectors) {
-            const sectorAlerts = list
-              .filter((a) => a.category === sector.key)
-              .sort((a, b) => UNIFIED_SEVERITY_ORDER.indexOf(a.severity) - UNIFIED_SEVERITY_ORDER.indexOf(b.severity));
+            const sectorAlerts = rankSectorAlerts(
+              sector.key,
+              list.filter((a) => a.category === sector.key) as unknown as TabularAlertItem[],
+              now,
+            );
             if (!sectorAlerts.length) continue;
             map.set(sector.key, {
               shown: sectorAlerts.slice(0, MAX_ITEMS_PER_SECTOR_UNIFIED),
@@ -937,87 +943,26 @@ export class ConsolidationService {
   }
 
   /**
-   * T7 (formato aprovado pelo Abel, 2026-07-16): mensagem única do modo
-   * per-contato, consolidando os alertas de TODOS os setores habilitados que o
-   * contato assina num só envio. Setor sem pendência não gera seção. Lista
-   * plana por setor (sem subtítulo por severidade, diferente do modo legado) —
-   * ordenada por gravidade, cap de `MAX_ITEMS_PER_SECTOR_UNIFIED` itens com
-   * "… e mais N pendências" acima disso. CRITICAL aparece aqui SOMENTE quando o
-   * canal imediato está em standby (ver `UNIFIED_SEVERITY_ORDER` e
-   * monitor-flags.const.ts) — com o imediato ativo, já foi na hora.
-   *
-   * `slotLabel` é o horário AGENDADO do contato (ex. "08:00"), não o horário
-   * real do tick — importa pro cabeçalho refletir "seu relatório das 08h"
-   * mesmo quando o envio efetivo é um catch-up alguns minutos depois.
+   * T10 (2026-07-20, substitui o formato T7): mensagem única do modo
+   * per-contato no layout TABULAR aprovado — spec completa em
+   * docs/monitor/t10-digest-tabular-format-2026-07.md; implementação em
+   * digest-tabular.ts (puro, testável isolado). CRITICAL aparece aqui SOMENTE
+   * quando o canal imediato está em standby — com o imediato ativo, já foi na
+   * hora (filtro na query de processPerContact).
    */
   private buildUnifiedMessage(
     sectors: SectorMeta[],
     alertsBySector: Map<string, UnifiedSectorAlerts>,
     now: Date,
-    slotLabel: string,
+    _slotLabel: string,
     cashView?: TmsCashView | null,
   ): string {
-    const dateShort = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const lines: string[] = [`⚠️ *HiperTMS — Pendências · ${dateShort} ${slotLabel}*\n`];
-
-    // T8.6: bloco do caixa vai ACIMA dos blocos de setor (formato aprovado).
-    if (cashView) {
-      lines.push(this.buildCashViewBlock(cashView));
-    }
-
-    for (const sector of sectors) {
-      const entry = alertsBySector.get(sector.key);
-      if (!entry || entry.total === 0) continue;
-      lines.push(`${sector.emoji} *${sector.label} (${entry.total})*`);
-      entry.shown.forEach((a) => lines.push(`${UNIFIED_SEVERITY_EMOJI[a.severity] ?? '⚪'} ${a.title}`));
-      const overflow = entry.total - entry.shown.length;
-      if (overflow > 0) lines.push(`… e mais ${overflow} pendência${overflow !== 1 ? 's' : ''}`);
-      lines.push('');
-    }
-
-    lines.push('Acesse o painel do HiperTMS para mais detalhes: https://www.hipertms.com.br');
-    return lines.join('\n');
-  }
-
-  /**
-   * T8.6 (opção 1 aprovada, seguir à risca) — bloco "💰 SEU CAIXA" anexado à
-   * última mensagem de pendências do dia. Saldo (inflow − outflow) derivado
-   * aqui — NÃO vem no payload do TMS.
-   */
-  private buildCashViewBlock(cash: TmsCashView): string {
-    const balance = cash.inflow15d.amount - cash.outflow15d.amount;
-    const balanceLine =
-      balance >= 0
-        ? `✅ Sobra: ${formatBRL(balance)}`
-        : `🔴 Falta: ${formatBRL(Math.abs(balance))}`;
-
-    // T9-ADENDO (2026-07-17) item B: resumo do DIA, logo após o cabeçalho,
-    // antes de "Entra/Sai". Campos opcionais no contrato — TMS antigo não
-    // manda, cada linha é omitida independentemente (nunca quebra).
-    const todayLines: string[] = [];
-    if (cash.invoicedToday) {
-      todayLines.push(
-        `🧾 Faturado hoje: ${formatBRL(cash.invoicedToday.amount)} (${cash.invoicedToday.count} fatura${cash.invoicedToday.count !== 1 ? 's' : ''})`,
-      );
-    }
-    if (cash.paidToday) {
-      todayLines.push(
-        `💸 Gasto hoje: ${formatBRL(cash.paidToday.amount)} (${cash.paidToday.count} pagamento${cash.paidToday.count !== 1 ? 's' : ''})`,
-      );
-    }
-
-    return [
-      '💰 *SEU CAIXA — próximos 15 dias*',
-      ...todayLines,
-      `⬇️ Entra: ${formatBRL(cash.inflow15d.amount)} (${cash.inflow15d.count} conta${cash.inflow15d.count !== 1 ? 's' : ''} a receber)`,
-      `⬆️ Sai: ${formatBRL(cash.outflow15d.amount)} (${cash.outflow15d.count} conta${cash.outflow15d.count !== 1 ? 's' : ''} a pagar)`,
-      '━━━━━━━━━━━━━━━',
-      balanceLine,
-      `⚠️ Vencido sem receber: ${formatBRL(cash.overdueReceivable.amount)} (${cash.overdueReceivable.count} cliente${cash.overdueReceivable.count !== 1 ? 's' : ''})`,
-      `🍯 CT-e emitidos sem faturar: ${formatBRL(cash.unbilledCte.amount)} (${cash.unbilledCte.count} CT-e)`,
-      `🧾 Faturado no mês: ${formatBRL(cash.invoicedMonth.amount)}`,
-      '',
-    ].join('\n');
+    // T10 (2026-07-20, spec docs/monitor/t10-digest-tabular-format-2026-07.md):
+    // formato tabular monoespaçado — header texto normal, caixa e setores em
+    // blocos ``` de 30 chars, ranking §2, verbo de ação §3, cap 3 + "+N no
+    // site". O e-mail HTML segue INTOCADO (assimetria de canal); o slotLabel
+    // saiu do header por decisão da spec (fica no assunto do e-mail).
+    return buildTabularDigest(sectors, alertsBySector, now, cashView);
   }
 
   /** T8.6 — versão HTML do bloco "💰 SEU CAIXA", inserida acima das seções de setor no e-mail. */
@@ -1250,8 +1195,9 @@ export class ConsolidationService {
    * excede o exibido. Nota: a paleta de cores/emoji da tabela HTML permanece a
    * legada (`SEVERITY_COLOR`/`SEVERITY_LABEL_PT`/`SEVERITY_EMOJI`, 4 níveis) —
    * o "formato aprovado" com 3 níveis (🔴🟠🟡) era especificado só pro texto
-   * WhatsApp; CRITICAL já não aparece aqui de qualquer forma (filtrado antes,
-   * ver `processPerContact`), então a diferença é só nos rótulos/cores visuais.
+   * WhatsApp. CRITICAL: com o imediato ATIVO é filtrado antes (ver
+   * `processPerContact`); em STANDBY (default — docs/STANDBY.md) ENTRA aqui
+   * também, e a paleta de 4 níveis já o renderiza corretamente.
    */
   private buildUnifiedEmailHtml(
     sectors: SectorMeta[],
