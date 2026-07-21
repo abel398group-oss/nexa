@@ -140,9 +140,39 @@ describe('actionVerbFor / ruleIdOf', () => {
     expect(actionVerbFor({ tmsEventId: 'seed-test-frota-1', title: 'x' })).toBeUndefined();
   });
 
-  it('installment.overdue: PAYABLE → pagar, RECEIVABLE → cobrar (metadata)', () => {
-    expect(actionVerbFor({ tmsEventId: 'installment.overdue:1', metadata: { kind: 'PAYABLE' }, title: '' })).toBe('pagar');
-    expect(actionVerbFor({ tmsEventId: 'installment.overdue:2', metadata: { direction: 'receivable' }, title: '' })).toBe('cobrar');
+  it('installment.overdue: PAYABLE → pagar, RECEIVABLE → cobrar (metadata.accountType do TMS)', () => {
+    // accountType é o campo REAL do TMS (pending-event-rules :1011/:1029)
+    expect(actionVerbFor({ tmsEventId: 'installment.overdue:1', metadata: { accountType: 'PAYABLE' }, title: '' })).toBe('pagar');
+    expect(actionVerbFor({ tmsEventId: 'installment.overdue:2', metadata: { accountType: 'RECEIVABLE' }, title: '' })).toBe('cobrar');
+    // aliases defensivos continuam aceitos
+    expect(actionVerbFor({ tmsEventId: 'installment.overdue:3', metadata: { kind: 'PAYABLE' }, title: '' })).toBe('pagar');
+  });
+
+  it('eventos agregados: `<ruleId>:agg` (formato novo) e `agg:<ruleId>` (defensivo) resolvem o verbo', () => {
+    // formato que o TMS vai adotar (prefixo continua sendo o ruleId)
+    expect(ruleIdOf({ tmsEventId: 'shipment.pickup_due:agg' })).toBe('shipment.pickup_due');
+    expect(actionVerbFor({ tmsEventId: 'shipment.pickup_due:agg', title: '23 coletas pendentes' })).toBe('agendar coletas');
+    // formato antigo pré-inversão — nunca deixar verbo sumir em silêncio
+    expect(ruleIdOf({ tmsEventId: 'agg:trip.overdue' })).toBe('trip.overdue');
+    expect(actionVerbFor({ tmsEventId: 'agg:trip.overdue', title: '3 viagens atrasadas' })).toBe('acompanhar');
+  });
+
+  it('enum validado (2026-07-21): novos ruleIds do TMS têm verbo; os inventados sumiram', () => {
+    // novos, confirmados pelo squad TMS
+    for (const [id, verb] of [
+      ['cte.pending_authorization', 'verificar'],
+      ['shipment.delivered_uninvoiced', 'faturar'],
+      ['budget.over', 'revisar'],
+      ['fleet.document_expired', 'renovar'],
+      ['fleet.maintenance_km_overdue', 'agendar'],
+      ['fleet.consumption_anomaly', 'verificar'],
+    ] as const) {
+      expect(actionVerbFor({ tmsEventId: `${id}:1`, title: '' })).toBe(verb);
+    }
+    // não existem no enum real — nunca devem ter verbo
+    for (const ghost of ['cte.pending_return', 'mdfe.rejected', 'shipment.delayed', 'fleet.crlv_expiring', 'purchase.overdue']) {
+      expect(actionVerbFor({ tmsEventId: `${ghost}:1`, title: '' })).toBeUndefined();
+    }
   });
 
   it('installment.overdue sem metadata: heurística pelo título de hoje do TMS', () => {
@@ -175,7 +205,7 @@ function fiscalEntry(): TabularSectorEntry {
     total: 5,
     shown: [
       item({ title: 'CT-e 4519 rejeitado', tmsEventId: 'cte.rejected:4519' }),
-      item({ title: 'CT-e 4512 sem retorno 5h', tmsEventId: 'cte.pending_return:4512' }),
+      item({ title: 'CT-e 4512 sem retorno 5h', tmsEventId: 'cte.pending_authorization:4512' }),
       item({ title: 'Certificado vence em 19d', tmsEventId: 'certificate.expiring:1', severity: 'DUE_SOON' }),
     ],
   };

@@ -67,50 +67,66 @@ interface SectorMetaLite {
 /**
  * Static ruleId → short action verb for the `   → verb` line. Unknown ruleId →
  * NO arrow line (never guess). `installment.overdue` is direction-dependent —
- * resolved in actionVerbFor() (metadata.kind/direction, then title heuristic).
+ * resolved in actionVerbFor() (metadata.accountType, then title heuristic).
  *
- * ⚠️ Best-effort list built from the TMS rule domains known on 2026-07-20 —
- * MUST be cross-checked against the TMS rule enum by the TMS squad (spec §5).
+ * VALIDATED against the real TMS rule enum on 2026-07-21 (TMS squad response —
+ * source of truth: hipertms_v12 pending-event-rules.ts, PENDING_EVENT_RULES,
+ * 28 rules). Aggregated count rules (one event per tenant/day with the total
+ * in the title) use count-friendly/plural verbs — a singular verb pointing at
+ * one specific item makes no sense there.
  */
 export const RULE_ACTION_VERBS: Record<string, string> = {
-  // fiscal
+  // fiscal (5)
   'cte.rejected': 'reenviar',
-  'cte.pending_return': 'verificar',
-  'mdfe.rejected': 'reenviar',
-  'mdfe.pending_return': 'verificar',
+  'cte.pending_authorization': 'verificar',
   'mdfe.unclosed': 'encerrar',
-  'certificate.expiring': 'renovar',
+  'certificate.expiring': 'renovar', // aggregated
   'certificate.expired': 'renovar',
-  // logistic
-  'shipment.pending_pickup': 'agendar coleta',
-  'shipment.pending_delivery': 'ver entrega',
-  'shipment.delayed': 'ver embarque',
-  'shipment.stalled': 'ver embarque',
-  'shipment.unlinked': 'vincular',
-  'quote.expiring': 'responder',
-  'quote.expired': 'responder',
-  'trip.overdue': 'ver rotas',
-  // frota
-  'fleet.cnh_expiring': 'renovar',
+  // logistic (8)
+  'shipment.pickup_due': 'agendar coletas', // aggregated
+  'shipment.delivery_due': 'ver entregas', // aggregated
+  'shipment.delivered_uninvoiced': 'faturar', // aggregated
+  'shipment.stalled': 'ver embarques', // aggregated count (TMS suggestion: plural)
+  'shipment.unlinked': 'vincular', // aggregated count
+  'quote.expiring': 'responder', // aggregated
+  'quote.expired': 'responder', // aggregated
+  'trip.overdue': 'acompanhar', // aggregated count (TMS suggestion)
+  // frota (10)
+  'fleet.cnh_expiring': 'renovar', // aggregated
   'fleet.cnh_expired': 'renovar',
-  'fleet.crlv_expiring': 'renovar',
-  'fleet.crlv_expired': 'renovar',
-  'fleet.maintenance_due': 'agendar',
-  'fleet.in_maintenance': 'acompanhar',
-  // finance
-  'installment.due_soon': 'programar',
+  'fleet.document_expiring': 'renovar', // aggregated — cobre CRLV e seguro
+  'fleet.document_expired': 'renovar',
+  'fleet.maintenance_date_due': 'agendar', // aggregated
+  'fleet.maintenance_date_overdue': 'agendar',
+  'fleet.maintenance_km_due': 'agendar', // aggregated
+  'fleet.maintenance_km_overdue': 'agendar',
+  'fleet.in_maintenance': 'acompanhar', // aggregated count
+  'fleet.consumption_anomaly': 'verificar', // aggregated
+  // finance (3 + installment.overdue dinâmico em actionVerbFor)
+  'installment.due_soon': 'programar', // aggregated
   'contract.billing_due': 'faturar',
-  // procurement (compras)
-  'purchase.pending_approval': 'aprovar',
-  'purchase.overdue': 'ver pedido',
+  'budget.over': 'revisar',
+  // procurement (1)
+  'purchase.pending_approval': 'aprovar', // aggregated count
 };
 
-/** Extracts the ruleId: metadata.ruleId → `<ruleId>:<entity>` prefix → bare `domain.rule` id. */
+/**
+ * Extracts the ruleId: metadata.ruleId → id prefix (`<ruleId>:<entity>`, the
+ * TMS dedupeKey format) → bare `domain.rule` id.
+ *
+ * Aggregated events (2026-07-21): the TMS is flipping the aggregated id from
+ * `agg:<ruleId>` to `<ruleId>:agg` so the prefix rule keeps working. We ALSO
+ * handle the old `agg:` prefix defensively — if any event with the pre-flip
+ * format slips through, the verb still renders instead of silently vanishing.
+ */
 export function ruleIdOf(item: Pick<TabularAlertItem, 'tmsEventId' | 'metadata'>): string | undefined {
   const metaRule = (item.metadata as any)?.ruleId;
   if (typeof metaRule === 'string' && metaRule) return metaRule;
   const id = item.tmsEventId ?? '';
-  if (id.includes(':')) return id.split(':')[0];
+  if (id.includes(':')) {
+    const [prefix, rest] = id.split(':');
+    return prefix === 'agg' && rest ? rest : prefix;
+  }
   const m = id.match(/^[a-z_]+\.[a-z_]+/);
   return m ? m[0] : undefined;
 }
@@ -121,11 +137,15 @@ export function actionVerbFor(item: Pick<TabularAlertItem, 'tmsEventId' | 'metad
   if (!ruleId) return undefined;
 
   // Direction-dependent rule (spec §3): PAYABLE → pagar, RECEIVABLE → cobrar.
+  // The TMS already records this as metadata.accountType (pending-event-rules
+  // :1011/:1029) — it will flow once the metadata field ships. Until then,
+  // degrade via today's TMS titles ("Conta a pagar/receber ...").
   if (ruleId === 'installment.overdue') {
-    const kind = String((item.metadata as any)?.kind ?? (item.metadata as any)?.direction ?? '').toLowerCase();
+    const kind = String(
+      (item.metadata as any)?.accountType ?? (item.metadata as any)?.kind ?? (item.metadata as any)?.direction ?? '',
+    ).toLowerCase();
     if (kind.includes('pay')) return 'pagar';
     if (kind.includes('receiv')) return 'cobrar';
-    // Degrade: today's TMS titles say "Conta a pagar/receber ..." — use them.
     if (/conta a pagar/i.test(item.title)) return 'pagar';
     if (/conta a receber/i.test(item.title)) return 'cobrar';
     return undefined;
