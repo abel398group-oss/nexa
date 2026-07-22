@@ -51,6 +51,18 @@ describe('AdminAlertService.notifyAdmin', () => {
     expect(waha.sendText).not.toHaveBeenCalled();
   });
 
+  it('vários admins por vírgula → avisa TODOS (bugfix 2026-07-22)', async () => {
+    process.env.ALERT_ADMIN_PHONE = '5511917747429,5511974869142';
+    const { svc, waha } = makeService();
+    const r = await svc.notifyAdmin('x', 'y');
+    expect(r.whatsapp).toBe(true);
+    expect(waha.sendText).toHaveBeenCalledTimes(2);
+    expect(waha.sendText.mock.calls.map((c: any[]) => c[0])).toEqual([
+      '5511917747429',
+      '5511974869142',
+    ]);
+  });
+
   it('e-mail: usa fallback .env quando não há canal no banco', async () => {
     process.env.ALERT_ADMIN_EMAIL = 'abel@empresa.com';
     process.env.EMAIL_SMTP_HOST = 'smtp.x.com';

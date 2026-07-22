@@ -5,6 +5,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
+import { parseAdminPhones } from '@/application/monitor/admin-phones.util';
 
 /**
  * WahaHealthService — monitora a sessão do WhatsApp (WAHA).
@@ -200,19 +201,25 @@ export class WahaHealthService {
   }
 
   private async notifyWhatsapp(text: string): Promise<void> {
-    const phone = (process.env.ALERT_ADMIN_PHONE ?? '').replace(/\D/g, '');
-    if (!phone) return;
-    // A sessão pode ter acabado de voltar a WORKING e ainda não estar pronta p/ enviar
-    // (WAHA responde 500). Tenta algumas vezes, espaçado, antes de desistir.
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const r = await this.waha.sendText(phone, text);
-        if (r.sent) return;
-        this.logger.warn(`alerta WhatsApp não enviado (tentativa ${attempt}/3): ${r.reason}`);
-      } catch (e: any) {
-        this.logger.warn(`notifyWhatsapp falhou (tentativa ${attempt}/3): ${e?.message}`);
+    // BUGFIX (2026-07-22): ALERT_ADMIN_PHONE pode ter VÁRIOS números por vírgula.
+    // O `.replace(/\D/g,'')` na string inteira concatenava tudo num número
+    // inválido de 26 dígitos e o alerta de WAHA no WhatsApp nunca saía (só o
+    // e-mail). Agora usa parseAdminPhones e avisa cada admin.
+    const phones = parseAdminPhones(process.env.ALERT_ADMIN_PHONE);
+    if (!phones.length) return;
+    for (const phone of phones) {
+      // A sessão pode ter acabado de voltar a WORKING e ainda não estar pronta p/
+      // enviar (WAHA responde 500). Tenta algumas vezes, espaçado, antes de desistir.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const r = await this.waha.sendText(phone, text);
+          if (r.sent) break;
+          this.logger.warn(`alerta WhatsApp não enviado a ${phone} (tentativa ${attempt}/3): ${r.reason}`);
+        } catch (e: any) {
+          this.logger.warn(`notifyWhatsapp ${phone} falhou (tentativa ${attempt}/3): ${e?.message}`);
+        }
+        if (attempt < 3) await this.sleep(6000);
       }
-      if (attempt < 3) await this.sleep(6000);
     }
   }
 

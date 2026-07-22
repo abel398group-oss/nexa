@@ -15,6 +15,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
+import { parseAdminPhones } from './admin-phones.util';
 
 @Injectable()
 export class AdminAlertService {
@@ -39,16 +40,20 @@ export class AdminAlertService {
   }
 
   private async notifyWhatsapp(text: string): Promise<boolean> {
-    const phone = (process.env.ALERT_ADMIN_PHONE ?? '').split(',')[0]?.replace(/\D/g, '') ?? '';
-    if (phone.length < 12) return false;
-    try {
-      const r = await this.waha.sendText(phone, text);
-      if (!r.sent) this.logger.warn(`admin WhatsApp não enviado: ${r.reason}`);
-      return r.sent;
-    } catch (e: any) {
-      this.logger.warn(`notifyWhatsapp (admin) falhou: ${e?.message}`);
-      return false;
+    const phones = parseAdminPhones(process.env.ALERT_ADMIN_PHONE);
+    if (!phones.length) return false;
+    // Avisa TODOS os admins listados (ex.: Abel + Uelder), não só o primeiro.
+    let anySent = false;
+    for (const phone of phones) {
+      try {
+        const r = await this.waha.sendText(phone, text);
+        if (r.sent) anySent = true;
+        else this.logger.warn(`admin WhatsApp não enviado (${phone}): ${r.reason}`);
+      } catch (e: any) {
+        this.logger.warn(`notifyWhatsapp (admin ${phone}) falhou: ${e?.message}`);
+      }
     }
+    return anySent;
   }
 
   private async notifyEmail(subject: string, body: string): Promise<boolean> {
