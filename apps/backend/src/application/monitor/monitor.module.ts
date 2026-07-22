@@ -6,22 +6,28 @@ import { MonitorNotificationService } from './monitor-notification.service';
 import { MonitorDispatchService } from './monitor-dispatch.service';
 import { WahaNotificationChannel } from './waha-notification-channel';
 import { WhatsAppCloudChannel } from './whatsapp-cloud-channel';
+import { ScaleWatchService } from './scale-watch.service';
+import { AdminAlertService } from './admin-alert.service';
 import { MonitorController } from './monitor.controller';
 import { MonitorIngestController } from './monitor-ingest.controller';
+import { ScaleHealthController } from '@/presentation/http/health/scale-health.controller';
 import { PrismaModule } from '@/infra/prisma/prisma.module';
 import { ConnectorsModule } from '@/application/connectors/connectors.module';
 import { WahaModule } from '@/shared/waha/waha.module';
 import { EmailModule } from '@/application/email/email.module';
+import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
 import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
 
 @Module({
-  imports: [PrismaModule, ConnectorsModule, WahaModule, EmailModule],
+  imports: [PrismaModule, ConnectorsModule, WahaModule, EmailModule, EmailCryptoModule],
   providers: [
     MonitorService,
     ConsolidationService,
     ClosingReportService,
     MonitorNotificationService,
     MonitorDispatchService, // A4: fila com retry/rate-limit
+    ScaleWatchService, // termômetro de gargalos (docs/infra/monitoramento-gargalos)
+    AdminAlertService, // aviso admin nos 2 canais (WhatsApp + e-mail)
     WahaNotificationChannel,
     WhatsAppCloudChannel,
     {
@@ -33,7 +39,7 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
         (process.env.MONITOR_WA_PROVIDER ?? 'waha').toLowerCase() === 'cloud' ? cloud : waha,
     },
   ],
-  controllers: [MonitorController, MonitorIngestController],
+  controllers: [MonitorController, MonitorIngestController, ScaleHealthController],
   exports: [MonitorService],
 })
 export class MonitorModule {}
