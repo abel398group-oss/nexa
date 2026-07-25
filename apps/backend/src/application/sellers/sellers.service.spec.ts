@@ -102,3 +102,39 @@ describe('SellersService.handoff — ADR 034', () => {
     expect(msg).toContain('https://painel.exemplo.com.br/inbox?c=conv-1');
   });
 });
+
+// ─── Incidente 2026-07-20 (spam de marmita): template por tipo de handoff ────
+// kind='human_request' → 🙋 sem score; kind ausente/'hot_lead' → 🔥 com score.
+describe('SellersService.handoff — kind (hot_lead vs human_request)', () => {
+  beforeEach(() => {
+    delete process.env.NEXA_APP_URL;
+  });
+
+  it('default (sem kind) → template 🔥 com score (retrocompat)', async () => {
+    const { svc, waha } = makeService();
+    await svc.handoff('t1', INPUT);
+    const [, msg] = waha.sendText.mock.calls[0];
+    expect(msg).toContain('Novo lead quente');
+    expect(msg).toContain(`score ${INPUT.leadScore}`);
+  });
+
+  it('kind=human_request → template 🙋 SEM "lead quente" e SEM score', async () => {
+    const { svc, waha } = makeService();
+    await svc.handoff('t1', { ...INPUT, leadScore: 0, kind: 'human_request' });
+    const [, msg] = waha.sendText.mock.calls[0];
+    expect(msg).toContain('Cliente pediu atendimento');
+    expect(msg).not.toContain('lead quente');
+    expect(msg).not.toContain('score');
+  });
+
+  it('re-engagement com kind=human_request → "Cliente voltou" sem score', async () => {
+    const { svc, waha } = makeService({
+      seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: true },
+      existingNotification: { sellerId: 's1', conversationId: 'conv-1' },
+    });
+    await svc.handoff('t1', { ...INPUT, leadScore: 0, kind: 'human_request' });
+    const [, msg] = waha.sendText.mock.calls[0];
+    expect(msg).toContain('Cliente voltou');
+    expect(msg).not.toContain('score');
+  });
+});

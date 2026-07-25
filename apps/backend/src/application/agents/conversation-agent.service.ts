@@ -185,6 +185,13 @@ export class ConversationAgentService {
         // por aqui, então continua funcionando. Alerta o time uma vez por mês.
         blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
         await this.notifyPlanLimitReached(tenantId).catch(() => null);
+      } else if (!draft) {
+        // wrong_person/spam (2026-07-20): resposta deliberadamente vazia — nunca
+        // enviar nada (nem aceno seguro; responder confirma o número como ativo).
+        blockedReason = 'sem resposta (spam/fora de perfil) — nenhuma mensagem enviada';
+        this.logger.log(
+          `Auto-envio suprimido: draft vazio (intent=${route.intent}) conv=${input.conversationId} — spam/fora de perfil`,
+        );
       } else {
         let outbound = draft;
         if (!supervisorOk) {
@@ -321,6 +328,15 @@ export class ConversationAgentService {
         break;
 
       case 'human':
+        // wrong_person = spam/fora de perfil (2026-07-20): não responde ("vou te
+        // conectar com especialistas" pra um robô de disparo é desperdício e
+        // confirma o número como ativo) e não marca needsHuman.
+        if (route.intent === 'wrong_person') {
+          draft = '';
+          suggestedAction = 'none';
+          scripted = true;
+          break;
+        }
         draft = 'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂';
         suggestedAction = 'handoff_human';
         needsHuman = true;
@@ -582,7 +598,18 @@ export class ConversationAgentService {
     const isHot =
       route.agent === 'sales' &&
       (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
-    if (isHot || route.agent === 'human') {
+    // Guard anti-spam (2026-07-20, incidente da marmita): wrong_person = mensagem
+    // fora de perfil/spam — a IA acertou (score 0), mas o mapeamento p/ agente
+    // 'human' acionava o rodízio e o vendedor recebia "lead quente (score 0)".
+    // Fora de perfil NUNCA aciona vendedor; fica registrado na conversa e no log.
+    const isHumanRequest = route.agent === 'human' && route.intent !== 'wrong_person';
+    if (route.agent === 'human' && route.intent === 'wrong_person') {
+      this.logger.log(
+        `Handoff suprimido: intent=wrong_person (spam/fora de perfil) ` +
+          `phone=${conv.phone} conv=${input.conversationId} score=${route.leadScore} — nenhum vendedor notificado`,
+      );
+    }
+    if (isHot || isHumanRequest) {
       if (isHot) {
         await this.opportunities
           .createFromLead(tenantId, {
@@ -600,6 +627,7 @@ export class ConversationAgentService {
         contactPhone: conv.phone,
         leadScore: route.leadScore,
         summary: input.message.slice(0, 120),
+        kind: isHot ? 'hot_lead' : 'human_request',
       });
       await this.notifications.create(tenantId, {
         type: isHot ? 'hot_lead' : 'info',
@@ -695,12 +723,21 @@ export class ConversationAgentService {
     const isHot =
       route.agent === 'sales' &&
       (route.leadScore >= HOT_LEAD_SCORE || route.intent === 'meeting_request');
-    if (isHot || route.agent === 'human') {
+    // Mesmo guard anti-spam do handle(): wrong_person nunca aciona vendedor.
+    const isHumanRequest = route.agent === 'human' && route.intent !== 'wrong_person';
+    if (route.agent === 'human' && route.intent === 'wrong_person') {
+      this.logger.log(
+        `escalateOnly: handoff suprimido (intent=wrong_person, spam/fora de perfil) ` +
+          `phone=${conv.phone} conv=${input.conversationId} — nenhum vendedor notificado`,
+      );
+    }
+    if (isHot || isHumanRequest) {
       handoff = await this.sellers.handoff(tenantId, {
         conversationId: input.conversationId,
         contactPhone: conv.phone,
         leadScore: route.leadScore,
         summary: input.message.slice(0, 120),
+        kind: isHot ? 'hot_lead' : 'human_request',
       });
       await this.notifications.create(tenantId, {
         type: isHot ? 'hot_lead' : 'info',

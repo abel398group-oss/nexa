@@ -183,6 +183,83 @@ describe('ConversationAgentService.handle()', () => {
     });
   });
 
+  // ── guard anti-spam (incidente 2026-07-20: promo de marmita → "lead quente score 0") ──
+
+  describe('wrong_person (spam/fora de perfil) — nunca aciona vendedor', () => {
+    it('handle(): NÃO chama sellers.handoff nem cria notificação de lead', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'human', intent: 'wrong_person', leadScore: 0 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Promoção especial! R$9,99 por marmita!', conversationId: 'conv1' });
+
+      expect(mockSellers.handoff).not.toHaveBeenCalled();
+      expect(mockNotifications.create).not.toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ type: 'hot_lead' }),
+      );
+    });
+
+    it('handle(): human_needed continua escalando, com kind=human_request', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'human', intent: 'human_needed', leadScore: 0 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero falar com um atendente', conversationId: 'conv1' });
+
+      expect(mockSellers.handoff).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ kind: 'human_request' }),
+      );
+    });
+
+    it('handle(): lead quente de vendas escala com kind=hot_lead', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 85 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero contratar o HiperTMS', conversationId: 'conv1' });
+
+      expect(mockSellers.handoff).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ kind: 'hot_lead', leadScore: 85 }),
+      );
+    });
+
+    it('escalateOnly(): wrong_person também não aciona vendedor (IA off)', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'human', intent: 'wrong_person', leadScore: 0 }),
+      );
+
+      const svc = makeService();
+      const res = await svc.escalateOnly('t1', { message: 'Promoção imperdível!', conversationId: 'conv1' });
+
+      expect(mockSellers.handoff).not.toHaveBeenCalled();
+      expect(res.handoff).toBeUndefined();
+    });
+
+    it('autonomia ON + wrong_person → NÃO auto-envia nada (nem aceno seguro)', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'human', intent: 'wrong_person', leadScore: 0 }),
+      );
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Promoção especial só hoje!', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.draft).toBe('');
+      expect(mockConversations.addMessage).not.toHaveBeenCalledWith(
+        't1',
+        'conv1',
+        expect.objectContaining({ direction: 'outbound' }),
+      );
+    });
+  });
+
   // ── gate de confiança ───────────────────────────────────────────────────────
 
   describe('gate de confiança', () => {

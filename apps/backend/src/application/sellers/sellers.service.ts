@@ -141,10 +141,21 @@ export class SellersService {
   }
 
   // Atribui a conversa a um vendedor e o notifica no WhatsApp. Dedup por conversa.
+  // `kind` (2026-07-20, incidente do spam de marmita): 'hot_lead' = lead de vendas
+  // com score alto (template 🔥 com score); 'human_request' = cliente pediu
+  // atendente (template 🙋 SEM score — "lead quente score 0" era mentira do
+  // template único). Default 'hot_lead' por retrocompat com chamadores antigos.
   async handoff(
     tenantId: string,
-    input: { conversationId: string; contactPhone: string; leadScore: number; summary?: string },
+    input: {
+      conversationId: string;
+      contactPhone: string;
+      leadScore: number;
+      summary?: string;
+      kind?: 'hot_lead' | 'human_request';
+    },
   ) {
+    const kind = input.kind ?? 'hot_lead';
     // já notificado? → lead re-engajou: avisa o mesmo vendedor sem mudar atribuição
     const existing = await this.prisma.sellerNotification.findUnique({
       where: { conversationId: input.conversationId },
@@ -161,10 +172,11 @@ export class SellersService {
           return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
         }
         const msg =
-          `👋 *Lead voltou!* (score ${input.leadScore})\n` +
+          `👋 *${kind === 'human_request' ? 'Cliente voltou!' : 'Lead voltou!'}*` +
+          `${kind === 'hot_lead' ? ` (score ${input.leadScore})` : ''}\n` +
           `Cliente: ${input.contactPhone}\n` +
           (input.summary ? `Resumo: ${input.summary}\n` : '') +
-          `Este lead já é seu — ele enviou uma nova mensagem.\n` +
+          `Este atendimento já é seu — chegou uma nova mensagem.\n` +
           this.attendLine(input.conversationId);
         const sent = await this.waha.sendText(seller.phone, msg);
         this.logger.log(`Re-engagement → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
@@ -210,7 +222,9 @@ export class SellersService {
       return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
     }
     const msg =
-      `🔥 *Novo lead quente!* (score ${input.leadScore})\n` +
+      (kind === 'human_request'
+        ? `🙋 *Cliente pediu atendimento*\n`
+        : `🔥 *Novo lead quente!* (score ${input.leadScore})\n`) +
       `Cliente: ${input.contactPhone}\n` +
       (input.summary ? `Resumo: ${input.summary}\n` : '') +
       `Atendimento atribuído a você.\n` +
