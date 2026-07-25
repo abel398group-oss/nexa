@@ -42,6 +42,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Prisma client PRIMEIRO: specs que importam PrismaService (ex.:
+      # dev-watch.service.spec) precisam do client gerado — sem isso o teste
+      # quebra com "Cannot find module '.prisma/client/default'" (CI 2026-07-25).
+      - name: Generate Prisma client
+        run: pnpm --filter backend exec prisma generate
+        env:
+          DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+
       - name: Lint (backend)
         run: pnpm lint
 
@@ -53,11 +61,6 @@ jobs:
 
       - name: Frontend tests
         run: pnpm --filter frontend test
-
-      - name: Generate Prisma client
-        run: pnpm --filter backend exec prisma generate
-        env:
-          DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
 
       - name: Build backend
         run: pnpm --filter backend build
