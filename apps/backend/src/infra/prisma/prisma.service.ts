@@ -25,6 +25,8 @@ function buildDatabaseUrl(): string {
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('PrismaService');
+  /** Contador acumulado de queries lentas (>SLOW_QUERY_MS). Lido pelo DevWatchService. */
+  static slowQueryCount = 0;
 
   constructor() {
     super({
@@ -35,6 +37,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any).$on('query', (e: { query: string; duration: number }) => {
       if (e.duration >= SLOW_QUERY_MS) {
+        PrismaService.slowQueryCount++;
         this.logger.warn(`[slow-query] ${e.duration}ms — ${e.query.slice(0, 200)}`);
       }
     });

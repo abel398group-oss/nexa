@@ -186,6 +186,9 @@ function escapeHtml(str: string): string {
 @Injectable()
 export class ConsolidationService {
   private readonly logger = new Logger('ConsolidationService');
+  /** Último tick do scheduler de digest (a cada 5 min). Se parar, os alertas
+   *  morrem em silêncio — o DevWatchService vigia a defasagem. */
+  static lastTickAt: Date | null = null;
 
   // Dedup de envio: chave → `tenantId` (legado) ou `tenantId:sector` (per-sector)
   // Valor → slot numérico único para a janela de 5 min (evita reenvio no mesmo slot)
@@ -208,6 +211,7 @@ export class ConsolidationService {
 
   @Interval(5 * 60 * 1000)
   async runConsolidation(): Promise<void> {
+    ConsolidationService.lastTickAt = new Date(); // heartbeat do scheduler (DevWatch)
     // Multi-instance guard: only one replica runs the consolidation at a time.
     const release = await this.lock.acquire('lock:consolidation:run', 240);
     if (!release) return;

@@ -45,7 +45,7 @@ export class SellersService {
             name: dto.name,
             role: 'vendedor',
             sellerId: seller.id,
-            permissions: ['dashboard', 'inbox', 'contacts'], // vendedor (acesso fixo): Painel + Inbox de Vendas (carteira) + Contatos
+            permissions: ['dashboard', 'inbox', 'contacts', 'opportunities'], // acesso fixo do vendedor; opportunities com escopo "so os meus" no controller (F6+)
           },
         });
       }
@@ -95,7 +95,7 @@ export class SellersService {
               name: dto.name ?? seller?.name ?? 'Vendedor',
               role: 'vendedor',
               sellerId: id,
-              permissions: ['dashboard', 'inbox', 'contacts'],
+              permissions: ['dashboard', 'inbox', 'contacts', 'opportunities'], // F6+: vendedor ve SEUS leads (escopo no controller)
             },
           });
         } else if (dto.email && !dto.password) {

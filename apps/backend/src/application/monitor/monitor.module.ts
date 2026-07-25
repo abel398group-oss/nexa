@@ -7,6 +7,7 @@ import { MonitorDispatchService } from './monitor-dispatch.service';
 import { WahaNotificationChannel } from './waha-notification-channel';
 import { WhatsAppCloudChannel } from './whatsapp-cloud-channel';
 import { ScaleWatchService } from './scale-watch.service';
+import { DevWatchService } from './dev-watch.service';
 import { AdminAlertService } from './admin-alert.service';
 import { MonitorController } from './monitor.controller';
 import { MonitorIngestController } from './monitor-ingest.controller';
@@ -27,6 +28,7 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
     MonitorNotificationService,
     MonitorDispatchService, // A4: fila com retry/rate-limit
     ScaleWatchService, // termômetro de gargalos (docs/infra/monitoramento-gargalos)
+    DevWatchService, // 4 falhas silenciosas → alerta de dev (WhatsApp + e-mail)
     AdminAlertService, // aviso admin nos 2 canais (WhatsApp + e-mail)
     WahaNotificationChannel,
     WhatsAppCloudChannel,

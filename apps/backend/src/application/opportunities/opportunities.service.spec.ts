@@ -65,4 +65,66 @@ describe('OpportunitiesService', () => {
     expect(prisma.opportunity.create).toHaveBeenCalledTimes(1);
     expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ tenantId: 't1', stage: 'new', conversationId: 'c2' });
   });
+
+  // ── F6+ seller-leads (2026-07-20): escopo por vendedor + paused/discarded ──
+
+  it('findAll com sellerScope: filtra assignedSellerId', async () => {
+    prisma.opportunity.findMany.mockResolvedValue([]); prisma.opportunity.count.mockResolvedValue(0);
+    await svc.findAll('t1', { limit: 50, offset: 0 } as any, undefined, 's1');
+    expect(prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', assignedSellerId: 's1' });
+  });
+
+  it('findAll com sellerScope __none__ (vendedor sem sellerId): nunca vaza', async () => {
+    prisma.opportunity.findMany.mockResolvedValue([]); prisma.opportunity.count.mockResolvedValue(0);
+    await svc.findAll('t1', { limit: 50, offset: 0 } as any, undefined, '__none__');
+    expect(prisma.opportunity.findMany.mock.calls[0][0].where.assignedSellerId).toBe('__never__');
+  });
+
+  it('findOne com sellerScope: lead de OUTRO vendedor -> 404 (query escopada)', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    await expect(svc.findOne('t1', 'o1', 's1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.opportunity.findFirst.mock.calls[0][0].where).toMatchObject({ id: 'o1', tenantId: 't1', assignedSellerId: 's1' });
+  });
+
+  it('moveStage paused: grava pausedUntil; discarded: grava discardReason', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', stageHistory: [] });
+    prisma.$transaction.mockResolvedValue([{ id: 'o1', stage: 'paused' }, {}]);
+    await svc.moveStage('t1', 'o1', 'paused', undefined, { pausedUntil: '2026-08-05' });
+    let data = prisma.opportunity.update.mock.calls[0][0].data;
+    expect(data.stage).toBe('paused');
+    expect(data.pausedUntil).toBeInstanceOf(Date);
+
+    prisma.opportunity.update.mockClear();
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o2', stage: 'new', stageHistory: [] });
+    prisma.$transaction.mockResolvedValue([{ id: 'o2', stage: 'discarded' }, {}]);
+    await svc.moveStage('t1', 'o2', 'discarded', undefined, { discardReason: 'sem_fit' });
+    data = prisma.opportunity.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ stage: 'discarded', discardReason: 'sem_fit', pausedUntil: null });
+  });
+
+  it('moveStage discarded com motivo invalido -> BadRequest', async () => {
+    await expect(
+      svc.moveStage('t1', 'o1', 'discarded', undefined, { discardReason: 'preguica' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('createFromLead: adota assignedSellerId quando oportunidade existe sem dono', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', conversationId: 'c1', assignedSellerId: null, assignedTo: null });
+    prisma.opportunity.update.mockResolvedValue({ id: 'o1', assignedSellerId: 's1' });
+    const out = await svc.createFromLead('t1', { conversationId: 'c1', assignedSellerId: 's1', assignedTo: 'João' });
+    expect(out).toMatchObject({ assignedSellerId: 's1' });
+    expect(prisma.opportunity.update.mock.calls[0][0].data).toMatchObject({ assignedSellerId: 's1', assignedTo: 'João' });
+  });
+
+  it('evolution: agrupa recebidos e ganhos por semana respeitando o escopo', async () => {
+    const now = new Date();
+    prisma.opportunity.findMany.mockResolvedValue([{ createdAt: now }, { createdAt: now }]);
+    prisma.opportunityStageHistory = { ...prisma.opportunityStageHistory, findMany: vi.fn().mockResolvedValue([{ changedAt: now }]) };
+    const out = await svc.evolution('t1', 4, 's1');
+    expect(out).toHaveLength(4);
+    const thisWeek = out[out.length - 1];
+    expect(thisWeek.received).toBe(2);
+    expect(thisWeek.won).toBe(1);
+    expect(prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', assignedSellerId: 's1' });
+  });
 });

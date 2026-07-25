@@ -38,7 +38,8 @@ export interface HandleResult {
   autonomyEnabled: boolean;
   autoSent: boolean;
   blockedReason?: string;
-  handoff?: { assigned: boolean; sellerName?: string; reason?: string };
+  // F6+ seller-leads: sellerId exposto p/ vincular a oportunidade ao dono real
+  handoff?: { assigned: boolean; sellerId?: string; sellerName?: string; reason?: string };
 }
 
 // MON-009: p95 > este threshold gera log warn para detectar degradação da Lia.
@@ -610,6 +611,15 @@ export class ConversationAgentService {
       );
     }
     if (isHot || isHumanRequest) {
+      // F6+ seller-leads: handoff ANTES de criar a oportunidade — o sellerId do
+      // rodizio vira o dono real (assignedSellerId) do lead no funil.
+      handoff = await this.sellers.handoff(tenantId, {
+        conversationId: input.conversationId ?? '',
+        contactPhone: conv.phone,
+        leadScore: route.leadScore,
+        summary: input.message.slice(0, 120),
+        kind: isHot ? 'hot_lead' : 'human_request',
+      });
       if (isHot) {
         await this.opportunities
           .createFromLead(tenantId, {
@@ -619,16 +629,11 @@ export class ConversationAgentService {
             interestScore: route.leadScore,
             intent: route.intent,
             summary: input.message.slice(0, 120),
+            assignedSellerId: handoff?.sellerId,
+            assignedTo: handoff?.sellerName,
           })
           .catch(() => null);
       }
-      handoff = await this.sellers.handoff(tenantId, {
-        conversationId: input.conversationId ?? '',
-        contactPhone: conv.phone,
-        leadScore: route.leadScore,
-        summary: input.message.slice(0, 120),
-        kind: isHot ? 'hot_lead' : 'human_request',
-      });
       await this.notifications.create(tenantId, {
         type: isHot ? 'hot_lead' : 'info',
         title: isHot ? `🔥 Lead quente (score ${route.leadScore})` : '🙋 Lead pediu atendente',

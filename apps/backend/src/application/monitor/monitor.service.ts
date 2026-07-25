@@ -162,6 +162,8 @@ function sanitizeSectorConfig(
 export class MonitorService implements OnModuleInit {
   private readonly logger = new Logger('MonitorService');
   private static readonly DEGRADATION_THRESHOLD = 10;
+  /** Último instante em que a reconciliação detectou push TMS→Nexa degradado. Lido pelo DevWatchService. */
+  static lastDegradedAt: Date | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -268,6 +270,7 @@ export class MonitorService implements OnModuleInit {
         totalNotified += notified;
 
         if (newEventsCount > MonitorService.DEGRADATION_THRESHOLD) {
+          MonitorService.lastDegradedAt = new Date();
           this.logger.warn(
             `Monitor: push TMS→Nexa possivelmente degradado — ` +
             `${newEventsCount} eventos novos descobertos pela reconciliação (tenant=${tenantId})`,

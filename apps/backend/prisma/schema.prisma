@@ -470,6 +470,7 @@ model Seller {
 
   conversations AiConversation[]
   notifications SellerNotification[]
+  opportunities Opportunity[] // F6+ (seller-leads): leads atribuidos a este vendedor
 
   @@index([tenantId])
   @@map("sellers")
@@ -722,12 +723,17 @@ model Opportunity {
   phone          String?
   name           String?
   company        String?
-  stage          String   @default("new") // new | qualified | proposal | won | lost
+  stage          String   @default("new") // new | qualified | proposal | paused | won | lost | discarded
   interestScore  Int      @default(0) @map("interest_score")
   intent         String?
   summary        String?
   value          Decimal? @db.Decimal(12, 2) // valor estimado (opcional)
-  assignedTo     String?  @map("assigned_to") // sellerId/nome do vendedor
+  assignedTo     String?  @map("assigned_to") // legado: nome livre (exibicao) — fonte de verdade e assignedSellerId
+  // F6+ (2026-07-20, seller-leads): dono real do lead (FK) — escopo do login vendedor.
+  assignedSellerId String? @map("assigned_seller_id")
+  assignedSeller Seller?  @relation(fields: [assignedSellerId], references: [id], onDelete: SetNull)
+  pausedUntil    DateTime? @map("paused_until")   // stage=paused: quando retomar
+  discardReason  String?   @map("discard_reason") // stage=discarded: sem_fit | sem_resposta | concorrente | outro
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -736,6 +742,7 @@ model Opportunity {
   @@index([tenantId])
   @@index([tenantId, stage])
   @@index([tenantId, conversationId])
+  @@index([tenantId, assignedSellerId])
   @@map("opportunities")
 }
 

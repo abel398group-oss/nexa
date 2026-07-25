@@ -8,21 +8,27 @@
  *   - Mover estágio inline (PATCH /:id/stage)
  *   - Excluir com confirmação (DELETE /:id)
  */
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
+import { useAuth } from '@/app/providers/AuthContext';
 import {
   Button, Input, Select, Modal, Label, Textarea, Icon, KpiCard,
 } from '@/shared/ui';
 import { displayPhone } from '@/shared/lib/phone';
 import { StandardListPage } from '@/components/shared/StandardListPage';
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
+import type { EvolutionPoint } from './OpportunitiesEvolutionChart';
+
+// F6+: recharts em chunk async (mesmo padrão do DashboardActivityChart)
+const EvolutionChart = lazy(() => import('./OpportunitiesEvolutionChart'));
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
-type OppStage = 'new' | 'qualified' | 'proposal' | 'won' | 'lost';
+// F6+ seller-leads: + paused (pausedUntil) e discarded (discardReason)
+type OppStage = 'new' | 'qualified' | 'proposal' | 'paused' | 'won' | 'lost' | 'discarded';
 
 interface Opportunity {
   id: string;
@@ -49,8 +55,10 @@ const STAGES: { key: OppStage; label: string }[] = [
   { key: 'new',       label: 'Novo'        },
   { key: 'qualified', label: 'Qualificado' },
   { key: 'proposal',  label: 'Proposta'    },
+  { key: 'paused',    label: 'Pausado'     },
   { key: 'won',       label: 'Ganho'       },
   { key: 'lost',      label: 'Perdido'     },
+  { key: 'discarded', label: 'Descartado'  },
 ];
 
 const PAGE = 30;
@@ -81,6 +89,12 @@ async function listOpportunities(params: { search?: string; stage?: string; limi
 async function getOpportunitiesSummary() {
   const r = await api.get('/opportunities/summary');
   return r.data as OppSummaryRow[];
+}
+
+// F6+: evolução semanal recebidos × fechados (escopo do usuário vem do JWT no backend)
+async function getOpportunitiesEvolution(weeks = 8) {
+  const r = await api.get(`/opportunities/evolution?weeks=${weeks}`);
+  return r.data as EvolutionPoint[];
 }
 
 // ── Form ───────────────────────────────────────────────────────────────────────
@@ -199,6 +213,10 @@ export function OpportunitiesPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
+  // F6+ seller-leads: vendedor vê a página como "Meus leads" (o backend já
+  // restringe o escopo pelo JWT — aqui é só apresentação).
+  const { user } = useAuth();
+  const isSeller = user?.role === 'vendedor';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -229,6 +247,12 @@ export function OpportunitiesPage() {
     queryFn: getOpportunitiesSummary,
   });
 
+  // F6+: evolução semanal (gráfico)
+  const evolutionQ = useQuery({
+    queryKey: ['opportunities-evolution'],
+    queryFn: () => getOpportunitiesEvolution(8),
+  });
+
   const listQ = useQuery({
     queryKey: ['opportunities', debouncedSearch, stageFilter, page],
     queryFn: () => listOpportunities({
@@ -243,6 +267,7 @@ export function OpportunitiesPage() {
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['opportunities'] });
     qc.invalidateQueries({ queryKey: ['opportunities-summary'] });
+    qc.invalidateQueries({ queryKey: ['opportunities-evolution'] });
   }, [qc]);
 
   // ── Handlers ──
@@ -344,8 +369,8 @@ export function OpportunitiesPage() {
   return (
     <>
       <StandardListPage
-        title="Oportunidades"
-        breadcrumb={[{ label: 'Vendas' }, { label: 'Oportunidades' }]}
+        title={isSeller ? 'Meus leads' : 'Oportunidades'}
+        breadcrumb={[{ label: 'Vendas' }, { label: isSeller ? 'Meus leads' : 'Oportunidades' }]}
         isLoading={listQ.isLoading && !listQ.isPlaceholderData}
         hasData={items.length > 0}
         error={listQ.error}
@@ -370,21 +395,33 @@ export function OpportunitiesPage() {
           </Button>
         }
         topContent={
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <KpiCard label="Total" value={String(totalCount)} sub={fmtBrl(totalValue)} tone="muted" />
-            {STAGES.map((s) => {
-              const row = summaryByStage[s.key];
-              return (
-                <KpiCard
-                  key={s.key}
-                  label={s.label}
-                  value={String(row?.count ?? 0)}
-                  sub={fmtBrl(row?.value)}
-                  tone={s.key === 'won' ? 'pos' : s.key === 'lost' ? 'neg' : 'muted'}
-                />
-              );
-            })}
-          </div>
+          <>
+            <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <KpiCard label="Total" value={String(totalCount)} sub={fmtBrl(totalValue)} tone="muted" />
+              {STAGES.map((s) => {
+                const row = summaryByStage[s.key];
+                return (
+                  <KpiCard
+                    key={s.key}
+                    label={s.label}
+                    value={String(row?.count ?? 0)}
+                    sub={fmtBrl(row?.value)}
+                    tone={s.key === 'won' ? 'pos' : s.key === 'lost' || s.key === 'discarded' ? 'neg' : 'muted'}
+                  />
+                );
+              })}
+            </div>
+            {(evolutionQ.data?.some((p) => p.received > 0 || p.won > 0) ?? false) && (
+              <div className="mb-5 rounded-xl border border-base-300 bg-base-100 p-4">
+                <p className="mb-2 text-sm font-medium text-base-content/70">
+                  Evolução semanal — recebidos × fechados
+                </p>
+                <Suspense fallback={<div className="h-[200px]" />}>
+                  <EvolutionChart series={evolutionQ.data ?? []} />
+                </Suspense>
+              </div>
+            )}
+          </>
         }
         pagination={{ page, pageCount, onPageChange: setPage }}
       >
