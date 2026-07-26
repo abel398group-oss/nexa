@@ -3131,4 +3131,354 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Não é preciso abrir um novo chamado manualmente — o sistema decide automaticamente.',
     tags: ['chamado encerrado', 'reabrir chamado', 'responder chamado fechado', 'acompanhamento', 'follow-up chamado', 'widget suporte', 'chamado fechado'],
   },
+
+  // ══════════════════════════════════════════════════════════
+  // FISCAL — CIOT (2026-07-22, escrito do código: fiscal-ciot)
+  // Só o que ESTÁ ESTÁVEL: registro manual + cancelar + encerrar.
+  // Geração automática via IPEF é esqueleto — ver
+  // docs/ai/kb-suporte-pendencias-tms.md.
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-ciot',
+    category: 'suporte',
+    title: 'CIOT: quando é obrigatório emitir',
+    content:
+      'O CIOT (Código Identificador da Operação de Transporte) é exigido pela ANTT ao CONTRATAR transportador autônomo.\n' +
+      'Regra aplicada pelo HiperTMS:\n' +
+      '• TAC (transportador autônomo de carga) → CIOT OBRIGATÓRIO.\n' +
+      '• TAC-equiparado → CIOT OBRIGATÓRIO.\n' +
+      '• Frota própria (veículo e motorista da empresa) → NÃO exige CIOT.\n' +
+      '• ETC / CTC (empresa ou cooperativa de transporte) → não exigido pelo sistema por padrão.\n' +
+      'O tipo do contratado é o que determina a obrigatoriedade — confira o cadastro do contratado antes de fechar a viagem.',
+    tags: ['ciot', 'obrigatorio', 'antt', 'tac', 'autonomo', 'agregado', 'frota propria', 'etc', 'quando emitir ciot'],
+  },
+  {
+    topic: 'operacao-ciot',
+    category: 'suporte',
+    title: 'Como registrar o CIOT no HiperTMS',
+    content:
+      'Hoje o número do CIOT é gerado na sua IPEF credenciada (instituição de pagamento eletrônico de frete) e REGISTRADO no HiperTMS.\n' +
+      'Passo a passo:\n' +
+      '1. Gere o CIOT na sua IPEF, como já faz normalmente.\n' +
+      '2. No HiperTMS, abra a viagem/embarque correspondente.\n' +
+      '3. Registre o CIOT informando o NÚMERO gerado na IPEF (campo obrigatório — sem o número o registro é recusado).\n' +
+      '4. O registro fica vinculado à viagem, com histórico e status.\n' +
+      'O número informado é a fonte de verdade: confira antes de salvar, pois ele é usado nos documentos e na fiscalização.',
+    tags: ['registrar ciot', 'numero ciot', 'ipef', 'como lancar ciot', 'ciot manual', 'vincular ciot viagem'],
+  },
+  {
+    topic: 'operacao-ciot',
+    category: 'suporte',
+    title: 'Erro ao registrar CIOT — número não informado ou valor do frete',
+    content:
+      'Mensagens comuns e o que fazer:\n' +
+      '• "Informe o número do CIOT gerado na IPEF para registro manual" — o campo do número veio vazio. Copie o número exatamente como a IPEF gerou (só dígitos; o sistema descarta pontuação).\n' +
+      '• "Informe o valor do frete (valorFrete > 0)" — a operação exige o valor do frete maior que zero. Preencha o valor do frete da viagem antes de registrar.\n' +
+      'Se o número foi digitado e mesmo assim recusa, verifique se não foi colado com espaços ou letras.',
+    tags: ['erro ciot', 'ciot nao registra', 'numero ciot obrigatorio', 'valor do frete ciot', 'ciot recusado'],
+  },
+  {
+    topic: 'operacao-ciot',
+    category: 'suporte',
+    title: 'Cancelar ou encerrar um CIOT',
+    content:
+      'Ambas as operações partem do registro do CIOT já existente na viagem:\n' +
+      '• CANCELAR: exige informar o MOTIVO do cancelamento. Use quando a operação de transporte não vai acontecer.\n' +
+      '• ENCERRAR: encerra o CIOT ao fim da operação executada.\n' +
+      'Em ambos os casos o registro precisa ter número de CIOT — um registro sem número não pode ser cancelado nem encerrado ("Registro sem número de CIOT").\n' +
+      'Importante: cancelar/encerrar no HiperTMS registra a operação no sistema; confirme também a situação na sua IPEF.',
+    tags: ['cancelar ciot', 'encerrar ciot', 'motivo cancelamento ciot', 'ciot sem numero', 'baixar ciot'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FISCAL — GNRE (2026-07-22, do código: fiscal-gnre)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'Quando o sistema aponta GNRE a recolher',
+    content:
+      'A GNRE é sinalizada quando o CT-e autorizado gera ICMS devido a uma UF na qual a transportadora NÃO é inscrita.\n' +
+      'As três condições, todas necessárias:\n' +
+      '1. A prestação é INTERESTADUAL (UF de origem diferente da UF de destino).\n' +
+      '2. Há ICMS destacado no próprio CT-e (valor de ICMS maior que zero).\n' +
+      '3. A UF favorecida (destino) NÃO está na lista de UFs em que a empresa tem inscrição estadual.\n' +
+      'Se a empresa é inscrita na UF de destino, ela recolhe por apuração normal e o sistema NÃO aponta GNRE.\n' +
+      'Mantenha a lista de inscrições estaduais da empresa atualizada no cadastro — é ela que evita apontamento indevido.',
+    tags: ['gnre', 'quando gnre', 'icms interestadual', 'inscricao estadual', 'uf favorecida', 'icms outra uf', 'gnre nao aparece'],
+  },
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'GNRE: classificação do tributo e código de receita',
+    content:
+      'O HiperTMS SINALIZA a obrigação e mostra os valores apurados no documento, mas NÃO decide sozinho o enquadramento do tributo.\n' +
+      'A classificação (ICMS próprio, ICMS-ST, DIFAL, FCP) e o código de receita são decisão tributária da empresa/contador, configurada na regra de ICMS do sistema.\n' +
+      'Se a guia saiu com enquadramento errado, o ajuste é na regra tributária — não no documento emitido.\n' +
+      'Em caso de dúvida sobre qual enquadramento usar, consulte o contador responsável: o sistema é conservador de propósito e não presume apuração.',
+    tags: ['codigo de receita gnre', 'icms st', 'difal', 'fcp', 'enquadramento gnre', 'classificacao tributo', 'regra icms'],
+  },
+  {
+    topic: 'operacao-gnre',
+    category: 'suporte',
+    title: 'Erros na emissão/consulta da GNRE',
+    content:
+      'Mensagens comuns:\n' +
+      '• "Nenhuma guia informada para emissão de GNRE" — nenhuma guia foi selecionada. Selecione as guias antes de transmitir.\n' +
+      '• "Registro de GNRE não encontrado" — o registro consultado não existe mais ou pertence a outra empresa.\n' +
+      '• "Registro sem recibo de lote para consulta" — a transmissão ainda não retornou recibo. A consulta do resultado só é possível DEPOIS que o lote foi transmitido e recebeu recibo. Aguarde e consulte de novo.\n' +
+      'O fluxo é: gerar guia → transmitir lote → receber recibo → consultar resultado.',
+    tags: ['erro gnre', 'guia nao emitida', 'recibo de lote', 'consultar gnre', 'lote gnre', 'gnre pendente'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FISCAL — NFS-e (2026-07-22, do código: fiscal-nfse)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'operacao-nfse',
+    category: 'suporte',
+    title: 'NFS-e: como o HiperTMS se conecta à prefeitura',
+    content:
+      'A emissão de NFS-e é feita por um provedor integrado (a integração ativa do HiperTMS é com o Focus NFe), que faz a ponte com a prefeitura do município.\n' +
+      'Operações disponíveis: emitir, consultar situação e cancelar a nota.\n' +
+      'Para funcionar é necessário que as credenciais do provedor estejam configuradas para a empresa e que o município seja atendido pela integração.\n' +
+      'Se aparecer erro de "integração não implementada para o provedor", significa que a empresa está apontada para um provedor sem integração ativa — ajuste a configuração fiscal da empresa.',
+    tags: ['nfse', 'nota fiscal servico', 'prefeitura', 'focus nfe', 'provedor nfse', 'emitir nfse', 'integracao nfse'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // PISO ANTT (2026-07-22, do código: antt-floor + public-calculator)
+  // Resolução 2.501/2025 — CONTRATAÇÃO DE TERCEIROS (não é venda).
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'antt-piso',
+    category: 'suporte',
+    title: 'Piso mínimo da ANTT: o que é e onde o sistema usa',
+    content:
+      'O piso da ANTT (Resolução 2.501/2025) é o valor MÍNIMO legal para contratar transporte rodoviário de carga de TERCEIROS.\n' +
+      'Onde o HiperTMS usa: no módulo de VIAGEM, quando você contrata um transportador terceiro — o sistema compara o frete que você vai pagar contra o piso legal.\n' +
+      'Importante: piso ANTT é COMPRA (o que você paga ao terceiro). Não tem relação com a precificação de VENDA (o que você cobra do cliente) — são módulos separados, com regras diferentes.\n' +
+      'O sistema ALERTA quando o valor está abaixo do piso, mas NÃO bloqueia a operação — a decisão é sua, e fica registrado um evento de compliance.',
+    tags: ['piso antt', 'antt', 'resolucao 2501', 'frete minimo', 'piso minimo', 'contratar terceiro', 'compliance antt'],
+  },
+  {
+    topic: 'antt-piso',
+    category: 'suporte',
+    title: 'Como o piso ANTT é calculado',
+    content:
+      'A fórmula legal usada pelo sistema:\n' +
+      'PISO = (distância em km × CCD) + CC\n' +
+      '• CCD = Coeficiente de Custo de Deslocamento (por km).\n' +
+      '• CC = Coeficiente de Carga e Descarga (valor fixo da operação).\n' +
+      '• Retorno vazio: quando marcado, entra no cálculo e aumenta o piso.\n' +
+      'Os coeficientes vêm da tabela oficial da ANTT vigente, por tipo de carga e número de eixos do veículo.\n' +
+      'A tabela sujeita a piso hoje é a Tabela A ("carga lotação").\n' +
+      'O resultado mostra: piso calculado, valor pago, diferença (delta) e se está abaixo do piso.',
+    tags: ['calculo piso antt', 'ccd', 'cc', 'formula piso', 'coeficiente antt', 'retorno vazio', 'tabela a', 'carga lotacao'],
+  },
+  {
+    topic: 'antt-piso',
+    category: 'suporte',
+    title: 'Piso ANTT não foi avaliado — o que faltou',
+    content:
+      'Quando o sistema não consegue avaliar o piso, ele informa o motivo em vez de errar o cálculo. Motivos e solução:\n' +
+      '• "Sem tipo de veículo (eixos) para o piso" — a viagem não tem tipo de veículo definido. O número de eixos é o que determina o coeficiente. Informe o veículo/tipo.\n' +
+      '• "Sem tipo de carga para o piso" — falta o tipo de carga (granel, frigorificada, geral etc.), que muda a tabela de coeficientes.\n' +
+      '• "Sem distância para o piso" — a distância em km está zerada ou ausente. Informe a distância da rota.\n' +
+      'Preenchidos os três (veículo, tipo de carga e distância), a avaliação roda automaticamente.',
+    tags: ['piso nao calculado', 'piso antt nao aparece', 'sem tipo de veiculo', 'sem distancia', 'sem tipo de carga', 'eixos'],
+  },
+  {
+    topic: 'antt-piso',
+    category: 'suporte',
+    title: 'Frete abaixo do piso ANTT — o que acontece',
+    content:
+      'Se o valor pago ao terceiro é MENOR que o piso legal, o sistema sinaliza "abaixo do piso" e mostra a diferença (delta negativo).\n' +
+      'O que o sistema faz: ALERTA e registra um evento de compliance com os valores apurados.\n' +
+      'O que o sistema NÃO faz: bloquear a viagem ou alterar o valor automaticamente.\n' +
+      'Recomendação: revise o valor negociado ou registre a justificativa. O histórico fica disponível para auditoria — o piso é obrigação legal e a fiscalização pode cobrar.',
+    tags: ['abaixo do piso', 'frete menor que piso', 'delta negativo', 'alerta antt', 'multa antt', 'fiscalizacao'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // PRECIFICAÇÃO — motor tarifário (2026-07-22, do código:
+  // pricing-tariff-engine). Erros reais do sistema.
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Erro: veículo não configurado na tabela (FCL)',
+    content:
+      'Mensagem: "Veículo X não configurado para tabela Y, cargo Z".\n' +
+      'Causa: na modalidade FCL (carga fechada), o preço vem de uma linha da tabela que combina VEÍCULO + TIPO DE CARGA. Se essa combinação não existe (ou está inativa), não há preço.\n' +
+      'Como resolver:\n' +
+      '1. Abra a tabela de preços indicada na mensagem.\n' +
+      '2. Verifique se existe linha para aquele tipo de veículo E aquele tipo de carga.\n' +
+      '3. Se existir mas estiver inativa, reative.\n' +
+      '4. Se não existir, cadastre a linha com CC, CCD e frete mínimo.\n' +
+      'Erros parecidos: "vehicle_type_id é obrigatório para modalidade FCL" (falta escolher o veículo na cotação) e "Veículo não encontrado/mapeado no catálogo" (o tipo de veículo não está mapeado no catálogo do sistema).',
+    tags: ['veiculo nao configurado', 'fcl', 'tabela fcl', 'linha da tabela', 'tipo de carga', 'sem preco', 'cotacao sem preco'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Erro: nenhuma tabela base configurada',
+    content:
+      'Mensagem: "Nenhuma tabela base (geral) configurada para [modalidade]. Defina uma tabela como base no hub de tabelas."\n' +
+      'Causa: o sistema procura o preço nesta ordem — tabela do CONTRATO do cliente → tabela BASE (geral) da empresa. Se o cliente não tem tabela no contrato e não existe tabela base, não há de onde tirar preço.\n' +
+      'Como resolver: no hub de tabelas de preço, marque uma tabela como BASE para a modalidade (FCL e LCL têm bases separadas).\n' +
+      'Dica: a tabela base é a rede de segurança para todo cliente sem tabela específica — mantenha sempre uma ativa por modalidade.',
+    tags: ['tabela base', 'sem tabela', 'hub de tabelas', 'tabela geral', 'contrato sem tabela', 'modalidade'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'Erro: tabela LCL sem preço para a faixa de distância',
+    content:
+      'Mensagem: "Tabela LCL sem preço para a faixa de distância [X]km. Reimporte a tabela ou edite as células."\n' +
+      'Causa: na modalidade LCL (carga fracionada), o preço vem de uma MATRIZ de faixa de peso × faixa de distância. A célula correspondente à distância da cotação está vazia.\n' +
+      'Como resolver:\n' +
+      '1. Abra a tabela LCL indicada.\n' +
+      '2. Localize a faixa de distância citada na mensagem.\n' +
+      '3. Preencha as células de franquia e excesso dessa faixa — ou reimporte a planilha completa da tabela.\n' +
+      'Erro relacionado: "weight é obrigatório para modalidade LCL" — a cotação LCL precisa do peso para escolher a faixa.',
+    tags: ['lcl', 'faixa de distancia', 'matriz de precos', 'celula vazia', 'reimportar tabela', 'franquia', 'excesso', 'peso obrigatorio'],
+  },
+  {
+    topic: 'precificacao-erros',
+    category: 'suporte',
+    title: 'De onde vem o preço de uma cotação (ordem de busca)',
+    content:
+      'Entender a ordem ajuda a achar por que um preço veio diferente do esperado:\n' +
+      '1. CONTRATO do tomador: se o cliente tem contrato ativo com tabelas definidas, essas têm prioridade.\n' +
+      '2. TABELA BASE (geral): usada quando o cliente não tem tabela própria.\n' +
+      'Depois de escolher a tabela, o preço sai da linha (FCL: veículo + tipo de carga) ou da matriz (LCL: peso × distância).\n' +
+      'Se o cliente "deveria" ter preço especial mas veio o geral, confira se o contrato está ATIVO e se as tabelas estão vinculadas nele.',
+    tags: ['de onde vem o preco', 'ordem de busca preco', 'contrato tabela', 'preco errado cotacao', 'tabela do cliente', 'prioridade tabela'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FROTA — PNEUS (2026-07-22, do código: fleet-tires)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-pneus',
+    category: 'suporte',
+    title: 'Cadastro de pneus e número de fogo',
+    content:
+      'Cada pneu é identificado pelo NÚMERO DE FOGO (marcação única gravada no pneu) — é o campo obrigatório do cadastro.\n' +
+      'Regras do sistema:\n' +
+      '• "Número de fogo é obrigatório" — não é possível cadastrar sem ele.\n' +
+      '• "Já existe um pneu com este número de fogo" — o número já está em uso por um pneu ATIVO. Confira se o pneu já foi cadastrado antes de criar outro.\n' +
+      'O número de fogo é o que permite rastrear vida útil, rodízios e custo por km do pneu ao longo do tempo.',
+    tags: ['pneu', 'numero de fogo', 'cadastrar pneu', 'pneu duplicado', 'ja existe pneu', 'rastreio pneu'],
+  },
+  {
+    topic: 'frota-pneus',
+    category: 'suporte',
+    title: 'Montar e desmontar pneu no veículo',
+    content:
+      'Ao instalar um pneu, o sistema valida:\n' +
+      '• "Posição inválida para este veículo" — a posição informada não existe na configuração de eixos daquele veículo. Confira o layout de posições do veículo.\n' +
+      '• "Este pneu já está montado. Desmonte-o antes." — o pneu está em outro veículo/posição. Faça a desmontagem primeiro.\n' +
+      '• "Já existe um pneu montado nesta posição." — a posição está ocupada. Desmonte o pneu atual antes de montar o novo.\n' +
+      '• "Hodômetro de instalação inválido" — informe o hodômetro do veículo no momento da instalação (usado para calcular a vida útil em km).\n' +
+      'Para EXCLUIR um pneu: "Não é possível remover: o pneu está montado. Desmonte-o primeiro."',
+    tags: ['montar pneu', 'desmontar pneu', 'posicao pneu', 'rodizio', 'hodometro instalacao', 'pneu montado', 'trocar pneu'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // FROTA — DIÁRIAS / ADIANTAMENTOS (fleet-driver-allowances)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-diarias',
+    category: 'suporte',
+    title: 'Diárias de motorista: fluxo e envio ao financeiro',
+    content:
+      'A diária (adiantamento de viagem do motorista) segue um fluxo com status: lançada → enviada ao financeiro → paga.\n' +
+      'Ponto de atenção — depois de ENVIADA ao financeiro, a diária TRAVA:\n' +
+      '• "Diária já enviada ao financeiro não pode ser editada"\n' +
+      '• "Diária já foi enviada para o financeiro" (ao tentar reenviar)\n' +
+      'Isso é proposital: o financeiro já recebeu o valor para pagamento e uma alteração criaria divergência.\n' +
+      'Se precisa corrigir uma diária já enviada, trate pelo financeiro (ajuste/estorno do lançamento) em vez de editar a diária.',
+    tags: ['diaria motorista', 'adiantamento', 'enviada ao financeiro', 'nao pode editar diaria', 'estorno diaria', 'pagamento motorista'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // CONTRATOS (commercial-contracts) — buraco coberto 2026-07-22
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'contratos-comerciais',
+    category: 'suporte',
+    title: 'Contrato comercial: para que serve e o que ele controla',
+    content:
+      'O contrato comercial vincula um CLIENTE (tomador) às condições negociadas com ele.\n' +
+      'O que o contrato define:\n' +
+      '• TABELAS DE PREÇO do cliente (FCL e/ou LCL) — têm prioridade sobre a tabela base geral.\n' +
+      '• TAXAS acordadas (por tipo de taxa; taxas personalizadas exigem nome).\n' +
+      '• REGRAS específicas da negociação.\n' +
+      'Reflexo direto na operação: cotações e documentos daquele cliente passam a usar o que está no contrato ATIVO. Se o cliente "deveria" ter preço diferenciado e não está saindo, o primeiro lugar para conferir é o contrato.',
+    tags: ['contrato comercial', 'contrato cliente', 'tabela do contrato', 'taxas contrato', 'condicoes comerciais', 'preco diferenciado'],
+  },
+  {
+    topic: 'contratos-comerciais',
+    category: 'suporte',
+    title: 'Erros ao cadastrar/editar contrato comercial',
+    content:
+      'Mensagens comuns e o que fazer:\n' +
+      '• "Já existe contrato com este número" — o número do contrato precisa ser único. Verifique se o contrato já foi cadastrado ou escolha outro número.\n' +
+      '• "Empresa não encontrada" — o cliente vinculado não existe (ou foi removido). Cadastre/confira a empresa no Diretório antes.\n' +
+      '• "Tipo de taxa desconhecido" — a taxa informada não existe na lista de tipos do sistema. Selecione um tipo válido.\n' +
+      '• "Taxa personalizada (OUTROS) exige um nome" — ao usar o tipo OUTROS, é obrigatório dar um nome à taxa, senão ninguém entende o que está sendo cobrado.\n' +
+      '• "Query obrigatória modality=FCL ou modality=LCL" — a consulta de tabelas do contrato precisa da modalidade.',
+    tags: ['erro contrato', 'contrato duplicado', 'numero do contrato', 'tipo de taxa', 'taxa personalizada', 'outros', 'modalidade contrato'],
+  },
+
+  // ══════════════════════════════════════════════════════════
+  // COMPRAS — PEDIDO DE COMPRA (2026-07-22, do código:
+  // procurement/purchase-order-transitions)
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'compras-pedidos',
+    category: 'suporte',
+    title: 'Fluxo do pedido de compra: status e caminhos permitidos',
+    content:
+      'O pedido de compra segue uma sequência controlada. Caminhos válidos:\n' +
+      '• SOLICITAÇÃO → aguardando aprovação, ou cancelado.\n' +
+      '• AGUARDANDO APROVAÇÃO → aprovado, rejeitado ou cancelado.\n' +
+      '• REJEITADO → volta para solicitação (para corrigir e reenviar) ou cancelado.\n' +
+      '• RASCUNHO → enviado ou cancelado.\n' +
+      '• APROVADO → enviado ao fornecedor ou cancelado.\n' +
+      '• ENVIADO → confirmado pelo fornecedor, recebido parcial, recebido ou cancelado.\n' +
+      '• CONFIRMADO → recebido parcial, recebido ou cancelado.\n' +
+      '• RECEBIDO PARCIAL → recebido (total), encerrado ou cancelado.\n' +
+      '• RECEBIDO → encerrado.\n' +
+      'ENCERRADO e CANCELADO são estados finais: não voltam atrás.\n' +
+      'Se o sistema recusa uma mudança de status, é porque o caminho não existe nessa lista — verifique o status atual do pedido.',
+    tags: ['pedido de compra', 'status pedido', 'fluxo compra', 'aprovacao pedido', 'rejeitado', 'recebido parcial', 'encerrar pedido', 'nao consigo mudar status'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Entrada de estoque por XML de NF-e: erros comuns',
+    content:
+      'A entrada de estoque a partir do XML da nota do fornecedor valida vários pontos:\n' +
+      '• "Somente documentos do tipo NF-e podem gerar entradas de estoque" — o XML enviado não é NF-e (pode ser CT-e ou outro documento).\n' +
+      '• "Não foi possível interpretar o XML como NF-e" — arquivo corrompido, incompleto ou em formato diferente do esperado.\n' +
+      '• "NF-e sem chave de acesso de 44 dígitos" — sem a chave o sistema não consegue evitar importação duplicada; o XML precisa conter a chave completa.\n' +
+      '• "Já existem movimentações de estoque vinculadas a esta NF-e (mesma chave de acesso)" — essa nota JÁ foi importada. É proteção contra duplicar estoque; confira as movimentações existentes antes de tentar de novo.\n' +
+      '• "NF-e sem itens (det/prod) utilizáveis no XML" — a nota não traz itens de produto que possam virar estoque.',
+    tags: ['importar xml', 'entrada de estoque', 'nfe fornecedor', 'xml nfe', 'chave de acesso', 'nota ja importada', 'estoque duplicado'],
+  },
+  {
+    topic: 'compras-estoque',
+    category: 'suporte',
+    title: 'Cadastro de produtos e movimentação de estoque',
+    content:
+      'Regras do estoque:\n' +
+      '• "Já existe produto com este código" — o código do produto é único por empresa. Confira se o item já está cadastrado antes de criar outro.\n' +
+      '• "Produto não encontrado" — o produto foi removido ou o código está errado.\n' +
+      '• "type/movementType inválido" — o tipo de movimentação precisa ser um dos valores aceitos pelo sistema (entrada, saída, ajuste etc.). Selecione pela lista em vez de digitar.\n' +
+      'Dica: entradas por XML de NF-e já criam a movimentação automaticamente — evite lançar a mesma entrada manualmente depois, para não duplicar o saldo.',
+    tags: ['cadastro produto', 'codigo produto duplicado', 'movimentacao estoque', 'tipo de movimentacao', 'saldo estoque', 'ajuste estoque'],
+  },
 ];
