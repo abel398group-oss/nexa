@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// NOTA (CI 2026-07-25): este spec importa PrismaService em cadeia, que estende
+// PrismaClient — por isso o workflow roda `prisma generate` ANTES dos testes
+// (ci.yml). Sem essa ordem, a suíte quebra com "Cannot find module
+// '.prisma/client/default'". Nenhum teste aqui toca no banco (Prisma mockado).
 import { DevWatchService } from './dev-watch.service';
 import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
