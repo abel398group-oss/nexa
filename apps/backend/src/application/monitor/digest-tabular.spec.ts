@@ -184,7 +184,7 @@ describe('actionVerbFor / ruleIdOf', () => {
 
   it('todo verbo do mapa é curto (cabe na linha de 30)', () => {
     for (const verb of Object.values(RULE_ACTION_VERBS)) {
-      expect(`   → ${verb}`.length).toBeLessThanOrEqual(BLOCK_WIDTH);
+      expect(`  → ${verb}`.length).toBeLessThanOrEqual(BLOCK_WIDTH);
     }
   });
 });
@@ -259,14 +259,20 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
     expect(lines[sobraIdx - 1]).toBe('─'.repeat(BLOCK_WIDTH));
   });
 
-  it('setor: itens numerados com verbo indentado; cap 3; overflow "+N no site" com régua', () => {
-    expect(lines).toContain('1. CT-e 4519 rejeitado');
-    expect(lines).toContain('   → reenviar');
-    expect(lines).toContain('2. CT-e 4512 sem retorno 5h');
-    expect(lines).toContain('   → verificar');
-    expect(lines).toContain('3. Certificado vence em 19d');
-    expect(lines).toContain('   → renovar');
-    expect(msg).not.toContain('4. ');
+  it('setor: itens com bullet "-" e verbo indentado; cap 3; overflow "+N no site" com régua', () => {
+    // Bullet em vez de número: títulos do TMS começam com número
+    // ("21 viagens atrasadas") e "1. 21 viagens" era lido como "1.21".
+    expect(lines).toContain('- CT-e 4519 rejeitado');
+    expect(lines).toContain('  → reenviar');
+    expect(lines).toContain('- CT-e 4512 sem retorno 5h');
+    expect(lines).toContain('  → verificar');
+    expect(lines).toContain('- Certificado vence em 19d');
+    expect(lines).toContain('  → renovar');
+    // cap de 3 dentro do bloco fiscal (o 4º e 5º viram "+2 no site")
+    const fiscalIdx = lines.findIndex((l) => l.trim().startsWith('FISCAL'));
+    const plusOffset = lines.slice(fiscalIdx).findIndex((l) => l.startsWith('+2 no site'));
+    const fiscalBullets = lines.slice(fiscalIdx, fiscalIdx + plusOffset).filter((l) => l.startsWith('- '));
+    expect(fiscalBullets).toHaveLength(3);
     const plusIdx = lines.findIndex((l) => l.startsWith('+2 no site'));
     expect(plusIdx).toBeGreaterThan(0);
     expect(lines[plusIdx - 1]).toBe('─'.repeat(BLOCK_WIDTH));
@@ -278,7 +284,7 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
     expect(msg).not.toContain('LOGÍSTICA');
     // finance (1 item, sem overflow): NADA de "+N no site" e o fence fecha
     // colado na última linha — que aqui é a linha do verbo.
-    expect(lines).toContain('   → pagar```');
+    expect(lines).toContain('  → pagar```');
     const financeTitleIdx = lines.indexOf(' FINANCEIRO (1)');
     const financeLines = lines.slice(financeTitleIdx, financeTitleIdx + 3).join('\n');
     expect(financeLines).not.toContain('no site');
@@ -378,7 +384,7 @@ describe('buildTabularDigest — variações', () => {
     const escalated = { ...item({ title: 'CP-0012 vencida' }), escalatedAgeDays: 32 };
     const map = new Map<string, TabularSectorEntry>([['finance', { total: 1, shown: [escalated] }]]);
     const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
-    expect(msg).toContain('1. CP-0012 vencida há 32d');
+    expect(msg).toContain('- CP-0012 vencida há 32d');
   });
 
   it('simulação cheia (5 setores × 5 itens + caixa) fica compacta (spec §5: ~40 linhas)', () => {
@@ -411,7 +417,8 @@ describe('buildTabularDigest — variações', () => {
     // link+branco) e nenhum setor listando mais de 3 itens.
     const perSector = (lines.length - 1) / sectors.length; // -1 = header
     expect(perSector).toBeLessThanOrEqual(15);
-    expect(lines.filter((l) => /^4\. /.test(l))).toHaveLength(0);
+    // 3 itens por setor, nunca mais (bullets "- " somam 3 × nº de setores)
+    expect(lines.filter((l) => l.startsWith('- '))).toHaveLength(3 * sectors.length);
     expect(lines[0]).toBe('*HiperTMS · seg 20/07 · 25 pendências*');
   });
 
@@ -419,7 +426,7 @@ describe('buildTabularDigest — variações', () => {
     const longTitle = 'Conta a receber CAR-003208 venceu em 18/07 e não foi recebida até agora';
     const map = new Map<string, TabularSectorEntry>([['finance', { total: 1, shown: [item({ title: longTitle })] }]]);
     const msg = buildTabularDigest([{ key: 'finance', label: 'Financeiro' }], map, NOW, null);
-    const itemLine = msg.split('\n').find((l) => l.startsWith('1. '))!;
+    const itemLine = msg.split('\n').find((l) => l.startsWith('- '))!;
     const bare = itemLine.endsWith('```') ? itemLine.slice(0, -3) : itemLine;
     expect(bare.length).toBeLessThanOrEqual(BLOCK_WIDTH);
     expect(bare).toContain('…');

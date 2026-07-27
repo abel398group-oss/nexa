@@ -28,12 +28,12 @@ CT-e s/ faturar     R$  3.100```
 
 ``` ══════════════════════════════
  FISCAL (5)
-1. CT-e 4519 rejeitado
-   → reenviar
-2. CT-e 4512 sem retorno 5h
-   → verificar
-3. Certificado vence em 19d
-   → renovar
+- CT-e 4519 rejeitado
+  → reenviar
+- CT-e 4512 sem retorno 5h
+  → verificar
+- Certificado vence em 19d
+  → renovar
 ──────────────────────────────
 +2 no site```
 
@@ -48,10 +48,12 @@ Rules of the layout:
   lastSlot gating — cash still appears only per current `cashViewIsOn` rules).
 - One block per enabled sector that has open items; sector with 0 items is
   omitted. Sector title: `NAME (total)`, uppercase, no emoji.
-- Max **3 items per sector** (`MAX_ITEMS_PER_SECTOR_UNIFIED`: 6 → 3). Items are
-  numbered; each item line is telegraphic (keyword first), action verb on the
-  following indented line (`   → verb`). Overflow: `─` rule + `+N no site`.
-- Aggregated count rules (e.g. procurement) render as a single numbered line.
+- Max **3 items per sector** (`MAX_ITEMS_PER_SECTOR_UNIFIED`: 6 → 3). Items use a
+  `- ` bullet — NOT numbering: most TMS titles *start* with a number
+  ("21 viagens atrasadas"), and `1. 21 viagens` reads as "1.21" (changed
+  2026-07-26). Each item line is telegraphic (keyword first), action verb on the
+  following indented line (`  → verb`). Overflow: `─` rule + `+N no site`.
+- Aggregated count rules (e.g. procurement) render as a single bullet line.
 - Footer: `Ver tudo: hipertms.com.br/painel` (full URL, no shortener).
 - No severity emojis, no sector emojis, no per-item dates in prose — severity is
   expressed by ORDER (see §2).

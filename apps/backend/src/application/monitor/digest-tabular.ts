@@ -312,13 +312,16 @@ function cashBlock(cash: TmsCashView): string {
 
 function sectorBlock(sectorKey: string, label: string, entry: TabularSectorEntry): string {
   const lines: string[] = [` ${label.toUpperCase()} (${entry.total})`];
-  entry.shown.forEach((item, i) => {
-    const prefix = `${i + 1}. `;
+  entry.shown.forEach((item) => {
+    // Bullet "- " em vez de numeração (2026-07-26): a maioria dos títulos do TMS
+    // COMEÇA com número ("21 viagens atrasadas"), e "1. 21 viagens" era lido
+    // como "1.21". O traço separa item de conteúdo sem ambiguidade.
+    const prefix = '- ';
     const suffix = item.escalatedAgeDays !== undefined ? ` há ${item.escalatedAgeDays}d` : '';
     const room = BLOCK_WIDTH - prefix.length - suffix.length;
     lines.push(`${prefix}${truncate(item.title, room)}${suffix}`);
     const verb = actionVerbFor(item);
-    if (verb) lines.push(`   → ${verb}`);
+    if (verb) lines.push(`  → ${verb}`);
   });
   const overflow = entry.total - entry.shown.length;
   if (overflow > 0) {
