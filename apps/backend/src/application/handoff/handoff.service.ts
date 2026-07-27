@@ -1,5 +1,6 @@
 import { Injectable, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { safeEqual } from '@/shared/utils/safe-compare';
 import { randomBytes } from 'crypto';
 
 // Gera token URL-safe de 8 chars sem dependência externa
@@ -34,7 +35,9 @@ function validateServiceToken(provided: string | undefined): void {
     Logger.warn('TMS_SERVICE_TOKEN não configurado — handoff sem autenticação (dev only)', 'HandoffService');
     return;
   }
-  if (!provided || provided !== expected) {
+  // Comparação em TEMPO CONSTANTE (auditoria 2026-07-26) — ver safe-compare.ts.
+  // `!==` vaza, pelo tempo de resposta, o quanto do token o atacante acertou.
+  if (!safeEqual(provided, expected)) {
     throw new UnauthorizedException('TMS_SERVICE_TOKEN inválido');
   }
 }
