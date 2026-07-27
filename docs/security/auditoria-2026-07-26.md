@@ -12,7 +12,7 @@
 | Isolamento por tenant | ✅ forte (na aplicação; sem RLS no Postgres — decisão consciente) |
 | Defesas de borda | ✅ Helmet, CORS restrito, rate limit, validação estrita |
 | Comparação de segredos | ⚠️→✅ **corrigido nesta auditoria** (timing attack) |
-| Token legado duplicado | ⚠️ **pendente** — depende do TMS (ver prompt) |
+| `NEXA_SERVICE_TOKEN` | ⚠️ **NÃO é legado** — 2 usos ativos no TMS (ver §5) |
 
 ## 1. Segredos no frontend — LIMPO ✅
 
@@ -67,16 +67,45 @@ B1 da auditoria 2026-07-08), mas dois pontos ficaram de fora:
 Ambos passaram a usar `safeEqual`. Cobertura nova: `service-token.guard.spec.ts`
 (7 casos, incluindo token de mesmo tamanho e fail-closed sem env).
 
-## 5. Pendente (depende do TMS) ⚠️
+## 5. `NEXA_SERVICE_TOKEN` — CORRIGIDO após ler o repo do TMS ⚠️
 
-**Alias `NEXA_SERVICE_TOKEN` ainda aceito.** O guard aceita DOIS segredos:
-`TMS_SERVICE_TOKEN` (oficial) e `NEXA_SERVICE_TOKEN` (marcado DEPRECADO no
-código, mantido para permitir rotação sem quebrar o TMS). Dois segredos válidos
-= dobro de superfície de ataque e de risco de vazamento.
+> **Retificação (mesmo dia):** a primeira versão desta auditoria classificou o
+> `NEXA_SERVICE_TOKEN` como "alias legado, remover". **Está errado.** Com acesso
+> ao `hipertms_v12`, ele tem TRÊS papéis — dois deles ATIVOS. Remover seria
+> quebrar produção. Registrado aqui para ninguém repetir a conclusão apressada.
 
-**Ação:** confirmar com o squad do TMS se todas as chamadas já usam
-`TMS_SERVICE_TOKEN`; se sim, remover o alias do guard. Prompt de handoff
-entregue ao Abel em 2026-07-26.
+### Os três papéis (file:line no hipertms_v12)
+
+| # | Papel | Onde | Estado |
+|---|---|---|---|
+| 1 | TMS → Nexa (alert-config) | `application/proactivity/alert-config.service.ts:130` | ✅ **já migrado** — usa `TMS_SERVICE_TOKEN ?? NEXA_SERVICE_TOKEN`, alias só como fallback com warning (`:132`) |
+| 2 | TMS → Nexa (proactivity/ingest) | `application/proactivity/proactivity.service.ts:132` | ⚠️ **usa SÓ `NEXA_SERVICE_TOKEN`** |
+| 3 | **Nexa → TMS** (o Nexa é quem chama) | `shared/guards/service-token.guard.ts:24` + rotas `nexa-external`, `nexa-proactivity` | 🔴 **é o segredo OFICIAL do lado do TMS** — não é legado |
+
+### Por que remover seria perigoso
+
+- **Papel 3:** o guard do TMS valida as chamadas que o **Nexa faz para ele**
+  contra `NEXA_SERVICE_TOKEN`. Apagar a env derruba a integração no sentido
+  Nexa → TMS.
+- **Papel 2 — falha SILENCIOSA:** em `proactivity.service.ts:133` o envio é
+  desligado sem erro quando a env falta ("feature flag implícita":
+  `if (!nexaUrl || !nexaToken) return;`). Se alguém remover a env achando que é
+  lixo, **o TMS para de empurrar eventos pro Monitor e ninguém vê o erro** —
+  exatamente a falha que o `DevWatchService` (sinal "TMS parou de empurrar")
+  passou a detectar do lado do Nexa.
+
+### Ação correta (ordem importa)
+
+1. **TMS** faz o papel 2 usar `TMS_SERVICE_TOKEN ?? NEXA_SERVICE_TOKEN` — mesmo
+   padrão que o alert-config já usa. E, ao remover a env um dia, trocar o
+   `return` silencioso por um `logger.error` (nunca desligar integração em silêncio).
+2. **TMS** decide o nome do segredo do papel 3 (renomear é mudança nos dois lados
+   — deploy coordenado; pode ficar como está).
+3. **Nexa** só remove o alias do seu guard depois que 1 e 2 estiverem confirmados
+   em produção.
+
+**Enquanto isso:** manter o alias no Nexa é a decisão certa. O risco real
+(dois segredos válidos) é menor que o de derrubar a integração.
 
 ## 6. Observação menor
 
