@@ -1030,4 +1030,23 @@ export interface TmsCashView {
    */
   invoicedToday?: { amount: number; count: number };
   paidToday?: { amount: number; count: number };
+  /**
+   * T11 (2026-07-29): acumulado da SEMANA CORRENTE (segunda 00:00 → agora) —
+   * campos ADICIONADOS ao contrato, opcionais. Mesma degradação graciosa dos
+   * campos do adendo T9: TMS que não manda → o Nexa omite as duas linhas
+   * `seg→X` do bloco de caixa, o resto sai igual.
+   *
+   * O ACUMULADO É CALCULADO PELO TMS, de propósito. Somar no Nexa a cada
+   * digest parecia mais simples, mas perde o dia inteiro se o backend cair
+   * (e o número fica errado em silêncio, que é o pior modo de falha). Aqui é
+   * a mesma query de `invoicedMonth`/`invoicedToday` com outro recorte de data.
+   *
+   * ⚠️ `count` segue a semântica de `invoicedToday`: **faturas**
+   * (`tenantFinanceInvoice` / `SALES_INVOICE`), NÃO CT-e — uma fatura pode
+   * agrupar vários CT-e. Por isso o rótulo no digest é "Faturado", nunca
+   * "CT-e". Ver hipertms_v12/application/proactivity/closing-report.service.ts
+   * :420-431.
+   */
+  invoicedWeek?: { amount: number; count: number };
+  paidWeek?: { amount: number; count: number };
 }

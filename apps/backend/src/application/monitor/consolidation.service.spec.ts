@@ -1117,12 +1117,12 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
     // T10: bloco do caixa no formato tabular (sem emoji)
-    expect(msgFirst).toContain(' SEU CAIXA — 15 dias');
+    expect(msgFirst).toContain(' SEU CAIXA — seg 13/07');
     expect(msgFirst).toContain('Sobra');
 
     await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
     const [, , msgLast] = notification.notifyPhone.mock.calls[1];
-    expect(msgLast).toContain(' SEU CAIXA — 15 dias');
+    expect(msgLast).toContain(' SEU CAIXA — seg 13/07');
     expect(msgLast).toContain('Sobra');
   });
 
@@ -1139,11 +1139,11 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
 
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msgFirst] = notification.notifyPhone.mock.calls[0];
-    expect(msgFirst).toContain(' SEU CAIXA — 15 dias');
+    expect(msgFirst).toContain(' SEU CAIXA — seg 13/07');
 
     await callPerContact(svc, { now: makeNow(18, 0), contacts: [contact], config: cfg });
     const [, , msgLast] = notification.notifyPhone.mock.calls[1];
-    expect(msgLast).toContain(' SEU CAIXA — 15 dias');
+    expect(msgLast).toContain(' SEU CAIXA — seg 13/07');
   });
 
   it('T9-ADENDO: "Faturado hoje"/"Gasto hoje" aparecem quando o TMS manda invoicedToday/paidToday', async () => {
@@ -1162,7 +1162,7 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     // T10: linhas do dia no formato coluna (inteiro BRL alinhado à direita)
     expect(msg).toContain('Faturado hoje');
     expect(msg).toContain('R$  8.400');
-    expect(msg).toContain('Gasto hoje');
+    expect(msg).toContain('Pago hoje');
     expect(msg).toContain('R$  5.100');
   });
 
@@ -1176,8 +1176,8 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     await callPerContact(svc, { now: makeNow(8, 0), contacts: [contact], config: cfg });
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).not.toContain('Faturado hoje');
-    expect(msg).not.toContain('Gasto hoje');
-    expect(msg).toContain(' SEU CAIXA — 15 dias');
+    expect(msg).not.toContain('Pago hoje');
+    expect(msg).toContain(' SEU CAIXA — seg 13/07');
     expect(msg).toContain('Sobra');
   });
 
@@ -1195,7 +1195,7 @@ describe('processPerContact — T6/T7 horário por contato (unificado)', () => {
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).toContain('Faturado hoje');
     expect(msg).toContain('R$  1.200');
-    expect(msg).not.toContain('Gasto hoje');
+    expect(msg).not.toContain('Pago hoje');
   });
 
   it('T8.6: cashView ausente/off → bloco nunca aparece, mesmo no último horário', async () => {

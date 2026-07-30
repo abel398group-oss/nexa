@@ -290,16 +290,54 @@ function moneyRow(label: string, amount: number): string {
   return `${truncate(label, labelWidth - 1).padEnd(labelWidth)}${value}`;
 }
 
+/**
+ * T11: rótulo da janela da semana corrente — `seg→qua`, `seg→sex`, `seg→dom`.
+ * A janela SEMPRE começa na segunda (é o que o TMS agrega em `invoicedWeek`);
+ * o fim é o dia de hoje, então o rótulo cresce sozinho ao longo da semana e o
+ * usuário lê o período sem precisar de legenda no rodapé.
+ *
+ * Domingo (`getDay() === 0`) é o FIM da janela, não o começo — daí o `|| 7`.
+ */
+export function weekWindowLabel(now: Date): string {
+  return `seg→${DOW_PT[now.getDay()]}`;
+}
+
+/**
+ * T11: na SEGUNDA o acumulado é idêntico ao dia — mostrar as duas linhas seria
+ * repetir o mesmo número e gastar 2 linhas do bloco. Então só a partir de terça.
+ */
+export function weekRowsAreRedundant(now: Date): boolean {
+  const dow = now.getDay() || 7; // domingo (0) → 7, fim da semana
+  return dow <= 1;
+}
+
 /** Wraps section lines in a WhatsApp monospace block, ═ above the title only. */
 function monoBlock(lines: string[]): string {
   return `\`\`\` ${RULE_DOUBLE}\n${lines.join('\n')}\`\`\``;
 }
 
-function cashBlock(cash: TmsCashView): string {
+function cashBlock(cash: TmsCashView, now: Date): string {
   const balance = cash.inflow15d.amount - cash.outflow15d.amount;
-  const lines: string[] = [' SEU CAIXA — 15 dias'];
-  if (cash.invoicedToday) lines.push(moneyRow('Faturado hoje', cash.invoicedToday.amount));
-  if (cash.paidToday) lines.push(moneyRow('Gasto hoje', cash.paidToday.amount));
+  // T11: o título passou de "15 dias" para a DATA. Com linhas de hoje, de semana
+  // e de 15 dias no mesmo bloco, "SEU CAIXA — 15 dias" no cabeçalho passou a
+  // descrever errado o conteúdo. As linhas de 15 dias mantêm o `(15d)` no rótulo.
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const lines: string[] = [` SEU CAIXA — ${DOW_PT[now.getDay()]} ${dd}/${mm}`];
+
+  // T11: `(N)` = contagem de FATURAS (semântica de `invoicedToday.count`), não
+  // de CT-e — ver o comentário em TmsCashView. Rótulo "Faturado" de propósito.
+  const week = weekWindowLabel(now);
+  const showWeek = !weekRowsAreRedundant(now);
+  if (cash.invoicedToday) lines.push(moneyRow(`Faturado hoje (${cash.invoicedToday.count})`, cash.invoicedToday.amount));
+  if (cash.invoicedWeek && showWeek) {
+    lines.push(moneyRow(`Faturado ${week} (${cash.invoicedWeek.count})`, cash.invoicedWeek.amount));
+  }
+  if (cash.paidToday) lines.push(moneyRow(`Pago hoje (${cash.paidToday.count})`, cash.paidToday.amount));
+  if (cash.paidWeek && showWeek) {
+    lines.push(moneyRow(`Pago ${week} (${cash.paidWeek.count})`, cash.paidWeek.amount));
+  }
+
   lines.push(moneyRow('Entra (15d)', cash.inflow15d.amount));
   lines.push(moneyRow('Sai (15d)', cash.outflow15d.amount));
   lines.push(RULE_SINGLE);
@@ -351,7 +389,7 @@ export function buildTabularDigest(
   const header = `*HiperTMS · ${DOW_PT[now.getDay()]} ${dd}/${mm} · ${total} pendência${total !== 1 ? 's' : ''}*`;
 
   const parts: string[] = [header];
-  if (cashView) parts.push(cashBlock(cashView));
+  if (cashView) parts.push(cashBlock(cashView, now));
   for (const sector of sectors) {
     const entry = alertsBySector.get(sector.key);
     if (!entry || entry.total === 0) continue;

@@ -40,7 +40,14 @@ import { HiperTmsConnector, type TmsCashView } from '@/application/connectors/hi
 import { resolveTmsTenantId } from './tms-tenant-id.util';
 import { isImmediateAlertsEnabled } from './monitor-flags.const';
 import { isBandDue, DIGEST_THROTTLE_DAYS } from './digest-throttle.const';
-import { buildTabularDigest, rankSectorAlerts, sectorPanelUrl, type TabularAlertItem } from './digest-tabular';
+import {
+  buildTabularDigest,
+  rankSectorAlerts,
+  sectorPanelUrl,
+  weekRowsAreRedundant,
+  weekWindowLabel,
+  type TabularAlertItem,
+} from './digest-tabular';
 import { formatBRL } from './money-format.util';
 import {
   CONTACT_SECTOR_KEYS,
@@ -970,7 +977,7 @@ export class ConsolidationService {
   }
 
   /** T8.6 — versão HTML do bloco "💰 SEU CAIXA", inserida acima das seções de setor no e-mail. */
-  private buildCashViewSectionHtml(cash: TmsCashView): string {
+  private buildCashViewSectionHtml(cash: TmsCashView, now: Date): string {
     const balance = cash.inflow15d.amount - cash.outflow15d.amount;
     const balanceLine =
       balance >= 0
@@ -987,9 +994,25 @@ export class ConsolidationService {
         `<tr><td style="padding:2px 0">🧾 Faturado hoje: ${formatBRL(cash.invoicedToday.amount)} (${cash.invoicedToday.count} fatura${cash.invoicedToday.count !== 1 ? 's' : ''})</td></tr>`,
       );
     }
+    // T11 (2026-07-29): acumulado da semana corrente, logo abaixo da linha do
+    // dia correspondente. Campos opcionais — TMS sem `invoicedWeek`/`paidWeek`
+    // simplesmente não gera a linha (mesma degradação do adendo T9 acima).
+    // Na segunda o acumulado é igual ao dia: linha omitida (weekRowsAreRedundant).
+    const week = weekWindowLabel(now);
+    const showWeek = !weekRowsAreRedundant(now);
+    if (cash.invoicedWeek && showWeek) {
+      todayRowsHtml.push(
+        `<tr><td style="padding:2px 0">📈 Faturado ${week}: ${formatBRL(cash.invoicedWeek.amount)} (${cash.invoicedWeek.count} fatura${cash.invoicedWeek.count !== 1 ? 's' : ''})</td></tr>`,
+      );
+    }
     if (cash.paidToday) {
       todayRowsHtml.push(
-        `<tr><td style="padding:2px 0">💸 Gasto hoje: ${formatBRL(cash.paidToday.amount)} (${cash.paidToday.count} pagamento${cash.paidToday.count !== 1 ? 's' : ''})</td></tr>`,
+        `<tr><td style="padding:2px 0">💸 Pago hoje: ${formatBRL(cash.paidToday.amount)} (${cash.paidToday.count} pagamento${cash.paidToday.count !== 1 ? 's' : ''})</td></tr>`,
+      );
+    }
+    if (cash.paidWeek && showWeek) {
+      todayRowsHtml.push(
+        `<tr><td style="padding:2px 0">📉 Pago ${week}: ${formatBRL(cash.paidWeek.amount)} (${cash.paidWeek.count} pagamento${cash.paidWeek.count !== 1 ? 's' : ''})</td></tr>`,
       );
     }
 
@@ -1212,7 +1235,7 @@ export class ConsolidationService {
   ): string {
     const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const totalAlerts = [...alertsBySector.values()].reduce((sum, entry) => sum + entry.total, 0);
-    const cashSection = cashView ? this.buildCashViewSectionHtml(cashView) : '';
+    const cashSection = cashView ? this.buildCashViewSectionHtml(cashView, now) : '';
 
     const sections = sectors
       .map((sector) => {

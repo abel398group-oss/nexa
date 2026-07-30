@@ -7,6 +7,8 @@ import {
   sectorPanelUrl,
   BLOCK_WIDTH,
   RULE_ACTION_VERBS,
+  weekWindowLabel,
+  weekRowsAreRedundant,
   type TabularAlertItem,
   type TabularSectorEntry,
 } from './digest-tabular';
@@ -246,8 +248,8 @@ describe('buildTabularDigest — layout aprovado (snapshot estrutural)', () => {
   it('caixa: linhas de dinheiro alinhadas à direita na coluna do bloco', () => {
     // padding derivado da constante (não hardcoded) — a largura pode mudar
     const money = (label: string, value: string) => label.padEnd(BLOCK_WIDTH - value.length) + value;
-    expect(lines).toContain(money('Faturado hoje', 'R$  4.320'));
-    expect(lines).toContain(money('Gasto hoje', 'R$  1.870'));
+    expect(lines).toContain(money('Faturado hoje (1)', 'R$  4.320'));
+    expect(lines).toContain(money('Pago hoje (1)', 'R$  1.870'));
     expect(lines).toContain(money('Entra (15d)', 'R$ 38.400'));
     expect(lines).toContain(money('Sai (15d)', 'R$ 21.150'));
     expect(lines).toContain(money('Sobra', 'R$ 17.250'));
@@ -430,5 +432,99 @@ describe('buildTabularDigest — variações', () => {
     const bare = itemLine.endsWith('```') ? itemLine.slice(0, -3) : itemLine;
     expect(bare.length).toBeLessThanOrEqual(BLOCK_WIDTH);
     expect(bare).toContain('…');
+  });
+});
+
+// ─── T11: acumulado da semana no bloco de caixa (2026-07-29) ─────────────────
+// Regra central: as linhas `seg→X` só existem se o TMS mandar invoicedWeek/
+// paidWeek. TMS antigo → bloco idêntico ao de hoje (degradação graciosa, mesmo
+// contrato aditivo do adendo T9). NUNCA somar no Nexa (ver TmsCashView).
+
+describe('weekWindowLabel / weekRowsAreRedundant', () => {
+  it('rótulo cresce com o dia da semana', () => {
+    expect(weekWindowLabel(new Date(2026, 6, 20))).toBe('seg→seg'); // 20/07 = segunda
+    expect(weekWindowLabel(new Date(2026, 6, 22))).toBe('seg→qua');
+    expect(weekWindowLabel(new Date(2026, 6, 24))).toBe('seg→sex');
+    expect(weekWindowLabel(new Date(2026, 6, 26))).toBe('seg→dom');
+  });
+
+  it('segunda = acumulado redundante (igual ao dia); resto da semana não', () => {
+    expect(weekRowsAreRedundant(new Date(2026, 6, 20))).toBe(true); // seg
+    expect(weekRowsAreRedundant(new Date(2026, 6, 21))).toBe(false); // ter
+    expect(weekRowsAreRedundant(new Date(2026, 6, 24))).toBe(false); // sex
+    // domingo é FIM da janela, não começo — acumulado ainda faz sentido
+    expect(weekRowsAreRedundant(new Date(2026, 6, 26))).toBe(false); // dom
+  });
+});
+
+describe('buildTabularDigest — caixa com acumulado da semana (T11)', () => {
+  const WED = new Date(2026, 6, 22, 8, 0, 0); // quarta
+  const MON = new Date(2026, 6, 20, 8, 0, 0); // segunda
+  const CASH_WEEK = {
+    ...CASH,
+    invoicedToday: { amount: 6500, count: 12 },
+    paidToday: { amount: 1100, count: 4 },
+    invoicedWeek: { amount: 18500, count: 37 },
+    paidWeek: { amount: 3900, count: 11 },
+  };
+  const money = (label: string, value: string) => label.padEnd(BLOCK_WIDTH - value.length) + value;
+  const build = (now: Date, cash: any) => buildTabularDigest([], new Map(), now, cash);
+
+  it('quarta: linha do dia seguida da linha seg→qua, com contagem no rótulo', () => {
+    const lines = build(WED, CASH_WEEK).split('\n');
+    expect(lines).toContain(money('Faturado hoje (12)', 'R$  6.500'));
+    expect(lines).toContain(money('Faturado seg→qua (37)', 'R$ 18.500'));
+    expect(lines).toContain(money('Pago hoje (4)', 'R$  1.100'));
+    expect(lines).toContain(money('Pago seg→qua (11)', 'R$  3.900'));
+    // acumulado vem logo DEPOIS do dia correspondente (leitura pareada)
+    const iToday = lines.indexOf(money('Faturado hoje (12)', 'R$  6.500'));
+    expect(lines[iToday + 1]).toBe(money('Faturado seg→qua (37)', 'R$ 18.500'));
+  });
+
+  it('título do bloco é a DATA, não "15 dias" (as linhas de 15d mantêm o rótulo)', () => {
+    const msg = build(WED, CASH_WEEK);
+    expect(msg).toContain(' SEU CAIXA — qua 22/07');
+    expect(msg).not.toContain('SEU CAIXA — 15 dias');
+    expect(msg).toContain('Entra (15d)');
+  });
+
+  it('segunda: acumulado é igual ao dia → linhas seg→X omitidas', () => {
+    const msg = build(MON, CASH_WEEK);
+    expect(msg).toContain('Faturado hoje (12)');
+    expect(msg).not.toContain('seg→seg');
+    expect(msg).not.toContain('R$ 18.500');
+  });
+
+  it('TMS antigo (sem invoicedWeek/paidWeek) → só as linhas do dia, resto intacto', () => {
+    const msg = build(WED, CASH); // CASH tem só invoicedToday/paidToday
+    expect(msg).not.toContain('seg→qua');
+    expect(msg).toContain('Faturado hoje (1)');
+    expect(msg).toContain('Sobra');
+    expect(msg).toContain('Vencido s/ receber');
+  });
+
+  it('só invoicedWeek (sem paidWeek) → cada linha é independente', () => {
+    const msg = build(WED, { ...CASH, invoicedWeek: { amount: 18500, count: 37 } });
+    expect(msg).toContain('Faturado seg→qua (37)');
+    expect(msg).not.toContain('Pago seg→qua');
+  });
+
+  it('todas as linhas de dinheiro respeitam a largura do bloco', () => {
+    const lines = build(WED, CASH_WEEK).split('\n');
+    for (const l of lines) {
+      if (!l.includes('R$')) continue;
+      const bare = l.endsWith('```') ? l.slice(0, -3) : l;
+      expect(bare.length).toBe(BLOCK_WIDTH);
+    }
+  });
+
+  it('contagem de 4 dígitos não estoura o alinhamento (trunca o rótulo)', () => {
+    const lines = build(WED, {
+      ...CASH_WEEK,
+      invoicedWeek: { amount: 18500, count: 1234 },
+    }).split('\n');
+    const row = lines.find((l) => l.startsWith('Faturado seg→'))!;
+    const bare = row.endsWith('```') ? row.slice(0, -3) : row;
+    expect(bare.length).toBe(BLOCK_WIDTH);
   });
 });

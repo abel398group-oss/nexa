@@ -45,6 +45,18 @@
 - **A fazer:** auditar na fase de Precificação e confirmar com o Uelder se a
   regra do piso já está valendo pros clientes.
 
+### ⚪ Caixa: acumulado da semana + contagem de CT-e (T11, 2026-07-29)
+
+- **Estado:** o endpoint `GET /nexa/proactivity/cash-view` devolve só o snapshot
+  do dia (`invoicedToday`/`paidToday`). Não tem acumulado da semana corrente.
+- **Nexa já está pronto:** `invoicedWeek`/`paidWeek` declarados como opcionais;
+  no dia que o TMS mandar, as linhas `seg→qua` aparecem sozinhas. Ver
+  `docs/monitor/t11-caixa-acumulado-semana-2026-07.md`.
+- **Perguntar ao Uelder:** (1) dá pra devolver `invoicedWeek`/`paidWeek`
+  (segunda 00:00 → agora)? (2) existe contagem de **CT-e emitidos** por dia/
+  semana? Hoje o `count` é de faturas (`SALES_INVOICE`), e uma fatura agrupa
+  vários CT-e — o usuário pensa em CT-e.
+
 ## Itens auditados e OK (sem pendência)
 
 Fiscal CT-e/MDF-e/SEFAZ/GNRE, certificados, e os demais domínios do
@@ -58,3 +70,4 @@ atual.
 | CIOT geração automática | — | — |
 | NFS-e nfe.io | — | — |
 | ANTT piso tarifário | — | — |
+| Caixa semana + contagem CT-e (T11) | — | — |
