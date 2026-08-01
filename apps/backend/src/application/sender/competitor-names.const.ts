@@ -42,3 +42,34 @@ export function looksLikeCompetitor(name: string | undefined | null): boolean {
   if (!n) return false;
   return COMPETITOR_NAME_PATTERNS.some((re) => re.test(n));
 }
+
+/**
+ * Domínios de e-mail dos concorrentes — sinal MUITO mais forte que nome:
+ * quem escreve de @bsoft.com.br É da Bsoft, sem ambiguidade. Usado nas
+ * campanhas de e-mail. Match no domínio exato ou subdomínio.
+ */
+export const COMPETITOR_EMAIL_DOMAINS: string[] = [
+  'activecorp.com.br',
+  'emiteai.com.br',
+  'bsoft.com.br',
+  'datamex.com.br',
+  'brudam.com.br',
+  'ssw.inf.br',
+  'praxio.com.br',
+  'softensistemas.com.br',
+  'egssistemas.com.br',
+  'transp.net',          // SmartGT
+  'hivecloud.com.br',
+  'totvs.com',
+  'totvs.com.br',
+  'benner.com.br',
+  'senior.com.br',       // Senior Sistemas
+  'eslcloud.com.br',
+];
+
+/** true se o e-mail pertence a um domínio de concorrente (ou subdomínio). */
+export function isCompetitorEmail(email: string | undefined | null): boolean {
+  const domain = (email ?? '').trim().toLowerCase().split('@')[1];
+  if (!domain) return false;
+  return COMPETITOR_EMAIL_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}

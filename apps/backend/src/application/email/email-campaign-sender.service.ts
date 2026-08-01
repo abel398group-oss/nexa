@@ -31,6 +31,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
 import { emailToPhone } from './email.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/competitor-names.const';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -141,14 +142,53 @@ export class EmailCampaignSenderService {
       return seen.has(k) ? false : seen.add(k);
     });
 
-    // Remove opted_out
-    const optedEmails = await this.prisma.contact.findMany({
-      where: { tenantId, status: 'opted_out', email: { in: targets.map((t) => t.email) } },
-      select: { email: true },
+    // Remove opted_out E bloqueados (blocklist de concorrentes, 2026-08-01) —
+    // mesma paridade do canal WhatsApp: opted_out é pedido do contato (LGPD),
+    // blocked é decisão nossa. Ambos ficam fora, com motivo distinto no relatório.
+    const excluded = await this.prisma.contact.findMany({
+      where: { tenantId, status: { in: ['opted_out', 'blocked'] }, email: { in: targets.map((t) => t.email) } },
+      select: { email: true, status: true },
     });
-    const blocked = new Set(optedEmails.map((o: any) => o.email!.toLowerCase()));
-    const skippedOptOut = targets.filter((t) => blocked.has(t.email.toLowerCase())).length;
-    targets = targets.filter((t) => !blocked.has(t.email.toLowerCase()));
+    const optedSet = new Set(excluded.filter((o: any) => o.status === 'opted_out').map((o: any) => o.email!.toLowerCase()));
+    const blockedSet = new Set(excluded.filter((o: any) => o.status === 'blocked').map((o: any) => o.email!.toLowerCase()));
+    const skippedOptOut = targets.filter((t) => optedSet.has(t.email.toLowerCase())).length;
+    const blockedList = targets.filter((t) => blockedSet.has(t.email.toLowerCase()));
+    targets = targets.filter((t) => {
+      const k = t.email.toLowerCase();
+      return !optedSet.has(k) && !blockedSet.has(k);
+    });
+
+    // Concorrente por NOME (heurística) ou por DOMÍNIO do e-mail (certeza) —
+    // @bsoft.com.br não tem como ser lead. Ver competitor-names.const.ts.
+    const suspectList = targets.filter((t) => looksLikeCompetitor(t.name) || isCompetitorEmail(t.email));
+    if (suspectList.length) {
+      const suspectSet = new Set(suspectList.map((t) => t.email.toLowerCase()));
+      targets = targets.filter((t) => !suspectSet.has(t.email.toLowerCase()));
+      this.logger.warn(
+        `Campanha "${dto.name}": ${suspectList.length} e-mail(s) parecem CONCORRENTE — pulados: ` +
+        suspectList.map((t) => `${t.name ?? ''} <${t.email}>`).join(', '),
+      );
+    }
+
+    // Dedup ENTRE campanhas (paridade com WhatsApp): quem já recebeu e-mail
+    // 'sent' em qualquer campanha anterior do tenant não recebe de novo.
+    let alreadySent = new Set<string>();
+    if (targets.length) {
+      const prior = await this.prisma.campaignTarget.findMany({
+        where: { tenantId, status: 'sent', email: { in: targets.map((t) => t.email) } },
+        select: { email: true },
+        distinct: ['email'],
+      });
+      alreadySent = new Set(prior.map((p: any) => (p.email ?? '').toLowerCase()));
+    }
+    const dupList = targets.filter((t) => alreadySent.has(t.email.toLowerCase()));
+    targets = targets.filter((t) => !alreadySent.has(t.email.toLowerCase()));
+
+    const skippedRows = [
+      ...blockedList.map((t) => ({ status: 'skipped', error: 'bloqueado', t })),
+      ...suspectList.map((t) => ({ status: 'skipped', error: 'suspeito_concorrente', t })),
+      ...dupList.map((t) => ({ status: 'skipped', error: 'ja_enviado', t })),
+    ];
 
     const campaign = await this.prisma.campaign.create({
       data: {
@@ -164,18 +204,36 @@ export class EmailCampaignSenderService {
         scheduledAt,
         ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         targets: {
-          create: targets.map((t) => ({
-            tenantId,
-            phone: emailToPhone(t.email), // synthetic phone para compatibilidade
-            email: t.email,
-            name: t.name,
-          })),
+          create: [
+            ...targets.map((t) => ({
+              tenantId,
+              phone: emailToPhone(t.email), // synthetic phone para compatibilidade
+              email: t.email,
+              name: t.name,
+            })),
+            // pulados aparecem no relatório com o motivo (paridade com WhatsApp)
+            ...skippedRows.map(({ status, error, t }) => ({
+              tenantId,
+              phone: emailToPhone(t.email),
+              email: t.email,
+              name: t.name,
+              status,
+              error,
+            })),
+          ],
         },
       },
       include: { _count: { select: { targets: true } } },
     });
 
-    return { ...campaign, included: targets.length, skippedOptOut };
+    return {
+      ...campaign,
+      included: targets.length,
+      skippedOptOut,
+      skippedBlocked: blockedList.length,
+      skippedSuspect: suspectList.length,
+      skippedAlreadySent: dupList.length,
+    };
   }
 
   // ── Worker: tick a cada 15s ──────────────────────────────────────
