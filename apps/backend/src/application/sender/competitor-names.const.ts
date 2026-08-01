@@ -18,7 +18,13 @@
  */
 export const COMPETITOR_NAME_PATTERNS: RegExp[] = [
   /active\s*corp/i,      // ActiveCorp — confirmado (grupos de logística)
-  /emitea[ií]/i,         // Emiteaí — emissor CT-e, confirmado
+  // Emiteaí: o "í" costuma vir corrompido de planilha salva pelo Excel
+  // ("Emitea" + byte inválido). O padrão aceita com ou sem o acento final.
+  /emitea[ií]?\b/i,
+  // ── Achados na base Transvias (2026-08-01) — categoria "Software" ─────────
+  /\bsimfrete\b/i,       // TMS SaaS p/ embarcador: gestão de frete, auditoria
+  /\bophos\b/i,          // software p/ logística
+  /incore\s*tech/i,      // software (categoria Software na base)
   /\bbsoft\b/i,          // Bsoft TMS
   /\bdatamex\b/i,        // Datamex (fundida com a Bsoft)
   /\bbrudam\b/i,         // Brudam TMS
@@ -65,6 +71,10 @@ export const COMPETITOR_EMAIL_DOMAINS: string[] = [
   'benner.com.br',
   'senior.com.br',       // Senior Sistemas
   'eslcloud.com.br',
+  // Achados na base Transvias (2026-08-01)
+  'simfrete.com.br',
+  'ophos.com.br',
+  'incore.site',
 ];
 
 /** true se o e-mail pertence a um domínio de concorrente (ou subdomínio). */

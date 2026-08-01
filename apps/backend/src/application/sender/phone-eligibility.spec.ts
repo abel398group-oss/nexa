@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { rejectionReason, canReceiveCampaign } from './phone-eligibility';
+import { looksLikeCompetitor, isCompetitorEmail } from './competitor-names.const';
 
 // ─── Elegibilidade de disparo (auditoria pré go-live, 2026-08-01) ────────────
 // Casos tirados do CSV real de 1.976 leads raspados de grupos de WhatsApp.
@@ -59,5 +60,34 @@ describe('rejectionReason — números RECUSADOS', () => {
     expect(rejectionReason('')).toBe('nao_brasileiro');
     expect(rejectionReason(null)).toBe('nao_brasileiro');
     expect(rejectionReason('abc')).toBe('nao_brasileiro');
+  });
+});
+
+// ─── Concorrentes achados na base Transvias (2026-08-01) ────────────────────
+// A planilha tinha coluna "Categorias"; os três estavam marcados "Software".
+describe('concorrentes da base Transvias', () => {
+  it('barra os três novos por nome', () => {
+    expect(looksLikeCompetitor('Simfrete -TMS Embarcador')).toBe(true);
+    expect(looksLikeCompetitor('Ophos -Soluções Tecnológicas')).toBe(true);
+    expect(looksLikeCompetitor('inCore Tech -Software')).toBe(true);
+  });
+
+  it('barra pelos domínios de e-mail', () => {
+    expect(isCompetitorEmail('comercial@simfrete.com.br')).toBe(true);
+    expect(isCompetitorEmail('marketing@ophos.com.br')).toBe(true);
+    expect(isCompetitorEmail('rafael.machiaveli@incore.site')).toBe(true);
+  });
+
+  it('Emiteaí é barrado mesmo com o acento corrompido pelo Excel', () => {
+    expect(looksLikeCompetitor('Emiteaí')).toBe(true);
+    expect(looksLikeCompetitor('Emitea')).toBe(true); // í perdido no salvamento
+  });
+
+  it('NÃO barra transportadora com nome enganoso (falso positivo mata lead bom)', () => {
+    // Ambas existem na base real e são transportadoras de verdade.
+    expect(looksLikeCompetitor('TMS -Transportadora')).toBe(false);
+    expect(looksLikeCompetitor('Tech Trans -Transportes')).toBe(false);
+    expect(looksLikeCompetitor('Tecnolog -Express Cargo')).toBe(false);
+    expect(isCompetitorEmail('matriz@transportadoratms.com.br')).toBe(false);
   });
 });
