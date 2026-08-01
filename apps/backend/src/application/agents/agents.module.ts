@@ -18,9 +18,10 @@ import { NotificationsModule } from '@/application/notifications/notifications.m
 import { OpportunitiesModule } from '@/application/opportunities/opportunities.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { ContactsModule } from '@/application/contacts/contacts.module';
 
 @Module({
-  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule, OpportunitiesModule],
+  imports: [KnowledgeModule, ConversationsModule, SellersModule, PlaybookModule, NotificationsModule, OpportunitiesModule, ContactsModule],
   controllers: [AgentsController],
   providers: [
     // Infra

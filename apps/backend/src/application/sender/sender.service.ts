@@ -806,15 +806,49 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return 'Boa noite';
   }
 
+  /**
+   * Primeiro nome utilizável, ou '' quando não dá para tratar a pessoa pelo nome.
+   * Descarta lixo comum de lista raspada: só dígitos, uma letra só, ou o próprio
+   * telefone no lugar do nome — nesses casos é melhor não chamar de nada.
+   */
+  static firstName(name?: string | null): string {
+    const first = String(name ?? '').trim().split(/\s+/)[0] ?? '';
+    if (first.length < 2) return '';
+    if (/^\d+$/.test(first)) return '';          // "5511999998888"
+    if (!/[a-zA-ZÀ-ÿ]/.test(first)) return '';   // só símbolo/emoji
+    return first;
+  }
+
+  /**
+   * Recompõe a frase quando `{{nome}}` saiu vazio, para não sobrar pontuação
+   * órfã. "Bom dia , tudo bem?" → "Bom dia, tudo bem?" · "Olá !" → "Olá!"
+   */
+  static tidyMissingName(txt: string): string {
+    return txt
+      .replace(/[ \t]{2,}/g, ' ')          // espaço duplo deixado pelo placeholder
+      .replace(/[ \t]+([,.!?;:])/g, '$1')  // " ," → ","
+      .replace(/,\s*,/g, ',')              // ", ," → ","
+      // pontuação colidindo: "{{saudacao}}, {{nome}}." vira "Bom dia,." — a
+      // vírgula existia só para separar o nome, então some.
+      .replace(/,\s*([.!?;:])/g, '$1')
+      .replace(/^[ \t]+/gm, '')            // espaço no começo da linha
+      .replace(/[ \t]+$/gm, '');           // espaço no fim da linha
+  }
+
   // opt-out footer (LGPD §4/§8). Disabled by setting LGPD_OPT_OUT_FOOTER=false in .env.
   // Warning: disabling removes the legally-recommended opt-out notice for Brazilian law.
   static OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
 
   private render(template: string, name?: string | null): string {
-    const first = (name ?? '').split(' ')[0] || 'tudo bem';
+    // 2026-08-01: sem nome, `{{nome}}` some e a frase se recompõe sozinha.
+    // Antes o fallback era a string "tudo bem", o que produzia aberrações como
+    // "Bom dia tudo bem, tudo bem?" em 1.666 dos 3.097 leads (mais da metade da
+    // base entra sem nome). Frase limpa > frase com apelido genérico.
+    const first = SenderService.firstName(name);
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    if (!first) txt = SenderService.tidyMissingName(txt);
     const footerEnabled = process.env.LGPD_OPT_OUT_FOOTER !== 'false';
     if (footerEnabled && !txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;
     return txt;

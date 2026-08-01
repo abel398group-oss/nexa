@@ -88,6 +88,9 @@ function makeService() {
     mockOpportunities as any,
     mockWaha as any,
     mockEvents as any,
+    // ContactsService (2026-08-01): grava o perfil que o lead revelou.
+    // Best-effort no serviço — o mock só precisa não explodir.
+    { applyLeadProfile: vi.fn().mockResolvedValue(undefined) } as any,
   );
 }
 

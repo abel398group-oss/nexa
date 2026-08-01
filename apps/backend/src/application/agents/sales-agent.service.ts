@@ -4,9 +4,24 @@ import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
 import { PlaybookService, PlaybookConfig } from '@/application/playbook/playbook.service';
 
+/**
+ * Dados que o lead revelou sobre si NA CONVERSA (2026-08-01).
+ * Nasceu do go-live de leads: 1.666 dos 3.097 contatos entram sem nome, e o
+ * que a pessoa digitava ("aqui é o João da Transportadora Silva, 12 caminhões")
+ * morria dentro da conversa — o vendedor recebia só um telefone.
+ * Campo ausente = o lead não falou. NUNCA inventar.
+ */
+export interface LeadProfile {
+  nome?: string;
+  empresa?: string;
+  frota?: number;
+}
+
 export interface SalesReply {
   draft: string;
   suggestedAction: 'none' | 'schedule_meeting' | 'handoff_human';
+  /** Só vem preenchido quando o lead mencionou espontaneamente. */
+  profile?: LeadProfile;
   usedKnowledge: { id: string; title: string }[];
   allowedFacts: string; // catálogo de planos + KB que a vendedora PODIA usar (p/ supervisora)
   confidence: 'high' | 'low';
@@ -106,7 +121,13 @@ export class SalesAgentService {
       'não cobra nem processa pagamento — o cliente finaliza no site. ' +
       `FECHAMENTO: quando o lead quiser contratar, envie o LINK DE CADASTRO: ${cfg.signupUrl} — ` +
       'oriente a criar a conta lá (onde ele escolhe o plano e finaliza) e ofereça ajuda se travar. NÃO peça pagamento aqui. ' +
-      'Ao final, em uma linha separada: ACTION=<none|schedule_meeting|handoff_human>.';
+      'Ao final, em uma linha separada: ACTION=<none|schedule_meeting|handoff_human>.\n' +
+      // Extração de perfil (2026-08-01): a mensagem já é lida para responder;
+      // aproveitamos a MESMA chamada para capturar o que o lead revelou.
+      'Depois do ACTION, em outra linha: PERFIL={"nome":"...","empresa":"...","frota":N} — ' +
+      'inclua APENAS os campos que o lead disse EXPLICITAMENTE nesta mensagem ou no histórico. ' +
+      'Nome = da pessoa, não da empresa. frota = número de veículos (só o número). ' +
+      'Se ele não disse nada disso, escreva PERFIL={}. NUNCA deduza nem invente.';
 
     const user =
       `Catálogo de planos:\n${planTxt || '(indisponível)'}\n\n` +
@@ -118,7 +139,9 @@ export class SalesAgentService {
       const u = await this.ai.completeWithUsage(system, user, { maxTokens: 450, temperature: 0.5 });
       const raw = u.text;
       const action = this.parseAction(raw);
-      let draft = raw.replace(/ACTION=.*/i, '').trim();
+      const profile = SalesAgentService.parseProfile(raw);
+      // Remove as linhas de controle do texto enviado ao lead (ACTION e PERFIL).
+      let draft = raw.replace(/^\s*PERFIL\s*=.*$/gim, '').replace(/ACTION=.*/i, '').trim();
       // Remove formatação markdown — WhatsApp não renderiza, aparece como lixo visual
       draft = SalesAgentService.stripMarkdown(draft);
       // GARANTIA: se a conversa já está em andamento, remove saudação no início (o modelo às vezes insiste)
@@ -133,6 +156,7 @@ export class SalesAgentService {
       return {
         draft,
         suggestedAction: action,
+        profile,
         usedKnowledge: kb.map((k: any) => ({ id: k.id, title: k.title })),
         allowedFacts,
         confidence: 'high',
@@ -166,5 +190,43 @@ export class SalesAgentService {
   private parseAction(raw: string): SalesReply['suggestedAction'] {
     const m = raw.match(/ACTION=\s*(none|schedule_meeting|handoff_human)/i);
     return (m?.[1]?.toLowerCase() as SalesReply['suggestedAction']) ?? 'none';
+  }
+
+  /**
+   * Lê a linha `PERFIL={...}` da resposta do modelo. Tudo aqui é defensivo: o
+   * modelo pode devolver JSON quebrado, campo vazio, ou não devolver nada — em
+   * qualquer um desses casos retorna undefined e o contato fica como está.
+   * Melhor não gravar do que gravar lixo no cadastro do lead.
+   */
+  static parseProfile(raw: string): LeadProfile | undefined {
+    const m = raw.match(/PERFIL\s*=\s*(\{[^\n]*\})/i);
+    if (!m) return undefined;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(m[1]);
+    } catch {
+      return undefined;
+    }
+    if (!parsed || typeof parsed !== 'object') return undefined;
+
+    const out: LeadProfile = {};
+    const txt = (v: unknown): string | undefined => {
+      if (typeof v !== 'string') return undefined;
+      const s = v.trim();
+      // 80 = teto defensivo; nome/empresa reais não passam disso e corta
+      // alucinação de frase inteira no campo.
+      if (!s || s.length > 80) return undefined;
+      return s;
+    };
+    const nome = txt(parsed.nome);
+    const empresa = txt(parsed.empresa);
+    if (nome) out.nome = nome;
+    if (empresa) out.empresa = empresa;
+
+    const frota = Number(parsed.frota);
+    // 0 não é informação; acima de 100 mil é alucinação, não frota.
+    if (Number.isFinite(frota) && frota > 0 && frota <= 100_000) out.frota = Math.round(frota);
+
+    return Object.keys(out).length ? out : undefined;
   }
 }

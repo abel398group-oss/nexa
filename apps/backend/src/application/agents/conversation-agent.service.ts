@@ -14,6 +14,7 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { HandoffService } from '@/application/handoff/handoff.service';
 import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { ContactsService } from '@/application/contacts/contacts.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -90,6 +91,7 @@ export class ConversationAgentService {
     private readonly opportunities: OpportunitiesService,
     private readonly waha: WahaClientService,
     private readonly events: EventEmitter2,
+    private readonly contacts: ContactsService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -360,6 +362,14 @@ export class ConversationAgentService {
         needsHuman = r.suggestedAction === 'handoff_human';
         allowedFacts = r.allowedFacts;
         usage = r.usage;
+        // 2026-08-01: grava nome/empresa/frota que o LEAD revelou nesta mensagem.
+        // Best-effort: falha aqui NUNCA pode derrubar a resposta ao lead — o
+        // enriquecimento do cadastro é secundário em relação a responder.
+        if (r.profile && conv.phone) {
+          await this.contacts
+            .applyLeadProfile(tenantId, conv.phone, r.profile)
+            .catch((e: any) => this.logger.warn(`applyLeadProfile falhou (${conv.phone}): ${e?.message}`));
+        }
         break;
       }
 

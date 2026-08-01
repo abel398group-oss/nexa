@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/create-contact.dto';
@@ -6,6 +6,8 @@ import { normalizePhone } from '@/shared/utils/phone.util';
 
 @Injectable()
 export class ContactsService {
+  private readonly logger = new Logger('Contacts');
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(tenantId: string, q: PaginationQueryDto, tag?: string): Promise<Paginated<any>> {
@@ -151,6 +153,48 @@ export class ContactsService {
     if (c.name && src !== 'pushname') return; // nome de fonte superior → não toca
     if (c.name === name) return; // sem mudança
     await this.prisma.contact.update({ where: { id: c.id }, data: { name, nameSource: 'pushname' } });
+  }
+
+  /**
+   * Grava o que o LEAD DISSE sobre si na conversa (2026-08-01).
+   *
+   * Precedência (estende a ADR 020): pushname < **lead** < tms < manual.
+   * O que a pessoa digita vale mais que o apelido do perfil dela no WhatsApp
+   * ("Jão 🚛" perde para "aqui é o João Silva"), mas nunca sobrepõe um dado do
+   * TMS nem uma edição sua no painel.
+   *
+   * Regra de ouro: **só preenche campo VAZIO**. Não corrige o que já existe —
+   * um erro de interpretação da IA sobrescrevendo dado bom é pior que um campo
+   * em branco. Só o nome pode substituir um valor anterior, e apenas quando
+   * esse valor veio do pushname.
+   */
+  async applyLeadProfile(
+    tenantId: string,
+    phone: string,
+    profile: { nome?: string; empresa?: string; frota?: number },
+  ): Promise<void> {
+    if (!profile || (!profile.nome && !profile.empresa && profile.frota === undefined)) return;
+    const p = normalizePhone(phone) || phone;
+    const c = await this.prisma.contact.findUnique({ where: { tenantId_phone: { tenantId, phone: p } } });
+    if (!c) return;
+
+    const data: Record<string, unknown> = {};
+    const src = (c as any).nameSource ?? 'pushname';
+
+    // Nome: entra se está vazio OU se o que existe veio do pushname.
+    if (profile.nome && (!c.name || src === 'pushname')) {
+      if (c.name !== profile.nome) {
+        data.name = profile.nome;
+        data.nameSource = 'lead';
+      }
+    }
+    // Empresa e frota: só quando vazios.
+    if (profile.empresa && !c.company) data.company = profile.empresa;
+    if (profile.frota !== undefined && (c as any).fleetSize == null) data.fleetSize = profile.frota;
+
+    if (!Object.keys(data).length) return;
+    await this.prisma.contact.update({ where: { id: c.id }, data: data as any });
+    this.logger.log(`Perfil do lead atualizado (${p}): ${Object.keys(data).join(', ')}`);
   }
 
   async update(tenantId: string, id: string, dto: UpdateContactDto) {

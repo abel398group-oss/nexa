@@ -165,8 +165,11 @@ model Contact {
   tenantId          String   @map("tenant_id")
   phone             String
   name              String?
-  nameSource        String?  @default("pushname") @map("name_source") // pushname | tms | manual (ADR 020)
+  nameSource        String?  @default("pushname") @map("name_source") // pushname | lead | tms | manual (ADR 020)
   company           String?
+  // Frota informada pelo PRÓPRIO lead na conversa (2026-08-01, extração de
+  // perfil). Aditivo e nullable — contato sem essa informação segue igual.
+  fleetSize         Int?     @map("fleet_size")
   email             String?  // armazenar NULL quando ausente — NUNCA string vazia (ADR 021)
   source            String?  // origem do lead (consent_source — LGPD)
   status            String   @default("active") // active / opted_out
