@@ -8,6 +8,7 @@ import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { looksLikeCompetitor } from './competitor-names.const';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -218,6 +219,22 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Campanha "${dto.name}": ${skippedBlocked} número(s) na blocklist — pulados (bloqueado)`);
     }
 
+    // ── Heurística de NOME de concorrente (2026-08-01) ────────────────────────
+    // Números raspados de grupos vêm com o nome de exibição; se o nome bate com
+    // um TMS/emissor conhecido (competitor-names.const), NÃO envia — entra como
+    // skipped/'suspeito_concorrente' no relatório. Falso positivo? O Abel vê no
+    // relatório e manda manualmente. Sem nome = passa (heurística, não trava).
+    const suspectList = targets.filter((t) => looksLikeCompetitor(t.name));
+    if (suspectList.length) {
+      const suspectSet = new Set(suspectList.map((t) => t.phone));
+      targets = targets.filter((t) => !suspectSet.has(t.phone));
+      this.logger.warn(
+        `Campanha "${dto.name}": ${suspectList.length} nome(s) parecem CONCORRENTE — pulados: ` +
+        suspectList.map((t) => `${t.name} (${t.phone})`).join(', '),
+      );
+    }
+    const skippedSuspect = suspectList.length;
+
     // ── Dedup ENTRE campanhas (2026-07-29, pré go-live de leads) ──────────────
     // O dedup acima só olha a lista DESTA campanha. Sem este bloco, o mesmo
     // telefone vindo em dois CSVs diferentes recebia a prospecção duas vezes —
@@ -297,12 +314,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...dupBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'ja_enviado' })),
             // blocklist (concorrentes): skipped para aparecer no relatório
             ...blockedList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'bloqueado' })),
+            // nome bateu com concorrente conhecido: skipped para revisão
+            ...suspectList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'suspeito_concorrente' })),
           ],
         },
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect };
   }
 
   async listCampaigns(tenantId: string, archived = false) {

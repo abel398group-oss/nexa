@@ -423,6 +423,35 @@ describe('SenderService.createCampaign — dedup entre campanhas', () => {
     expect(r.included).toBe(2);
   });
 
+  // Heurística de nome (2026-08-01): nome que bate com TMS concorrente não entra na fila
+  it('nome de concorrente conhecido → skipped/suspeito_concorrente', async () => {
+    const r = await makeService().createCampaign('t1', {
+      name: 'Lote 3', template: 'Ola {{nome}}',
+      phones: [
+        { phone: '5511900000001', name: 'Equipe Bsoft TMS' },
+        { phone: '5511900000002', name: 'Transportadora Silva' },
+        { phone: '5511900000003' }, // sem nome: heurística não se aplica
+      ],
+    });
+    expect(r.skippedSuspect).toBe(1);
+    expect(r.included).toBe(2);
+    const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
+    const suspect = created.find((t: any) => t.phone === '5511900000001');
+    expect(suspect).toMatchObject({ status: 'skipped', error: 'suspeito_concorrente' });
+  });
+
+  it('heurística não pega nome parecido mas legítimo (anti falso positivo)', async () => {
+    const r = await makeService().createCampaign('t1', {
+      name: 'Lote 4', template: 'Ola',
+      phones: [
+        { phone: '5511900000001', name: 'Analista Senior' },     // "senior" solto não bloqueia
+        { phone: '5511900000002', name: 'ESL Transportes' },     // só "esl cloud" bloqueia
+      ],
+    });
+    expect(r.skippedSuspect).toBe(0);
+    expect(r.included).toBe(2);
+  });
+
   // Blocklist (2026-08-01): concorrente com status='blocked' nunca entra na fila
   it('telefone na blocklist (status=blocked) → skipped/bloqueado, fora da fila', async () => {
     prisma.contact.findMany.mockImplementation(({ where }: any) =>
