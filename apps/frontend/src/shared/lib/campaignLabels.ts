@@ -36,6 +36,12 @@ const SKIP_REASON_PT: Record<string, string> = {
   bloqueado: 'Bloqueado (concorrente)',
   suspeito_concorrente: 'Parece concorrente',
   opted_out: 'Descadastrado (pediu para sair)',
+  // Elegibilidade do telefone (phone-eligibility.ts)
+  nao_brasileiro: 'Número de fora do Brasil',
+  telefone_fixo: 'Telefone fixo (não tem WhatsApp)',
+  ddd_invalido: 'DDD não existe',
+  tamanho_invalido: 'Número com tamanho inválido',
+  telefone_invalido: 'Telefone inválido',
 };
 
 export function campaignStatusLabel(status: string): string {

@@ -9,6 +9,7 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
+import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -184,6 +185,22 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     const seen = new Set<string>();
     targets = targets.filter((t) => (seen.has(t.phone) ? false : seen.add(t.phone)));
 
+    // ── Telefone inelegível (2026-08-01, auditoria pré go-live) ───────────────
+    // PRIMEIRO filtro de todos, de propósito: número estrangeiro/inválido não
+    // deve nem consultar o TMS nem consumir cota do aquecimento (~10/dia).
+    // Ver phone-eligibility.ts — o CSV real trouxe 33 estrangeiros e 27 fixos.
+    const invalidList = targets.filter((t) => !canReceiveCampaign(t.phone));
+    if (invalidList.length) {
+      const invalidSet = new Set(invalidList.map((t) => t.phone));
+      targets = targets.filter((t) => !invalidSet.has(t.phone));
+      this.logger.warn(
+        `Campanha "${dto.name}": ${invalidList.length} telefone(s) inelegível(is) — pulados. ` +
+        invalidList.slice(0, 10).map((t) => `${t.phone} (${rejectionReason(t.phone)})`).join(', ') +
+        (invalidList.length > 10 ? ` … +${invalidList.length - 10}` : ''),
+      );
+    }
+    const skippedInvalid = invalidList.length;
+
     // quantos foram PULADOS por opt-out (transparência LGPD)
     let skippedOptOut = 0;
     if (dto.fromContacts) {
@@ -316,12 +333,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...blockedList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'bloqueado' })),
             // nome bateu com concorrente conhecido: skipped para revisão
             ...suspectList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'suspeito_concorrente' })),
+            // telefone inelegível: motivo específico no relatório (estrangeiro, fixo, DDD…)
+            ...invalidList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: rejectionReason(t.phone) ?? 'telefone_invalido' })),
           ],
         },
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid };
   }
 
   async listCampaigns(tenantId: string, archived = false) {
