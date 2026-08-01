@@ -422,4 +422,16 @@ describe('SenderService.createCampaign — dedup entre campanhas', () => {
     expect(r.skippedAlreadySent).toBe(0);
     expect(r.included).toBe(2);
   });
+
+  // Blocklist (2026-08-01): concorrente com status='blocked' nunca entra na fila
+  it('telefone na blocklist (status=blocked) → skipped/bloqueado, fora da fila', async () => {
+    prisma.contact.findMany.mockImplementation(({ where }: any) =>
+      Promise.resolve(where?.status === 'blocked' ? [{ phone: '5511961688954' }] : []));
+    const r = await makeService().createCampaign('t1', dto(['5511961688954', '5511900000002']));
+    expect(r.skippedBlocked).toBe(1);
+    expect(r.included).toBe(1);
+    const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
+    const blocked = created.find((t: any) => t.phone === '5511961688954');
+    expect(blocked).toMatchObject({ status: 'skipped', error: 'bloqueado' });
+  });
 });

@@ -25,6 +25,8 @@ import {
   optOutContact,
   deleteContact,
   bulkDeleteContacts,
+  bulkBlockContacts,
+  bulkUnblockContacts,
   importContacts,
   getContactCampaigns,
 } from '@/entities/contact';
@@ -280,6 +282,36 @@ export function ContactsPage() {
     if (chosen.length === 0) { toast.error('Selecione contatos ativos.'); return; }
     navigate('/campaigns', { state: { phones: chosen.map((c) => ({ phone: c.phone, name: c.name })) } });
   }
+  // Blocklist (concorrentes): bloqueados nunca recebem campanha; reversível.
+  async function blockSelected() {
+    const n = selected.size;
+    const ok = await confirm({
+      title: 'Bloquear selecionados',
+      message: `Bloquear ${n} contato(s)? Eles NUNCA vao receber campanhas (use para concorrentes). Da para desbloquear depois.`,
+      confirmLabel: `Bloquear ${n}`,
+    });
+    if (!ok) return;
+    try {
+      const r = await bulkBlockContacts([...selected]);
+      toast.success(`${r.blocked} contato(s) bloqueado(s).`);
+      setSelected(new Set());
+      await invalidate();
+    } catch {
+      toast.error('Erro ao bloquear os contatos.');
+    }
+  }
+
+  async function unblockSelected() {
+    try {
+      const r = await bulkUnblockContacts([...selected]);
+      toast.success(`${r.unblocked} contato(s) desbloqueado(s).`);
+      setSelected(new Set());
+      await invalidate();
+    } catch {
+      toast.error('Erro ao desbloquear os contatos.');
+    }
+  }
+
   async function deleteSelected() {
     const n = selected.size;
     const ok = await confirm({
@@ -401,6 +433,9 @@ export function ContactsPage() {
           {c.name || '—'}
           {c.status === 'opted_out' && (
             <span className="ml-2"><Badge variant="error">descadastrado</Badge></span>
+          )}
+          {c.status === 'blocked' && (
+            <span className="ml-2"><Badge variant="error">🚫 bloqueado</Badge></span>
           )}
         </span>
       ),
@@ -528,6 +563,8 @@ export function ContactsPage() {
                     />
                     <Button variant="outline" size="sm" onClick={addTagToSelected}>+ Tag</Button>
                   </div>
+                  <Button variant="outline" size="sm" onClick={blockSelected}>🚫 Bloquear</Button>
+                  <Button variant="outline" size="sm" onClick={unblockSelected}>Desbloquear</Button>
                   <Button variant="destructive" size="sm" onClick={deleteSelected}>Excluir</Button>
                   <button
                     onClick={() => setSelected(new Set())}

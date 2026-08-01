@@ -200,6 +200,24 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       targets = targets.filter((t) => !blocked.has(t.phone));
     }
 
+    // ── Blocklist (2026-08-01): concorrentes marcados status='blocked' ────────
+    // Diferente do opt-out (pedido do contato/LGPD), blocked é decisão nossa.
+    // fromContacts já filtra (where status='active'); aqui cobre lista manual/CSV.
+    let blockedList: { phone: string; name?: string | null }[] = [];
+    if (targets.length) {
+      const blockedRows = await this.prisma.contact.findMany({
+        where: { tenantId, status: 'blocked', phone: { in: targets.map((t) => t.phone) } },
+        select: { phone: true },
+      });
+      const blockedSet = new Set(blockedRows.map((b: any) => b.phone));
+      blockedList = targets.filter((t) => blockedSet.has(t.phone));
+      targets = targets.filter((t) => !blockedSet.has(t.phone));
+    }
+    const skippedBlocked = blockedList.length;
+    if (skippedBlocked > 0) {
+      this.logger.log(`Campanha "${dto.name}": ${skippedBlocked} número(s) na blocklist — pulados (bloqueado)`);
+    }
+
     // ── Dedup ENTRE campanhas (2026-07-29, pré go-live de leads) ──────────────
     // O dedup acima só olha a lista DESTA campanha. Sem este bloco, o mesmo
     // telefone vindo em dois CSVs diferentes recebia a prospecção duas vezes —
@@ -277,12 +295,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...tmsBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'tms_cliente' })),
             // já receberam campanha anterior: skipped para aparecer no relatório
             ...dupBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'ja_enviado' })),
+            // blocklist (concorrentes): skipped para aparecer no relatório
+            ...blockedList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'bloqueado' })),
           ],
         },
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked };
   }
 
   async listCampaigns(tenantId: string, archived = false) {
@@ -655,10 +675,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       });
       if (claim.count === 0) return; // outro tick já pegou este alvo
 
-      // pula opt-outs (LGPD)
+      // pula opt-outs (LGPD) e blocklist (concorrentes) — defesa em profundidade:
+      // quem for bloqueado DEPOIS da campanha criada ainda é barrado aqui.
       const contact = await this.contacts.create(campaign.tenantId, { phone: target.phone, name: target.name ?? undefined, source: 'outbound' });
-      if (contact.status === 'opted_out') {
-        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: 'opted_out' } });
+      if (contact.status === 'opted_out' || contact.status === 'blocked') {
+        const reason = contact.status === 'opted_out' ? 'opted_out' : 'bloqueado';
+        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: reason } });
         return;
       }
 

@@ -183,6 +183,30 @@ export class ContactsService {
     return this.prisma.contact.update({ where: { id }, data: { status: 'opted_out', optOutAt: new Date() } });
   }
 
+  // ── Blocklist (2026-08-01, pré go-live): concorrentes NUNCA recebem campanha ──
+  // status='blocked' é distinto de 'opted_out' (LGPD): opt-out é pedido do
+  // contato; blocked é decisão NOSSA (concorrente, número interno, etc).
+  // Reversível pelo painel (unblock). O sender barra em DOIS pontos:
+  // criação da campanha (skipped/bloqueado) e tick (se bloquear depois de criada).
+  async block(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { blocked: 0 };
+    const r = await this.prisma.contact.updateMany({
+      where: { id: { in: ids }, tenantId },
+      data: { status: 'blocked' },
+    });
+    return { blocked: r.count };
+  }
+
+  async unblock(tenantId: string, ids: string[]) {
+    if (!ids?.length) return { unblocked: 0 };
+    // volta para 'active' apenas quem está 'blocked' — não mexe em opted_out
+    const r = await this.prisma.contact.updateMany({
+      where: { id: { in: ids }, tenantId, status: 'blocked' },
+      data: { status: 'active' },
+    });
+    return { unblocked: r.count };
+  }
+
   // Import em lote (CSV já parseado em array). Idempotente por phone.
   async importMany(tenantId: string, contacts: CreateContactDto[]) {
     let created = 0;

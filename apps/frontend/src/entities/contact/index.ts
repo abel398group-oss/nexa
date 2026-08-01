@@ -22,6 +22,8 @@ export {
   optOutContact,
   deleteContact,
   bulkDeleteContacts,
+  bulkBlockContacts,
+  bulkUnblockContacts,
   importContacts,
   getContactCampaigns,
 } from './api/contact.api';

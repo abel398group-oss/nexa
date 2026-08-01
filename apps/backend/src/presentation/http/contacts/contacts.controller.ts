@@ -117,6 +117,17 @@ export class ContactsController {
     return this.contacts.deleteMany(tenantId, body.ids ?? []);
   }
 
+  // Blocklist (concorrentes): bloqueio/desbloqueio em lote — nunca recebem campanha
+  @Post('bulk-block')
+  bulkBlock(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
+    return this.contacts.block(tenantId, body.ids ?? []);
+  }
+
+  @Post('bulk-unblock')
+  bulkUnblock(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {
+    return this.contacts.unblock(tenantId, body.ids ?? []);
+  }
+
   @Patch(':id/reactivate')
   reactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.contacts.reactivate(tenantId, id);

@@ -87,6 +87,17 @@ export async function bulkDeleteContacts(ids: string[]): Promise<{ deleted: numb
   return r.data;
 }
 
+// Blocklist (concorrentes): bloqueio/desbloqueio em lote — nunca recebem campanha.
+export async function bulkBlockContacts(ids: string[]): Promise<{ blocked: number }> {
+  const r = await api.post('/contacts/bulk-block', { ids });
+  return r.data;
+}
+
+export async function bulkUnblockContacts(ids: string[]): Promise<{ unblocked: number }> {
+  const r = await api.post('/contacts/bulk-unblock', { ids });
+  return r.data;
+}
+
 // Campanhas que o contato recebeu (histórico).
 export async function getContactCampaigns(id: string): Promise<ContactCampaign[]> {
   const r = await api.get(`/contacts/${id}/campaigns`);
