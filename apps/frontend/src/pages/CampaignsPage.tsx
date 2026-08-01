@@ -736,7 +736,9 @@ export function CampaignsPage() {
           const extras = avulsos.filter((p) => !seenPhones.has(p)).map((p) => ({ phone: p }));
           payload.phones = [...fromSel, ...extras];
         }
-        if (link.trim()) payload.link = link.trim();
+        // sendLinkOnFirst agora vale no WhatsApp também (antes o backend ignorava
+        // e o link ia SEMPRE na 1ª mensagem — risco de ban em disparo frio)
+        if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (media) { payload.mediaUrl = media.url; payload.mediaName = media.name; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
@@ -1451,15 +1453,15 @@ export function CampaignsPage() {
                                  onChange={() => setSendLinkOnFirst(false)} />
                           <div>
                             <p className="text-sm font-medium text-base-content">Só após resposta <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Recomendado</span></p>
-                            <p className="text-[11px] text-base-content/40">1º e-mail sem link → lead responde com interesse → Lia envia o link na conversa. Melhor entregabilidade.</p>
+                            <p className="text-[11px] text-base-content/40">1ª mensagem sem link → lead responde com interesse → Lia envia o link na conversa. Melhor entregabilidade e menos risco de bloqueio.</p>
                           </div>
                         </label>
                         <label className="flex cursor-pointer items-start gap-3">
                           <input type="radio" className="mt-0.5" checked={sendLinkOnFirst}
                                  onChange={() => setSendLinkOnFirst(true)} />
                           <div>
-                            <p className="text-sm text-base-content/70">No 1º e-mail</p>
-                            <p className="text-[11px] text-base-content/40">Envia o link direto. Mais risco de cair em spam.</p>
+                            <p className="text-sm text-base-content/70">No 1º envio</p>
+                            <p className="text-[11px] text-base-content/40">Envia o link direto. Mais risco de cair em spam (e-mail) ou de bloqueio do número (WhatsApp).</p>
                           </div>
                         </label>
                       </div>

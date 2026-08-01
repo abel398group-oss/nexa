@@ -147,7 +147,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     dto: {
       name: string; template: string; type?: string;
       phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
-      link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
+      link?: string; sendLinkOnFirst?: boolean;
+      mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
     },
   ) {
     const campaignType = dto.type === 'status' ? 'status' : 'message';
@@ -199,6 +200,29 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       targets = targets.filter((t) => !blocked.has(t.phone));
     }
 
+    // ── Dedup ENTRE campanhas (2026-07-29, pré go-live de leads) ──────────────
+    // O dedup acima só olha a lista DESTA campanha. Sem este bloco, o mesmo
+    // telefone vindo em dois CSVs diferentes recebia a prospecção duas vezes —
+    // com lista comprada/exportada isso é questão de tempo, não hipótese.
+    // Quem já tem envio 'sent' em QUALQUER campanha do tenant entra como
+    // skipped/ja_enviado (visível no relatório, mesmo padrão do tms_cliente).
+    // Só 'sent' bloqueia: failed/skipped/queued não contam como "já recebeu".
+    let alreadySent = new Set<string>();
+    if (targets.length) {
+      const prior = await this.prisma.campaignTarget.findMany({
+        where: { tenantId, status: 'sent', phone: { in: targets.map((t) => t.phone) } },
+        select: { phone: true },
+        distinct: ['phone'],
+      });
+      alreadySent = new Set(prior.map((p: any) => p.phone));
+    }
+    const dupBlocked = targets.filter((t) => alreadySent.has(t.phone));
+    targets = targets.filter((t) => !alreadySent.has(t.phone));
+    const skippedAlreadySent = dupBlocked.length;
+    if (skippedAlreadySent > 0) {
+      this.logger.log(`Campanha "${dto.name}": ${skippedAlreadySent} lead(s) já receberam campanha anterior — pulados (ja_enviado)`);
+    }
+
     // ── Filtro TMS: consulta o lote no banco do HiperTMS (read-only) ──────────
     // Clientes já cadastrados no TMS não recebem campanha de prospecção.
     // Se TMS_DB_URL não estiver configurado, tmsMap fica vazio e nenhum lead é bloqueado.
@@ -234,6 +258,11 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         type: campaignType,
         template: dto.template,
         link: dto.link || null,
+        // 2026-07-29: mesma semântica do e-mail (email-campaign-sender:299-303).
+        // false (default) = 1ª mensagem SEM link; a Lia entrega o signupUrl na
+        // conversa quando o lead responde (sales-agent:107). Link em mensagem
+        // fria de número não-oficial é o padrão clássico de ban do WhatsApp.
+        sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
         mediaUrl: dto.mediaUrl || null,
         mediaName: dto.mediaName || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
@@ -246,12 +275,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...tmsAllowed.map((t) => ({ tenantId, phone: t.phone, name: t.name })),
             // clientes TMS: criados como skipped para aparecer no relatório
             ...tmsBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'tms_cliente' })),
+            // já receberam campanha anterior: skipped para aparecer no relatório
+            ...dupBlocked.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'ja_enviado' })),
           ],
         },
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent };
   }
 
   async listCampaigns(tenantId: string, archived = false) {
@@ -632,7 +663,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       }
 
       let text = this.render(campaign.template, target.name);
-      if (campaign.link) text += `\n\n${campaign.link}`; // anexa o link no texto
+      // Link na 1ª mensagem só com opt-in explícito (sendLinkOnFirst) — antes era
+      // incondicional. Default: mensagem fria sem link (anti-ban); o lead que
+      // responder recebe o link da Lia na conversa (sales-agent, signupUrl).
+      if (campaign.link && campaign.sendLinkOnFirst) text += `\n\n${campaign.link}`;
       // Public attachment link. mediaUrl is stored as a relative path (/uploads/filename)
       // since the controller was updated (BUG-010). Legacy campaigns may still carry an
       // absolute URL — we extract the /uploads/ segment in both cases.

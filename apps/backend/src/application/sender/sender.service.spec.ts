@@ -345,4 +345,81 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     expect(followup.schedule).toHaveBeenCalledTimes(1);
     expect(prisma.$transaction).toHaveBeenCalled(); // incrementa contadores + marca sent
   });
+
+  // ── sendLinkOnFirst no WhatsApp (2026-07-29, pré go-live) ──────────────────
+  // Antes o link ia SEMPRE na 1ª mensagem (a flag só existia no e-mail).
+  // Link em disparo frio de número não-oficial = padrão clássico de ban.
+
+  it('link NAO vai na 1ª mensagem quando sendLinkOnFirst=false (default)', async () => {
+    prisma.campaign.findFirst = vi.fn().mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...MSG_CAMPAIGN, link: 'https://hipertms.com.br/demo', sendLinkOnFirst: false });
+    await makeService().tick();
+    const msg = conversations.addMessage.mock.calls[0][2];
+    expect(msg.content).not.toContain('https://hipertms.com.br/demo');
+  });
+
+  it('link VAI na 1ª mensagem quando sendLinkOnFirst=true (opt-in explícito)', async () => {
+    prisma.campaign.findFirst = vi.fn().mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...MSG_CAMPAIGN, link: 'https://hipertms.com.br/demo', sendLinkOnFirst: true });
+    await makeService().tick();
+    const msg = conversations.addMessage.mock.calls[0][2];
+    expect(msg.content).toContain('https://hipertms.com.br/demo');
+  });
+});
+
+// ── Dedup ENTRE campanhas (2026-07-29, pré go-live de leads) ─────────────────
+// O dedup interno só olha a própria lista; sem o bloco novo, o mesmo telefone
+// em dois CSVs recebia a prospecção 2x. Quem já tem 'sent' em qualquer campanha
+// do tenant entra como skipped/ja_enviado (visível no relatório).
+describe('SenderService.createCampaign — dedup entre campanhas', () => {
+  let prisma: any, contacts: any, tmsLookup: any;
+  const makeService = () =>
+    new SenderService(prisma, contacts, {} as any, {} as any, {} as any, tmsLookup, { acquire: async () => async () => {} } as any);
+
+  beforeEach(() => {
+    prisma = {
+      campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
+      campaign: {
+        create: vi.fn().mockImplementation(({ data }: any) =>
+          Promise.resolve({ id: 'camp-new', ...data, _count: { targets: data.targets?.create?.length ?? 0 } })),
+      },
+      contact: {
+        count: vi.fn().mockResolvedValue(0),
+        findMany: vi.fn().mockResolvedValue([]),
+        upsert: vi.fn().mockResolvedValue({}),
+      },
+    };
+    contacts = {};
+    tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()) };
+  });
+
+  const dto = (phones: string[]) => ({
+    name: 'Lote 2', template: 'Ola {{nome}}',
+    phones: phones.map((phone) => ({ phone })),
+  });
+
+  it('telefone com "sent" em campanha anterior → skipped/ja_enviado, fora da fila', async () => {
+    prisma.campaignTarget.findMany.mockResolvedValue([{ phone: '5511900000001' }]);
+    const r = await makeService().createCampaign('t1', dto(['5511900000001', '5511900000002']));
+    expect(r.skippedAlreadySent).toBe(1);
+    expect(r.included).toBe(1);
+    const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
+    const dup = created.find((t: any) => t.phone === '5511900000001');
+    expect(dup).toMatchObject({ status: 'skipped', error: 'ja_enviado' });
+    const ok = created.find((t: any) => t.phone === '5511900000002');
+    expect(ok.status).toBeUndefined(); // default queued
+  });
+
+  it('a consulta só considera status=sent (failed/skipped não bloqueiam reenvio)', async () => {
+    await makeService().createCampaign('t1', dto(['5511900000001']));
+    const where = prisma.campaignTarget.findMany.mock.calls[0][0].where;
+    expect(where.status).toBe('sent');
+    expect(where.tenantId).toBe('t1');
+  });
+
+  it('nenhum repetido → nada pulado, todos na fila', async () => {
+    const r = await makeService().createCampaign('t1', dto(['5511900000001', '5511900000002']));
+    expect(r.skippedAlreadySent).toBe(0);
+    expect(r.included).toBe(2);
+  });
 });
