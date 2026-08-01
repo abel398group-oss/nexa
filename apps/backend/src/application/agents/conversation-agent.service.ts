@@ -6,7 +6,7 @@ import { SellersService } from '@/application/sellers/sellers.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { RouterAgentService, RouteDecision } from './router-agent.service';
-import { SalesAgentService } from './sales-agent.service';
+import { SalesAgentService, type LeadProfile } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
 import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
@@ -289,6 +289,8 @@ export class ConversationAgentService {
     let allowedFacts = '';
     let scripted = false; // respostas fixas (optout/human) não precisam de supervisora IA
     let usage: { tokensIn: number; tokensOut: number; costUsd: number } | undefined;
+    // 2026-08-01: nome/empresa/frota que o lead revelou nesta mensagem (rota sales).
+    let leadProfile: LeadProfile | undefined;
 
     // ── ANTI-LOOP (ia-autonoma §9.8): se a Lia já fez MAX_AI_QUESTIONS perguntas seguidas
     // (cada turno dela terminando em "?") e o lead não esquentou, para de reperguntar e
@@ -362,14 +364,9 @@ export class ConversationAgentService {
         needsHuman = r.suggestedAction === 'handoff_human';
         allowedFacts = r.allowedFacts;
         usage = r.usage;
-        // 2026-08-01: grava nome/empresa/frota que o LEAD revelou nesta mensagem.
-        // Best-effort: falha aqui NUNCA pode derrubar a resposta ao lead — o
-        // enriquecimento do cadastro é secundário em relação a responder.
-        if (r.profile && conv.phone) {
-          await this.contacts
-            .applyLeadProfile(tenantId, conv.phone, r.profile)
-            .catch((e: any) => this.logger.warn(`applyLeadProfile falhou (${conv.phone}): ${e?.message}`));
-        }
+        // 2026-08-01: guarda o que o LEAD revelou; a gravação acontece após o
+        // switch (aqui não há a conversa em escopo para pegar o telefone).
+        leadProfile = r.profile;
         break;
       }
 
@@ -413,6 +410,19 @@ export class ConversationAgentService {
         .replace(/^[^a-zA-ZÀ-ÿ]*(bom dia|boa tarde|boa noite|ol[áa]|oi)[^a-zA-ZÀ-ÿ]*?(tudo bem\??|tudo certo\??)?[^a-zA-ZÀ-ÿ]*/i, '')
         .trimStart();
       if (draft && draft !== before) draft = draft.charAt(0).toUpperCase() + draft.slice(1);
+    }
+
+    // 2026-08-01: grava nome/empresa/frota que o lead revelou. A consulta da
+    // conversa só acontece quando HÁ algo para gravar (minoria das mensagens),
+    // então não adiciona custo ao caminho comum. Best-effort: falhar aqui nunca
+    // pode derrubar a resposta ao lead — enriquecer cadastro é secundário.
+    if (leadProfile && input.conversationId) {
+      try {
+        const c = await this.conversations.findOne(tenantId, input.conversationId);
+        if (c?.phone) await this.contacts.applyLeadProfile(tenantId, c.phone, leadProfile);
+      } catch (e: any) {
+        this.logger.warn(`applyLeadProfile falhou (conv=${input.conversationId}): ${e?.message}`);
+      }
     }
 
     return { route, draft, suggestedAction, usedKnowledge, confidence, needsHuman, allowedFacts, scripted, usage };

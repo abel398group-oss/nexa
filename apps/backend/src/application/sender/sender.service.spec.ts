@@ -126,8 +126,21 @@ describe('SenderService — regras de negocio', () => {
     it('substitui {{nome}} pelo primeiro nome', () => {
       expect(render('Ola {{nome}}!', 'Joao Silva')).toContain('Ola Joao!');
     });
-    it('sem nome usa "tudo bem"', () => {
-      expect(render('Ola {{nome}}!')).toContain('Ola tudo bem!');
+    // 2026-08-01: o fallback ERA a string "tudo bem", o que produzia
+    // "Ola tudo bem!" e, pior, "Bom dia tudo bem, tudo bem?" — em 1.666 dos
+    // 3.097 leads (mais da metade da base entra sem nome). Agora o placeholder
+    // some e a frase se recompõe. Ver SenderService.tidyMissingName.
+    it('sem nome: o placeholder some e a frase fica limpa', () => {
+      expect(render('Ola {{nome}}!')).toContain('Ola!');
+      expect(render('Ola {{nome}}!')).not.toContain('tudo bem!');
+    });
+    it('sem nome: vírgula órfã e pontuação dupla não sobram', () => {
+      expect(render('{{saudacao}} {{nome}}, tudo bem?')).toMatch(/^(Bom dia|Boa tarde|Boa noite), tudo bem\?/);
+      expect(render('{{saudacao}}, {{nome}}. Sou a Lia.')).toMatch(/^(Bom dia|Boa tarde|Boa noite)\. Sou a Lia\./);
+    });
+    it('nome-lixo de lista raspada é tratado como sem nome', () => {
+      expect(render('Ola {{nome}}!', '5511999998888')).toContain('Ola!');
+      expect(render('Ola {{nome}}!', '🚛')).toContain('Ola!');
     });
     it('anexa o rodape de opt-out quando falta (LGPD)', () => {
       const out = render('Mensagem qualquer', 'Ana');
