@@ -29,6 +29,7 @@ import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Card, StatusBadge, Modal, Icon, Badge, statusVariant } from '@/shared/ui';
 import { StandardListPage } from '@/components/shared/StandardListPage';
+import { campaignStatusLabel, targetStatusLabel, skipReasonLabel } from '@/shared/lib/campaignLabels';
 
 type Channel = 'whatsapp' | 'email';
 
@@ -980,7 +981,7 @@ export function CampaignsPage() {
                       title="Selecionar"
                     />
                     <span className="font-semibold text-base-content">{c.name}</span>
-                    <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
+                    <Badge variant={statusVariant(c.status)}>{campaignStatusLabel(c.status)}</Badge>
                     {isEmailCh
                       ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700 dark:bg-blue-500/15"><Icon name="mail" className="h-3 w-3" /> e-mail</span>
                       : c.type === 'status'
@@ -1105,7 +1106,13 @@ export function CampaignsPage() {
                                 {engChip(t)!.label}
                               </span>
                             )}
-                            <StatusBadge tone={targetTone(t.status)}>{t.status}</StatusBadge>
+                            <StatusBadge tone={targetTone(t.status)}>{targetStatusLabel(t.status)}</StatusBadge>
+                            {/* motivo do pulo/falha — antes ficava só no banco */}
+                            {skipReasonLabel(t.error) && (
+                              <span className="rounded-full bg-base-200 px-2 py-0.5 text-[10px] text-base-content/60">
+                                {skipReasonLabel(t.error)}
+                              </span>
+                            )}
                             {exData?.campaign?.status === 'draft' && (
                               <button
                                 type="button"
