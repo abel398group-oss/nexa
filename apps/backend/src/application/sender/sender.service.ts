@@ -367,64 +367,99 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return camps.map((c: any) => ({ ...c, counts: countMap.get(c.id) ?? {} }));
   }
 
-  // Detalhe de uma campanha: campanha + destinatários (status de envio + engajamento) + contagens.
-  async campaignDetail(tenantId: string, id: string) {
+  /**
+   * Detalhe de uma campanha: campanha + destinatários (status + engajamento) + contagens.
+   *
+   * DISP-003: `limit` liga a paginação da LISTA de destinatários (e `status`/`search`
+   * filtram no banco, não no browser). Os agregados — `counts`, `engagement` e
+   * `conversion` — são SEMPRE calculados sobre a campanha inteira, nunca sobre a
+   * página: o funil não pode mudar conforme a página que o operador abriu.
+   *
+   * Sem `limit` o retorno continua idêntico ao anterior (a tela antiga que carrega
+   * tudo de uma vez segue funcionando sem mudança).
+   */
+  async campaignDetail(
+    tenantId: string,
+    id: string,
+    opts: { limit?: number; offset?: number; status?: string; search?: string } = {},
+  ) {
     const campaign = await this.prisma.campaign.findFirst({ where: { id, tenantId } });
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
-    const targets = await this.prisma.campaignTarget.findMany({
-      where: { campaignId: id },
-      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
-    });
 
-    // Engajamento DESTA campanha: só conta quem foi REALMENTE enviado nesta campanha,
-    // ack das mensagens carimbadas com este campaignId, e resposta só APÓS o envio dela.
-    // (evita marcar "respondeu/lido" por conversas antigas — ex.: campanha agendada/não enviada)
-    const sentPhones = [...new Set(targets.filter((t: any) => t.status === 'sent' && t.sentAt).map((t: any) => t.phone).filter(Boolean))];
+    // ── página de destinatários (filtro aplicado no banco) ────────────────────
+    const where: any = { campaignId: id };
+    if (opts.status) where.status = opts.status;
+    const q = opts.search?.trim();
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    const [targets, matching] = await Promise.all([
+      this.prisma.campaignTarget.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+        ...(opts.limit ? { take: opts.limit, skip: opts.offset ?? 0 } : {}),
+      }),
+      this.prisma.campaignTarget.count({ where }),
+    ]);
+
+    // ── contagens por status: campanha INTEIRA (ignora paginação e filtro) ────
+    const countRows = await this.prisma.campaignTarget.groupBy({
+      by: ['status'],
+      where: { campaignId: id },
+      _count: { _all: true },
+    });
+    const counts = countRows.reduce(
+      (a: Record<string, number>, r: any) => ({ ...a, [r.status]: r._count._all }),
+      {} as Record<string, number>,
+    );
+
+    // ── engajamento DESTA campanha ───────────────────────────────────────────
+    // Parte das mensagens carimbadas com `campaignId` (coluna indexada, C3) em vez
+    // de partir dos alvos carregados — assim o agregado não depende da página.
+    // Resposta só conta se veio DEPOIS do envio desta campanha (evita marcar
+    // "respondeu" por conversa antiga do mesmo contato).
+    const campMsgs = await this.prisma.aiMessage.findMany({
+      where: { tenantId, campaignId: id, direction: 'outbound', intent: 'outbound_campaign' },
+      select: { conversationId: true, ack: true, createdAt: true },
+    });
+    const convIds = [...new Set(campMsgs.map((m: any) => m.conversationId))];
+    // uma query só traz phone (enriquecer as linhas) e outcome (conversão)
+    const convs = convIds.length
+      ? await this.prisma.aiConversation.findMany({
+          where: { id: { in: convIds } },
+          select: { id: true, phone: true, outcome: true },
+        })
+      : [];
+    const phoneByConv = new Map<string, string>(convs.map((c: any) => [c.id, c.phone]));
+
     const engByPhone = new Map<string, { ack: number; replied: boolean }>();
-    if (sentPhones.length) {
-      const convs = await this.prisma.aiConversation.findMany({
-        where: { tenantId, phone: { in: sentPhones } },
-        select: { id: true, phone: true },
+    const sentAtByPhone = new Map<string, Date>();
+    for (const m of campMsgs) {
+      const phone = phoneByConv.get(m.conversationId);
+      if (!phone) continue;
+      const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
+      cur.ack = Math.max(cur.ack, m.ack ?? 0);
+      engByPhone.set(phone, cur);
+      const prev = sentAtByPhone.get(phone);
+      if (!prev || m.createdAt < prev) sentAtByPhone.set(phone, m.createdAt);
+    }
+    if (sentAtByPhone.size) {
+      const inbound = await this.prisma.aiMessage.findMany({
+        where: { conversationId: { in: convIds }, direction: 'inbound' },
+        select: { conversationId: true, createdAt: true },
       });
-      const convIds = convs.map((c: any) => c.id);
-      const phoneByConv = new Map<string, string>(convs.map((c: any) => [c.id, c.phone]));
-      if (convIds.length) {
-        // mensagens DESTA campanha (carimbadas com campaignId): ack + horário de envio por telefone
-        const outMsgs = await this.prisma.aiMessage.findMany({
-          where: {
-            conversationId: { in: convIds },
-            direction: 'outbound',
-            intent: 'outbound_campaign',
-            campaignId: id, // C3: coluna dedicada indexada (era metadata->>'campaignId')
-          },
-          select: { conversationId: true, ack: true, createdAt: true },
-        });
-        const sentAtByPhone = new Map<string, Date>();
-        for (const m of outMsgs) {
-          const phone = phoneByConv.get(m.conversationId);
-          if (!phone) continue;
+      for (const m of inbound) {
+        const phone = phoneByConv.get(m.conversationId);
+        if (!phone) continue;
+        const sentAt = sentAtByPhone.get(phone);
+        if (sentAt && m.createdAt >= sentAt) {
           const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
-          cur.ack = Math.max(cur.ack, m.ack ?? 0);
+          cur.replied = true;
           engByPhone.set(phone, cur);
-          const prev = sentAtByPhone.get(phone);
-          if (!prev || m.createdAt < prev) sentAtByPhone.set(phone, m.createdAt);
-        }
-        // resposta: inbound só conta se veio DEPOIS do envio desta campanha
-        if (sentAtByPhone.size) {
-          const inbound = await this.prisma.aiMessage.findMany({
-            where: { conversationId: { in: convIds }, direction: 'inbound' },
-            select: { conversationId: true, createdAt: true },
-          });
-          for (const m of inbound) {
-            const phone = phoneByConv.get(m.conversationId);
-            if (!phone) continue;
-            const sentAt = sentAtByPhone.get(phone);
-            if (sentAt && m.createdAt >= sentAt) {
-              const cur = engByPhone.get(phone) ?? { ack: 0, replied: false };
-              cur.replied = true;
-              engByPhone.set(phone, cur);
-            }
-          }
         }
       }
     }
@@ -434,36 +469,25 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       return { ...t, ack: e?.ack ?? 0, replied: e?.replied ?? false };
     });
 
-    const counts = enriched.reduce(
-      (a: Record<string, number>, t: any) => ({ ...a, [t.status]: (a[t.status] ?? 0) + 1 }),
-      {} as Record<string, number>,
-    );
-    // resumo de engajamento. Quem RESPONDEU conta como entregue+lido (responder prova
-    // recebimento e leitura) — evita o funil incoerente "3 responderam, 0 entregues"
-    // quando o WAHA não manda os recibos de ack.
+    // Quem RESPONDEU conta como entregue+lido (responder prova recebimento e
+    // leitura) — evita o funil incoerente "3 responderam, 0 entregues" quando o
+    // WAHA não manda os recibos de ack.
+    const eng = [...engByPhone.values()];
     const engagement = {
-      delivered: enriched.filter((t: any) => t.ack >= 2 || t.replied).length,
-      read: enriched.filter((t: any) => t.ack >= 3 || t.replied).length,
-      replied: enriched.filter((t: any) => t.replied).length,
+      delivered: eng.filter((e) => e.ack >= 2 || e.replied).length,
+      read: eng.filter((e) => e.ack >= 3 || e.replied).length,
+      replied: eng.filter((e) => e.replied).length,
     };
 
-    // CAMP-1: conversão — conversas originadas por ESTA campanha (msg carimbada com campaignId) + outcome
-    const campMsgs = await this.prisma.aiMessage.findMany({
-      where: { tenantId, intent: 'outbound_campaign', campaignId: id }, // C3: coluna indexada
-      select: { conversationId: true },
-      distinct: ['conversationId'],
-    });
-    const convIds = campMsgs.map((m: any) => m.conversationId);
-    const convs = convIds.length
-      ? await this.prisma.aiConversation.findMany({ where: { id: { in: convIds } }, select: { outcome: true } })
-      : [];
+    // CAMP-1: conversão — conversas originadas por ESTA campanha + outcome
     const byOutcome = convs.reduce(
       (a: Record<string, number>, c: any) => ({ ...a, [c.outcome ?? 'em_aberto']: (a[c.outcome ?? 'em_aberto'] ?? 0) + 1 }),
       {} as Record<string, number>,
     );
     const conversion = { conversations: convIds.length, byOutcome };
 
-    return { campaign, targets: enriched, counts, engagement, conversion };
+    // `matching` = total que casa com o filtro atual (base da paginação na tela)
+    return { campaign, targets: enriched, counts, engagement, conversion, matching };
   }
 
   // Edita uma campanha que ainda NÃO foi iniciada (status 'draft'). Só campos seguros.
@@ -502,6 +526,40 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  /**
+   * DISP-002: recoloca na fila os alvos que FALHARAM (erro de entrega).
+   * Serve aos dois canais — cada worker pega de volta o que é seu (o de e-mail
+   * filtra `channel:'email'`; o de WhatsApp, `channel:'whatsapp'` desde DISP-014).
+   *
+   * Só mexe em `failed`. `skipped` fica de fora de propósito: é exclusão
+   * deliberada (opt-out, blocklist, cliente TMS, já enviado, telefone inválido) —
+   * recolocar na fila reenviaria justamente para quem não pode receber.
+   *
+   * Campanha `done` volta a `running` para o worker consumir a fila de novo.
+   * `paused` é decisão explícita do operador e é preservada — os alvos ficam
+   * prontos e saem quando ele clicar em Iniciar.
+   */
+  async retryFailed(tenantId: string, id: string) {
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id, tenantId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    const r = await this.prisma.campaignTarget.updateMany({
+      where: { campaignId: id, tenantId, status: 'failed' },
+      data: { status: 'queued', error: null, sentAt: null },
+    });
+    if (r.count === 0) return { requeued: 0, status: campaign.status };
+
+    const resumed = campaign.status === 'done';
+    if (resumed) {
+      await this.prisma.campaign.update({ where: { id }, data: { status: 'running', startedAt: new Date() } });
+    }
+    this.logger.log(`Retry: ${r.count} alvo(s) de volta à fila (campanha "${campaign.name}")`);
+    return { requeued: r.count, status: resumed ? 'running' : campaign.status };
   }
 
   async removeTarget(tenantId: string, campaignId: string, targetId: string) {
@@ -598,6 +656,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       await this.prisma.campaignTarget.updateMany({
         where: {
           status: 'sending',
+          campaign: { channel: 'whatsapp' }, // DISP-014: não mexer em alvo de e-mail
           OR: [
             { sentAt: null },
             { sentAt: { lt: new Date(Date.now() - 5 * 60_000) } },
@@ -609,7 +668,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       // fecha campanhas 'message' running que já não têm alvo na fila (terminaram)
       // (type:'status' não tem targets — não deve ser fechado aqui; o tick do status cuida disso)
       await this.prisma.campaign.updateMany({
-        where: { status: 'running', type: 'message', targets: { none: { status: 'queued' } } },
+        where: { channel: 'whatsapp', status: 'running', type: 'message', targets: { none: { status: 'queued' } } },
         data: { status: 'done' },
       });
 
@@ -658,8 +717,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       }
 
       // pega uma campanha rodando com alvo na fila — respeitando agendamento (scheduledAt no futuro = espera)
+      // DISP-014: `channel: 'whatsapp'` é OBRIGATÓRIO. Sem ele este worker pegava
+      // campanhas de e-mail (o worker de e-mail filtra por canal, este não filtrava)
+      // e tentava mandar WhatsApp para o telefone sintético `email:<addr>` — o alvo
+      // era consumido aqui e o e-mail real nunca saía.
       const campaign = await this.prisma.campaign.findFirst({
         where: {
+          channel: 'whatsapp',
           status: 'running',
           targets: { some: { status: 'queued' } },
           OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
@@ -761,7 +825,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             },
           });
         }
-        await this.conversations.addMessage(campaign.tenantId, conv.id, { direction: 'outbound', content: text, intent: 'outbound_campaign', metadata: { campaignId: campaign.id } });
+        // DISP-001: requireDelivery faz o addMessage LANÇAR quando o WAHA recusa
+        // (sessão caída, 5xx, timeout, fora do allowlist). Sem isto o fluxo seguia
+        // direto para o `sent` abaixo e a campanha aparecia 100% enviada mesmo com
+        // o WhatsApp fora do ar.
+        await this.conversations.addMessage(campaign.tenantId, conv.id, {
+          direction: 'outbound',
+          content: text,
+          intent: 'outbound_campaign',
+          metadata: { campaignId: campaign.id },
+          requireDelivery: true,
+        });
 
         // anexo NATIVO (PDF/Word) — só quando a API oficial do WhatsApp estiver habilitada.
         // WAHA grátis não envia arquivo; até habilitar, o material vai como link no texto (acima).
@@ -790,7 +864,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         await this.writeAntibanState(Date.now(), newDelay); // persiste no Redis (BUG-001 fix)
         this.logger.log(`Disparo p/ ${target.phone} (campanha ${campaign.name}) [${number.sentToday + 1}/${number.dailyLimit} hoje; próx em ${Math.round(newDelay / 1000)}s]`);
       } catch (e: any) {
-        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: String(e?.message).slice(0, 200) } });
+        // REGRA 3 (REGRAS-SQUAD): todo caminho de erro loga o motivo original.
+        const reason = String(e?.message ?? e).slice(0, 200);
+        this.logger.warn(`Disparo p/ ${target.phone} FALHOU (campanha ${campaign.name}): ${reason}`);
+        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: reason } });
+        // DISP-001: preserva o ritmo anti-ban também na falha. Sem isto, um WAHA
+        // fora do ar faria o worker varrer a fila inteira a 1 alvo/15s marcando
+        // tudo como 'failed' — em vez de espaçar as tentativas como no sucesso.
+        const retryDelay = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
+        await this.writeAntibanState(Date.now(), retryDelay);
       }
     } catch (e: any) {
       this.logger.error(`tick falhou: ${e?.message}`);

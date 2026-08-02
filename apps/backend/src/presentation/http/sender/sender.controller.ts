@@ -3,7 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SenderService } from '@/application/sender/sender.service';
 import { EmailCampaignSenderService } from '@/application/email/email-campaign-sender.service';
@@ -32,6 +32,19 @@ class CampaignIdsDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
 }
 
+/**
+ * DISP-003: filtros/paginação do detalhe da campanha. Todos opcionais e SEM
+ * default para `limit` — ausente significa "traz tudo", que é o comportamento
+ * que a tela atual espera. (REGRA 2: query param não declarado aqui derrubaria
+ * a request com 400 por causa do `forbidNonWhitelisted` global.)
+ */
+class CampaignDetailQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
+  @IsOptional() @IsIn(['queued', 'sending', 'sent', 'failed', 'skipped']) status?: string;
+  @IsOptional() @IsString() search?: string;
+}
+
 // edição de campanha (draft ou paused com 0 envios)
 class UpdateCampaignDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
@@ -50,11 +63,18 @@ class SenderSettingsDto {
   @Type(() => Number) @IsInt() @Min(0) emailEndHour!: number;
 }
 
+// DISP-008: sem isto qualquer string entrava na fila como "e-mail" e só falhava
+// lá na frente, no SMTP, virando um alvo 'failed' sem motivo claro no relatório.
+class EmailTargetDto {
+  @IsEmail() email!: string;
+  @IsOptional() @IsString() name?: string;
+}
+
 class CreateEmailCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(1) subject!: string;
   @IsString() @MinLength(1) template!: string;
-  @IsOptional() @IsArray() emails?: { email: string; name?: string }[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => EmailTargetDto) emails?: EmailTargetDto[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
   @IsOptional() @IsString() link?: string;
   @IsOptional() @IsBoolean() sendLinkOnFirst?: boolean;
@@ -94,9 +114,20 @@ export class SenderController {
     return this.sender.bulkRemoveCampaigns(tenantId, dto.ids);
   }
 
+  // DISP-003: limit/offset/status/search são opcionais — sem `limit` o retorno é
+  // a campanha inteira (comportamento anterior). Agregados nunca paginam.
   @Get('campaigns/:id')
-  detail(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.sender.campaignDetail(tenantId, id);
+  detail(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Query() q: CampaignDetailQueryDto,
+  ) {
+    return this.sender.campaignDetail(tenantId, id, {
+      limit: q.limit,
+      offset: q.offset,
+      status: q.status,
+      search: q.search,
+    });
   }
 
   @Post('campaigns')
@@ -147,6 +178,13 @@ export class SenderController {
   @Post('campaigns/:id/pause')
   pause(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.sender.setStatus(tenantId, id, 'paused');
+  }
+
+  // DISP-002: recoloca na fila os alvos que falharam (só 'failed' — 'skipped' é
+  // exclusão deliberada). Vale para WhatsApp e e-mail.
+  @Post('campaigns/:id/retry-failed')
+  retryFailed(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sender.retryFailed(tenantId, id);
   }
 
   @Delete('campaigns/:id/targets/:targetId')

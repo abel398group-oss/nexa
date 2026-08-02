@@ -359,6 +359,41 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     expect(prisma.$transaction).toHaveBeenCalled(); // incrementa contadores + marca sent
   });
 
+  // ── DISP-001 (auditoria 2026-08-02): 'sent' tem que significar ENTREGUE ─────
+  // O addMessage engolia a recusa do WAHA (só logava) e o worker seguia direto
+  // para o `sent`. Com o WhatsApp fora do ar a campanha era reportada como 100%
+  // enviada sem nenhuma mensagem ter saído.
+
+  it('exige entrega: pede requireDelivery ao addMessage', async () => {
+    await makeService().tick();
+    expect(conversations.addMessage.mock.calls[0][2].requireDelivery).toBe(true);
+  });
+
+  // ── DISP-014 (auditoria 2026-08-02): este worker é SÓ do WhatsApp ───────────
+  // Sem o filtro de canal ele pegava campanha de e-mail (o worker de e-mail
+  // filtra, este não filtrava) e tentava mandar WhatsApp pro telefone sintético
+  // `email:<addr>` — consumindo o alvo e impedindo o envio real do e-mail.
+  it('só considera campanhas do canal whatsapp (não rouba alvo de e-mail)', async () => {
+    await makeService().tick();
+    const whereCampanha = prisma.campaign.findFirst.mock.calls.at(-1)[0].where;
+    expect(whereCampanha.channel).toBe('whatsapp');
+    // recuperação de travados e fechamento de campanha também são escopados
+    expect(prisma.campaignTarget.updateMany.mock.calls[0][0].where.campaign).toMatchObject({ channel: 'whatsapp' });
+    expect(prisma.campaign.updateMany.mock.calls[0][0].where.channel).toBe('whatsapp');
+  });
+
+  it('WAHA recusa o envio → alvo vira "failed" (nunca "sent") e sem follow-up', async () => {
+    conversations.addMessage.mockRejectedValue(new Error('whatsapp_nao_enviado: waha_500'));
+    await makeService().tick();
+
+    const failed = prisma.campaignTarget.update.mock.calls.find((c: any[]) => c[0]?.data?.status === 'failed');
+    expect(failed).toBeTruthy();
+    expect(failed[0].data.error).toContain('waha_500');
+    // o `sent` mora no $transaction — não pode ter acontecido
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(followup.schedule).not.toHaveBeenCalled();
+  });
+
   // ── sendLinkOnFirst no WhatsApp (2026-07-29, pré go-live) ──────────────────
   // Antes o link ia SEMPRE na 1ª mensagem (a flag só existia no e-mail).
   // Link em disparo frio de número não-oficial = padrão clássico de ban.

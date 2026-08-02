@@ -16,7 +16,11 @@ export interface Campaign {
 export interface CampaignDetail {
   campaign: Campaign;
   targets: unknown[];
+  /** Contagem por status da campanha INTEIRA — não muda com paginação/filtro. */
   counts: Record<string, number>;
+  /** DISP-003: total que casa com o filtro atual (base da paginação da lista). */
+  matching?: number;
+  engagement?: { delivered: number; read: number; replied: number };
 }
 
 // Resultado da criação de campanha (mensagem de sucesso lê included/skippedOptOut).

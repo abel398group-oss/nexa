@@ -32,6 +32,9 @@ import { EmailReplyService } from './email-reply.service';
 import { emailToPhone } from './email.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/competitor-names.const';
+// DISP-007: helpers estáticos de template (nome/saudação) — mesma regra dos dois
+// canais, sem duplicar. Import só de estáticos: não entra no grafo de DI.
+import { SenderService } from '@/application/sender/sender.service';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -91,14 +94,20 @@ export class EmailCampaignSenderService {
     return !SPAM_SUBJECT_WORDS.some((w) => lower.includes(w));
   }
 
-  /** Renderiza o template com {{nome}} e {{saudacao}}. */
+  /**
+   * Renderiza o template com {{nome}} e {{saudacao}}.
+   *
+   * DISP-007: reusa os helpers já validados do canal WhatsApp. O fallback antigo
+   * era a string "tudo bem", que produzia aberrações como "Bom dia tudo bem, tudo
+   * bem?" — o WhatsApp corrigiu isso (mais da metade da base entra sem nome) e o
+   * e-mail tinha ficado para trás. Sem nome, `{{nome}}` some e a frase se recompõe.
+   */
   private render(template: string, name?: string | null): string {
-    const first = (name ?? '').split(' ')[0] || 'tudo bem';
-    const h = (new Date().getUTCHours() - 3 + 24) % 24;
-    const saudacao = h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
-    return template
+    const first = SenderService.firstName(name);
+    const txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
-      .replace(/\{\{\s*saudacao\s*\}\}/gi, saudacao);
+      .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    return first ? txt : SenderService.tidyMissingName(txt);
   }
 
   // ── CRUD: cria campanha de e-mail ────────────────────────────────

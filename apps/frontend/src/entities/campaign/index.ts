@@ -17,6 +17,7 @@ export {
   updateCampaign,
   startCampaign,
   pauseCampaign,
+  retryFailedTargets,
   deleteCampaign,
   removeCampaignTarget,
   bulkDeleteCampaigns,

@@ -15,8 +15,22 @@ export async function listCampaigns(archived = false): Promise<Campaign[]> {
   return r.data;
 }
 
-export async function getCampaign(id: string): Promise<CampaignDetail> {
-  const r = await api.get(`/campaigns/${id}`);
+/**
+ * Detalhe da campanha. DISP-003: `limit` liga a paginação e `status`/`search`
+ * filtram no banco. Os agregados (counts/engagement/conversion) vêm sempre da
+ * campanha inteira — só a LISTA de destinatários é paginada.
+ * Sem opções, o backend devolve tudo (comportamento antigo).
+ */
+export async function getCampaign(
+  id: string,
+  opts: { limit?: number; offset?: number; status?: string; search?: string } = {},
+): Promise<CampaignDetail> {
+  const params: Record<string, string | number> = {};
+  if (opts.limit !== undefined) params.limit = opts.limit;
+  if (opts.offset) params.offset = opts.offset;
+  if (opts.status) params.status = opts.status;
+  if (opts.search) params.search = opts.search;
+  const r = await api.get(`/campaigns/${id}`, { params });
   return r.data;
 }
 
@@ -50,6 +64,13 @@ export async function startCampaign(id: string): Promise<void> {
 
 export async function pauseCampaign(id: string): Promise<void> {
   await api.post(`/campaigns/${id}/pause`);
+}
+
+// DISP-002: recoloca na fila os alvos que falharam, na própria campanha.
+// Só 'failed' volta — 'skipped' é exclusão deliberada (opt-out, blocklist, etc).
+export async function retryFailedTargets(id: string): Promise<{ requeued: number; status: string }> {
+  const r = await api.post(`/campaigns/${id}/retry-failed`);
+  return r.data;
 }
 
 export async function deleteCampaign(id: string): Promise<void> {

@@ -573,6 +573,9 @@ model CampaignTarget {
 
   @@index([campaignId])
   @@index([status])
+  // DISP-005: query mais quente do worker — próximo alvo de UMA campanha, por
+  // status, na ordem de criação. Os dois índices acima resolviam só metade dela.
+  @@index([campaignId, status, createdAt])
   @@map("campaign_targets")
 }
 

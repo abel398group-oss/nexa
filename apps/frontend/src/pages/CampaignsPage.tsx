@@ -14,6 +14,7 @@ import {
   updateCampaign,
   startCampaign,
   pauseCampaign,
+  retryFailedTargets,
   deleteCampaign,
   removeCampaignTarget,
   bulkDeleteCampaigns,
@@ -32,6 +33,11 @@ import { StandardListPage } from '@/components/shared/StandardListPage';
 import { campaignStatusLabel, targetStatusLabel, skipReasonLabel } from '@/shared/lib/campaignLabels';
 
 type Channel = 'whatsapp' | 'email';
+
+// DISP-003: destinatários por página no painel expandido. Antes a tela baixava a
+// campanha INTEIRA (e o polling repetia isso a cada 8s), o que numa campanha de
+// milhares de leads virava um payload enorme a cada ciclo.
+const PAGE_TARGETS = 50;
 
 // Date → string aceita pelo <input type="datetime-local"> (horário LOCAL).
 function toLocalInput(d: Date): string {
@@ -127,6 +133,11 @@ export function CampaignsPage() {
   const [expandedDataMap, setExpandedDataMap] = useState<Record<string, any>>({});
   const [expandedLoadingIds, setExpandedLoadingIds] = useState<Record<string, boolean>>({});
   const [expandedSearchMap, setExpandedSearchMap] = useState<Record<string, string>>({});
+  // DISP-003: página atual da lista de destinatários, por campanha expandida.
+  const [expandedPageMap, setExpandedPageMap] = useState<Record<string, number>>({});
+  // Espelho de {busca, página} lido pelo polling (o setInterval não enxerga o state atual).
+  const targetsViewRef = useRef<Record<string, { search: string; page: number }>>({});
+  const searchTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const location = useLocation();
   // link fixo: memoriza o último link usado (não precisa redigitar a cada campanha)
   const [link, setLink] = useState(() => localStorage.getItem('nexa_campaign_link') ?? '');
@@ -429,26 +440,71 @@ export function CampaignsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
+  /**
+   * DISP-003: carrega UMA página de destinatários, já filtrada no servidor.
+   *
+   * A busca e a página vivem em `targetsViewRef` (não só no state) porque o
+   * polling roda dentro de um setInterval — lendo do state ele congelaria na
+   * primeira página com a busca vazia a cada 8s.
+   */
+  async function loadExpandedTargets(campaignId: string, view?: { search?: string; page?: number }) {
+    const cur = targetsViewRef.current[campaignId] ?? { search: '', page: 0 };
+    const next = { search: view?.search ?? cur.search, page: view?.page ?? cur.page };
+    targetsViewRef.current[campaignId] = next;
+    const d = await getCampaign(campaignId, {
+      limit: PAGE_TARGETS,
+      offset: next.page * PAGE_TARGETS,
+      search: next.search.trim() || undefined,
+    });
+    setExpandedDataMap((prev) => (prev[campaignId] ? { ...prev, [campaignId]: d } : prev));
+    return d;
+  }
+
   // expande/colapsa a linha inline (estilo Excel) — cada campanha independente
   async function toggleExpand(c: Campaign) {
     if (expandedIds[c.id]) {
       setExpandedIds((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
       setExpandedDataMap((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
       setExpandedSearchMap((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
+      setExpandedPageMap((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
+      delete targetsViewRef.current[c.id];
       return;
     }
     setExpandedIds((prev) => ({ ...prev, [c.id]: true }));
     setExpandedSearchMap((prev) => ({ ...prev, [c.id]: '' }));
+    setExpandedPageMap((prev) => ({ ...prev, [c.id]: 0 }));
     setExpandedLoadingIds((prev) => ({ ...prev, [c.id]: true }));
     setExpandedDataMap((prev) => ({ ...prev, [c.id]: { campaign: c, targets: [], counts: c.counts } }));
     try {
-      const d = await getCampaign(c.id);
-      setExpandedDataMap((prev) => ({ ...prev, [c.id]: d }));
+      await loadExpandedTargets(c.id, { search: '', page: 0 });
     } catch {
       // mantém o placeholder
     } finally {
       setExpandedLoadingIds((prev) => { const n = { ...prev }; delete n[c.id]; return n; });
     }
+  }
+
+  // troca de página da lista de destinatários (a busca atual é preservada)
+  async function goToTargetsPage(campaignId: string, page: number) {
+    setExpandedPageMap((prev) => ({ ...prev, [campaignId]: page }));
+    setExpandedLoadingIds((prev) => ({ ...prev, [campaignId]: true }));
+    try {
+      await loadExpandedTargets(campaignId, { page });
+    } catch {
+      toast.error('Erro ao carregar a página.');
+    } finally {
+      setExpandedLoadingIds((prev) => { const n = { ...prev }; delete n[campaignId]; return n; });
+    }
+  }
+
+  // busca no servidor com debounce — sempre volta para a 1ª página
+  function onTargetsSearchChange(campaignId: string, value: string) {
+    setExpandedSearchMap((prev) => ({ ...prev, [campaignId]: value }));
+    setExpandedPageMap((prev) => ({ ...prev, [campaignId]: 0 }));
+    clearTimeout(searchTimersRef.current[campaignId]);
+    searchTimersRef.current[campaignId] = setTimeout(() => {
+      void loadExpandedTargets(campaignId, { search: value, page: 0 }).catch(() => {});
+    }, 350);
   }
 
   // Single click → expandir inline | Double click → editar (só rascunho)
@@ -474,10 +530,8 @@ export function CampaignsPage() {
     const ids = Object.keys(expandedIds);
     const t = setInterval(async () => {
       for (const id of ids) {
-        try {
-          const d = await getCampaign(id);
-          setExpandedDataMap((prev) => prev[id] ? { ...prev, [id]: d } : prev);
-        } catch { /* silencioso */ }
+        // DISP-003: recarrega só a página/busca atual (lida do ref, não do state)
+        try { await loadExpandedTargets(id); } catch { /* silencioso */ }
       }
     }, 8000);
     return () => clearInterval(t);
@@ -501,19 +555,25 @@ export function CampaignsPage() {
   const outcomeLabel = (o: string) =>
     ({ won: 'Ganho', lost: 'Perdido', no_response: 'Sem resposta', opt_out: 'Opt-out', em_aberto: 'Em aberto' } as Record<string, string>)[o] || o;
 
-  // pré-preenche o "Nova campanha" só com os que falharam/pularam
-  function resendFailed(campaignId: string) {
-    const exData = expandedDataMap[campaignId];
-    const failed = (exData?.targets || []).filter((t: any) => t.status === 'failed' || t.status === 'skipped');
-    if (failed.length === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
-    setName(`Reenvio · ${exData.campaign.name}`);
-    setTemplate(exData.campaign.template || template);
-    setSeedPhones(failed.map((t: any) => ({ phone: t.phone })));
-    setAudience('manual');
-    setChannel('whatsapp');
-    setExpandedIds({});
-    setExpandedDataMap({});
-    setShow(true);
+  // DISP-002: recoloca na fila os alvos que falharam, NA PRÓPRIA campanha.
+  // Antes isto pré-preenchia uma campanha NOVA e forçava canal 'whatsapp' — o que
+  // quebrava campanha de e-mail (os telefones sintéticos `email:<addr>` eram todos
+  // recusados) e ainda oferecia reenvio para 'skipped' (opt-out, blocklist, cliente
+  // TMS), que são exclusões deliberadas.
+  async function resendFailed(campaignId: string) {
+    try {
+      const r = await retryFailedTargets(campaignId);
+      if (r.requeued === 0) { toast.info('Nenhum envio falhou nesta campanha.'); return; }
+      toast.success(
+        `${r.requeued} envio(s) de volta à fila.` +
+        (r.status === 'paused' ? ' A campanha está pausada — clique em Iniciar para disparar.' : ''),
+      );
+      await load();
+      const d = await getCampaign(campaignId);
+      setExpandedDataMap((prev) => (prev[campaignId] ? { ...prev, [campaignId]: d } : prev));
+    } catch {
+      toast.error('Erro ao reenviar as falhas.');
+    }
   }
 
   // Clonar: pré-preenche o form de Nova campanha com nome/mensagem/canal (cria nova).
@@ -956,12 +1016,14 @@ export function CampaignsPage() {
           const isLoadingExpand = !!expandedLoadingIds[c.id];
           const expandSearch = expandedSearchMap[c.id] ?? '';
 
-          // filtro de busca nos contatos expandidos
-          const filteredTargets = (exData?.targets || []).filter((t: any) => {
-            const q = expandSearch.trim().toLowerCase();
-            if (!q) return true;
-            return (t.name || '').toLowerCase().includes(q) || (t.phone || '').includes(q);
-          });
+          // DISP-003: a lista já vem filtrada e paginada do servidor — nada de
+          // filtrar no browser (só enxergaria a página carregada).
+          const pageTargets: any[] = exData?.targets ?? [];
+          const targetsPage = expandedPageMap[c.id] ?? 0;
+          const matching: number = exData?.matching ?? pageTargets.length;
+          const pageCount = Math.max(1, Math.ceil(matching / PAGE_TARGETS));
+          const firstOnPage = matching === 0 ? 0 : targetsPage * PAGE_TARGETS + 1;
+          const lastOnPage = Math.min(matching, targetsPage * PAGE_TARGETS + pageTargets.length);
 
           return (
             <div key={c.id}>
@@ -1042,8 +1104,8 @@ export function CampaignsPage() {
                         <StatusBadge key={s} tone={targetTone(s)}>{s}: {n as number}</StatusBadge>
                       ))}
                     </div>
-                    {((exData?.counts?.failed ?? 0) + (exData?.counts?.skipped ?? 0)) > 0 && (
-                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); resendFailed(c.id); }}>
+                    {(exData?.counts?.failed ?? 0) > 0 && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); void resendFailed(c.id); }}>
                         <Icon name="refresh" className="h-4 w-4" /> Reenviar falhas
                       </Button>
                     )}
@@ -1054,10 +1116,10 @@ export function CampaignsPage() {
                         className="bg-transparent outline-none text-sm text-base-content placeholder:text-base-content/35 w-40"
                         placeholder="Pesquisar contato…"
                         value={expandSearch}
-                        onChange={(e) => setExpandedSearchMap((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                        onChange={(e) => onTargetsSearchChange(c.id, e.target.value)}
                       />
                       {expandSearch && (
-                        <button type="button" onClick={() => setExpandedSearchMap((prev) => ({ ...prev, [c.id]: '' }))} className="text-base-content/30 hover:text-base-content/60">
+                        <button type="button" onClick={() => onTargetsSearchChange(c.id, '')} className="text-base-content/30 hover:text-base-content/60">
                           <Icon name="close" className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -1083,9 +1145,9 @@ export function CampaignsPage() {
                     </div>
                   ) : isLoadingExpand ? (
                     <div className="py-4 text-center text-sm text-base-content/40">Carregando contatos…</div>
-                  ) : filteredTargets.length > 0 ? (
+                  ) : pageTargets.length > 0 ? (
                     <div className="max-h-72 overflow-y-auto space-y-1">
-                      {filteredTargets.map((t: any) => (
+                      {pageTargets.map((t: any) => (
                         <div
                           key={t.id}
                           className="flex items-center justify-between rounded-lg border border-base-200 bg-white dark:bg-base-300/50 px-3 py-2 text-sm"
@@ -1121,11 +1183,10 @@ export function CampaignsPage() {
                                   e.stopPropagation();
                                   try {
                                     await removeCampaignTarget(c.id, t.id);
-                                    setExpandedDataMap((prev) => {
-                                      const d = prev[c.id];
-                                      if (!d) return prev;
-                                      return { ...prev, [c.id]: { ...d, targets: d.targets.filter((x: any) => x.id !== t.id) } };
-                                    });
+                                    // DISP-003: recarrega a página — filtrar só no
+                                    // cliente deixaria a página com 49 itens e
+                                    // esconderia o alvo que subiu da página seguinte.
+                                    await loadExpandedTargets(c.id);
                                     toast.success('Removido.');
                                   } catch {
                                     toast.error('Erro ao remover.');
@@ -1145,6 +1206,35 @@ export function CampaignsPage() {
                       {expandSearch ? 'Nenhum contato encontrado para essa busca.' : 'Sem destinatários (público automático).'}
                     </div>
                   ) : null}
+
+                  {/* DISP-003: paginação da lista (só aparece se passar de uma página) */}
+                  {c.type !== 'status' && matching > PAGE_TARGETS && (
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-base-content/50" onClick={(e) => e.stopPropagation()}>
+                      <span>
+                        {firstOnPage}–{lastOnPage} de {matching}
+                        {expandSearch ? ' encontrados' : ' destinatários'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={targetsPage === 0 || isLoadingExpand}
+                          onClick={(e) => { e.stopPropagation(); void goToTargetsPage(c.id, targetsPage - 1); }}
+                        >
+                          Anterior
+                        </Button>
+                        <span>Página {targetsPage + 1} de {pageCount}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={targetsPage + 1 >= pageCount || isLoadingExpand}
+                          onClick={(e) => { e.stopPropagation(); void goToTargetsPage(c.id, targetsPage + 1); }}
+                        >
+                          Próxima
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

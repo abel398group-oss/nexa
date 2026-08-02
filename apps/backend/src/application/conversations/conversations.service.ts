@@ -396,6 +396,15 @@ export class ConversationsService {
       estimatedCostUsd?: number;
       /** ADR 035: true only on the human inbox route — first human outbound activates takeover. */
       byHuman?: boolean;
+      /**
+       * DISP-001: quando true, uma recusa do WAHA vira exceção em vez de só um
+       * warn no log. Usado pelo disparo de campanha, que precisa distinguir
+       * "entregue" de "tentou e falhou" para não marcar o alvo como 'sent'.
+       * Default false — todos os outros chamadores mantêm o comportamento atual
+       * (log-only), inclusive a rota HTTP do inbox, cujo contrato de resposta
+       * NÃO muda.
+       */
+      requireDelivery?: boolean;
     },
   ) {
     const conv = await this.findOne(tenantId, conversationId);
@@ -453,6 +462,12 @@ export class ConversationsService {
         }
       } else {
         this.logger.warn(`WhatsApp NÃO enviado p/ ${conv.phone}: ${r.reason}`);
+        // DISP-001: o disparo de campanha pede requireDelivery para poder marcar
+        // o alvo como 'failed'. Sem isto o WAHA recusava em silêncio e a campanha
+        // era reportada como 100% enviada.
+        if (dto.requireDelivery) {
+          throw new Error(`whatsapp_nao_enviado: ${r.reason ?? 'motivo desconhecido'}`);
+        }
       }
     }
     return message;
