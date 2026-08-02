@@ -43,6 +43,3 @@ apps/backend/err.txt
 *.tsbuildinfo
 
 waha-sessions/
-
-# graphify (skill de terceiros — grafo local, nunca versionar)
-graphify-out/

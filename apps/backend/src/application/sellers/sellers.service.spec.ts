@@ -26,6 +26,8 @@ function makeService(opts: {
       create: vi.fn().mockResolvedValue({}),
     },
     aiConversation: { update: vi.fn().mockResolvedValue({}) },
+    // pickAndClaimSeller (round-robin atomico): SELECT+UPDATE via $queryRaw
+    $queryRaw: vi.fn().mockResolvedValue(seller ? [seller] : []),
     $transaction: vi.fn().mockImplementation((ops: any[]) => Promise.all(ops)),
   } as any;
 

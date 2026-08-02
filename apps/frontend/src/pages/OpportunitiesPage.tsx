@@ -134,7 +134,7 @@ function formFromOpp(o: Opportunity): OppForm {
 // ── Colunas da tabela ─────────────────────────────────────────────────────────
 
 function buildColumns(
-  moveStage: (id: string, stage: OppStage) => void,
+  moveStage: (id: string, stage: OppStage, fromStage: OppStage) => void,
   openEdit: (o: Opportunity) => void,
 ): DataTableColumn<Opportunity>[] {
   return [
@@ -166,7 +166,7 @@ function buildColumns(
       cell: (o) => (
         <Select
           value={o.stage}
-          onChange={(e) => moveStage(o.id, e.target.value as OppStage)}
+          onChange={(e) => moveStage(o.id, e.target.value as OppStage, o.stage)}
           className="!h-7 !py-0 text-xs !w-auto"
           title="Mover estágio"
         >
@@ -340,14 +340,33 @@ export function OpportunitiesPage() {
 
   // Pausado e descartado têm um motivo/data associados (pausedUntil,
   // discardReason) — abre um modal pra coletar em vez de mandar o PATCH direto.
-  function moveStage(id: string, stage: OppStage) {
+  // Sair de Ganho/Perdido (estágios finais) pelo dropdown inline pede
+  // confirmação — um clique errado não deve reverter um negócio fechado.
+  function moveStage(id: string, stage: OppStage, fromStage: OppStage) {
     if (stage === 'paused' || stage === 'discarded') {
       setPausedUntilInput('');
       setDiscardReasonInput('');
       setStagePrompt({ id, stage });
       return;
     }
+    if ((fromStage === 'won' || fromStage === 'lost') && stage !== fromStage) {
+      void confirmLeaveClosedStage(id, stage, fromStage);
+      return;
+    }
     void applyStage(id, stage, {});
+  }
+
+  async function confirmLeaveClosedStage(id: string, stage: OppStage, fromStage: 'won' | 'lost') {
+    const fromLabel = fromStage === 'won' ? 'Ganho' : 'Perdido';
+    const toLabel = STAGES.find((s) => s.key === stage)?.label ?? stage;
+    const ok = await confirm({
+      title: 'Reabrir oportunidade',
+      message: `Esta oportunidade está marcada como "${fromLabel}". Confirma mudar para "${toLabel}"?`,
+      confirmLabel: 'Confirmar',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    await applyStage(id, stage, {});
   }
 
   async function applyStage(id: string, stage: OppStage, extra: { pausedUntil?: string; discardReason?: string }) {

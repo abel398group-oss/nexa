@@ -132,12 +132,26 @@ export class SellersService {
     return { deleted: r.count };
   }
 
-  // Round-robin balanceado: escolhe o vendedor ativo com MENOS atribuições.
-  private async pickSeller(tenantId: string) {
-    return this.prisma.seller.findFirst({
-      where: { tenantId, active: true },
-      orderBy: [{ assignedCount: 'asc' }, { createdAt: 'asc' }],
-    });
+  // Round-robin balanceado: escolhe o vendedor ativo com MENOS atribuições E
+  // incrementa o contador na mesma instrucao (SELECT ... FOR UPDATE SKIP LOCKED).
+  // Pick + increment separados (um SELECT, depois um UPDATE em outra query/
+  // transacao) permitiam duas conversas virando lead quente ao mesmo tempo
+  // lerem o mesmo "menos atribuido" antes de qualquer uma incrementar,
+  // desbalanceando o round-robin sob concorrencia.
+  private async pickAndClaimSeller(tenantId: string) {
+    const rows = await this.prisma.$queryRaw<any[]>`
+      UPDATE sellers SET assigned_count = assigned_count + 1
+      WHERE id = (
+        SELECT id FROM sellers
+        WHERE tenant_id = ${tenantId} AND active = true
+        ORDER BY assigned_count ASC, created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id, tenant_id AS "tenantId", name, phone, active,
+                out_of_office AS "outOfOffice", assigned_count AS "assignedCount",
+                created_at AS "createdAt"`;
+    return rows[0] ?? null;
   }
 
   // Atribui a conversa a um vendedor e o notifica no WhatsApp. Dedup por conversa.
@@ -163,6 +177,13 @@ export class SellersService {
     if (existing) {
       const seller = await this.prisma.seller.findUnique({ where: { id: existing.sellerId } });
       if (seller?.phone) {
+        // Vendedor desativado desde a atribuicao original — nao pinga WhatsApp
+        // de alguem que nao deveria mais estar atendendo (a conversa continua
+        // "dele" no registro; reatribuir é decisao de negocio, fora de escopo aqui).
+        if (!seller.active) {
+          this.logger.log(`Re-engagement → ${seller.name}: vendedor inativo — sem notificacao`);
+          return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
+        }
         // ADR 034: WhatsApp só quando o vendedor está "fora" — no PC, o sino do
         // portal (hot_lead, criado pelo ConversationAgent) já cobre.
         if (!this.isOutOfOffice(seller)) {
@@ -185,21 +206,19 @@ export class SellersService {
       return { assigned: false, reason: 'já atribuído', sellerId: existing.sellerId };
     }
 
-    const seller = await this.pickSeller(tenantId);
+    // escolhe + incrementa o contador atomicamente (evita corrida entre
+    // conversas concorrentes — ver comentario em pickAndClaimSeller)
+    const seller = await this.pickAndClaimSeller(tenantId);
     if (!seller) {
       this.logger.warn('Nenhum vendedor ativo p/ handoff');
       return { assigned: false, reason: 'sem vendedor ativo' };
     }
 
-    // atribui conversa + incrementa contador (round-robin) + registra dedup
+    // atribui conversa + registra dedup (o contador ja foi incrementado acima)
     await this.prisma.$transaction([
       this.prisma.aiConversation.update({
         where: { id: input.conversationId },
         data: { assignedSellerId: seller.id, assignedAt: new Date() },
-      }),
-      this.prisma.seller.update({
-        where: { id: seller.id },
-        data: { assignedCount: { increment: 1 } },
       }),
       this.prisma.sellerNotification.create({
         data: {

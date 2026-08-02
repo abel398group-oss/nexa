@@ -50,6 +50,21 @@ export class OpportunitiesService {
     return rows.map((r: any) => ({ stage: r.stage, count: r._count as number, value: Number(r._sum.value ?? 0) }));
   }
 
+  // America/Sao_Paulo nao observa horario de verao desde 2019 — deslocamento
+  // fixo. Usado pra alinhar os buckets semanais ao calendario do Brasil sem
+  // depender do TZ do processo/servidor (que pode estar em UTC em producao).
+  private static readonly BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+  // Segunda-feira (00:00 BRT) da semana que contem `d`, calculada só com
+  // metodos UTC + deslocamento fixo — nao usa Date local (setHours/getDay),
+  // que herdaria o fuso do servidor e deslocaria os buckets em producao.
+  private mondayBRT(d: Date): Date {
+    const shifted = new Date(d.getTime() - OpportunitiesService.BRT_OFFSET_MS);
+    shifted.setUTCHours(0, 0, 0, 0);
+    shifted.setUTCDate(shifted.getUTCDate() - ((shifted.getUTCDay() + 6) % 7));
+    return new Date(shifted.getTime() + OpportunitiesService.BRT_OFFSET_MS);
+  }
+
   /**
    * F6+: evolucao semanal — recebidos (createdAt) × fechados (stageHistory
    * toStage='won') por semana, ultimas `weeks` semanas (max 26). Alimenta o
@@ -57,9 +72,7 @@ export class OpportunitiesService {
    */
   async evolution(tenantId: string, weeks = 8, sellerScope?: string) {
     const w = Math.max(1, Math.min(26, Math.round(weeks)));
-    const since = new Date();
-    since.setDate(since.getDate() - w * 7);
-    since.setHours(0, 0, 0, 0);
+    const since = this.mondayBRT(new Date(Date.now() - w * 7 * 24 * 60 * 60 * 1000));
 
     const where = this.scoped({ tenantId }, sellerScope);
     const [created, wonHistory] = await Promise.all([
@@ -73,26 +86,18 @@ export class OpportunitiesService {
       }),
     ]);
 
-    // Buckets semanais alinhados em segunda-feira (fuso do servidor).
-    const monday = (d: Date) => {
-      const out = new Date(d);
-      out.setHours(0, 0, 0, 0);
-      out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
-      return out;
-    };
     const buckets = new Map<string, { weekStart: string; received: number; won: number }>();
     for (let i = w - 1; i >= 0; i--) {
-      const ref = new Date();
-      ref.setDate(ref.getDate() - i * 7);
-      const key = monday(ref).toISOString().slice(0, 10);
+      const ref = new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000);
+      const key = this.mondayBRT(ref).toISOString().slice(0, 10);
       buckets.set(key, { weekStart: key, received: 0, won: 0 });
     }
     for (const o of created) {
-      const b = buckets.get(monday(o.createdAt).toISOString().slice(0, 10));
+      const b = buckets.get(this.mondayBRT(o.createdAt).toISOString().slice(0, 10));
       if (b) b.received++;
     }
     for (const h of wonHistory) {
-      const b = buckets.get(monday(h.changedAt).toISOString().slice(0, 10));
+      const b = buckets.get(this.mondayBRT(h.changedAt).toISOString().slice(0, 10));
       if (b) b.won++;
     }
     return [...buckets.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
@@ -163,14 +168,22 @@ export class OpportunitiesService {
   // Auto-criacao no lead quente (score >= 70) — idempotente por conversationId (nao duplica).
   // F6+: aceita assignedSellerId (dono real, vindo do handoff). Se a oportunidade
   // ja existe sem dono e o handoff trouxe um, adota (lead re-engajou pos-handoff).
+  //
+  // Sem conversationId (chamador futuro que nao passe o campo), cai pra um
+  // fallback por contactId — so contra oportunidades ainda abertas, pra nao
+  // duplicar o lead nem "reviver" um won/lost/discarded antigo do mesmo contato.
   async createFromLead(
     tenantId: string,
     input: { conversationId?: string; contactId?: string; phone?: string; name?: string; interestScore?: number; intent?: string; summary?: string; assignedTo?: string; assignedSellerId?: string },
   ) {
-    if (input.conversationId) {
-      const existing = await this.prisma.opportunity.findFirst({
-        where: { tenantId, conversationId: input.conversationId },
-      });
+    const dedupeWhere = input.conversationId
+      ? { tenantId, conversationId: input.conversationId }
+      : input.contactId
+        ? { tenantId, contactId: input.contactId, stage: { notIn: ['won', 'lost', 'discarded'] } }
+        : null;
+
+    if (dedupeWhere) {
+      const existing = await this.prisma.opportunity.findFirst({ where: dedupeWhere as any });
       if (existing) {
         // cast: campo novo pre-`prisma generate` (ver comentario no moveStage)
         if (!(existing as any).assignedSellerId && input.assignedSellerId) {
