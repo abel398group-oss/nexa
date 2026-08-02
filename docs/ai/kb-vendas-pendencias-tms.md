@@ -4,19 +4,43 @@
 > antes do go-live de leads. A KB de vendas tinha **41 artigos** contra 228 da
 > de suporte, e o TMS cresceu para **80 módulos** desde que ela foi escrita.
 
-## 🔴 Corrigido nesta rodada — a Lia estava errando
+## 🔴 ERRO MEU — e a correção (leia antes de mexer em planos)
 
-### Limites de usuário estavam TODOS errados
+Numa primeira versão eu "corrigi" os limites de usuário para **1/5/10**, a
+partir das MIGRATIONS do TMS, alegando que a Lia estava errando. **Estava
+errado: os valores originais (5/8/15) estavam certos.** Os planos foram
+alterados direto no banco depois das migrations, então elas estão
+desatualizadas e **não servem como fonte de verdade**.
 
-| Plano | A Lia dizia | Real |
-|---|---|---|
-| Básico | 5 usuários | **1** |
-| Essencial | 8 usuários | **5** |
-| Profissional | 15 usuários | **10** |
+> **Regra:** a fonte de verdade dos planos é a tela `/admin/subscription` do TMS
+> em produção — não as migrations, não o seed, não o schema.
 
-Fonte: `apps/api/prisma/migrations/20260309110000_update_plans_limits/migration.sql`.
-O Básico era o pior caso — vender "5 usuários" e entregar 1 gera cancelamento
-na primeira semana.
+### Valores REAIS (conferidos na tela em 2026-08-01)
+
+| | Básico | Essencial | Profissional | Corporativo |
+|---|---|---|---|---|
+| Preço | R$ 89 | **R$ 199** (Mais Popular) | R$ 299 | **Sob consulta** |
+| Usuários | 5 | 8 | 15 | ilimitado |
+| Empresas | **ilimitado** | ilimitado | ilimitado | ilimitado |
+| Veículos | **ilimitado** | ilimitado | ilimitado | ilimitado |
+| Embarques/mês | 500 | 1.000 | 2.000 | ilimitado |
+| Documentos/mês | 500 | 1.000 | 5.000 | ilimitado |
+| Armazenamento | 1 GB | 10 GB | 50 GB | ilimitado |
+| Alertas (números) | 1 | 3 | 5 | sob consulta |
+| API | ✗ | **✓** | ✓ | ✓ |
+| Relatórios avançados | ✗ | ✓ | ✓ | ✓ |
+| Suporte prioritário | ✗ | ✗ | ✓ | ✓ |
+| SSO | ✗ | ✗ | ✗ | ✓ |
+
+**Consequência para a venda:** veículos e empresas são ilimitados em TODOS os
+planos. "Quantos caminhões você tem?" **não** define o plano — o que separa é
+número de USUÁRIOS e volume de embarques/documentos. A Lia foi corrigida nisso.
+
+### Add-ons (preços de tabela, pode informar)
+
+- Número adicional de WhatsApp para alertas: **R$ 29,90/número/mês**
+- Armazenamento extra: **R$ 19,90/GB/mês**
+- Ciclo anual: **economia de até 17%**
 
 ### "Teste grátis" que não existe
 
@@ -75,16 +99,10 @@ Nota de precisão: o Uelder diz "30 dias"; o código
 dias, podendo chegar a ~56. As duas afirmações são compatíveis; a Lia usa
 "nunca em menos de 30 dias", que é verdadeiro nos dois casos.
 
-## ❓ Ainda aguardando
+## ✅ Nada mais pendente
 
-1. **Preços de Essencial, Profissional e Corporativo.** Só o Básico está
-   confirmado em migration (R$89/mês, R$890/ano). Os outros (199/299/499) vêm do
-   seed inicial e podem ter sido alterados direto no banco.
-2. **Corporativo tem preço de tabela ou é sob consulta?** A descrição no banco
-   diz "Sob consulta", mas o fallback do Nexa tem R$499.
-
-Baixo risco: no dia a dia a Lia consulta preço em tempo real via `getPlans()`.
-O catálogo fixo só entra quando o TMS está fora do ar.
+Os preços foram confirmados na tela de assinatura (tabela acima). O Corporativo
+é **sob consulta** — a Lia foi instruída a não informar preço para ele.
 
 ## Fase 2 — contratos, compras e ANTT ✅
 

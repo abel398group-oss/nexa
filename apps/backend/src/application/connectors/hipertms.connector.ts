@@ -121,25 +121,31 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
   // Quando o TMS está configurado e indisponível, getPlans() retorna [] (não este fallback).
   // Manter sincronizado com os planos reais do TMS.
   // Validado em 2026-06-19 contra GET /api/nexa/plans do TMS local; Corporativo adicionado em K1 (2026-07-10).
-  // CORRIGIDO 2026-08-01: os limites de usuário estavam TODOS errados (5/8/15 vs
-  // 1/5/10 reais) — a Lia vendia "5 usuários" no Básico e o cliente recebia 1.
-  // Valores conferidos nas migrations do TMS, que são a fonte de verdade:
-  //   20260309110000_update_plans_limits    → usuários, empresas, veículos, docs
-  //   20260309130000_plan_profissional_5_empresas → Profissional = 5 empresas
-  //   20260429103000_plan_limits_shipments_xml_storage → embarques/mês
-  //   20260430120000_plan_basic_and_modules_updates   → Básico R$89 e SEM viagens
-  // Preço confirmado só do Básico; os demais aguardam o Uelder (ver
-  // docs/ai/kb-vendas-pendencias-tms.md).
+  // ⚠️ FONTE DE VERDADE = a tela /admin/subscription do TMS EM PRODUÇÃO.
+  //
+  // Lição cara (2026-08-01): numa primeira versão "corrigi" estes limites a
+  // partir das MIGRATIONS do TMS (1/5/10 usuários) e quebrei dados que estavam
+  // certos — os planos foram alterados direto no banco depois das migrations,
+  // então elas estão desatualizadas e NÃO servem de fonte. Conferido contra a
+  // tela real de assinatura em 2026-08-01.
+  //
+  // Este catálogo só é usado quando o TMS está OFFLINE; no dia a dia getPlans()
+  // lê os valores em tempo real. Ainda assim precisa estar certo.
   private defaultPlans(): Plan[] {
     return [
-      { code: 'basic', name: 'Básico', price: 89, maxUsers: 1,
-        features: ['CT-e', 'MDF-e', 'embarques', 'precificação', 'frota (5 veículos)', 'financeiro', 'SEM módulo de Viagens'] },
-      { code: 'essencial', name: 'Essencial', price: 199, maxUsers: 5,
-        features: ['tudo do Básico', 'Viagens e roteirização', '3 empresas', '15 veículos', '200 embarques/mês', 'relatórios avançados'] },
-      { code: 'profissional', name: 'Profissional', price: 299, maxUsers: 10,
-        features: ['tudo do Essencial', '5 empresas', '30 veículos', '1.000 embarques/mês', 'API REST', 'suporte prioritário'] },
-      { code: 'corporativo', name: 'Corporativo', price: 499, maxUsers: undefined,
-        features: ['tudo do Profissional', 'usuários/veículos/embarques ilimitados', 'SSO', 'SLA dedicado', 'sob consulta'] },
+      { code: 'basic', name: 'Básico', price: 89, maxUsers: 5,
+        features: ['5 usuários', 'empresas ilimitadas', 'veículos ilimitados', '500 embarques/mês',
+          '500 documentos/mês', '1 GB', 'alertas em 1 número', 'SEM módulo de Viagens'] },
+      { code: 'essencial', name: 'Essencial', price: 199, maxUsers: 8,
+        features: ['8 usuários', 'empresas ilimitadas (matriz e filiais)', 'veículos ilimitados',
+          '1.000 embarques/mês', '1.000 documentos/mês', '10 GB', 'Viagens e roteirização',
+          'acesso à API', 'relatórios avançados', 'alertas em 3 números'] },
+      { code: 'profissional', name: 'Profissional', price: 299, maxUsers: 15,
+        features: ['15 usuários', '2.000 embarques/mês', '5.000 documentos/mês', '50 GB',
+          'suporte prioritário', 'acesso à API', 'relatórios avançados', 'alertas em 5 números'] },
+      { code: 'corporativo', name: 'Corporativo', price: 0, maxUsers: undefined,
+        features: ['SOB CONSULTA — não informar preço', 'tudo ilimitado', 'SSO (Single Sign-On)',
+          'instância dedicada', 'SLA', 'retenção longa e compliance'] },
     ];
   }
 
@@ -384,26 +390,31 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
           'Forma de dizer ao lead: "você se cadastra sem informar cartão nenhum, já começa a usar, e o boleto da ' +
           'primeira mensalidade só vem depois — nunca em menos de 30 dias. E nos primeiros 7 dias você pode ' +
           'cancelar." É forte E verdadeiro. NÃO chame de "grátis" nem de "teste": não é. ' +
-          'Pagamento via boleto (padrão), PIX ou cartão. Ciclo mensal ou anual (o anual tem desconto — o Básico é ' +
-          'R$890/ano contra R$1.068 no mensal). Sem fidelidade; upgrade e downgrade são imediatos.',
+          'Pagamento via boleto (padrão), PIX ou cartão. Ciclo mensal ou ANUAL — o anual dá ' +
+          'ECONOMIA DE ATÉ 17% (informação da própria tela de assinatura). Sem fidelidade; upgrade e ' +
+          'downgrade são imediatos.',
         tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'pix', 'cartao', 'sem cartao', 'cancelamento', 'primeira fatura', 'quando paga', 'compromisso'],
       },
       {
         topic: 'planos', category: 'comercial',
         title: 'Limites de cada plano — usar para qualificar o lead',
         content:
-          'Limites REAIS por plano (fonte: migrations do TMS). Use-os para recomendar o plano certo — ' +
-          'a pergunta "quantos veículos você tem?" já define quase tudo:\n' +
-          'BÁSICO (R$89/mês): 1 usuário, 1 empresa, 5 veículos, 40 embarques/mês, 500 documentos/mês, 1 GB. ' +
-          'NÃO inclui o módulo de Viagens/roteirização, nem API, nem relatórios avançados.\n' +
-          'ESSENCIAL: 5 usuários, 3 empresas, 15 veículos, 200 embarques/mês, 1.000 documentos/mês, 3 GB. ' +
-          'Inclui Viagens e relatórios avançados. Sem API.\n' +
-          'PROFISSIONAL: 10 usuários, 5 empresas (matriz + filiais), 30 veículos, 1.000 embarques/mês, ' +
-          '5.000 documentos/mês, 10 GB. Inclui API REST e suporte prioritário.\n' +
-          'CORPORATIVO: tudo ilimitado, SSO e SLA dedicado — sob consulta.\n' +
+          'Limites REAIS por plano (conferidos na tela de assinatura do TMS em 2026-08-01). ' +
+          'O que separa os planos é USUÁRIOS e VOLUME — veículos e empresas são ilimitados em todos, ' +
+          'então "quantos caminhões você tem?" NÃO é a pergunta que define o plano. ' +
+          'Pergunte quantas PESSOAS vão usar o sistema e quantos embarques/mês a operação faz.\n' +
+          'BÁSICO (R$89/mês): 5 usuários, 500 embarques/mês, 500 documentos/mês, 1 GB, alertas em 1 número. ' +
+          'NÃO inclui Viagens/roteirização, API nem relatórios avançados.\n' +
+          'ESSENCIAL (R$199/mês): 8 usuários, 1.000 embarques/mês, 1.000 documentos/mês, 10 GB, ' +
+          'alertas em 3 números. Inclui Viagens, API e relatórios avançados. É o plano marcado como ' +
+          '"Mais Popular" e atende 90% do público.\n' +
+          'PROFISSIONAL (R$299/mês): 15 usuários, 2.000 embarques/mês, 5.000 documentos/mês, 50 GB, ' +
+          'alertas em 5 números, suporte prioritário. Foco em precificação avançada, regras por cliente/rota.\n' +
+          'CORPORATIVO: SOB CONSULTA (não informe preço). Tudo ilimitado, SSO, instância dedicada, SLA.\n' +
+          'Empresas (matriz e filiais) e veículos são ILIMITADOS em todos os planos. ' +
           'NUNCA infle esses números para fechar venda: o limite é aplicado pelo sistema e o cliente descobre ' +
           'no primeiro uso.',
-        tags: ['limite', 'usuarios', 'veiculos', 'frota', 'empresas', 'filial', 'embarques', 'documentos', 'quantos', 'cabe'],
+        tags: ['limite', 'usuarios', 'veiculos', 'frota', 'empresas', 'filial', 'embarques', 'documentos', 'quantos', 'cabe', 'preco', 'quanto custa'],
       },
       {
         topic: 'planos', category: 'comercial',
@@ -606,13 +617,14 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'addons', category: 'comercial',
         title: 'Add-ons cobrados à parte',
         content:
-          'Além do plano, o HiperTMS cobra ADD-ONS por unidade — por exemplo armazenamento extra e números ' +
-          'adicionais do Monitor (o alerta por WhatsApp). Cada plano já inclui uma quantidade de números do ' +
-          'Monitor; acima disso é add-on. ' +
-          'Se o lead perguntar "quantas pessoas recebem os alertas?", a resposta depende do plano — e o extra ' +
-          'é cobrado. NÃO informe o preço do add-on: consulte um especialista, pois esses valores não estão ' +
-          'no catálogo dinâmico.',
-        tags: ['addon', 'add-on', 'adicional', 'extra', 'armazenamento', 'monitor', 'numero extra', 'cobranca'],
+          'Além da mensalidade, o HiperTMS cobra dois ADD-ONS (preços conferidos na tela de assinatura, 2026-08-01):\n' +
+          '• NÚMERO ADICIONAL de WhatsApp para os alertas do Monitor Proativo: R$ 29,90 por número/mês. ' +
+          'Cada plano já inclui uma quantidade (Básico 1, Essencial 3, Profissional 5; Corporativo sob consulta) — ' +
+          'acima disso é add-on.\n' +
+          '• ARMAZENAMENTO EXTRA: R$ 19,90 por bloco de 1 GB/mês, além da quota do plano.\n' +
+          'Se o lead perguntar "quantas pessoas recebem os alertas?", a resposta depende do plano. ' +
+          'Pode informar esses dois valores — são de tabela. Para o Corporativo, sob consulta.',
+        tags: ['addon', 'add-on', 'adicional', 'extra', 'armazenamento', 'monitor', 'numero extra', 'cobranca', 'whatsapp'],
       },
 
       // ── ONBOARDING E IMPLANTAÇÃO ──────────────────────────────────────────────
