@@ -47,8 +47,19 @@ describe('HiperTmsConnector — getPlans() (K1)', () => {
     expect(codes).toContain('essencial');
     expect(codes).toContain('profissional');
     expect(codes).toContain('corporativo');
-    // Nenhum plano deve ter preço 0 no fallback
-    plans.forEach((p) => expect(p.price).toBeGreaterThan(0));
+    // Planos com preço de tabela não podem vir zerados no fallback.
+    // Corporativo é a exceção deliberada: é SOB CONSULTA (ver defaultPlans em
+    // hipertms.connector.ts) — price 0 é o sentinela de "sem preço fixo", e a
+    // Lia não deve citar valor. Este teste é de 2026-07-10 e afirmava
+    // `price > 0` para TODOS; o Corporativo virou sob consulta em 2026-08-01
+    // (commit 82791a8) e a asserção ficou para trás, quebrando o CI.
+    plans
+      .filter((p) => p.code !== 'corporativo')
+      .forEach((p) => expect(p.price).toBeGreaterThan(0));
+
+    const corporativo = plans.find((p) => p.code === 'corporativo')!;
+    expect(corporativo.price).toBe(0); // sob consulta — nunca um valor inventado
+    expect(corporativo.features.join(' ')).toContain('SOB CONSULTA');
   });
 
   // Cenário 2: TMS configurado + API ok → retorna planos do TMS (inclui Corporativo do banco)
