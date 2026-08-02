@@ -812,8 +812,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       // Public attachment link. mediaUrl is stored as a relative path (/uploads/filename)
       // since the controller was updated (BUG-010). Legacy campaigns may still carry an
       // absolute URL — we extract the /uploads/ segment in both cases.
+      //
+      // DISP-017: o anexo agora obedece o MESMO `sendLinkOnFirst` do link. Antes ia
+      // sempre, incondicional — a 1ª mensagem fria saía com uma URL colada mesmo com
+      // "não enviar link no primeiro contato" marcado. É o mesmo risco de ban (link em
+      // disparo frio de número não-oficial) e quebrava a regra do negócio: primeiro
+      // contato é só texto; material e link vão depois que o lead responde.
       const mediaBase = process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL;
-      if (campaign.mediaUrl && mediaBase) {
+      if (campaign.mediaUrl && mediaBase && campaign.sendLinkOnFirst) {
         const idx = campaign.mediaUrl.indexOf('/uploads/');
         const relativePath = idx >= 0 ? campaign.mediaUrl.slice(idx) : campaign.mediaUrl;
         const publicUrl = mediaBase.replace(/\/$/, '') + relativePath;
