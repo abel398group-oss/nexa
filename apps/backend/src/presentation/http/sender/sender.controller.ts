@@ -22,6 +22,11 @@ class CreateCampaignDto {
   @IsOptional() @IsArray() phones?: { phone: string; name?: string }[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
   @IsOptional() @IsString() link?: string;
+  // DISP-015: a tela envia `sendLinkOnFirst` junto com o link no WhatsApp (o
+  // service já aceitava), mas o campo só existia no DTO de e-mail — e o
+  // `forbidNonWhitelisted` global derrubava a criação com 400 sempre que o
+  // operador preenchia o link. Mesmo padrão do incidente da REGRA 1/2.
+  @IsOptional() @IsBoolean() sendLinkOnFirst?: boolean;
   @IsOptional() @IsString() mediaUrl?: string;
   @IsOptional() @IsString() mediaName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
