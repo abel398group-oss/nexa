@@ -121,12 +121,25 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
   // Quando o TMS está configurado e indisponível, getPlans() retorna [] (não este fallback).
   // Manter sincronizado com os planos reais do TMS.
   // Validado em 2026-06-19 contra GET /api/nexa/plans do TMS local; Corporativo adicionado em K1 (2026-07-10).
+  // CORRIGIDO 2026-08-01: os limites de usuário estavam TODOS errados (5/8/15 vs
+  // 1/5/10 reais) — a Lia vendia "5 usuários" no Básico e o cliente recebia 1.
+  // Valores conferidos nas migrations do TMS, que são a fonte de verdade:
+  //   20260309110000_update_plans_limits    → usuários, empresas, veículos, docs
+  //   20260309130000_plan_profissional_5_empresas → Profissional = 5 empresas
+  //   20260429103000_plan_limits_shipments_xml_storage → embarques/mês
+  //   20260430120000_plan_basic_and_modules_updates   → Básico R$89 e SEM viagens
+  // Preço confirmado só do Básico; os demais aguardam o Uelder (ver
+  // docs/ai/kb-vendas-pendencias-tms.md).
   private defaultPlans(): Plan[] {
     return [
-      { code: 'basic',         name: 'Básico',        price: 89,  maxUsers: 5,   features: ['CT-e', 'MDF-e', 'precificação', 'frota', 'financeiro'] },
-      { code: 'essencial',     name: 'Essencial',     price: 199, maxUsers: 8,   features: ['tudo do Básico', 'multi-filial', 'suporte e-mail'] },
-      { code: 'profissional',  name: 'Profissional',  price: 299, maxUsers: 15,  features: ['tudo do Essencial', 'suporte prioritário', 'API REST'] },
-      { code: 'corporativo',   name: 'Corporativo',   price: 499, maxUsers: undefined, features: ['tudo do Profissional', 'usuários ilimitados', 'SLA dedicado', 'gerente de conta'] },
+      { code: 'basic', name: 'Básico', price: 89, maxUsers: 1,
+        features: ['CT-e', 'MDF-e', 'embarques', 'precificação', 'frota (5 veículos)', 'financeiro', 'SEM módulo de Viagens'] },
+      { code: 'essencial', name: 'Essencial', price: 199, maxUsers: 5,
+        features: ['tudo do Básico', 'Viagens e roteirização', '3 empresas', '15 veículos', '200 embarques/mês', 'relatórios avançados'] },
+      { code: 'profissional', name: 'Profissional', price: 299, maxUsers: 10,
+        features: ['tudo do Essencial', '5 empresas', '30 veículos', '1.000 embarques/mês', 'API REST', 'suporte prioritário'] },
+      { code: 'corporativo', name: 'Corporativo', price: 499, maxUsers: undefined,
+        features: ['tudo do Profissional', 'usuários/veículos/embarques ilimitados', 'SSO', 'SLA dedicado', 'sob consulta'] },
     ];
   }
 
@@ -343,18 +356,148 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
           'Sempre consulte os dados dinâmicos do conector (getPlans()) para responder sobre preços e limites. ' +
           'NUNCA informe preço ou limite de plano a partir de texto fixo — se os dados do conector estiverem indisponíveis, ' +
           'diga "vou confirmar os valores atualizados" e escale para um especialista. ' +
-          'Todos os planos incluem: CT-e, MDF-e, precificação, frota, financeiro e suporte por e-mail.',
+          'Todos os planos incluem: CT-e, MDF-e, precificação, frota, financeiro e suporte por e-mail. ' +
+          'ATENÇÃO (2026-08-01): o módulo de VIAGENS não está no Básico — só a partir do Essencial.',
         tags: ['plano', 'preco', 'valor', 'basico', 'essencial', 'profissional', 'corporativo', 'quanto custa'],
       },
       {
         topic: 'planos', category: 'comercial',
-        title: 'Trial e forma de pagamento',
+        title: 'Primeira cobrança — NÃO existe teste grátis',
         content:
-          'O HiperTMS oferece período de teste (trial) gratuito sem necessidade de cartão de crédito. ' +
-          'Após o trial, o pagamento é via boleto ou cartão, com ciclo mensal ou anual (desconto no anual). ' +
-          'O cancelamento pode ser feito a qualquer momento sem fidelidade. ' +
-          'Upgrade e downgrade de plano são imediatos.',
-        tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'cartao', 'cancelamento'],
+          'ATENÇÃO: o HiperTMS NÃO tem período de teste (trial). Nunca prometa "teste grátis" nem "30 dias grátis". ' +
+          'A assinatura entra ATIVA desde o primeiro dia — o cliente é cliente, não testador. ' +
+          'O que existe é a PRIMEIRA COBRANÇA ADIADA: a fatura vence sempre no dia 15 e nunca em menos de 30 dias ' +
+          'da contratação. Se o dia 15 mais próximo estiver a menos de 30 dias, ela pula para o mês seguinte. ' +
+          'Na prática o cliente usa entre 30 e ~60 dias antes de pagar, dependendo do dia em que entrou: ' +
+          'quem entra dia 1º de agosto paga em 15 de setembro (45 dias); quem entra dia 20 de agosto paga em ' +
+          '15 de outubro (56 dias). ' +
+          'Forma de dizer ao lead: "você começa a usar hoje e a primeira fatura vence no dia 15, nunca antes de ' +
+          '30 dias". É um argumento forte E verdadeiro — não transforme em "grátis". ' +
+          'Pagamento via boleto, PIX ou cartão. Ciclo mensal ou anual (o anual tem desconto — o Básico é R$890/ano ' +
+          'contra R$1.068 no mensal). Sem fidelidade; upgrade e downgrade são imediatos.',
+        tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'pix', 'cartao', 'cancelamento', 'primeira fatura', 'quando paga'],
+      },
+      {
+        topic: 'planos', category: 'comercial',
+        title: 'Limites de cada plano — usar para qualificar o lead',
+        content:
+          'Limites REAIS por plano (fonte: migrations do TMS). Use-os para recomendar o plano certo — ' +
+          'a pergunta "quantos veículos você tem?" já define quase tudo:\n' +
+          'BÁSICO (R$89/mês): 1 usuário, 1 empresa, 5 veículos, 40 embarques/mês, 500 documentos/mês, 1 GB. ' +
+          'NÃO inclui o módulo de Viagens/roteirização, nem API, nem relatórios avançados.\n' +
+          'ESSENCIAL: 5 usuários, 3 empresas, 15 veículos, 200 embarques/mês, 1.000 documentos/mês, 3 GB. ' +
+          'Inclui Viagens e relatórios avançados. Sem API.\n' +
+          'PROFISSIONAL: 10 usuários, 5 empresas (matriz + filiais), 30 veículos, 1.000 embarques/mês, ' +
+          '5.000 documentos/mês, 10 GB. Inclui API REST e suporte prioritário.\n' +
+          'CORPORATIVO: tudo ilimitado, SSO e SLA dedicado — sob consulta.\n' +
+          'NUNCA infle esses números para fechar venda: o limite é aplicado pelo sistema e o cliente descobre ' +
+          'no primeiro uso.',
+        tags: ['limite', 'usuarios', 'veiculos', 'frota', 'empresas', 'filial', 'embarques', 'documentos', 'quantos', 'cabe'],
+      },
+      {
+        topic: 'planos', category: 'comercial',
+        title: 'Básico NÃO tem módulo de Viagens',
+        content:
+          'O plano Básico (R$89/mês) cobre embarques e fiscal, mas o módulo de VIAGENS está desligado nele. ' +
+          'A própria descrição do plano no sistema diz: "Viagens e roteirização avançada nos planos Essencial ou superior". ' +
+          'Se o lead falar em roteirização, montagem de viagem, agrupar embarques numa viagem ou controle de ' +
+          'motorista em rota, o plano mínimo é o ESSENCIAL. ' +
+          'Vender o Básico nesse caso gera cancelamento na primeira semana.',
+        tags: ['basico', 'viagens', 'roteirizacao', 'trip', 'limitacao', 'nao tem'],
+      },
+
+      // ── FISCAL: módulos que faltavam na KB de vendas (2026-08-01) ─────────────
+      {
+        topic: 'gnre', category: 'produto',
+        title: 'GNRE — guia de recolhimento interestadual',
+        content:
+          'O HiperTMS emite GNRE (Guia Nacional de Recolhimento de Tributos Estaduais) com transmissão direta ' +
+          'aos autorizadores estaduais, assinada com o certificado digital da transportadora. ' +
+          'Cobre o envio do lote, a consulta do resultado e a validação do XML antes do envio (evita rejeição). ' +
+          'Serve para o ICMS-ST e demais obrigações interestaduais que a operação de transporte gera. ' +
+          'Quem opera fora do estado e hoje preenche guia no site da SEFAZ manualmente é o público desse módulo.',
+        tags: ['gnre', 'guia', 'icms', 'interestadual', 'st', 'recolhimento', 'imposto', 'tributo'],
+      },
+      {
+        topic: 'nfse', category: 'produto',
+        title: 'NFS-e — nota fiscal de serviço',
+        content:
+          'O HiperTMS emite NFS-e (nota fiscal de serviço eletrônica) através de API intermediadora, ' +
+          'hoje pela Focus NFe. Útil para a transportadora que além do frete (CT-e) presta serviços ' +
+          'que exigem nota de serviço: armazenagem, movimentação, gestão logística. ' +
+          'A configuração é por município, já que a NFS-e é municipal.',
+        tags: ['nfse', 'nota fiscal de servico', 'servico', 'armazenagem', 'municipal', 'iss'],
+      },
+      {
+        topic: 'ciot', category: 'produto',
+        title: 'CIOT — atenção: registro sim, geração automática AINDA NÃO',
+        content:
+          'CUIDADO AO RESPONDER. O HiperTMS REGISTRA o CIOT na viagem e no embarque, com histórico e vínculo ' +
+          'ao documento — mas a GERAÇÃO AUTOMÁTICA junto à IPEF ainda não está liberada (depende de ' +
+          'credenciamento). Hoje o cliente gera o número na IPEF e registra no HiperTMS. ' +
+          'Diga exatamente isso ao lead: "o sistema registra e controla o CIOT das suas viagens; a geração ' +
+          'automática junto à IPEF está em implantação". ' +
+          'NUNCA prometa "o sistema gera o CIOT sozinho" — é o tipo de promessa que vira cancelamento. ' +
+          'Se o lead disser que geração automática é decisivo, escale para um especialista humano.',
+        tags: ['ciot', 'ipef', 'motorista autonomo', 'tac', 'pamcard', 'gerar ciot', 'antt'],
+      },
+      {
+        topic: 'calculadora', category: 'produto',
+        title: 'Calculadora de frete — ferramenta pública para atrair o lead',
+        content:
+          'O HiperTMS tem uma calculadora de frete PÚBLICA (não precisa ser cliente para usar) com três modalidades: ' +
+          '(1) PISO MÍNIMO ANTT — calcula o valor mínimo legal da tabela da ANTT para a rota e o tipo de carga; ' +
+          '(2) DEDICADO — frete de carga fechada/lotação; ' +
+          '(3) FRACIONADO — carga fracionada. ' +
+          'Inclui busca de cidades para montar a rota. ' +
+          'Use como CTA de baixo compromisso com lead frio: convide a testar a calculadora antes de falar de plano. ' +
+          'É o melhor gancho para quem ainda não quer conversa comercial.',
+        tags: ['calculadora', 'calcular frete', 'piso minimo', 'antt', 'dedicado', 'fracionado', 'simular', 'cotar'],
+      },
+
+      // ── FROTA: módulos que faltavam na KB de vendas (2026-08-01) ──────────────
+      {
+        topic: 'frota-pneus', category: 'produto',
+        title: 'Controle de pneus por posição no veículo',
+        content:
+          'O HiperTMS controla pneus individualmente: cadastro de cada pneu, montagem e desmontagem por ' +
+          'POSIÇÃO no veículo (dianteiro esquerdo, eixo traseiro, etc.), histórico de onde cada pneu rodou e ' +
+          'alerta de troca ao se aproximar da vida útil em km. ' +
+          'Pneu é o segundo maior custo variável de uma transportadora depois do combustível — quem hoje ' +
+          'controla isso em caderno ou planilha perde rodízio e roda pneu além do limite. ' +
+          'Boa pergunta de qualificação: "como você controla o rodízio dos pneus hoje?".',
+        tags: ['pneu', 'pneus', 'rodizio', 'vida util', 'borracharia', 'posicao', 'eixo', 'custo'],
+      },
+      {
+        topic: 'frota-manutencao', category: 'produto',
+        title: 'Manutenção preventiva com alerta automático',
+        content:
+          'O HiperTMS registra manutenções e dispara ALERTA AUTOMÁTICO de preventiva por dois gatilhos: ' +
+          'quilometragem rodada (lido do hodômetro do veículo) ou tempo decorrido — o que vencer primeiro. ' +
+          'Troca de óleo, por exemplo, alerta por km OU pela validade do lubrificante. ' +
+          'Também alerta a troca de pneu antes de atingir a vida útil, com tolerância configurável. ' +
+          'O argumento comercial é claro: manutenção preventiva perdida vira quebra na estrada, que custa ' +
+          'guincho, carga parada e cliente insatisfeito.',
+        tags: ['manutencao', 'preventiva', 'alerta', 'oleo', 'revisao', 'quebra', 'hodometro', 'km'],
+      },
+      {
+        topic: 'frota-combustivel', category: 'produto',
+        title: 'Abastecimento, consumo e média por veículo',
+        content:
+          'O HiperTMS registra abastecimentos, calcula a MÉDIA DE CONSUMO por veículo (km/l), mantém preços ' +
+          'médios de combustível e histórico de hodômetro. Isso permite comparar veículos e motoristas, ' +
+          'identificar consumo fora do padrão e apurar o custo real por km — que é a base para precificar frete. ' +
+          'Transportadora que não sabe o custo por km está chutando o preço do frete.',
+        tags: ['combustivel', 'diesel', 'abastecimento', 'consumo', 'media', 'km/l', 'hodometro', 'custo por km'],
+      },
+      {
+        topic: 'frota-diarias', category: 'produto',
+        title: 'Diárias e adiantamentos de motorista',
+        content:
+          'O HiperTMS controla diárias e adiantamentos de motorista vinculados à viagem, com registro do que ' +
+          'foi pago e prestação de contas. Integra ao financeiro, então o custo da viagem já nasce completo ' +
+          '(frete + combustível + diária + pedágio), sem precisar juntar recibo depois.',
+        tags: ['diaria', 'diarias', 'adiantamento', 'motorista', 'vale', 'prestacao de contas', 'viagem'],
       },
 
       // ── ONBOARDING E IMPLANTAÇÃO ──────────────────────────────────────────────
