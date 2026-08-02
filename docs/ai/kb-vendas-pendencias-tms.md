@@ -59,18 +59,32 @@ Lead que fala em roteirização precisa do Essencial no mínimo.
 | Diárias | adiantamento de motorista vinculado à viagem |
 | Limites por plano | tabela completa como ferramenta de qualificação |
 
-## ❓ Aguardando o Uelder
+## ✅ Respondido pela diretoria (2026-08-01)
+
+> **Cadastro NÃO pede cartão.** "Quando ele entra, ele só precisa entrar, aí
+> depois a gente manda o boleto para ele. Se pedir cartão, aí o pessoal pula
+> fora." Também: **7 dias para cancelar**, e a cobrança da mensalidade vem
+> **depois de ~30 dias**. E a orientação explícita: **não usar a palavra
+> "grátis"**.
+
+Isso está agora na KB (artigo `Trial e forma de pagamento`) e no playbook, como
+objeção dedicada — é a resposta mais forte contra a hesitação inicial do lead.
+
+Nota de precisão: o Uelder diz "30 dias"; o código
+(`billing-schedule.ts:16-28`) é mais específico — dia 15, nunca em menos de 30
+dias, podendo chegar a ~56. As duas afirmações são compatíveis; a Lia usa
+"nunca em menos de 30 dias", que é verdadeiro nos dois casos.
+
+## ❓ Ainda aguardando
 
 1. **Preços de Essencial, Profissional e Corporativo.** Só o Básico está
    confirmado em migration (R$89/mês, R$890/ano). Os outros (199/299/499) vêm do
    seed inicial e podem ter sido alterados direto no banco.
-2. **O cliente precisa cadastrar cartão/pagamento para entrar?** A assinatura é
-   criada no Asaas no ato do cadastro (boleto, PIX ou cartão), mas não ficou
-   claro se o acesso é liberado antes disso. Muda a frase de venda: *"sem
-   precisar de cartão"* é o argumento mais forte que existe em SaaS — e o pior
-   se for mentira.
-3. **Corporativo tem preço de tabela ou é sob consulta?** A descrição no banco
+2. **Corporativo tem preço de tabela ou é sob consulta?** A descrição no banco
    diz "Sob consulta", mas o fallback do Nexa tem R$499.
+
+Baixo risco: no dia a dia a Lia consulta preço em tempo real via `getPlans()`.
+O catálogo fixo só entra quando o TMS está fora do ar.
 
 ## Fase 2 — contratos, compras e ANTT ✅
 

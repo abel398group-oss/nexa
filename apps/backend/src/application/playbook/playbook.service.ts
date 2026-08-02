@@ -34,7 +34,11 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
   objections: [
     { objection: 'Tá caro', guidance: 'Reposicione o custo como investimento da operação: o HiperTMS evita multa fiscal, retrabalho e erro de precificação. Mostre que ao precificar pelo custo real (consumo, manutenção, depreciação, margem) o sistema se paga ao evitar poucos fretes mal cotados por mês. Compare com o prejuízo de um CT-e errado.' },
     { objection: 'Já uso outro sistema', guidance: 'Pergunte o que falta no atual; destaque o diferencial (tudo integrado: fiscal + frota + financeiro + precificação por custo real) e que a migração é acompanhada.' },
-    { objection: 'Vou pensar', guidance: 'Não pressione; ofereça um próximo passo técnico de baixo compromisso (uma cotação demonstrando custos e margem de uma rota real) e pergunte qual a principal dúvida que ficou.' },
+    { objection: 'Vou pensar', guidance: 'Não pressione; ofereça um próximo passo técnico de baixo compromisso (uma cotação demonstrando custos e margem de uma rota real) e pergunte qual a principal dúvida que ficou. Se a hesitação for medo de se comprometer, lembre que o cadastro NÃO pede cartão e que ele pode cancelar nos primeiros 7 dias — sem chamar de "grátis" nem de "teste".' },
+    // 2026-08-01: confirmado pela diretoria — cadastro sem cartão. É a resposta
+    // mais forte contra a hesitação inicial, e o motivo pelo qual pedir cartão
+    // faria o lead desistir.
+    { objection: 'Vou ter que colocar cartão?', guidance: 'Não. O cadastro não pede cartão nenhum — ele entra e já começa a usar; o boleto da primeira mensalidade vem depois, nunca em menos de 30 dias. Nos primeiros 7 dias ele pode cancelar. Diga isso com naturalidade, sem transformar em "teste grátis": é uma assinatura normal com a primeira cobrança adiada.' },
     { objection: 'É difícil de usar?', guidance: 'Tranquilize: é feito para a operação de transportadora; ofereça acompanhamento na implantação.' },
     { objection: 'Preciso falar com meu sócio/chefe', guidance: 'Ótimo sinal; ofereça material/uma call com os dois e pergunte o melhor momento.' },
   ],

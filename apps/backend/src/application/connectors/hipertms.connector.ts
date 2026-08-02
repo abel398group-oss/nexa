@@ -377,11 +377,16 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
           'Na prática o cliente usa entre 30 e ~60 dias antes de pagar, dependendo do dia em que entrou: ' +
           'quem entra dia 1º de agosto paga em 15 de setembro (45 dias); quem entra dia 20 de agosto paga em ' +
           '15 de outubro (56 dias). ' +
-          'Forma de dizer ao lead: "você começa a usar hoje e a primeira fatura vence no dia 15, nunca antes de ' +
-          '30 dias". É um argumento forte E verdadeiro — não transforme em "grátis". ' +
-          'Pagamento via boleto, PIX ou cartão. Ciclo mensal ou anual (o anual tem desconto — o Básico é R$890/ano ' +
-          'contra R$1.068 no mensal). Sem fidelidade; upgrade e downgrade são imediatos.',
-        tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'pix', 'cartao', 'cancelamento', 'primeira fatura', 'quando paga'],
+          'NÃO PRECISA CADASTRAR CARTÃO PARA ENTRAR (confirmado pela diretoria em 2026-08-01). O lead só se ' +
+          'cadastra e já acessa; o boleto é enviado depois. Esse é o argumento MAIS FORTE que temos para vencer ' +
+          'a hesitação inicial — use sempre que o lead demonstrar receio de se comprometer. ' +
+          'Ele também pode CANCELAR nos primeiros 7 dias. ' +
+          'Forma de dizer ao lead: "você se cadastra sem informar cartão nenhum, já começa a usar, e o boleto da ' +
+          'primeira mensalidade só vem depois — nunca em menos de 30 dias. E nos primeiros 7 dias você pode ' +
+          'cancelar." É forte E verdadeiro. NÃO chame de "grátis" nem de "teste": não é. ' +
+          'Pagamento via boleto (padrão), PIX ou cartão. Ciclo mensal ou anual (o anual tem desconto — o Básico é ' +
+          'R$890/ano contra R$1.068 no mensal). Sem fidelidade; upgrade e downgrade são imediatos.',
+        tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'pix', 'cartao', 'sem cartao', 'cancelamento', 'primeira fatura', 'quando paga', 'compromisso'],
       },
       {
         topic: 'planos', category: 'comercial',
