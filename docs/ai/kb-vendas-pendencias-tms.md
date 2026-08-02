@@ -72,12 +72,38 @@ Lead que fala em roteirização precisa do Essencial no mínimo.
 3. **Corporativo tem preço de tabela ou é sob consulta?** A descrição no banco
    diz "Sob consulta", mas o fallback do Nexa tem R$499.
 
-## Fases seguintes (não feitas ainda)
+## Fase 2 — contratos, compras e ANTT ✅
 
-- **Fase 2:** contratos (comerciais, prestador, fornecedor), compras/procurement
-  detalhado, ANTT piso tarifário.
-- **Fase 3:** oportunidades de venda, SDR, dashboard, equipes/tarefas,
-  relatórios, chat interno, add-ons cobrados.
+| Tópico | Observação |
+|---|---|
+| Contrato comercial por cliente | tabela/taxa/markup próprios, aplicados automaticamente; validado contra a empresa antes de aplicar |
+| Contratos de fornecedor e prestador | agregado/terceiro/autônomo com vigência — custo do terceiro entra na apuração da viagem |
+| **Piso ANTT na contratação** | Resolução 2.501/2025, fórmula `(d × CCD) + CC` + retorno vazio. Compara com o pago ao terceiro e **alerta sem bloquear** (`antt-floor.service.ts:38-43`). Argumento de RISCO, não de eficiência |
+| Compras e estoque | importação por XML da nota do fornecedor, movimentações, export CSV |
+
+⚠️ O piso ANTT é para **contratar terceiro** — não confundir com precificação de
+venda, que tem markup e tabela comercial próprios. O código é explícito sobre
+essa separação e a Lia foi instruída nela.
+
+## Fase 3 — comercial e gestão ✅
+
+| Tópico | Observação |
+|---|---|
+| Funil de vendas + playbook SDR | ADR 049; oportunidades com etapas e passos, geo-enriquecimento das empresas. **A transportadora não precisa de CRM separado** |
+| Dashboard operacional | contagens por estado, panorama de frota, séries temporais — argumento para o DONO, que decide a compra |
+| Tarefas, atividades e chat interno | tira a coordenação do grupo de WhatsApp |
+| Relatórios | avançados só a partir do **Essencial** |
+| Add-ons | armazenamento extra e números adicionais do Monitor. Lia instruída a **não informar preço** (não estão no catálogo dinâmico) |
+
+## Resultado
+
+**41 → 60 artigos** de vendas.
+
+## Ainda não coberto (backlog frio)
+
+Asaas/pagamentos (detalhe interno, pouco relevante em venda), RBAC/permissões,
+sequences, upload, platform/admin, health. Nenhum desses aparece em conversa com
+lead — só entram se algum lead perguntar.
 
 ## Como validar
 

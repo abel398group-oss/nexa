@@ -500,6 +500,110 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         tags: ['diaria', 'diarias', 'adiantamento', 'motorista', 'vale', 'prestacao de contas', 'viagem'],
       },
 
+      // ── CONTRATOS E COMPRAS (fase 2, 2026-08-01) ─────────────────────────────
+      {
+        topic: 'contratos-comerciais', category: 'produto',
+        title: 'Contrato comercial por cliente — preço que não vaza',
+        content:
+          'O HiperTMS permite contrato comercial POR CLIENTE, com tabela de preço, taxas e markup próprios. ' +
+          'Quando o embarque é daquele cliente, o sistema aplica automaticamente o contrato dele — sem depender ' +
+          'de alguém lembrar o desconto combinado. O contrato é validado contra a empresa antes de ser aplicado, ' +
+          'para não pegar tabela de outra filial por engano. ' +
+          'Dor que resolve: transportadora com 30 clientes e 30 acordos diferentes na cabeça do comercial. ' +
+          'Quando o vendedor sai, o preço vai junto. Aqui fica no sistema.',
+        tags: ['contrato', 'cliente', 'tabela de preco', 'acordo', 'desconto', 'markup', 'taxa'],
+      },
+      {
+        topic: 'contratos-terceiros', category: 'produto',
+        title: 'Contratos de fornecedor e de prestador de serviço',
+        content:
+          'Além do contrato de cliente, o HiperTMS controla contratos de FORNECEDOR e de PRESTADOR DE SERVIÇO ' +
+          '(agregado, terceiro, autônomo), com vigência e vínculo à empresa. ' +
+          'Serve para transportadora que subcontrata frete: o custo do terceiro fica registrado em contrato e ' +
+          'entra na apuração da viagem, em vez de virar acerto informal.',
+        tags: ['fornecedor', 'prestador', 'terceiro', 'agregado', 'subcontratacao', 'contrato', 'autonomo'],
+      },
+      {
+        topic: 'antt-piso', category: 'produto',
+        title: 'Piso mínimo ANTT na contratação de terceiro (compliance)',
+        content:
+          'O HiperTMS calcula o PISO MÍNIMO da ANTT (Resolução 2.501/2025) na contratação de terceiros e ' +
+          'COMPARA com o frete que a transportadora está pagando ao terceiro. Se ficar abaixo do piso legal, ' +
+          'registra um evento de compliance e ALERTA — não bloqueia a operação. ' +
+          'A fórmula usada é a oficial: (distância × CCD) + CC, com retorno vazio quando aplicável. ' +
+          'Esse é um argumento de RISCO, não de eficiência: pagar abaixo do piso expõe a transportadora a ' +
+          'autuação. Muita gente não sabe que está exposta. ' +
+          'Atenção: isso é para CONTRATAR terceiro — não confundir com a precificação de venda ao cliente, ' +
+          'que tem markup e tabela comercial próprios.',
+        tags: ['antt', 'piso', 'piso minimo', 'resolucao', '2501', 'terceiro', 'compliance', 'multa', 'autuacao'],
+      },
+      {
+        topic: 'compras-estoque', category: 'produto',
+        title: 'Compras e estoque de peças com importação por XML',
+        content:
+          'O módulo de Compras controla produtos (peças, pneus, insumos) e suas movimentações de entrada e saída, ' +
+          'com importação a partir do XML da nota do fornecedor — não precisa digitar item por item. ' +
+          'Também exporta as movimentações em CSV. ' +
+          'Fecha o ciclo com a manutenção: a peça que sai do estoque entra no custo da manutenção do veículo.',
+        tags: ['compras', 'estoque', 'pecas', 'produto', 'xml', 'nota do fornecedor', 'almoxarifado', 'entrada'],
+      },
+
+      // ── COMERCIAL E GESTÃO (fase 3, 2026-08-01) ──────────────────────────────
+      {
+        topic: 'funil-vendas', category: 'produto',
+        title: 'Funil de vendas e playbook de prospecção dentro do TMS',
+        content:
+          'O HiperTMS tem funil comercial próprio: oportunidades de venda com etapas, e um PLAYBOOK de ' +
+          'prospecção em passos — cada oportunidade mostra em que passo do processo está e o que falta fazer. ' +
+          'Também tem enriquecimento geográfico das empresas do funil (localiza a empresa no mapa), útil para ' +
+          'planejar visita e rota comercial. ' +
+          'Diferencial relevante: a transportadora não precisa de um CRM separado para o comercial dela. ' +
+          'Vender frete e operar frete ficam no mesmo lugar — a cotação vira embarque sem redigitar.',
+        tags: ['funil', 'crm', 'oportunidade', 'prospeccao', 'playbook', 'sdr', 'comercial', 'vendas', 'pipeline'],
+      },
+      {
+        topic: 'dashboard', category: 'produto',
+        title: 'Dashboard operacional — o dono enxerga a operação',
+        content:
+          'O HiperTMS tem dashboard do tenant com contagens por estado (cotações, embarques, cargas, viagens), ' +
+          'panorama da frota, panorama operacional e séries temporais da logística — dá para ver a evolução, ' +
+          'não só a foto do dia. ' +
+          'Argumento para o DONO da transportadora, que costuma ser quem decide a compra: hoje ele pergunta ' +
+          '"quantos embarques temos em aberto?" e alguém vai contar na planilha. Aqui ele abre e vê.',
+        tags: ['dashboard', 'painel', 'indicador', 'kpi', 'grafico', 'visao geral', 'gestao', 'dono'],
+      },
+      {
+        topic: 'equipes-tarefas', category: 'produto',
+        title: 'Tarefas, atividades e chat interno da equipe',
+        content:
+          'O HiperTMS controla tarefas atribuídas a usuários (com conclusão), registro de atividades da equipe e ' +
+          'CHAT INTERNO — conversa direta e em grupo dentro do próprio sistema. ' +
+          'Evita que a coordenação da operação viva em grupo de WhatsApp, onde nada fica registrado e ninguém ' +
+          'acha depois. A tarefa fica ligada à operação, não solta num aplicativo à parte.',
+        tags: ['tarefa', 'atividade', 'equipe', 'chat', 'mensagem interna', 'coordenacao', 'time'],
+      },
+      {
+        topic: 'relatorios', category: 'produto',
+        title: 'Relatórios por área',
+        content:
+          'O HiperTMS tem relatórios de logística, frota, fiscal e financeiro. ' +
+          'RELATÓRIOS AVANÇADOS estão disponíveis a partir do plano ESSENCIAL — o Básico não inclui. ' +
+          'Se o lead insistir em análise mais profunda ou exportação, o piso é o Essencial.',
+        tags: ['relatorio', 'relatorios', 'exportar', 'analise', 'gerencial', 'planilha'],
+      },
+      {
+        topic: 'addons', category: 'comercial',
+        title: 'Add-ons cobrados à parte',
+        content:
+          'Além do plano, o HiperTMS cobra ADD-ONS por unidade — por exemplo armazenamento extra e números ' +
+          'adicionais do Monitor (o alerta por WhatsApp). Cada plano já inclui uma quantidade de números do ' +
+          'Monitor; acima disso é add-on. ' +
+          'Se o lead perguntar "quantas pessoas recebem os alertas?", a resposta depende do plano — e o extra ' +
+          'é cobrado. NÃO informe o preço do add-on: consulte um especialista, pois esses valores não estão ' +
+          'no catálogo dinâmico.',
+        tags: ['addon', 'add-on', 'adicional', 'extra', 'armazenamento', 'monitor', 'numero extra', 'cobranca'],
+      },
+
       // ── ONBOARDING E IMPLANTAÇÃO ──────────────────────────────────────────────
       {
         topic: 'onboarding', category: 'suporte',
