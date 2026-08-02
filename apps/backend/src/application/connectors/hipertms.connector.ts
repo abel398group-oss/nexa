@@ -362,7 +362,13 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       },
       {
         topic: 'planos', category: 'comercial',
-        title: 'Primeira cobrança — NÃO existe teste grátis',
+        // ⚠️ NÃO RENOMEAR ESTE TÍTULO. A sincronização da KB
+        // (knowledge.service.ts:233) casa artigo por TÍTULO: mudar o título cria
+        // um artigo NOVO e deixa o antigo vivo no banco — e nada apaga artigo que
+        // sumiu do conector. Foi o que aconteceu na 1ª versão desta correção: o
+        // texto do "trial gratuito" continuaria recuperável pela Lia.
+        // Para corrigir o conteúdo de um artigo, edite só o `content`.
+        title: 'Trial e forma de pagamento',
         content:
           'ATENÇÃO: o HiperTMS NÃO tem período de teste (trial). Nunca prometa "teste grátis" nem "30 dias grátis". ' +
           'A assinatura entra ATIVA desde o primeiro dia — o cliente é cliente, não testador. ' +

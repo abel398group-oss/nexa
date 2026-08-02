@@ -105,6 +105,27 @@ Asaas/pagamentos (detalhe interno, pouco relevante em venda), RBAC/permissões,
 sequences, upload, platform/admin, health. Nenhum desses aparece em conversa com
 lead — só entram se algum lead perguntar.
 
+## ⚠️ Armadilha: NUNCA renomear o título de um artigo da KB
+
+`importFromConnector` casa artigo por **TÍTULO** (`knowledge.service.ts:233`).
+Consequências:
+
+- mudar o `content` mantendo o título → **atualiza** o artigo e refaz o embedding ✅
+- mudar o **título** → cria um artigo NOVO e deixa o antigo **vivo no banco** ❌
+
+E **nada apaga** artigo que sumiu do conector — a exclusão só existe manual, pela
+tela. Ou seja: um artigo com informação errada renomeado continua recuperável
+pela Lia para sempre.
+
+Aconteceu na primeira versão desta correção: o artigo `Trial e forma de
+pagamento` foi renomeado para `Primeira cobrança — NÃO existe teste grátis`, o
+que teria deixado o texto do "trial gratuito" ativo no banco. O título foi
+restaurado e o aviso ficou no código, junto do artigo.
+
+**Melhoria futura (não feita):** limpar da base os artigos importados que não
+existem mais no conector. Exige distinguir artigo do conector de artigo escrito
+à mão no painel — senão apaga o conteúdo do usuário.
+
 ## Como validar
 
 A KB de vendas é servida por `getKnowledge()` em

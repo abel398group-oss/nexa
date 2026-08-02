@@ -39,7 +39,13 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     { objection: 'Preciso falar com meu sócio/chefe', guidance: 'Ótimo sinal; ofereça material/uma call com os dois e pergunte o melhor momento.' },
   ],
   ctaCold:
-    'Ainda explorando. Foque em entender a operação (porte da frota, principais dores de custo) e mostre 1 ganho concreto ligado a custo ou margem. CTA leve e técnico (ex.: "quer que eu te mostre como o sistema calcula o custo real de um frete?"). Não peça e-mail ainda.',
+    'Ainda explorando. Foque em entender a operação (porte da frota, principais dores de custo) e mostre 1 ganho concreto ligado a custo ou margem. ' +
+    // 2026-08-01: a calculadora PÚBLICA (piso ANTT / dedicado / fracionado) não
+    // exige cadastro — é o convite de menor atrito que existe hoje e converte
+    // melhor que oferecer demonstração para quem ainda nem sabe se tem interesse.
+    'CTA leve e técnico: ofereça a CALCULADORA DE FRETE gratuita do HiperTMS (piso mínimo da ANTT, dedicado ou fracionado) — ' +
+    'ele usa sozinho, sem cadastro e sem compromisso, e já sente o valor do cálculo por custo real. ' +
+    'Alternativa: "quer que eu te mostre como o sistema calcula o custo real de um frete?". Não peça e-mail ainda.',
   ctaWarm:
     'Há interesse. Avance com proposta técnica: ofereça preparar uma cotação rápida demonstrando os custos e a margem de uma rota real do cliente, facilitando a tomada de decisão. Colete UM dado de qualificação que ainda falte (porte da frota, volume de docs/mês ou quem decide). CTA médio.',
   ctaHot:
