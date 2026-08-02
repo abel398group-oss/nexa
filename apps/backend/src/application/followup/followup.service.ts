@@ -11,9 +11,22 @@ const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7);
 const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19);
 
 const OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
+
+// DISP-018: o rodapé era CONCATENADO na constante, então o follow-up ignorava o
+// LGPD_OPT_OUT_FOOTER — desligar a flag tirava o aviso do disparo mas ele voltava
+// no follow-up de 24h/72h. Agora os dois canais leem a mesma chave.
+// (a leitura é feita a cada envio, não no import, para o .env valer sem rebuild)
+function optOutFooter(): string {
+  return process.env.LGPD_OPT_OUT_FOOTER === 'false' ? '' : OPT_OUT_FOOTER;
+}
+
+const MSG_BASE = {
+  1: 'Oi {{nome}}, passando pra saber se você teve a chance de ver minha mensagem sobre o sistema de gestão de fretes. Posso ajudar com alguma dúvida? 🙂',
+  2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes do HiperTMS, é só me chamar quando quiser. Abraço!',
+};
 const MSG = {
-  1: 'Oi {{nome}}, passando pra saber se você teve a chance de ver minha mensagem sobre o sistema de gestão de fretes. Posso ajudar com alguma dúvida? 🙂' + OPT_OUT_FOOTER,
-  2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes do HiperTMS, é só me chamar quando quiser. Abraço!' + OPT_OUT_FOOTER,
+  get 1() { return MSG_BASE[1] + optOutFooter(); },
+  get 2() { return MSG_BASE[2] + optOutFooter(); },
 };
 
 @Injectable()
