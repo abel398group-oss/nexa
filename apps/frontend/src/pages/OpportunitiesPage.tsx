@@ -61,6 +61,14 @@ const STAGES: { key: OppStage; label: string }[] = [
   { key: 'discarded', label: 'Descartado'  },
 ];
 
+// Precisa bater com DISCARD_REASONS do backend (opportunities.service.ts)
+const DISCARD_REASONS: { key: string; label: string }[] = [
+  { key: 'sem_fit',      label: 'Sem fit com o produto' },
+  { key: 'sem_resposta', label: 'Sem resposta'          },
+  { key: 'concorrente',  label: 'Foi para concorrente'  },
+  { key: 'outro',        label: 'Outro'                 },
+];
+
 const PAGE = 30;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -240,6 +248,13 @@ export function OpportunitiesPage() {
   const [form, setForm] = useState<OppForm>(EMPTY_FORM);
   const [formBusy, setFormBusy] = useState(false);
 
+  // Modal pausar/descartar — pausedUntil e discardReason só existem se
+  // coletados aqui; o PATCH /:id/stage genérico não pergunta por eles.
+  const [stagePrompt, setStagePrompt] = useState<{ id: string; stage: 'paused' | 'discarded' } | null>(null);
+  const [pausedUntilInput, setPausedUntilInput] = useState('');
+  const [discardReasonInput, setDiscardReasonInput] = useState('');
+  const [stageBusy, setStageBusy] = useState(false);
+
   // ── Queries ──
 
   const summaryQ = useQuery({
@@ -323,12 +338,43 @@ export function OpportunitiesPage() {
     }
   }
 
-  async function moveStage(id: string, stage: OppStage) {
+  // Pausado e descartado têm um motivo/data associados (pausedUntil,
+  // discardReason) — abre um modal pra coletar em vez de mandar o PATCH direto.
+  function moveStage(id: string, stage: OppStage) {
+    if (stage === 'paused' || stage === 'discarded') {
+      setPausedUntilInput('');
+      setDiscardReasonInput('');
+      setStagePrompt({ id, stage });
+      return;
+    }
+    void applyStage(id, stage, {});
+  }
+
+  async function applyStage(id: string, stage: OppStage, extra: { pausedUntil?: string; discardReason?: string }) {
     try {
-      await api.patch(`/opportunities/${id}/stage`, { stage });
+      await api.patch(`/opportunities/${id}/stage`, { stage, ...extra });
       invalidate();
     } catch {
       toast.error('Erro ao mover estágio.');
+    }
+  }
+
+  async function confirmStagePrompt() {
+    if (!stagePrompt || stageBusy) return;
+    setStageBusy(true);
+    try {
+      const extra: { pausedUntil?: string; discardReason?: string } = {};
+      if (stagePrompt.stage === 'paused' && pausedUntilInput) {
+        extra.pausedUntil = new Date(pausedUntilInput).toISOString();
+      }
+      if (stagePrompt.stage === 'discarded' && discardReasonInput) {
+        extra.discardReason = discardReasonInput;
+      }
+      await applyStage(stagePrompt.id, stagePrompt.stage, extra);
+      toast.success(stagePrompt.stage === 'paused' ? 'Lead pausado.' : 'Lead descartado.');
+      setStagePrompt(null);
+    } finally {
+      setStageBusy(false);
     }
   }
 
@@ -495,6 +541,41 @@ export function OpportunitiesPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button onClick={submitForm} disabled={formBusy}>
               {editTarget ? 'Salvar' : 'Criar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal pausar / descartar — coleta pausedUntil ou discardReason antes do PATCH */}
+      <Modal
+        open={stagePrompt !== null}
+        onClose={() => setStagePrompt(null)}
+        title={stagePrompt?.stage === 'paused' ? 'Pausar oportunidade' : 'Descartar oportunidade'}
+      >
+        <div className="space-y-4">
+          {stagePrompt?.stage === 'paused' && (
+            <div>
+              <Label className="mb-1 block">Retomar em (opcional)</Label>
+              <Input
+                type="date"
+                value={pausedUntilInput}
+                onChange={(e) => setPausedUntilInput(e.target.value)}
+              />
+            </div>
+          )}
+          {stagePrompt?.stage === 'discarded' && (
+            <div>
+              <Label className="mb-1 block">Motivo</Label>
+              <Select value={discardReasonInput} onChange={(e) => setDiscardReasonInput(e.target.value)}>
+                <option value="">Selecione um motivo…</option>
+                {DISCARD_REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </Select>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setStagePrompt(null)}>Cancelar</Button>
+            <Button onClick={confirmStagePrompt} disabled={stageBusy}>
+              {stagePrompt?.stage === 'paused' ? 'Pausar' : 'Descartar'}
             </Button>
           </div>
         </div>

@@ -82,9 +82,12 @@ export class OpportunitiesController {
 
   @Post()
   create(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Body() dto: CreateOpportunityDto) {
-    // vendedor criando manualmente → lead nasce dele (nunca de outro)
+    // vendedor criando manualmente → lead nasce dele (nunca de outro, nem mesmo
+    // quando ele nao tem sellerId — nesse caso o campo enviado pelo cliente e
+    // descartado em vez de passar direto, senao um vendedor sem perfil poderia
+    // plantar o lead na conta de outro vendedor)
     const scope = sellerScopeOf(user);
-    if (scope && scope !== '__none__') dto.assignedSellerId = scope;
+    if (scope) dto.assignedSellerId = scope === '__none__' ? undefined : scope;
     return this.opps.create(tenantId, dto);
   }
 
