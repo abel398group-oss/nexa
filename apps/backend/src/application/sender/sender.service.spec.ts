@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import { SenderService } from './sender.service';
 
 // As regras puras nao usam as dependencias — instancia com mocks vazios.
@@ -419,6 +420,54 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
 // O dedup interno só olha a própria lista; sem o bloco novo, o mesmo telefone
 // em dois CSVs recebia a prospecção 2x. Quem já tem 'sent' em qualquer campanha
 // do tenant entra como skipped/ja_enviado (visível no relatório).
+// ── DISP-016: campanha vazia não pode ser criada ────────────────────────────
+// Nasceu de um teste real: o CSV foi subido no campo de ANEXO (não é lista de
+// envio) e a base de contatos estava vazia → campanha criada com 0 alvos, o
+// worker marcou 'done' no primeiro tick e pareceu que o disparo falhou.
+describe('SenderService.createCampaign — campanha sem destinatários', () => {
+  const makeSvc = (prisma: any) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any,
+      { batchLookup: vi.fn().mockResolvedValue(new Map()) } as any,
+      { acquire: async () => async () => {} } as any);
+
+  const prismaVazio = () => ({
+    campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
+    campaign: { create: vi.fn() },
+    contact: {
+      count: vi.fn().mockResolvedValue(0),
+      findMany: vi.fn().mockResolvedValue([]), // base de contatos vazia
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+  });
+
+  it('lista manual vazia -> BadRequest e NÃO cria a campanha', async () => {
+    const prisma = prismaVazio();
+    await expect(
+      makeSvc(prisma).createCampaign('t1', { name: 'Vazia', template: 'Oi', phones: [] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+
+  it('"todos os contatos" com a base vazia -> BadRequest', async () => {
+    const prisma = prismaVazio();
+    await expect(
+      makeSvc(prisma).createCampaign('t1', { name: 'Vazia', template: 'Oi', fromContacts: true }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+
+  it('todos os números pulados (ex.: telefone inválido) AINDA cria — o relatório é o valor', async () => {
+    const prisma = prismaVazio();
+    prisma.campaign.create = vi.fn().mockResolvedValue({ id: 'c1', _count: { targets: 1 } });
+    const out = await makeSvc(prisma).createCampaign('t1', {
+      name: 'So invalidos', template: 'Oi',
+      phones: [{ phone: '639616524149' }], // estrangeiro → skipped, não vazio
+    });
+    expect(out).toMatchObject({ id: 'c1' });
+    expect(prisma.campaign.create).toHaveBeenCalled();
+  });
+});
+
 describe('SenderService.createCampaign — dedup entre campanhas', () => {
   let prisma: any, contacts: any, tmsLookup: any;
   const makeService = () =>

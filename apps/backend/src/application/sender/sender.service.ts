@@ -303,6 +303,24 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Campanha "${dto.name}": ${skippedTms} lead(s) já são clientes TMS — pulados e marcados`);
     }
 
+    // DISP-016: campanha sem NENHUM destinatário não pode ser criada.
+    // Antes ela nascia vazia, o worker marcava 'done' no primeiro tick e o
+    // operador via só "Campanha criada! 0 contato(s)" — parecia que o disparo
+    // tinha rodado e não enviado. Acontece ao escolher "todos os contatos" com a
+    // base vazia, ou ao subir um CSV no campo de ANEXO achando que é a lista.
+    // Só barra quando a entrada estava vazia: se há linhas 'skipped' (opt-out,
+    // blocklist, cliente TMS, já enviado, telefone inválido) a campanha é criada
+    // normalmente, porque o relatório com os motivos é justamente o que interessa.
+    const totalRows =
+      tmsAllowed.length + tmsBlocked.length + dupBlocked.length +
+      blockedList.length + suspectList.length + invalidList.length;
+    if (totalRows === 0) {
+      throw new BadRequestException(
+        'Nenhum destinatário para esta campanha. Selecione contatos, informe números avulsos, ' +
+        'ou importe a lista em Contatos antes de criar. (O anexo de mídia não serve como lista de envio.)',
+      );
+    }
+
     const campaign = await this.prisma.campaign.create({
       data: {
         tenantId,
