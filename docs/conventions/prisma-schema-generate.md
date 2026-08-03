@@ -47,7 +47,7 @@ Sem isso, o TypeScript não conhece os campos novos e o projeto não compila.
 1. git pull
 2. Verificar se schema.prisma mudou → se sim:
 3. pnpm db:generate
-4. cd apps/backend && pnpm start:dev
+4. cd apps/backend && pnpm dev
 ```
 
 ---

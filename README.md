@@ -77,7 +77,7 @@ pnpm db:migrate                # nunca migrate reset/push em produção
 pnpm db:seed
 
 # 6. Subir backend e frontend
-cd apps/backend && pnpm start:dev      # :3001
+cd apps/backend && pnpm dev      # :3001
 cd apps/frontend && pnpm dev           # :5174
 ```
 

@@ -140,7 +140,7 @@ Dois ambientes distintos — nunca confundir:
 ## Working agreement (read first)
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
-  `start:dev` on `:3001`, frontend `vite` on `:5174`) and `docker compose`
+  `dev` on `:3001`, frontend `vite` on `:5174`) and `docker compose`
   (Postgres `:5433`, Redis `:6380`, WAHA `:3018`). The user often already keeps
   servers running with file-watch, so check for a running instance / port
   conflict before starting another. Ports are deliberately offset from the
@@ -213,7 +213,7 @@ Run from the repo root unless noted. Package manager: **pnpm 9** (Node >= 20).
 | **DB migrate (USER ONLY)** | `cd apps/backend && npx prisma migrate deploy` |
 | **Seed (USER ONLY)** | `pnpm db:seed` |
 | Prisma Studio | `pnpm db:studio` |
-| Backend dev (`:3001`) | `cd apps/backend && pnpm start:dev` |
+| Backend dev (`:3001`) | `cd apps/backend && pnpm dev` |
 | Frontend dev (`:5174`) | `cd apps/frontend && pnpm dev` |
 | **Frontend build** ⚠️ | `cd apps/frontend && pnpm build` |
 | **Frontend type-check** ⚠️ | `pnpm typecheck` · ou `pnpm --filter frontend typecheck` |

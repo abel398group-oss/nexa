@@ -4,7 +4,7 @@
 
 ```
 # Backend (porta 3001)
-cd apps/backend && pnpm start:dev
+cd apps/backend && pnpm dev
 
 # Frontend (porta 5174)
 cd apps/frontend && pnpm dev
