@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
 import {
@@ -101,6 +101,9 @@ export function CampaignsPage() {
   const [settings, setSettings] = useState<SenderSettings | null>(null);
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
+  // Quantos contatos ativos existem — mostrado no formulário para o operador
+  // ver ANTES de criar que a base está vazia (null = ainda não consultado).
+  const [activeCount, setActiveCount] = useState<number | null>(null);
   const [channel, setChannel] = useState<Channel>('whatsapp');
   const [campaignType, setCampaignType] = useState<'message' | 'status'>('message');
   // status-only fields
@@ -181,6 +184,17 @@ export function CampaignsPage() {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function uploadFile(file: File) {
+    // O anexo é MATERIAL enviado junto com a mensagem (PDF/Word/imagem), não a
+    // lista de destinatários. Subir o CSV de contatos aqui era o engano mais
+    // comum: a campanha nascia sem ninguém e o link do arquivo ainda ia colado
+    // na mensagem. Barrar com explicação vale mais que qualquer texto de ajuda.
+    if (/\.(csv|txt|xlsx?|tsv)$/i.test(file.name)) {
+      toast.error(
+        'Planilha não é anexo. Para carregar a lista de envio use Contatos → Importar. ' +
+        'Aqui vai só material (PDF, Word ou imagem) enviado junto com a mensagem.',
+      );
+      return;
+    }
     setUploading(true);
     try {
       const m = await uploadCampaignMedia(file);
@@ -354,6 +368,18 @@ export function CampaignsPage() {
     loadManualContacts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audience, channel, manualLoaded]);
+
+  // Ao abrir o formulário, conta os contatos ativos. Serve para avisar de cara
+  // que a base está vazia, em vez de deixar o operador preencher tudo e tomar
+  // um 400 no final (foi o que aconteceu na prática, mais de uma vez).
+  useEffect(() => {
+    if (!show) return;
+    let cancelado = false;
+    listContacts({ limit: 1 })
+      .then((r) => { if (!cancelado) setActiveCount(r.total ?? r.items.length); })
+      .catch(() => { if (!cancelado) setActiveCount(null); });
+    return () => { cancelado = true; };
+  }, [show]);
 
   // reconcilia telefones pré-preenchidos (vindo de Contatos / reenvio): casa com a base ou vira avulso
   useEffect(() => {
@@ -1686,7 +1712,27 @@ export function CampaignsPage() {
                   </div>
                 ) : (
                 <div>
-                  <div className="mb-2 text-sm text-base-content/70">Quem vai receber?</div>
+                  <div className="mb-2 flex items-center justify-between text-sm text-base-content/70">
+                    <span>Quem vai receber?</span>
+                    {activeCount !== null && (
+                      <span className={activeCount === 0 ? 'text-xs font-medium text-red-500' : 'text-xs text-base-content/45'}>
+                        {activeCount} contato(s) na base
+                      </span>
+                    )}
+                  </div>
+                  {/* Aviso ANTES de criar. Sem isto o operador só descobria que a
+                      base estava vazia depois de preencher tudo e tomar um 400 —
+                      e a tentação era subir o CSV no campo de Anexo, que não é
+                      lista de envio. */}
+                  {activeCount === 0 && (
+                    <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                      Nenhum contato cadastrado — não há para quem enviar.{' '}
+                      <Link to="/contacts" className="font-semibold underline">
+                        Importar contatos
+                      </Link>
+                      . O campo <strong>Anexo</strong> aqui embaixo é para material (PDF/Word), não para a lista.
+                    </div>
+                  )}
                   <div className="mb-2 flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
                     {([['todos', 'Todos ativos'], ['tag', 'Por tag'], ['manual', 'Manual']] as const).map(([k, label]) => (
                       <button
