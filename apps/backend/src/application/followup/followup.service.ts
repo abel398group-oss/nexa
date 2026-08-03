@@ -24,7 +24,9 @@ const MSG_BASE = {
   1: 'Oi {{nome}}, passando pra saber se você teve a chance de ver minha mensagem sobre o sistema de gestão de fretes. Posso ajudar com alguma dúvida? 🙂',
   2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes do HiperTMS, é só me chamar quando quiser. Abraço!',
 };
-const MSG = {
+// exportado para teste: o rodapé é resolvido na LEITURA (getter), então o spec
+// consegue variar LGPD_OPT_OUT_FOOTER sem recarregar o módulo.
+export const MSG = {
   get 1() { return MSG_BASE[1] + optOutFooter(); },
   get 2() { return MSG_BASE[2] + optOutFooter(); },
 };

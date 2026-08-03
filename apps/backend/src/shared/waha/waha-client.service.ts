@@ -4,6 +4,19 @@ export interface SendResult {
   sent: boolean;
   reason?: string;
   externalId?: string;
+  /**
+   * DISP-021: só faz sentido quando `sent === false`.
+   *
+   * `true`  — o WAHA REJEITOU o envio (4xx, sessão não configurada, fora do
+   *           allowlist). A mensagem com certeza não saiu: pode marcar falha e
+   *           reenviar sem medo.
+   * `false` — NÃO SABEMOS. Timeout, queda de rede ou 5xx: o WAHA pode ter
+   *           entregue a mensagem e só não ter conseguido responder a tempo.
+   *           Tratar como falha aqui gera DUPLICATA no reenvio — foi o que
+   *           aconteceu com o Mateus em 2026-08-03 (mensagem chegou 11:35, o
+   *           reenvio mandou de novo 11:45).
+   */
+  definitive?: boolean;
 }
 
 export interface StatusPostResult {
@@ -114,11 +127,11 @@ export class WahaClientService {
   async sendText(phone: string, text: string): Promise<SendResult> {
     if (!this.configured) {
       this.logger.warn('WAHA não configurado — mensagem NÃO enviada ao WhatsApp');
-      return { sent: false, reason: 'waha_nao_configurado' };
+      return { sent: false, reason: 'waha_nao_configurado', definitive: true };
     }
     if (!this.allowed(phone)) {
       this.logger.warn(`Envio bloqueado por allowlist: ${phone}`);
-      return { sent: false, reason: 'fora_do_allowlist' };
+      return { sent: false, reason: 'fora_do_allowlist', definitive: true };
     }
 
     const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
@@ -127,18 +140,23 @@ export class WahaClientService {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
         body: JSON.stringify({ session: this.session, chatId, text }),
-        signal: AbortSignal.timeout(15_000),
+        // DISP-021: 30s. Com 15s o WAHA sob carga estourava o prazo DEPOIS de já
+        // ter entregue a mensagem, e o envio entrava como falha (ver `definitive`).
+        signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) {
         const body = await res.text();
         this.logger.error(`WAHA sendText ${res.status}: ${body.slice(0, 160)}`);
-        return { sent: false, reason: `waha_${res.status}` };
+        // 4xx = o WAHA recusou (não saiu). 5xx = pode ter saído antes de quebrar.
+        return { sent: false, reason: `waha_${res.status}`, definitive: res.status < 500 };
       }
       const data: any = await res.json().catch(() => ({}));
       return { sent: true, externalId: data?.id?._serialized ?? data?.id ?? undefined };
     } catch (e: any) {
-      this.logger.error(`WAHA sendText falhou: ${e?.message}`);
-      return { sent: false, reason: 'erro_rede' };
+      // timeout/rede: a mensagem PODE ter ido. Nunca assumir que não foi.
+      const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+      this.logger.error(`WAHA sendText falhou (${timeout ? 'timeout' : 'rede'}): ${e?.message}`);
+      return { sent: false, reason: timeout ? 'timeout_sem_confirmacao' : 'erro_rede', definitive: false };
     }
   }
 

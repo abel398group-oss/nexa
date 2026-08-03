@@ -383,6 +383,40 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     expect(prisma.campaign.updateMany.mock.calls[0][0].where.channel).toBe('whatsapp');
   });
 
+  // ── DISP-021 (incidente real, 2026-08-03) ──────────────────────────────────
+  // O WAHA ENTREGOU a mensagem do Mateus mas estourou o timeout de 15s antes de
+  // responder. O DISP-001 marcou 'failed', o operador clicou em "Reenviar
+  // falhas" e o lead recebeu DUAS vezes (11:35 e 11:45).
+  // Regra: recusa DEFINITIVA (4xx/sessão/allowlist) → falha, pode reenviar.
+  // Timeout/rede/5xx → NÃO SABEMOS: conta como enviado e sai do reenvio.
+  // Duplicata em prospecção fria é spam e risco de ban; pior que não confirmar.
+
+  it('timeout do WAHA (entrega incerta) → NAO marca falha, para nao duplicar no reenvio', async () => {
+    const err: any = new Error('whatsapp_nao_enviado: timeout_sem_confirmacao');
+    err.definitive = false; // WAHA pode ter entregue
+    conversations.addMessage.mockRejectedValue(err);
+
+    await makeService().tick();
+
+    const upd = prisma.campaignTarget.update.mock.calls.map((c: any[]) => c[0].data);
+    expect(upd.some((d: any) => d.status === 'failed')).toBe(false);
+    const marcado = upd.find((d: any) => d.status === 'sent');
+    expect(marcado).toBeTruthy();
+    expect(marcado.error).toBe('entrega_nao_confirmada'); // visível pro operador
+  });
+
+  it('recusa definitiva do WAHA → marca falha (reenvio e seguro)', async () => {
+    const err: any = new Error('whatsapp_nao_enviado: waha_401');
+    err.definitive = true; // o WAHA recusou; nao saiu
+    conversations.addMessage.mockRejectedValue(err);
+
+    await makeService().tick();
+
+    const upd = prisma.campaignTarget.update.mock.calls.map((c: any[]) => c[0].data);
+    expect(upd.some((d: any) => d.status === 'failed')).toBe(true);
+    expect(upd.some((d: any) => d.status === 'sent')).toBe(false);
+  });
+
   it('WAHA recusa o envio → alvo vira "failed" (nunca "sent") e sem follow-up', async () => {
     conversations.addMessage.mockRejectedValue(new Error('whatsapp_nao_enviado: waha_500'));
     await makeService().tick();
@@ -413,6 +447,115 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     await makeService().tick();
     const msg = conversations.addMessage.mock.calls[0][2];
     expect(msg.content).toContain('https://hipertms.com.br/demo');
+  });
+
+  // ── DISP-017 (validado em produção 2026-08-03) ─────────────────────────────
+  // O ANEXO ia sempre, ignorando o sendLinkOnFirst que o link já respeitava:
+  // a 1ª mensagem fria saía com uma URL colada mesmo com a opção desmarcada.
+  // Regra do negócio: primeiro contato é SÓ TEXTO; material vai depois que o
+  // lead responde. Se este teste quebrar, a mensagem fria voltou a levar link.
+
+  it('anexo NAO vai na 1ª mensagem quando sendLinkOnFirst=false', async () => {
+    process.env.MEDIA_PUBLIC_BASE = 'https://nexa.example.com';
+    prisma.campaign.findFirst = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+      ...MSG_CAMPAIGN, mediaUrl: '/uploads/material.pdf', mediaName: 'material.pdf', sendLinkOnFirst: false,
+    });
+    await makeService().tick();
+    const msg = conversations.addMessage.mock.calls[0][2];
+    expect(msg.content).not.toContain('/uploads/material.pdf');
+    expect(msg.content).not.toContain('📎');
+  });
+
+  it('anexo VAI quando sendLinkOnFirst=true', async () => {
+    process.env.MEDIA_PUBLIC_BASE = 'https://nexa.example.com';
+    prisma.campaign.findFirst = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+      ...MSG_CAMPAIGN, mediaUrl: '/uploads/material.pdf', mediaName: 'material.pdf', sendLinkOnFirst: true,
+    });
+    await makeService().tick();
+    const msg = conversations.addMessage.mock.calls[0][2];
+    expect(msg.content).toContain('https://nexa.example.com/uploads/material.pdf');
+  });
+});
+
+// ── DISP-002: retry de falhas (validado em produção 2026-08-03) ──────────────
+// O Abel disparou, 1 alvo falhou, clicou em "Reenviar falhas" e o envio saiu.
+// O risco de regressão aqui é reenviar para quem NÃO devia: 'skipped' guarda
+// opt-out, blocklist, cliente TMS e telefone inválido — nunca pode voltar à fila.
+describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
+  const makeSvc = (prisma: any) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any,
+      { acquire: async () => async () => {} } as any);
+
+  it('recoloca apenas status=failed e limpa o erro', async () => {
+    const prisma = {
+      campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'running' }), update: vi.fn() },
+      campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    } as any;
+
+    const out = await makeSvc(prisma).retryFailed('t1', 'c1');
+
+    expect(out).toMatchObject({ requeued: 2 });
+    const call = prisma.campaignTarget.updateMany.mock.calls[0][0];
+    expect(call.where).toMatchObject({ campaignId: 'c1', tenantId: 't1', status: 'failed' });
+    expect(call.data).toMatchObject({ status: 'queued', error: null });
+  });
+
+  it('campanha concluída volta a rodar (senão o worker não pega os alvos)', async () => {
+    const prisma = {
+      campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'done' }), update: vi.fn() },
+      campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    } as any;
+
+    const out = await makeSvc(prisma).retryFailed('t1', 'c1');
+
+    expect(out.status).toBe('running');
+    expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe('running');
+  });
+
+  it('sem nenhuma falha: não mexe no status da campanha', async () => {
+    const prisma = {
+      campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'done' }), update: vi.fn() },
+      campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    } as any;
+
+    const out = await makeSvc(prisma).retryFailed('t1', 'c1');
+
+    expect(out).toMatchObject({ requeued: 0, status: 'done' });
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── DISP-019: reagendamento ─────────────────────────────────────────────────
+describe('SenderService.updateCampaign — reagendar', () => {
+  const makeSvc = (prisma: any) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any,
+      { acquire: async () => async () => {} } as any);
+
+  const prismaWith = (sent: number, status = 'running') => ({
+    campaign: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'c1', status, _count: { targets: sent } }),
+      update: vi.fn().mockResolvedValue({}),
+    },
+  } as any);
+
+  it('sem envios: grava o novo horário', async () => {
+    const prisma = prismaWith(0);
+    await makeSvc(prisma).updateCampaign('t1', 'c1', { scheduledAt: '2026-08-10T13:00:00.000Z' });
+    expect(prisma.campaign.update.mock.calls[0][0].data.scheduledAt).toBeInstanceOf(Date);
+  });
+
+  it('null remove o agendamento (dispara ao iniciar)', async () => {
+    const prisma = prismaWith(0);
+    await makeSvc(prisma).updateCampaign('t1', 'c1', { scheduledAt: null });
+    expect(prisma.campaign.update.mock.calls[0][0].data.scheduledAt).toBeNull();
+  });
+
+  it('já tem envios: recusa reagendar', async () => {
+    const prisma = prismaWith(3);
+    await expect(
+      makeSvc(prisma).updateCampaign('t1', 'c1', { scheduledAt: '2026-08-10T13:00:00.000Z' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
   });
 });
 

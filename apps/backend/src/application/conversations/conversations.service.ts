@@ -466,7 +466,12 @@ export class ConversationsService {
         // o alvo como 'failed'. Sem isto o WAHA recusava em silêncio e a campanha
         // era reportada como 100% enviada.
         if (dto.requireDelivery) {
-          throw new Error(`whatsapp_nao_enviado: ${r.reason ?? 'motivo desconhecido'}`);
+          // DISP-021: carrega no erro se a recusa foi DEFINITIVA. Timeout/rede
+          // podem ter entregue a mensagem — quem trata precisa saber disso para
+          // não marcar falha e provocar reenvio duplicado.
+          const err = new Error(`whatsapp_nao_enviado: ${r.reason ?? 'motivo desconhecido'}`) as Error & { definitive?: boolean };
+          err.definitive = r.definitive === true;
+          throw err;
         }
       }
     }

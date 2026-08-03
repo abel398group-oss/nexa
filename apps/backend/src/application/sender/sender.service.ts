@@ -839,11 +839,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         const publicUrl = mediaBase.replace(/\/$/, '') + relativePath;
         text += `\n\n📎 ${campaign.mediaName || 'Material'}: ${publicUrl}`;
       }
+      // declarada FORA do try: o catch precisa dela para agendar o follow-up no
+      // caso de entrega não confirmada (DISP-021).
+      let conv: { id: string; status?: string } | null = null;
       try {
         // UMA thread por contato (igual ao recebimento): acha a conversa mais recente
         // do telefone (qualquer status) e reaproveita; reabre se estava fechada; só cria
         // se o contato nunca teve conversa. Evita threads duplicadas no inbox.
-        let conv = await this.prisma.aiConversation.findFirst({
+        conv = await this.prisma.aiConversation.findFirst({
           where: { tenantId: campaign.tenantId, phone: target.phone },
           orderBy: { startedAt: 'desc' },
         });
@@ -904,8 +907,37 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       } catch (e: any) {
         // REGRA 3 (REGRAS-SQUAD): todo caminho de erro loga o motivo original.
         const reason = String(e?.message ?? e).slice(0, 200);
-        this.logger.warn(`Disparo p/ ${target.phone} FALHOU (campanha ${campaign.name}): ${reason}`);
-        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: reason } });
+
+        // DISP-021: entrega NÃO CONFIRMADA ≠ falha.
+        // Timeout/rede/5xx do WAHA podem ter entregue a mensagem — só a resposta
+        // se perdeu. Marcar 'failed' aqui coloca o alvo na fila do botão
+        // "Reenviar falhas" e o lead recebe DUAS vezes (aconteceu com o Mateus em
+        // 2026-08-03: chegou 11:35, o reenvio mandou de novo 11:45).
+        // Em prospecção fria duplicata é pior que envio não confirmado: é spam,
+        // queima o lead e aumenta risco de ban. Então: grava 'sent' com o motivo
+        // no campo `error`, o operador vê que não houve confirmação, e o alvo
+        // FICA FORA do reenvio. O recibo do WhatsApp (ack) confirma depois.
+        const naoConfirmado = e?.definitive === false;
+        if (naoConfirmado) {
+          this.logger.warn(`Disparo p/ ${target.phone} SEM CONFIRMAÇÃO (campanha ${campaign.name}): ${reason} — tratando como enviado para não duplicar`);
+          await this.prisma.$transaction([
+            this.prisma.campaignTarget.update({
+              where: { id: target.id },
+              data: { status: 'sent', sentAt: new Date(), error: 'entrega_nao_confirmada' },
+            }),
+            this.prisma.senderNumber.update({
+              where: { id: number.id },
+              data: { sentToday: { increment: 1 }, sentThisHour: { increment: 1 } },
+            }),
+          ]);
+          if (conv) {
+            await this.followup.schedule(campaign.tenantId, { conversationId: conv.id, phone: target.phone, name: target.name });
+          }
+        } else {
+          this.logger.warn(`Disparo p/ ${target.phone} FALHOU (campanha ${campaign.name}): ${reason}`);
+          await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'failed', error: reason } });
+        }
+
         // DISP-001: preserva o ritmo anti-ban também na falha. Sem isto, um WAHA
         // fora do ar faria o worker varrer a fila inteira a 1 alvo/15s marcando
         // tudo como 'failed' — em vez de espaçar as tentativas como no sucesso.
