@@ -67,7 +67,19 @@ services:
   redis:
     image: redis:7.2-alpine
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-    # SEM porta no host - acessivel so dentro da nexa-network (redis://:senha@redis:6379)
+    # SEM porta no host - acessivel so dentro da nexa-network.
+    #
+    # IMPORTANTE: use o apelido `nexa-redis` na REDIS_URL, nunca `redis`.
+    # O backend participa de nexa-network E hipertms-network, e a stack do
+    # HiperTMS tambem tem um servico chamado `redis` — o DNS do Docker resolvia
+    # `redis` para o Redis do HiperTMS (172.18.x) em vez deste (172.19.x).
+    # Efeito: locks, estado anti-ban e pub/sub do WebSocket do Nexa iam parar no
+    # Redis do outro sistema, com risco de colisao de chaves. Diagnosticado em
+    # 2026-08-03 pelo warning "default user does not require a password".
+    networks:
+      default:
+        aliases:
+          - nexa-redis
     volumes:
       - nexa-redis:/data
     mem_limit: 128m
