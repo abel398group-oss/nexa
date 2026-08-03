@@ -98,4 +98,30 @@ export class AuthService {
       select: { id: true, email: true, name: true, role: true, tenantId: true, sellerId: true, permissions: true },
     });
   }
+
+  /**
+   * Troca a senha do próprio usuário, conferindo a senha atual antes.
+   *
+   * Ao final REVOGA as outras sessões: se a troca foi porque a senha vazou (é o
+   * motivo mais comum), deixar os refresh tokens antigos vivos manteria o
+   * invasor dentro por até 7 dias. A sessão atual do navegador continua válida
+   * — o access token em uso não é derrubado, então o usuário não é deslogado.
+   */
+  async changeOwnPassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) throw new UnauthorizedException('Sessão inválida');
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('Senha atual incorreta');
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
+    await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { ok: true };
+  }
 }

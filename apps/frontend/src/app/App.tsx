@@ -12,6 +12,8 @@ import { ProtectedRoute, PermissionRoute, RootRedirect } from '@/components/Rout
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+
 // Páginas da área autenticada carregadas sob demanda (named exports → interop).
 const InboxPage = lazy(() => import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })));
 const SupportPage = lazy(() => import('@/pages/SupportPage').then((m) => ({ default: m.SupportPage })));
@@ -57,6 +59,8 @@ export default function App() {
                 <Route path="/" element={<RootRedirect />} />
                 <Route path="/landing" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
+                {/* Destino do link de "Esqueceu a senha?" — publica, sem auth */}
+                <Route path="/redefinir-senha" element={<Suspense fallback={<PageFallback />}><ResetPasswordPage /></Suspense>} />
                 <Route path="/portal" element={<Suspense fallback={<PageFallback />}><PortalPage /></Suspense>} />
                 <Route
                   element={

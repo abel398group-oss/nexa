@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
+import { api } from '@/shared/lib/api';
 import { Button, Input, Alert } from '@/shared/ui';
 
 // Ícones inline (nexa não usa lucide) — mostrar/ocultar senha.
@@ -30,6 +31,10 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [forgotHint, setForgotHint] = useState(false);
+  // "Esqueceu a senha?" — antes era só um aviso estático mandando falar com o admin
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState('');
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,9 +130,40 @@ export function LoginPage() {
                   </button>
                 </div>
                 {forgotHint && (
-                  <p className="text-xs text-base-content/55">
-                    Para redefinir a senha, fale com o administrador da sua conta.
-                  </p>
+                  <div className="rounded-lg border border-base-200 bg-base-100/60 p-3">
+                    <p className="mb-2 text-xs text-base-content/60">
+                      Informe seu e-mail e enviaremos um link para criar uma nova senha.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="seu@email.com"
+                        className="!h-10"
+                      />
+                      <button
+                        type="button"
+                        disabled={forgotBusy || !forgotEmail.trim()}
+                        onClick={async () => {
+                          setForgotBusy(true);
+                          try {
+                            const r = await api.post('/auth/forgot-password', { email: forgotEmail.trim() });
+                            setForgotMsg(r.data?.message ?? 'Se houver uma conta com esse e-mail, o link foi enviado.');
+                          } catch {
+                            // resposta genérica de propósito: não revela se o e-mail existe
+                            setForgotMsg('Se houver uma conta com esse e-mail, o link foi enviado.');
+                          } finally {
+                            setForgotBusy(false);
+                          }
+                        }}
+                        className="shrink-0 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {forgotBusy ? 'Enviando…' : 'Enviar'}
+                      </button>
+                    </div>
+                    {forgotMsg && <p className="mt-2 text-xs text-emerald-600">{forgotMsg}</p>}
+                  </div>
                 )}
               </div>
 

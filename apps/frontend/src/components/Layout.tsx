@@ -10,6 +10,8 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { Icon, type IconName } from '@/components/ui/icons';
 import { TenantSelector } from '@/app/providers/TenantContext';
+import { Button, Input, Modal } from '@/shared/ui';
+import { useToast } from '@/app/providers/ToastContext';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa!', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
@@ -195,9 +197,70 @@ function KillSwitch() {
   );
 }
 
+/**
+ * Troca da própria senha — disponível para QUALQUER usuário logado, inclusive o
+ * platform admin, que não aparece na tela de Usuários (ela filtra por tenant).
+ * Exige a senha atual: navegador esquecido aberto não pode virar troca de dono.
+ */
+function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const toast = useToast();
+  const [atual, setAtual] = useState('');
+  const [nova, setNova] = useState('');
+  const [confirma, setConfirma] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  function fechar() {
+    setAtual(''); setNova(''); setConfirma('');
+    onClose();
+  }
+
+  async function salvar() {
+    if (nova.length < 8) { toast.error('A nova senha precisa ter pelo menos 8 caracteres.'); return; }
+    if (nova !== confirma) { toast.error('A confirmação não confere com a nova senha.'); return; }
+    setBusy(true);
+    try {
+      await api.post('/auth/password', { currentPassword: atual, newPassword: nova });
+      toast.success('Senha alterada. As outras sessões foram encerradas.');
+      fechar();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Não foi possível trocar a senha.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={fechar} title="Trocar minha senha" size="sm">
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-base-content/60">Senha atual</label>
+          <Input type="password" value={atual} onChange={(e) => setAtual(e.target.value)} autoComplete="current-password" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-base-content/60">Nova senha</label>
+          <Input type="password" value={nova} onChange={(e) => setNova(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-base-content/60">Confirme a nova senha</label>
+          <Input type="password" value={confirma} onChange={(e) => setConfirma(e.target.value)} autoComplete="new-password" />
+        </div>
+        <p className="text-[11px] text-base-content/40">
+          Ao trocar, os acessos abertos em outros dispositivos são encerrados. Você continua conectado aqui.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={fechar}>Cancelar</Button>
+          <Button onClick={salvar} loading={busy} disabled={!atual || !nova || !confirma}>Salvar</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function AccountMenu() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === 'admin';
   const email = user?.email ?? '';
@@ -235,6 +298,15 @@ function AccountMenu() {
           <div className="px-4 py-2 text-[11px] text-base-content/50">
             {isAdmin ? 'Administrador' : 'Vendedor'}
           </div>
+          {/* Trocar a própria senha. Antes NÃO existia caminho nenhum na tela:
+              a lista de Usuários é por tenant, e o platform admin fica fora de
+              todos — nem a si mesmo conseguia editar. */}
+          <button
+            onClick={() => { setOpen(false); setPwOpen(true); }}
+            className="flex w-full items-center gap-2 border-t border-base-200 px-4 py-2.5 text-left text-sm text-base-content/70 transition-colors hover:bg-base-100"
+          >
+            <Icon name="edit" className="h-4 w-4" /> Trocar minha senha
+          </button>
           <button
             onClick={logout}
             className="flex w-full items-center gap-2 border-t border-base-200 px-4 py-2.5 text-left text-sm text-base-content/70 transition-colors hover:bg-base-100"
@@ -243,6 +315,7 @@ function AccountMenu() {
           </button>
         </div>
       )}
+      <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
   );
 }

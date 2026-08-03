@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards }
 import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from '@/application/auth/auth.service';
+import { PasswordResetService } from '@/application/auth/password-reset.service';
 import { AuditService } from '@/shared/audit/audit.service';
 import { UsersService } from '@/application/users/users.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
@@ -31,6 +32,7 @@ export class AuthController {
     private readonly audit: AuditService,
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
+    private readonly reset: PasswordResetService,
   ) {}
 
   // ─── SETUP: cria o primeiro admin ────────────────────────────────────────────
@@ -97,5 +99,61 @@ export class AuthController {
   @Get('me')
   async me(@CurrentUser() user: { userId: string }) {
     return this.auth.me(user.userId);
+  }
+
+  /**
+   * Troca a senha do PRÓPRIO usuário logado. Exige a senha atual — sem isso, um
+   * navegador esquecido aberto viraria sequestro de conta.
+   *
+   * Existe porque não havia NENHUM caminho para trocar senha na interface: a tela
+   * de Usuários lista por tenant, e o platform admin (tenantId = null) não aparece
+   * nem para si mesmo. Resultado: a senha padrão do seed (pública no Git) não
+   * tinha como ser trocada sem mexer no banco.
+   *
+   * Rate-limit apertado: 5 tentativas por 15 min (a senha atual é adivinhável a
+   * força bruta se não limitar).
+   */
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 900_000 } })
+  @Post('password')
+  async changePassword(
+    @CurrentUser() user: { userId: string },
+    @Body() body: { currentPassword?: string; newPassword?: string },
+    @Req() req: Request,
+  ) {
+    const atual = (body?.currentPassword ?? '').trim();
+    const nova = (body?.newPassword ?? '').trim();
+    if (!atual || !nova) throw new BadRequestException('Informe a senha atual e a nova senha.');
+    if (nova.length < 8) throw new BadRequestException('A nova senha precisa ter pelo menos 8 caracteres.');
+    if (nova === atual) throw new BadRequestException('A nova senha precisa ser diferente da atual.');
+
+    await this.auth.changeOwnPassword(user.userId, atual, nova);
+    // (audit abaixo)
+    await this.audit.log({
+      tenantId: null,
+      actorId: user.userId,
+      action: 'auth.password_changed',
+      // sem conteúdo de senha no log, só o rastro de quem trocou e de onde
+      metadata: { ip: req.ip },
+    } as any).catch(() => undefined);
+    return { ok: true };
+  }
+
+  // ─── Esqueceu a senha ────────────────────────────────────────────────────────
+  // Público (sem auth) e por isso com rate-limit apertado. A resposta é SEMPRE a
+  // mesma, exista o e-mail ou não: senão a tela vira um oráculo para descobrir
+  // quem tem conta no sistema.
+  @Throttle({ default: { limit: 5, ttl: 900_000 } })
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email?: string }) {
+    const base = process.env.APP_BASE_URL ?? 'http://localhost:5174';
+    await this.reset.request(body?.email ?? '', base);
+    return { ok: true, message: 'Se houver uma conta com esse e-mail, o link de redefinição foi enviado.' };
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  @Post('reset-password')
+  async resetPassword(@Body() body: { token?: string; newPassword?: string }) {
+    return this.reset.reset(body?.token ?? '', body?.newPassword ?? '');
   }
 }
