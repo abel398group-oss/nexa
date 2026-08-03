@@ -165,6 +165,8 @@ export function CampaignsPage() {
   const [editName, setEditName] = useState('');
   const [editMsg, setEditMsg] = useState('');
   const [editLink, setEditLink] = useState('');
+  // DISP-019: horário agendado editável (vazio = dispara ao iniciar)
+  const [editSchedule, setEditSchedule] = useState('');
   const [editMedia, setEditMedia] = useState<{ url: string; name: string } | null>(null);
   const [editUploading, setEditUploading] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
@@ -636,6 +638,8 @@ export function CampaignsPage() {
     setEditName(c.name || '');
     setEditMsg(c.template || '');
     setEditLink(c.link || '');
+    // datetime-local espera horário LOCAL sem timezone; o backend guarda ISO/UTC
+    setEditSchedule(c.scheduledAt ? toLocalInput(new Date(c.scheduledAt)) : '');
     setEditMedia(c.mediaUrl ? { url: c.mediaUrl, name: c.mediaName || c.mediaUrl.split('/').pop() || 'arquivo' } : null);
     setEditTargets([]);
     setEditTargetsOpen(false);
@@ -687,6 +691,11 @@ export function CampaignsPage() {
         payload.link = editLink.trim() || null;
         payload.mediaUrl = editMedia?.url ?? null;
         payload.mediaName = editMedia?.name ?? null;
+      }
+      // DISP-019: reagendamento vale sempre que nada foi enviado (regra própria,
+      // independente do isFullEdit). Vazio = remove o agendamento.
+      if (sentCount === 0) {
+        payload.scheduledAt = editSchedule ? new Date(editSchedule).toISOString() : null;
       }
       await updateCampaign(editC.id, payload);
       toast.success('Campanha atualizada!');
@@ -1258,6 +1267,30 @@ export function CampaignsPage() {
               <label className="mb-1 block text-xs font-medium text-base-content/60">Nome</label>
               <input className="input w-full" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
+
+            {/* DISP-019: reagendar. Vale sempre que NADA foi enviado ainda —
+                inclusive em campanha já 'concluída' com tudo pulado, caso em que
+                antes o horário ficava travado sem como corrigir. */}
+            {sentCount === 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-base-content/60">
+                  Agendamento {editSchedule && <span className="text-base-content/40">· deixe vazio para disparar ao iniciar</span>}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="datetime-local"
+                    className="input w-full"
+                    value={editSchedule}
+                    onChange={(e) => setEditSchedule(e.target.value)}
+                  />
+                  {editSchedule && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEditSchedule('')}>
+                      Limpar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {isFullEdit && (
               <>
@@ -1860,8 +1893,15 @@ export function CampaignsPage() {
                   <div>
                     <label className="mb-1 block text-xs font-medium text-base-content/60">Anexo (PDF/Word)</label>
                     <div className="flex flex-col gap-1">
-                      <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                             onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} className="text-xs" />
+                      {/* Mesmo padrão do modal de edição — antes era o input de
+                          arquivo cru do navegador ("Escolher ficheiro"), que
+                          destoava do resto da tela. */}
+                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-base-300 px-3 py-2.5 text-xs text-base-content/50 hover:border-brand-500 hover:text-brand-600">
+                        <Icon name="upload" className="h-4 w-4" />
+                        {uploading ? 'Enviando…' : 'Clique para anexar arquivo (PDF/Word)'}
+                        <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" className="hidden" disabled={uploading}
+                               onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
+                      </label>
                       {uploading && <span className="text-xs text-base-content/40">enviando...</span>}
                       {media && (
                         <>

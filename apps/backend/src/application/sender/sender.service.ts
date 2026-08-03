@@ -512,7 +512,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async updateCampaign(
     tenantId: string,
     id: string,
-    dto: { name?: string; template?: string; subject?: string; link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number },
+    dto: { name?: string; template?: string; subject?: string; link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string | null },
   ) {
     const c = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
@@ -522,8 +522,16 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     const sentCount = c._count?.targets ?? 0;
     // Allow full edit on draft; allow name-only on running/done; allow full edit on paused with 0 sent
     const isEditableInFull = c.status === 'draft' || (c.status === 'paused' && sentCount === 0);
+    // DISP-019: reagendar segue uma regra própria e mais simples — se NADA saiu
+    // ainda, mudar a hora é sempre seguro. Sem isto, uma campanha agendada que
+    // já rodou o tick (status 'running'/'done' com 0 enviados, ex.: todos os
+    // alvos pulados) ficava presa no horário original, sem como corrigir.
+    const canReschedule = sentCount === 0;
     if (!isEditableInFull && (dto.template !== undefined || dto.link !== undefined || dto.mediaUrl !== undefined || dto.sendLimit !== undefined)) {
       throw new BadRequestException('Campanha já em andamento — só é possível renomear.');
+    }
+    if (dto.scheduledAt !== undefined && !canReschedule) {
+      throw new BadRequestException('Campanha já tem envios — não é possível reagendar.');
     }
     return this.prisma.campaign.update({
       where: { id },
@@ -535,6 +543,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         ...(isEditableInFull && dto.mediaUrl !== undefined ? { mediaUrl: dto.mediaUrl || null } : {}),
         ...(isEditableInFull && dto.mediaName !== undefined ? { mediaName: dto.mediaName || null } : {}),
         ...(isEditableInFull && dto.sendLimit !== undefined ? { sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null } : {}),
+        // DISP-019: reagendamento. Campanha agendada entra como 'running' e o
+        // worker segura até a hora; ao tirar o agendamento (null) ela passa a
+        // poder disparar assim que o operador iniciar.
+        ...(canReschedule && dto.scheduledAt !== undefined
+          ? { scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null }
+          : {}),
       },
     });
   }

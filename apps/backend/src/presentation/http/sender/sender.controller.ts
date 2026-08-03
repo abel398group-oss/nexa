@@ -3,7 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SenderService } from '@/application/sender/sender.service';
 import { EmailCampaignSenderService } from '@/application/email/email-campaign-sender.service';
@@ -59,6 +59,10 @@ class UpdateCampaignDto {
   @IsOptional() @IsString() mediaUrl?: string;
   @IsOptional() @IsString() mediaName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
+  // DISP-019: reagendar. O campo existia na criação mas não na edição, então
+  // uma campanha agendada ficava presa no horário original. Aceita null para
+  // remover o agendamento (dispara assim que iniciar).
+  @IsOptional() @IsISO8601() scheduledAt?: string | null;
 }
 
 class SenderSettingsDto {
