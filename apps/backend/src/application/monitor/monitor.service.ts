@@ -30,7 +30,7 @@ import {
   extractUniqueWaNumbers,
   isPlanAllowed,
   monitorWaLimit,
-  MONITOR_WA_INCLUDED,
+  monitorWaIncluded,
   maxContactTimes,
 } from './monitor-plan-limits.const';
 import {
@@ -338,7 +338,7 @@ export class MonitorService implements OnModuleInit {
       }),
       this.prisma.planLimit.findUnique({
         where: { tenantId },
-        select: { plan: true, monitorExtraNumbers: true },
+        select: { plan: true, monitorExtraNumbers: true, monitorNumbersIncluded: true },
       }),
     ]);
 
@@ -350,6 +350,7 @@ export class MonitorService implements OnModuleInit {
       planLimit?.plan,
       planLimit?.monitorExtraNumbers ?? 0,
       monitorOverride,
+      planLimit?.monitorNumbersIncluded,
     );
 
     if (!config) {
@@ -391,7 +392,7 @@ export class MonitorService implements OnModuleInit {
     const [planLimit, existing] = await Promise.all([
       this.prisma.planLimit.findUnique({
         where: { tenantId },
-        select: { plan: true, monitorExtraNumbers: true },
+        select: { plan: true, monitorExtraNumbers: true, monitorNumbersIncluded: true },
       }),
       this.prisma.tenantNotificationConfig.findUnique({
         where: { tenantId },
@@ -432,7 +433,12 @@ export class MonitorService implements OnModuleInit {
     // ExternalConfigDto não tem notificationPhone (raiz) — só sectorConfig/contacts são
     // enviados pelo proxy do TMS, então o rootPhone usado é sempre o existente.
     if (input.sectorConfig !== undefined || input.contacts !== undefined) {
-      const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
+      const limit = monitorWaLimit(
+        planLimit?.plan,
+        planLimit?.monitorExtraNumbers ?? 0,
+        override,
+        planLimit?.monitorNumbersIncluded,
+      );
 
       const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
       const existingPhone = existing?.notificationPhone ?? null;
@@ -445,8 +451,7 @@ export class MonitorService implements OnModuleInit {
       const newCount = uniqueNumbers.size;
 
       if (newCount > limit && newCount > previousCount) {
-        const planKey = (planLimit?.plan ?? 'free').toLowerCase();
-        const included = MONITOR_WA_INCLUDED[planKey] ?? 0;
+        const included = monitorWaIncluded(planLimit?.plan, planLimit?.monitorNumbersIncluded);
         const extras = planLimit?.monitorExtraNumbers ?? 0;
         throw new BadRequestException(
           `Limite de números WhatsApp atingido. ` +

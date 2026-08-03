@@ -681,6 +681,30 @@ model EmailOptOutToken {
   @@map("email_optout_tokens")
 }
 
+// Registro PERMANENTE de quem pediu para não receber mais (LGPD).
+//
+// Existe separado de `Contact` de propósito: em 2026-08-03 um contato que havia
+// pedido opt-out foi apagado numa limpeza da base e, ao reimportar o CSV antigo,
+// voltou como `active` e recebeu campanha de novo. O opt-out morava só no
+// status do contato — apagou o contato, apagou o pedido dela.
+//
+// Esta tabela NÃO deve ser limpa junto com contatos. É a lista de bloqueio.
+model OptOutRecord {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  phone     String?                         // WhatsApp (dígitos)
+  email     String?                         // canal e-mail
+  reason    String?                         // pedido | hostilidade | link_email | manual
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Postgres permite vários NULL num índice único, então um registro só de
+  // telefone e outro só de e-mail convivem sem conflito.
+  @@unique([tenantId, phone])
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("opt_out_records")
+}
+
 // Recuperação de senha ("Esqueceu a senha?"). Uso único, TTL curto (30min).
 // Guardamos o HASH do token, não ele em claro: se o banco vazar, os links de
 // redefinição em aberto continuam inúteis — mesma lógica do refresh token.
@@ -828,6 +852,10 @@ model PlanLimit {
   maxMessagesMonth Int?     @map("max_messages_month") // null = ilimitado
   plan                String   @default("free")           // free | starter | essencial | pro | enterprise | profissional | corporativo
   monitorExtraNumbers Int      @default(0) @map("monitor_extra_numbers") // extra WA numbers purchased (R$29.90/mo each)
+  // WA numbers included in the plan, as told by the TMS (source of truth for the
+  // plan catalogue — ADR 011). null = TMS has not synced it yet → fall back to
+  // MONITOR_WA_INCLUDED. -1 = unlimited (Corporativo), capped at the technical limit.
+  monitorNumbersIncluded Int?  @map("monitor_numbers_included")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

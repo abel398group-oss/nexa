@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
@@ -88,6 +89,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     private readonly waha: WahaClientService,
     private readonly tmsLookup: TmsLookupService,
     private readonly lock: RedisLockService,
+    private readonly optOutRegistry: OptOutRegistryService,
   ) {}
 
   // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
@@ -216,6 +218,21 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       });
       const blocked = new Set(optedOut.map((o: any) => o.phone));
       targets = targets.filter((t) => !blocked.has(t.phone));
+    }
+
+    // ── Lista de bloqueio LGPD (2026-08-03) ──────────────────────────────────
+    // Vem da tabela `opt_out_records`, que sobrevive à exclusão do contato.
+    // Sem isto, limpar a base e reimportar a lista antiga ressuscitava quem
+    // tinha pedido para sair — aconteceu em produção.
+    let optOutBloqueados: { phone: string; name?: string | null }[] = [];
+    if (targets.length) {
+      const bloqueados = await this.optOutRegistry.blockedPhones(tenantId, targets.map((t) => t.phone));
+      optOutBloqueados = targets.filter((t) => bloqueados.has((t.phone ?? '').replace(/\D/g, '')));
+      targets = targets.filter((t) => !bloqueados.has((t.phone ?? '').replace(/\D/g, '')));
+      if (optOutBloqueados.length) {
+        skippedOptOut += optOutBloqueados.length;
+        this.logger.log(`Campanha "${dto.name}": ${optOutBloqueados.length} na lista de bloqueio (opt-out) — pulados`);
+      }
     }
 
     // ── Blocklist (2026-08-01): concorrentes marcados status='blocked' ────────
@@ -353,6 +370,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...suspectList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'suspeito_concorrente' })),
             // telefone inelegível: motivo específico no relatório (estrangeiro, fixo, DDD…)
             ...invalidList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: rejectionReason(t.phone) ?? 'telefone_invalido' })),
+            // pediu para não receber mais (lista de bloqueio LGPD)
+            ...optOutBloqueados.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'opted_out' })),
           ],
         },
       },
@@ -811,6 +830,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
       // pula opt-outs (LGPD) e blocklist (concorrentes) — defesa em profundidade:
       // quem for bloqueado DEPOIS da campanha criada ainda é barrado aqui.
+      // Lista de bloqueio ANTES de tocar no contato: se a pessoa pediu para sair,
+      // nem recriamos o cadastro dela a partir da campanha.
+      if (await this.optOutRegistry.isBlocked(campaign.tenantId, { phone: target.phone })) {
+        this.logger.log(`Alvo ${target.phone} está na lista de bloqueio (opt-out) — pulado`);
+        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: 'opted_out' } });
+        return;
+      }
+
       const contact = await this.contacts.create(campaign.tenantId, { phone: target.phone, name: target.name ?? undefined, source: 'outbound' });
       if (contact.status === 'opted_out' || contact.status === 'blocked') {
         const reason = contact.status === 'opted_out' ? 'opted_out' : 'bloqueado';

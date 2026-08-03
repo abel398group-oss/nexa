@@ -45,7 +45,7 @@ import { MonitorService } from './monitor.service';
 import { ConsolidationService } from './consolidation.service';
 import {
   monitorWaLimit,
-  MONITOR_WA_INCLUDED,
+  monitorWaIncluded,
   isPlanAllowed,
   extractUniqueWaNumbers,
   maxContactTimes,
@@ -184,7 +184,7 @@ export class MonitorController {
       }),
       this.prisma.planLimit.findUnique({
         where: { tenantId },
-        select: { plan: true, monitorExtraNumbers: true },
+        select: { plan: true, monitorExtraNumbers: true, monitorNumbersIncluded: true },
       }),
     ]);
 
@@ -200,6 +200,7 @@ export class MonitorController {
       planLimit?.plan,
       planLimit?.monitorExtraNumbers ?? 0,
       monitorOverride,
+      planLimit?.monitorNumbersIncluded,
     );
 
     const defaults = {
@@ -238,7 +239,7 @@ export class MonitorController {
     const [planLimit, existing] = await Promise.all([
       this.prisma.planLimit.findUnique({
         where: { tenantId },
-        select: { plan: true, monitorExtraNumbers: true },
+        select: { plan: true, monitorExtraNumbers: true, monitorNumbersIncluded: true },
       }),
       this.prisma.tenantNotificationConfig.findUnique({
         where: { tenantId },
@@ -282,7 +283,12 @@ export class MonitorController {
     // (e.g. after a downgrade), allow saves that do NOT increase the count.
     // Block only when: newCount > limit AND newCount > previousCount.
     if (dto.sectorConfig !== undefined || dto.notificationPhone !== undefined || dto.contacts !== undefined) {
-      const limit = monitorWaLimit(planLimit?.plan, planLimit?.monitorExtraNumbers ?? 0, override);
+      const limit = monitorWaLimit(
+        planLimit?.plan,
+        planLimit?.monitorExtraNumbers ?? 0,
+        override,
+        planLimit?.monitorNumbersIncluded,
+      );
 
       // Previous state (before this save)
       const existingSectorConfig = (existing?.sectorConfig as Record<string, any> | null) ?? null;
@@ -301,8 +307,7 @@ export class MonitorController {
       const newCount = uniqueNumbers.size;
 
       if (newCount > limit && newCount > previousCount) {
-        const planKey = (planLimit?.plan ?? 'free').toLowerCase();
-        const included = MONITOR_WA_INCLUDED[planKey] ?? 0;
+        const included = monitorWaIncluded(planLimit?.plan, planLimit?.monitorNumbersIncluded);
         const extras = planLimit?.monitorExtraNumbers ?? 0;
         throw new BadRequestException(
           `Limite de números WhatsApp atingido. ` +

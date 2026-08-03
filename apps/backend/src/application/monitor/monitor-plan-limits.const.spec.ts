@@ -1,6 +1,11 @@
 // monitor-plan-limits.const.spec.ts
 import { describe, it, expect } from 'vitest';
-import { monitorWaLimit, MONITOR_WA_INCLUDED, MONITOR_WA_OVERRIDE_LIMIT } from './monitor-plan-limits.const';
+import {
+  monitorWaLimit,
+  monitorWaIncluded,
+  MONITOR_WA_INCLUDED,
+  MONITOR_WA_OVERRIDE_LIMIT,
+} from './monitor-plan-limits.const';
 
 describe('monitorWaLimit — v2 matriz 2026-07-14', () => {
   // U1: Básico inclui 1 (Monitor disponível no Básico)
@@ -76,5 +81,39 @@ describe('MONITOR_WA_INCLUDED', () => {
     for (const plan of required) {
       expect(MONITOR_WA_INCLUDED).toHaveProperty(plan);
     }
+  });
+});
+
+// 2026-08-03 — ADR 011: o catálogo de planos é do TMS. O que ele sincroniza em
+// PlanLimit.monitorNumbersIncluded manda; a tabela acima virou só fallback.
+describe('monitorWaIncluded — valor do TMS tem prioridade sobre a tabela local', () => {
+  it('usa o valor do TMS mesmo quando diverge da tabela', () => {
+    // Tabela local diz 1 para basico; se o TMS passar a incluir 2, vale 2.
+    expect(monitorWaIncluded('basico', 2)).toBe(2);
+    // E o contrário também: um plano que a tabela dá 5 pode ser reduzido no TMS.
+    expect(monitorWaIncluded('profissional', 1)).toBe(1);
+  });
+
+  it('0 do TMS é um valor legítimo, não "não informado"', () => {
+    expect(monitorWaIncluded('profissional', 0)).toBe(0);
+    expect(monitorWaLimit('profissional', 0, false, 0)).toBe(0);
+  });
+
+  it('negativo = ilimitado no TMS → cap técnico do Nexa', () => {
+    expect(monitorWaIncluded('corporativo', -1)).toBe(MONITOR_WA_OVERRIDE_LIMIT);
+  });
+
+  it('null/undefined = tenant ainda não sincronizado → fallback da tabela', () => {
+    expect(monitorWaIncluded('essencial', null)).toBe(3);
+    expect(monitorWaIncluded('essencial', undefined)).toBe(3);
+    expect(monitorWaLimit('essencial', 0, false, null)).toBe(3);
+  });
+
+  it('extras somam por cima do valor do TMS', () => {
+    expect(monitorWaLimit('essencial', 2, false, 3)).toBe(5);
+  });
+
+  it('override continua ignorando tudo, inclusive o valor do TMS', () => {
+    expect(monitorWaLimit('free', 0, true, 0)).toBe(MONITOR_WA_OVERRIDE_LIMIT);
   });
 });

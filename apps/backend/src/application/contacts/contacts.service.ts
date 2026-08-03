@@ -217,7 +217,20 @@ export class ContactsService {
 
   // reativa um contato que tinha optado por sair (uso MANUAL pelo admin, com consentimento)
   async reactivate(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
+    const c = await this.findOne(tenantId, id);
+    // Tira também da lista de bloqueio permanente. Sem isto o disparo continuaria
+    // pulando a pessoa e a tela mentiria: "reativei mas ela nunca recebe".
+    // É ação MANUAL e consciente do admin — diferente de apagar o contato, que
+    // não deve revogar o pedido de opt-out.
+    await this.prisma.optOutRecord.deleteMany({
+      where: {
+        tenantId,
+        OR: [
+          ...(c.phone ? [{ phone: c.phone }] : []),
+          ...(c.email ? [{ email: c.email }] : []),
+        ],
+      },
+    }).catch(() => undefined);
     return this.prisma.contact.update({ where: { id }, data: { status: 'active', optOutAt: null } });
   }
 

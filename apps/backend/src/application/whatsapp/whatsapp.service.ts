@@ -10,6 +10,7 @@ import { NotificationsService } from '@/application/notifications/notifications.
 import { TranscriptionService } from '@/shared/ai/transcription.service';
 import { InternalNumbersService } from './internal-numbers.service';
 import { isOptOutMessage } from './opt-out-detection';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 
 interface Normalized {
   phone: string;
@@ -47,6 +48,7 @@ export class WhatsappService {
     private readonly transcription: TranscriptionService,
     private readonly emitter: EventEmitter2,
     private readonly internalNumbers: InternalNumbersService,
+    private readonly optOutRegistry: OptOutRegistryService,
   ) {}
 
   // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
@@ -337,6 +339,9 @@ export class WhatsappService {
         where: { id: contact.id },
         data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() },
       });
+      // Lista de bloqueio PERMANENTE, fora do contato: se o contato for apagado
+      // numa limpeza e a lista reimportada, o pedido continua valendo.
+      await this.optOutRegistry.register(tenantId, { phone: n.phone, email: contact.email }, 'pedido');
       const optConv = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
       if (optConv) {
         // registra a mensagem do cliente no histórico
