@@ -24,7 +24,7 @@ const userSchema = z.object({
   permissions: z.array(z.string()),
 });
 type UserForm = z.infer<typeof userSchema>;
-const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operador', permissions: [] };
+const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: [] };
 
 const AREA_LABEL: Record<string, string> = {
   dashboard: 'Painel', inbox: 'Inbox', contacts: 'Contatos', knowledge: 'Conhecimento',
@@ -63,7 +63,7 @@ export function UsersPage() {
   const [page, setPage] = useState(1);
   // edicao de usuario existente (tipo de acesso + reset de senha)
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [editRole, setEditRole] = useState('operador');
+  const [editRole, setEditRole] = useState('operacional');
   const [editPassword, setEditPassword] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const toast = useToast();
@@ -291,7 +291,7 @@ export function UsersPage() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setEditRole('operador')}
+                onClick={() => setEditRole('operacional')}
                 className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                   editRole !== 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
                 }`}
@@ -361,7 +361,7 @@ export function UsersPage() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setValue('role', 'operador')}
+                onClick={() => setValue('role', 'operacional')}
                 className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                   formRole !== 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
                 }`}
