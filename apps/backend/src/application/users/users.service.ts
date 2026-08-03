@@ -2,8 +2,16 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
-// Áreas que podem ser habilitadas por usuário
-export const AREAS = ['dashboard', 'inbox', 'contacts', 'knowledge', 'sellers', 'campaigns', 'ai_control', 'users'] as const;
+// Áreas que podem ser habilitadas por usuário.
+// Precisa cobrir TODO `@RequirePerm(...)` de rota de tenant — o que não estiver
+// aqui é filtrado no create/update e vira permissão impossível de conceder pela
+// tela. Faltavam `opportunities` (funil (funil/"Meus leads") e `metrics`, ambos já
+// exigidos por controllers: o vendedor recebia `opportunities` fixo no código e
+// pela tela de Usuários não havia como dar a ninguém.
+export const AREAS = [
+  'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
+  'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
+] as const;
 
 const SELECT = { id: true, email: true, name: true, role: true, permissions: true, isActive: true, sellerId: true, createdAt: true };
 

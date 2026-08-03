@@ -24,20 +24,39 @@ const userSchema = z.object({
   permissions: z.array(z.string()),
 });
 type UserForm = z.infer<typeof userSchema>;
-const emptyUser: UserForm = { name: '', email: '', password: '', role: 'admin', permissions: [] };
+const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operador', permissions: [] };
 
 const AREA_LABEL: Record<string, string> = {
   dashboard: 'Painel', inbox: 'Inbox', contacts: 'Contatos', knowledge: 'Conhecimento',
-  sellers: 'Vendedores', campaigns: 'Disparo', ai_control: 'Controle da IA', users: 'Usuarios',
+  sellers: 'Vendedores', campaigns: 'Disparo', opportunities: 'Leads / Funil',
+  metrics: 'Metricas', ai_control: 'Controle da IA', users: 'Usuarios',
 };
-const ALL_AREAS = ['dashboard', 'inbox', 'contacts', 'knowledge', 'sellers', 'campaigns', 'ai_control', 'users'];
+// Precisa espelhar AREAS do backend (users.service.ts) — o que nao estiver la e
+// descartado no create/update.
+const ALL_AREAS = [
+  'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
+  'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
+];
+
+// Conjuntos prontos para os papeis do dia a dia — o admin ainda pode ajustar
+// marcando/desmarcando area por area depois de criar.
+const PRESETS: { id: string; label: string; hint: string; areas: string[] }[] = [
+  { id: 'suporte', label: 'Suporte', hint: 'Atende o inbox e consulta a base',
+    areas: ['dashboard', 'inbox', 'contacts', 'knowledge'] },
+  { id: 'vendas', label: 'Vendas', hint: 'Disparo de leads e funil',
+    areas: ['dashboard', 'inbox', 'contacts', 'campaigns', 'opportunities'] },
+  { id: 'suporte_vendas', label: 'Suporte + Vendas', hint: 'As duas frentes',
+    areas: ['dashboard', 'inbox', 'contacts', 'knowledge', 'campaigns', 'opportunities', 'metrics'] },
+];
 
 export function UsersPage() {
   const [show, setShow] = useState(false);
   const {
-    register, handleSubmit, reset, setError,
+    register, handleSubmit, reset, setError, watch, setValue,
     formState: { errors, isSubmitting },
   } = useForm<UserForm>({ resolver: zodResolver(userSchema), defaultValues: emptyUser });
+  const formRole = watch('role');
+  const formPerms = watch('permissions');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -118,7 +137,7 @@ export function UsersPage() {
       <StandardListPage
         title="Usuarios & Acessos"
         breadcrumb={[{ label: 'Inicio', path: '/dashboard' }, { label: 'Usuarios' }]}
-        description="Administradores do sistema (acesso total). Vendedores tem login proprio criado na tela Vendedores."
+        description="Quem acessa o Nexa e o que cada um enxerga. Clique nos modulos do cartao para liberar ou tirar acesso na hora. Vendedores tem login proprio, criado na tela Vendedores."
         isLoading={isLoading}
         hasData={shown.length > 0}
         error={isError ? new Error('Falha ao carregar usuarios') : undefined}
@@ -128,7 +147,7 @@ export function UsersPage() {
         entityName="usuario(s)"
         pagination={pageCount > 1 ? { page, pageCount, onPageChange: setPage } : undefined}
         headerActions={
-          <Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo administrador</Button>
+          <Button onClick={() => { reset(emptyUser); setShow(true); }}>+ Novo usuario</Button>
         }
         extraToolbar={
           <div className="flex flex-wrap items-center gap-2">
@@ -217,7 +236,7 @@ export function UsersPage() {
         )}
       </StandardListPage>
 
-      <Modal open={show} onClose={() => setShow(false)} title="Novo administrador" size="sm">
+      <Modal open={show} onClose={() => setShow(false)} title="Novo usuario" size="sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <div>
             <Input placeholder="Nome" {...register('name')} />
@@ -231,14 +250,83 @@ export function UsersPage() {
             <Input type="password" placeholder="Senha (min. 6)" {...register('password')} />
             {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
           </div>
+          {/* Papel: admin ve tudo; operador so o que for marcado abaixo. */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-base-content/60">Tipo de acesso</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setValue('role', 'operador')}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  formRole !== 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
+                }`}
+              >
+                <span className="block font-medium">Acesso por modulo</span>
+                <span className="block text-[11px] opacity-70">voce escolhe abaixo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setValue('role', 'admin')}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  formRole === 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
+                }`}
+              >
+                <span className="block font-medium">Administrador</span>
+                <span className="block text-[11px] opacity-70">acesso total</span>
+              </button>
+            </div>
+          </div>
+
+          {formRole !== 'admin' && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-base-content/40">Atalhos:</span>
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    title={p.hint}
+                    onClick={() => setValue('permissions', p.areas)}
+                    className="rounded-md border border-base-300 px-2 py-0.5 text-[11px] text-base-content/60 hover:border-brand-500 hover:text-brand-600"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ALL_AREAS.map((a) => {
+                  const on = (formPerms ?? []).includes(a);
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setValue('permissions', togglePerm(formPerms ?? [], a))}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                        on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'
+                      }`}
+                      style={!on ? { background: 'var(--surface)' } : undefined}
+                    >
+                      {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
+                    </button>
+                  );
+                })}
+              </div>
+              {(formPerms ?? []).length === 0 && (
+                <p className="text-[11px] text-amber-600">
+                  Sem nenhum modulo marcado o usuario entra e nao ve nada.
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="text-[11px] text-base-content/40">
-            Administrador tem acesso total. Para criar um vendedor (com login e carteira propria),
-            use a tela <strong>Vendedores</strong>.
+            Para criar um <strong>vendedor</strong> (com login e carteira propria de leads),
+            use a tela <strong>Vendedores</strong> — la o acesso ja vem pronto.
           </p>
           {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => setShow(false)}>Cancelar</Button>
-            <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Criando...' : 'Criar administrador'}</Button>
+            <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'Criando...' : 'Criar usuario'}</Button>
           </div>
         </form>
       </Modal>
