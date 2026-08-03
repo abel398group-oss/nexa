@@ -138,6 +138,14 @@ export class EmailReplyService {
       secure: config.secure, // true = SSL/TLS (porta 465)
       auth: { user: config.user, pass: config.pass },
       tls: { rejectUnauthorized: false }, // Hostgator usa certificado cPanel, pode não ter CA raiz
+      // DISP-012: sem timeout o nodemailer espera o SO desistir (minutos). O tick
+      // de campanha de e-mail roda dentro de um lock Redis de 60s — se o envio
+      // passar disso, o lock expira com o tick ainda rodando e outra réplica
+      // dispara o próximo e-mail fora do intervalo anti-spam de 90-180s.
+      // Teto aqui: ~30s no pior caso, bem abaixo do TTL do lock.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
 
     try {
@@ -183,6 +191,9 @@ export class EmailReplyService {
       secure: config.secure,
       auth: { user: config.user, pass: config.pass },
       tls: { rejectUnauthorized: false },
+      connectionTimeout: 10_000, // DISP-012 — ver comentário em send()
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
 
     try {

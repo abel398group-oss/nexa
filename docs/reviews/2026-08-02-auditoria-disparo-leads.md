@@ -23,8 +23,12 @@
 | Segurança                     | 0        | 0     | 0      | 1      |
 | **TOTAL**                     | **3**    | **3** | **5**  | **3**  |
 
-> DISP-014 (3º crítico) foi encontrado **durante a implementação**, não na leitura inicial —
-> a matriz acima já o inclui.
+> A matriz acima é da **leitura inicial do código** (DISP-001 a 013), mais o DISP-014,
+> encontrado durante a implementação. Os achados DISP-015 a 020 vieram depois, testando o
+> disparo em produção, e estão na seção "Achados posteriores" — não estão contabilizados
+> aqui de propósito, para preservar o retrato do que a auditoria estática pegou e o que só
+> apareceu com o sistema rodando. Dos 6 posteriores, **1 era crítico** (DISP-020, Redis
+> cruzado com o HiperTMS) e 1 impedia criar campanha com link (DISP-015).
 
 ---
 
@@ -196,7 +200,28 @@ documentado como risco aceito, não só um comentário de código.
 | DISP-005 | ✅ corrigido | `@@index([campaignId, status, createdAt])` + migration aditiva `20260802120000_campaign_target_dispatch_index`. |
 | DISP-007 | ✅ corrigido | `email-campaign-sender.service.ts` reusa `firstName`/`tidyMissingName`/`greeting` do canal WhatsApp. |
 | DISP-008 | ✅ corrigido | `EmailTargetDto` com `@IsEmail()` + `@ValidateNested()`. |
-| DISP-004, 006, 009, 010, 011, 012, 013 | ⬜ em aberto | Não implementados nesta rodada. |
+| DISP-012 | ✅ corrigido | `connectionTimeout`/`greetingTimeout`/`socketTimeout` nos **4** pontos que abrem SMTP (`email-reply.service.ts` ×2, `admin-alert.service.ts`, `waha-health.service.ts`). Teto ~30s, abaixo do TTL de 60s do lock. |
+| DISP-004, 006, 009, 010, 011, 013 | ⬜ em aberto | Não implementados. |
+
+### Achados posteriores (2026-08-02/03) — durante o teste em produção
+
+Estes **não** vieram da leitura inicial; apareceram testando o disparo de verdade.
+Ficam registrados aqui porque o padrão se repete: quase todos são *campo/config que
+faltou*, não lógica errada.
+
+| ID | Situação | O que era |
+|----|----------|-----------|
+| DISP-015 | ✅ corrigido | `sendLinkOnFirst` existia no DTO de e-mail mas **não no de WhatsApp**. A tela enviava o campo junto com o link e o `forbidNonWhitelisted` global derrubava a criação com **400** — criar campanha de WhatsApp com link preenchido sempre falhava. Mesmo padrão do incidente que originou a REGRA 1/2. |
+| DISP-016 | ✅ corrigido | Dava para criar campanha **sem nenhum destinatário**: nascia vazia, o worker marcava `done` no 1º tick e a tela só dizia "Campanha criada! 0 contato(s)". Parecia que o disparo rodou e não enviou. Agora recusa com mensagem explícita. 3 testes. |
+| DISP-017 | ✅ corrigido | O **anexo** era colado na mensagem sempre, ignorando o `sendLinkOnFirst` que o link já respeitava. A 1ª mensagem fria saía com uma URL mesmo com a opção desmarcada — mesmo risco de ban, e quebrava a regra "primeiro contato é só texto". |
+| DISP-018 | ✅ corrigido | O rodapé de opt-out era **concatenado na constante** do follow-up, então `LGPD_OPT_OUT_FOOTER=false` tirava a frase do disparo mas ela **voltava no follow-up de 24h/72h**. Os dois canais agora leem a mesma chave. |
+| DISP-019 | ✅ corrigido | `scheduledAt` existia na criação mas **não no DTO de edição** — campanha agendada ficava presa no horário original. Regra própria: reagenda enquanto `sent === 0`, inclusive em campanha "concluída" com tudo pulado. |
+| DISP-020 | ✅ corrigido | **Backend do Nexa falava com o Redis do HiperTMS.** O backend está nas duas redes Docker e as duas têm um serviço `redis`; o DNS resolvia para o do TMS (`172.18.x`) em vez do próprio (`172.19.x`). Locks, estado anti-ban e pub/sub do WebSocket iam parar no Redis do outro sistema, com risco de colisão de chaves e de perder o ritmo se aquele Redis reiniciasse. Sintoma que denunciou: warning `default user does not require a password`. Correção: `REDIS_URL` por nome de container + alias `nexa-redis` no compose. |
+
+**Armadilha de operação descoberta no caminho:** `docker compose restart` **não relê o
+`env_file`** — as variáveis são gravadas no container na criação. Três mudanças de `.env`
+(`LGPD_OPT_OUT_FOOTER`, `GATE_TEST_PHONES`, `REDIS_URL`) pareceram aplicadas e não estavam.
+Para valer é `docker compose up -d --force-recreate backend`.
 
 > **Pendência operacional:** a migration do DISP-005 precisa rodar em produção com
 > `prisma migrate deploy` (REGRA 5 — nunca `migrate dev`/`db push`). Nada depende dela
@@ -211,14 +236,18 @@ própria. O caso grave (polling) está resolvido.
 
 ## Plano de implementação sugerido (ordem)
 
-1. **DISP-001 → DISP-003 → DISP-002** — críticos, nessa ordem: corrigir o status primeiro,
-   depois garantir que a tela não quebra em campanhas grandes, depois dar a ferramenta de
-   retry (que só faz sentido depois que o status estiver confiável).
-2. **DISP-005, DISP-007, DISP-008** — rápidos, baixo risco, podem ir juntos.
-3. **DISP-004, DISP-009** — médios, independentes entre si.
-4. **DISP-011, DISP-010** — ficam fora até decisão de produto (provedor de e-mail
-   transacional? WhatsApp por tenant é prioridade de negócio?) — não são bugs pontuais, são
-   decisões de arquitetura/infraestrutura.
+Concluído: DISP-001, 002, 003, 005, 007, 008, 012, 014 a 020.
+
+**Restam:**
+
+1. **DISP-004** (botão Cancelar campanha) e **DISP-009** (coluna "confirmado pelo WhatsApp")
+   — pequenos, independentes, sem urgência.
+2. **DISP-006** (falha do anexo ignorada — alvo vira `sent` mesmo se o arquivo não foi).
+3. **DISP-013** — documentar o `rejectUnauthorized: false` como risco aceito.
+4. **DISP-010** (sessão WAHA por tenant) e **DISP-011** (bounce de e-mail) — ficam fora até
+   decisão de produto: não são bugs pontuais, são arquitetura/infraestrutura. O DISP-010
+   segue sendo a limitação estrutural mais séria do módulo (um tenant com campanha grande
+   mata o throughput dos outros, e todos disparam pelo mesmo número).
 
 ---
 

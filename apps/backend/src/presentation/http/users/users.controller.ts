@@ -15,7 +15,8 @@ class CreateUserDto {
 class UpdateUserDto {
   @IsOptional() @IsString() role?: string;
   @IsOptional() @IsArray() permissions?: string[];
-  @IsOptional() @IsString() password?: string;
+  // Mesmo mínimo do create — sem isto dava para trocar a senha por "1" na edição.
+  @IsOptional() @IsString() @MinLength(6) password?: string;
 }
 class ActiveDto { @IsBoolean() active!: boolean; }
 

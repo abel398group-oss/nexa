@@ -96,6 +96,11 @@ export class AdminAlertService {
         secure,
         auth: { user, pass },
         tls: { rejectUnauthorized: false },
+        // DISP-012: alerta é caminho de incidente — não pode pendurar o worker
+        // esperando um SMTP morto (sem isto o nodemailer só desiste no timeout do SO).
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
       });
       await transporter.sendMail({
         from: `"${fromName}" <${user}>`,

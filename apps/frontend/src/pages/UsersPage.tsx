@@ -61,6 +61,11 @@ export function UsersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
+  // edicao de usuario existente (tipo de acesso + reset de senha)
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [editRole, setEditRole] = useState('operador');
+  const [editPassword, setEditPassword] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
@@ -132,6 +137,41 @@ export function UsersPage() {
     await invalidate();
   }
 
+  // Edicao de usuario existente: trocar tipo de acesso e resetar senha.
+  // O backend ja aceitava as duas coisas (PATCH /users/:id) — faltava a tela,
+  // entao um admin criado por engano nao tinha como ser rebaixado e uma senha
+  // esquecida so se resolvia no banco.
+  async function saveEditUser() {
+    if (!editUser) return;
+    const novaSenha = editPassword.trim();
+    if (novaSenha && novaSenha.length < 6) {
+      toast.error('A senha precisa ter no minimo 6 caracteres.');
+      return;
+    }
+    setEditBusy(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (editRole !== editUser.role) payload.role = editRole;
+      if (novaSenha) payload.password = novaSenha;
+      if (Object.keys(payload).length === 0) { setEditUser(null); return; }
+
+      await api.patch(`/users/${editUser.id}`, payload);
+      toast.success(
+        novaSenha && payload.role ? 'Acesso e senha atualizados.'
+          : novaSenha ? 'Senha redefinida.'
+          : 'Tipo de acesso atualizado.',
+      );
+      setEditUser(null);
+      setEditPassword('');
+      await invalidate();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao salvar.');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   return (
     <>
       <StandardListPage
@@ -195,6 +235,13 @@ export function UsersPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => { setEditUser(u); setEditRole(u.role); setEditPassword(''); }}
+                      title="Trocar tipo de acesso ou redefinir a senha"
+                      className="rounded-md border border-base-300 px-3 py-1 text-xs hover:bg-base-100"
+                    >
+                      Editar
+                    </button>
+                    <button
                       onClick={() => toggleActive(u)}
                       className="rounded-md border border-base-300 px-3 py-1 text-xs hover:bg-base-100"
                     >
@@ -235,6 +282,64 @@ export function UsersPage() {
           </div>
         )}
       </StandardListPage>
+
+      {/* Editar usuario existente — tipo de acesso e senha */}
+      <Modal open={!!editUser} onClose={() => setEditUser(null)} title={`Editar ${editUser?.name || editUser?.email || ''}`} size="sm">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-base-content/60">Tipo de acesso</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEditRole('operador')}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  editRole !== 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
+                }`}
+              >
+                <span className="block font-medium">Acesso por modulo</span>
+                <span className="block text-[11px] opacity-70">marque no cartao</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditRole('admin')}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  editRole === 'admin' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/60'
+                }`}
+              >
+                <span className="block font-medium">Administrador</span>
+                <span className="block text-[11px] opacity-70">acesso total</span>
+              </button>
+            </div>
+            {editUser && editRole !== editUser.role && editRole === 'admin' && (
+              <p className="mt-1 text-[11px] text-amber-600">
+                Vira admin: passa a ver tudo e os modulos marcados sao zerados.
+              </p>
+            )}
+            {editUser && editRole !== editUser.role && editRole !== 'admin' && (
+              <p className="mt-1 text-[11px] text-amber-600">
+                Deixa de ser admin: entra sem nenhum modulo — marque no cartao depois de salvar.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-base-content/60">
+              Nova senha <span className="text-base-content/40">· deixe vazio para manter</span>
+            </label>
+            <Input
+              type="password"
+              placeholder="Minimo 6 caracteres"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" onClick={() => setEditUser(null)}>Cancelar</Button>
+            <Button onClick={saveEditUser} loading={editBusy}>Salvar</Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={show} onClose={() => setShow(false)} title="Novo usuario" size="sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">

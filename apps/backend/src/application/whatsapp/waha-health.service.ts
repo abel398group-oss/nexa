@@ -264,6 +264,11 @@ export class WahaHealthService {
         secure,
         auth: { user, pass },
         tls: { rejectUnauthorized: false },
+        // DISP-012: o health check roda em intervalo — um SMTP travado aqui
+        // seguraria o ciclo inteiro de monitoramento da sessão do WhatsApp.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
       });
       await transporter.sendMail({
         from: `"${fromName}" <${user}>`,

@@ -53,6 +53,10 @@ export class UsersService {
     const data: any = {};
     if (dto.role) data.role = dto.role;
     if (dto.permissions) data.permissions = dto.permissions.filter((p) => (AREAS as readonly string[]).includes(p));
+    // Promoveu a admin → zera a lista, igual ao create. Admin passa direto pelo
+    // guard, então manter permissões antigas é lixo que reaparece se um dia ele
+    // for rebaixado (voltaria com os acessos de antes, sem ninguém pedir).
+    if (dto.role === 'admin') data.permissions = [];
     if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 10);
     return this.prisma.user.update({ where: { id }, data, select: SELECT });
   }
