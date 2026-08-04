@@ -11,6 +11,7 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
 import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
+import { spin, spinVariants } from './spintax';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -747,9 +748,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
                 ? statusCampaign.mediaUrl
                 : mediaBase + (statusCampaign.mediaUrl.startsWith('/') ? '' : '/') + statusCampaign.mediaUrl)
             : null;
+          // Status é UM post só — o spin aqui não é anti-ban, é para as chaves não
+          // vazarem literalmente caso o usuário reaproveite um template com variação.
+          const statusText = spin(statusCampaign.template ?? '');
           const result = resolvedMediaUrl
-            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusCampaign.template || undefined)
-            : await this.waha.sendStatusText(statusCampaign.template);
+            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusText || undefined)
+            : await this.waha.sendStatusText(statusText);
           if (result.sent) {
             await this.prisma.campaign.update({
               where: { id: statusCampaign.id },
@@ -1027,6 +1031,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    // Spintax DEPOIS do {{...}}: quando o lead não tem nome o placeholder já saiu,
+    // então nenhuma chave remanescente pode ser confundida com grupo de variação.
+    // Sem `|` no template o texto passa intacto — campanhas antigas não mudam.
+    txt = spin(txt);
     if (!first) txt = SenderService.tidyMissingName(txt);
     const footerEnabled = process.env.LGPD_OPT_OUT_FOOTER !== 'false';
     if (footerEnabled && !txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;

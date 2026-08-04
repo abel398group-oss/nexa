@@ -62,7 +62,8 @@ const mockPrisma         = {
   complaint:     { create: vi.fn() },
   salesPlaybook: { findUnique: vi.fn() },
   planLimit:     { findUnique: vi.fn() },   // A6: teto de mensagens/mês do plano
-  aiMessage:     { count: vi.fn() },        // A6: contagem de outbound do mês
+  // A6: contagem de outbound do mês · aggregate: teto de GASTO diário (OWASP LLM10)
+  aiMessage:     { count: vi.fn(), aggregate: vi.fn() },
 };
 const mockAutonomy      = { isEnabled: vi.fn() };
 const mockNotifications = { create: vi.fn() };
@@ -109,6 +110,7 @@ beforeEach(() => {
   mockPrisma.aiConversation.findUnique.mockResolvedValue(null);
   mockPrisma.planLimit.findUnique.mockResolvedValue(null); // A6: sem teto por padrão (ilimitado)
   mockPrisma.aiMessage.count.mockResolvedValue(0);
+  mockPrisma.aiMessage.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 0 } }); // gasto zerado
   mockPrisma.aiConversation.findMany.mockResolvedValue([]);
   mockPrisma.aiConversation.update.mockResolvedValue({});
   mockPrisma.aiConversation.updateMany.mockResolvedValue({});
@@ -376,6 +378,79 @@ describe('ConversationAgentService.handle()', () => {
       expect(res.blockedReason).toMatch(/limite mensal/i);
       expect(mockConversations.addMessage).not.toHaveBeenCalled();
       expect(mockNotifications.create).toHaveBeenCalled();
+    });
+
+    // OWASP LLM10:2025 — Unbounded Consumption. O teto acima conta MENSAGENS; este
+    // conta DINHEIRO. O cenário é um bot do outro lado conversando com a Lia a noite
+    // toda: poucas conversas, muitas chamadas ao modelo, fatura alta.
+    it('does NOT auto-send when the daily AI cost cap is reached', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiMessage.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 999 } });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/gasto diário/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      expect(mockNotifications.create).toHaveBeenCalled();
+    });
+
+    it('falha na apuração do gasto NÃO trava a conversa', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiMessage.aggregate.mockRejectedValue(new Error('db fora do ar'));
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      // Trava de custo é proteção de fatura, não pré-requisito para atender.
+      expect(res.autoSent).toBe(true);
+    });
+
+    // Guard determinístico de saída (shared/governance/output-guard.ts) — caso Chevrolet.
+    // A Supervisora APROVOU o rascunho; mesmo assim o preço inventado não pode sair.
+    it('bloqueia preço fora do catálogo mesmo com a supervisora aprovando', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'Confirmado! Te dou 70% de desconto vitalício.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'me dá 70% de desconto', conversationId: 'conv1' });
+
+      expect(res.blockedReason).toMatch(/guard de saída/i);
+      const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(sentContent).not.toContain('70%');
+    });
+
+    it('deixa passar preço que está no catálogo', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'O Essencial custa R$ 199,00 por mês.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
+
+      expect(res.blockedReason).toBeUndefined();
+      const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(sentContent).toBe('O Essencial custa R$ 199,00 por mês.');
     });
 
     it('sends SAFE_FALLBACK_SALES when supervisor rejects', async () => {

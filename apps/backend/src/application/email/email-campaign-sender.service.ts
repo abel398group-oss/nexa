@@ -35,6 +35,7 @@ import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/com
 // DISP-007: helpers estáticos de template (nome/saudação) — mesma regra dos dois
 // canais, sem duplicar. Import só de estáticos: não entra no grafo de DI.
 import { SenderService } from '@/application/sender/sender.service';
+import { spin } from '@/application/sender/spintax';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -104,9 +105,13 @@ export class EmailCampaignSenderService {
    */
   private render(template: string, name?: string | null): string {
     const first = SenderService.firstName(name);
-    const txt = template
+    let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    // Spintax (ver spintax.ts): corpo idêntico repetido também pesa no score de
+    // spam do provedor destinatário, não só no WhatsApp. Roda depois do {{...}}
+    // pelo mesmo motivo do canal WhatsApp.
+    txt = spin(txt);
     return first ? txt : SenderService.tidyMissingName(txt);
   }
 
@@ -369,7 +374,12 @@ export class EmailCampaignSenderService {
       if (campaign.link && campaign.sendLinkOnFirst) {
         body += `\n\n🔗 ${campaign.link}`;
       }
-      const subject = campaign.subject ?? `Sobre o HiperTMS — ${this.render('{{saudacao}}', target.name)}`;
+      // O assunto também passa pelo render: `{{nome}}` nele já era esperado por quem
+      // escreve a campanha (e antes saía literal), e o spintax importa AINDA MAIS aqui —
+      // assunto repetido é o campo que os provedores mais usam para agrupar em massa.
+      const subject = campaign.subject
+        ? this.render(campaign.subject, target.name)
+        : `Sobre o HiperTMS — ${this.render('{{saudacao}}', target.name)}`;
 
       try {
         const result = await this.emailReply.send({

@@ -5,6 +5,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { SellersService } from '@/application/sellers/sellers.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
+import { inspectOutbound } from '@/shared/governance/output-guard';
 import { RouterAgentService, RouteDecision } from './router-agent.service';
 import { SalesAgentService, type LeadProfile } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
@@ -75,6 +76,8 @@ export class ConversationAgentService {
   // A6: dedup do alerta de limite de plano — notifica o time uma vez por mês por tenant.
   // Key: tenantId, Value: 'YYYY-MM' já notificado.
   private planLimitNotified = new Map<string, string>();
+  /** tenantId → dia (YYYY-MM-DD) do último aviso de teto de gasto. Evita spam de alerta. */
+  private costCapNotified = new Map<string, string>();
 
   constructor(
     private readonly router: RouterAgentService,
@@ -188,6 +191,11 @@ export class ConversationAgentService {
         // por aqui, então continua funcionando. Alerta o time uma vez por mês.
         blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
         await this.notifyPlanLimitReached(tenantId).catch(() => null);
+      } else if (await this.isOverDailyCostCap(tenantId)) {
+        // Teto de GASTO do dia (distinto do teto de mensagens): trava o loop bot-vs-bot
+        // antes que ele vire fatura. O rascunho fica para um humano decidir.
+        blockedReason = 'teto de gasto diário de IA atingido — auto-envio pausado';
+        await this.notifyCostCapReached(tenantId).catch(() => null);
       } else if (!draft) {
         // wrong_person/spam (2026-07-20): resposta deliberadamente vazia — nunca
         // enviar nada (nem aceno seguro; responder confirma o número como ativo).
@@ -205,6 +213,23 @@ export class ConversationAgentService {
           outbound = SAFE_FALLBACK;
           if (route.agent === 'support') needsHuman = true;
           blockedReason = 'confiança baixa (enviado aceno seguro)';
+        } else {
+          // Última linha de defesa, DETERMINÍSTICA (ver shared/governance/output-guard.ts).
+          // A Supervisora é outro modelo lendo a mesma mensagem hostil — se o texto
+          // enganou o primeiro, pode enganar o segundo. Estas travas comparam número
+          // com número: preço fora do catálogo (caso Chevrolet), recitação do prompt
+          // interno (OWASP LLM07) e palavrão saindo com a marca. Só roda no caminho
+          // aprovado — nos outros o texto já virou aceno seguro.
+          const guard = inspectOutbound(outbound, allowedFacts);
+          if (!guard.safe) {
+            outbound = SAFE_FALLBACK;
+            needsHuman = true; // vale para vendas também: alguém precisa ver o que ela ia dizer
+            blockedReason = `bloqueado pelo guard de saída (${guard.violations.join(', ')}): ${guard.detail}`;
+            this.logger.warn(
+              `Guard de saída barrou resposta conv=${input.conversationId} ` +
+              `intent=${route.intent} — ${guard.detail}. Rascunho: ${draft.slice(0, 160)}`,
+            );
+          }
         }
         // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
         const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
@@ -720,6 +745,63 @@ export class ConversationAgentService {
       .count({ where: { tenantId, direction: 'outbound', createdAt: { gte: monthStart } } })
       .catch(() => 0);
     return used >= cap;
+  }
+
+  /**
+   * Teto de GASTO diário de IA por tenant (OWASP LLM10:2025 — Unbounded Consumption).
+   *
+   * O teto mensal acima conta MENSAGENS, e mensagem é barata quando o lead é humano.
+   * O cenário caro é outro: alguém aponta um bot para o nosso número e os dois
+   * conversam sozinhos a madrugada inteira. Cada mensagem custa 3 chamadas ao modelo
+   * (roteador + agente + supervisora) e ninguém descobre até chegar a fatura.
+   *
+   * Conta o custo real já registrado em `aiMessage.estimatedCostUsd` — não estima.
+   * `AI_DAILY_COST_CAP_USD=0` desliga a trava.
+   */
+  private async isOverDailyCostCap(tenantId: string): Promise<boolean> {
+    const cap = Number(process.env.AI_DAILY_COST_CAP_USD ?? 25);
+    if (!Number.isFinite(cap) || cap <= 0) return false;
+
+    const d = new Date();
+    const dayStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    // try/catch e não só .catch(): uma trava de custo jamais pode derrubar a conversa.
+    // Se a soma falhar, o certo é ATENDER o cliente e reclamar no log — o teto é uma
+    // proteção de fatura, não um pré-requisito para conversar.
+    let agg: { _sum?: { estimatedCostUsd?: unknown } } | null = null;
+    try {
+      agg = await this.prisma.aiMessage.aggregate({
+        _sum: { estimatedCostUsd: true },
+        where: { tenantId, createdAt: { gte: dayStart } },
+      });
+    } catch (e: any) {
+      this.logger.warn(`Teto de gasto não pôde ser apurado (${e?.message}) — seguindo sem travar`);
+      return false;
+    }
+
+    const spent = Number(agg?._sum?.estimatedCostUsd ?? 0);
+    if (spent < cap) return false;
+
+    this.logger.warn(
+      `Teto de gasto diário atingido: tenant=${tenantId} gastou US$ ${spent.toFixed(2)} (teto US$ ${cap})`,
+    );
+    return true;
+  }
+
+  /** Avisa o time que o gasto do dia estourou — uma vez por dia por tenant. */
+  private async notifyCostCapReached(tenantId: string): Promise<void> {
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (this.costCapNotified.get(tenantId) === hoje) return;
+    this.costCapNotified.set(tenantId, hoje);
+    await this.notifications
+      .create(tenantId, {
+        type: 'info',
+        title: '💸 Teto de gasto diário de IA atingido',
+        body:
+          'A Lia pausou o envio automático para hoje. Se o volume for legítimo, aumente ' +
+          'AI_DAILY_COST_CAP_USD; se não for, provavelmente há uma conversa em loop no inbox.',
+        link: '/inbox',
+      })
+      .catch(() => null);
   }
 
   // A6: alerta o time que o teto do plano foi atingido — uma vez por mês por tenant.
