@@ -27,8 +27,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AdminAlertService } from '@/application/monitor/admin-alert.service';
 
-/** Tentativas de manipulação antes de banir. Configurável — ver ABUSE_BAN_THRESHOLD. */
-const BAN_THRESHOLD = Number(process.env.ABUSE_BAN_THRESHOLD ?? 3);
+/**
+ * Tentativas de manipulação antes de banir. Função, não constante de módulo —
+ * lida a cada chamada para respeitar mudança de env em runtime/teste, mesmo
+ * padrão de `healthThresholdsFromEnv()` em sender-health.ts.
+ */
+function banThreshold(): number {
+  return Number(process.env.ABUSE_BAN_THRESHOLD ?? 3);
+}
 
 @Injectable()
 export class AbuseGuardService {
@@ -86,7 +92,7 @@ export class AbuseGuardService {
       // `!row.bannedAt` evita re-notificar em cada violação futura: uma vez banido,
       // o número já é barrado antes de chegar aqui (isBanned() corta no topo do
       // handle()) — mas checamos mesmo assim, defesa em profundidade.
-      if (row.strikeCount >= BAN_THRESHOLD && !row.bannedAt) {
+      if (row.strikeCount >= banThreshold() && !row.bannedAt) {
         await this.prisma.contactAbuseRecord.update({
           where: { id: row.id },
           data: { bannedAt: new Date() },

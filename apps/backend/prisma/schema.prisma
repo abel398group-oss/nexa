@@ -190,21 +190,19 @@ model Contact {
   @@map("contacts")
 }
 
-/**
- * Registro de abuso por telefone — "3 strikes" (2026-08-04).
- *
- * Cada vez que shared/governance/output-guard.ts barra uma resposta da Lia
- * (preço fora do catálogo, vazamento de prompt, ofensa, ou dado sensível de
- * terceiro), é sinal de que quem está do outro lado tentou manipular a IA —
- * não é erro da Lia, é ataque. Aqui a gente conta essas tentativas por
- * telefone e, ao atingir o teto, bane: a Lia para de responder aquele
- * número, silenciosamente (mesma lógica do wrong_person — responder
- * confirma o número como ativo).
- *
- * Fica fora da tabela `contacts` de propósito: apagar/reimportar um contato
- * (limpeza de base, por exemplo) não pode apagar o histórico de abuso junto
- * — mesmo raciocínio do OptOutRecord.
- */
+// Registro de abuso por telefone — "3 strikes" (2026-08-04).
+//
+// Cada vez que shared/governance/output-guard.ts barra uma resposta da Lia
+// (preço fora do catálogo, vazamento de prompt, ofensa, ou dado sensível de
+// terceiro), é sinal de que quem está do outro lado tentou manipular a IA —
+// não é erro da Lia, é ataque. Aqui a gente conta essas tentativas por
+// telefone e, ao atingir o teto, bane: a Lia para de responder aquele
+// número, silenciosamente (mesma lógica do wrong_person — responder
+// confirma o número como ativo).
+//
+// Fica fora da tabela `contacts` de propósito: apagar/reimportar um contato
+// (limpeza de base, por exemplo) não pode apagar o histórico de abuso junto
+// — mesmo raciocínio do OptOutRecord.
 model ContactAbuseRecord {
   id            String    @id @default(uuid())
   tenantId      String    @map("tenant_id")
