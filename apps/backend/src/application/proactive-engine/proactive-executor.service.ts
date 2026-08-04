@@ -2,6 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { ConversationsService } from '@/application/conversations/conversations.service';
+
+/**
+ * Intent da mensagem automática de "estamos vendo o seu caso".
+ *
+ * É a chave de idempotência: a regra de SLA redispara a cada ciclo enquanto ninguém
+ * atender, e a existência de UMA mensagem com este intent é o que impede o cliente
+ * de receber o mesmo aviso repetidamente.
+ */
+const SLA_ACK_INTENT = 'sla_ack';
 
 @Injectable()
 export class ProactiveExecutorService {
@@ -11,6 +21,7 @@ export class ProactiveExecutorService {
     private readonly prisma: PrismaService,
     private readonly autonomy: AutonomyService,
     private readonly notifications: NotificationsService,
+    private readonly conversations: ConversationsService,
   ) {}
 
   /** Processes all OPEN events and dispatches L1/L2/L3 actions. */
@@ -95,7 +106,17 @@ export class ProactiveExecutorService {
     }
   }
 
-  /** L1 — urgent alert for SLA breach on escalated ticket. */
+  /**
+   * L1 — SLA estourado num ticket escalado.
+   *
+   * Alerta o time E avisa o CLIENTE. Antes só existia o alerta interno: quem foi
+   * escalado às 18h de sexta ficava sem nenhuma resposta até segunda, sem saber se
+   * alguém tinha visto. A pessoa não sabe que existe fila — do lado dela é silêncio.
+   *
+   * O aviso é deliberadamente modesto: reconhece a espera e NÃO promete prazo, porque
+   * o backend não tem como saber quando um humano vai pegar. Prometer "retorno em 1h"
+   * e não cumprir é pior que o silêncio — vira a segunda quebra de confiança.
+   */
   private async handleSlaBreach(ev: any): Promise<void> {
     await this.notifications.create(ev.tenantId, {
       type: 'escalation',
@@ -103,7 +124,53 @@ export class ProactiveExecutorService {
       body: `Ticket escalado aguardando resposta humana além do prazo.`,
       link: `/inbox/${ev.subjectId}`,
     });
+
+    await this.ackCustomerWaiting(ev.tenantId, ev.subjectId);
     await this.resolveEvent(ev.id, 'RESOLVED');
+  }
+
+  /**
+   * Manda UMA mensagem de reconhecimento ao cliente que espera atendimento humano.
+   *
+   * Idempotente por conversa: a regra de SLA volta a disparar a cada ciclo enquanto
+   * ninguém atender, e sem esta trava o cliente receberia "já estamos vendo" de
+   * 15 em 15 minutos — o que irrita mais que o silêncio. A marca fica no metadata da
+   * própria mensagem, então não precisa de coluna nova nem de estado em memória
+   * (que se perderia no restart).
+   *
+   * Não depende do kill switch: isto não é a IA opinando, é aviso operacional de que
+   * a mensagem foi recebida. Com a autonomia desligada o cliente continua merecendo
+   * saber que não foi esquecido.
+   */
+  private async ackCustomerWaiting(tenantId: string, conversationId: string): Promise<void> {
+    const jaAvisou = await this.prisma.aiMessage.findFirst({
+      where: {
+        tenantId,
+        conversationId,
+        direction: 'outbound' as any,
+        intent: SLA_ACK_INTENT,
+      },
+      select: { id: true },
+    });
+    if (jaAvisou) return;
+
+    try {
+      await this.conversations.addMessage(tenantId, conversationId, {
+        direction: 'outbound',
+        content:
+          'Oi! Só passando para dizer que sua mensagem está com a nossa equipe e ' +
+          'ainda estamos cuidando dela. Assim que tivermos a resposta, retornamos por aqui.',
+        intent: SLA_ACK_INTENT,
+        metadata: { aiGenerated: false, automated: 'sla_ack' },
+      });
+      this.logger.log(`[executor] cliente avisado da espera (conv=${conversationId})`);
+    } catch (err) {
+      // O alerta interno já saiu; falhar aqui não pode impedir o evento de ser resolvido,
+      // senão a fila de eventos entope e o time para de receber alerta de SLA.
+      this.logger.warn(
+        `[executor] não foi possível avisar o cliente (conv=${conversationId}): ${(err as Error).message}`,
+      );
+    }
   }
 
   /** L2 — campaign follow-up due. */
