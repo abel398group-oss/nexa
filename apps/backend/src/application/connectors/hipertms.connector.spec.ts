@@ -197,3 +197,104 @@ describe('HiperTmsConnector — getProactivityEvents() (K2)', () => {
     expect(events).toHaveLength(0);
   });
 });
+
+// ── Cache + disjuntor (tms-resilience.ts) ────────────────────────────────────
+// Testam o COMPORTAMENTO no connector, não a classe isolada: é aqui que um
+// refactor futuro poderia religar uma chamada direta e desfazer a proteção sem
+// nenhum teste acusar.
+describe('HiperTmsConnector — cache e disjuntor', () => {
+  let connector: HiperTmsConnector;
+  const origFetch = global.fetch;
+
+  beforeEach(() => {
+    process.env.TMS_BASE_URL = 'http://tms.local/api';
+    process.env.TMS_INTERNAL_TOKEN = 'tok';
+    connector = new HiperTmsConnector();
+  });
+
+  afterEach(() => {
+    global.fetch = origFetch;
+    delete process.env.TMS_BASE_URL;
+    delete process.env.TMS_INTERNAL_TOKEN;
+  });
+
+  const customerOk = () =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        found: true,
+        customer: { externalId: 'ext-1', name: 'Transportadora X', status: 'active' },
+      }),
+    } as any);
+
+  it('segunda consulta do mesmo telefone NÃO chama o TMS de novo', async () => {
+    const fetchMock = customerOk();
+    global.fetch = fetchMock;
+
+    const a = await connector.lookupCustomer('5511999999999');
+    const b = await connector.lookupCustomer('5511999999999');
+
+    expect(a).toEqual(b);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 2ª veio do cache
+  });
+
+  it('telefone diferente é consulta diferente — cache não mistura clientes', async () => {
+    const fetchMock = customerOk();
+    global.fetch = fetchMock;
+
+    await connector.lookupCustomer('5511111111111');
+    await connector.lookupCustomer('5522222222222');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('TMS fora depois de uma leitura boa: serve o último valor conhecido', async () => {
+    global.fetch = customerOk();
+    const antes = await connector.lookupCustomer('5511999999999');
+
+    // TTL do cliente é 5 min; avança o relógio para vencer o valor fresco.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 6 * 60_000));
+    global.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const depois = await connector.lookupCustomer('5511999999999');
+    vi.useRealTimers();
+
+    expect(depois).toEqual(antes); // vencido, mas melhor que nada
+  });
+
+  it('disjuntor abre e para de bater no TMS caído', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('timeout'));
+    global.fetch = fetchMock;
+
+    // Limiar padrão = 5 falhas consecutivas.
+    for (let i = 0; i < 5; i++) await connector.lookupCustomer(`551100000000${i}`);
+    expect(connector.resilienceStats().circuitOpen).toBe(true);
+
+    const chamadasAteAbrir = fetchMock.mock.calls.length;
+    await connector.lookupCustomer('5511777777777');
+    await connector.lookupCustomer('5511888888888');
+
+    // Com o disjuntor aberto ninguém mais paga o timeout.
+    expect(fetchMock.mock.calls.length).toBe(chamadasAteAbrir);
+  });
+
+  it('K1 preservado: getPlans NÃO serve preço vencido quando o TMS falha', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ plans: [{ code: 'essencial', name: 'Essencial', price: 199, features: [] }] }),
+    } as any);
+    const ok = await connector.getPlans();
+    expect(ok).toHaveLength(1);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 11 * 60_000)); // vence o TTL de planos
+    global.fetch = vi.fn().mockRejectedValue(new Error('TMS fora'));
+
+    const fora = await connector.getPlans();
+    vi.useRealTimers();
+
+    // Preço velho JAMAIS sai: a Lia recebe [] e escala (casos Chevrolet/Air Canada).
+    expect(fora).toEqual([]);
+  });
+});

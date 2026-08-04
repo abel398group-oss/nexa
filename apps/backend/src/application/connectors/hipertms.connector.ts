@@ -129,9 +129,16 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       if (i < attempts) {
         this.logger.debug(`TMS ping tentativa ${i}/${attempts}: ${result.detail} — aguardando...`);
       } else {
+        // Esta mensagem já prometeu "Lia usará dados em cache" numa época em que
+        // cache nenhum existia. Agora existe (ver tms-resilience.ts) — mas no BOOT
+        // ele está vazio, então a promessa continuaria falsa. Log de incidente
+        // precisa dizer o que de fato acontece: sem TMS e sem cache quente, a Lia
+        // atende sem contexto de cliente e escala o que depender do TMS.
         this.logger.warn(
           `⚠️  TMS inacessível no boot: ${result.detail}. ` +
-          `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. Lia usará dados em cache enquanto TMS estiver fora.`,
+          `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. ` +
+          `Cache ainda VAZIO neste momento: até a primeira leitura bem-sucedida, ` +
+          `consultas de cliente/contrato retornam vazio e a Lia escala em vez de responder.`,
         );
       }
     }
@@ -1047,7 +1054,15 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 
   async getDocumentStatus(tenantId: string, type: 'cte' | 'mdfe', key: string): Promise<DocumentStatus | null> {
     if (!this.configured) return null;
-    try {
+
+    // TTL curtíssimo (30s) e SEM cache vencido: status fiscal muda a toda hora. Dizer
+    // "seu CT-e foi autorizado" com base numa leitura de 10 minutos atrás é pior que
+    // dizer "não consegui consultar agora" — o cache aqui só absorve a repetição de
+    // quem manda a mesma chave três vezes seguidas.
+    return this.cachedRead<DocumentStatus | null>(
+      `doc:${tenantId}:${type}:${key}`,
+      TTL.document,
+      async () => {
       const url =
         `${this.baseUrl}/nexa/fiscal/document` +
         `?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`;
@@ -1091,10 +1106,9 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         rejectionCode: d.rejectionCode,
         rejectionMessage: d.rejectionMessage,
       };
-    } catch (err: any) {
-      this.logger.warn(`getDocumentStatus erro — ${err?.message}`);
-      return null;
-    }
+      },
+      { serveStaleOnError: false },
+    );
   }
 
   async getRejectionInfo(code: string): Promise<RejectionInfo | null> {
