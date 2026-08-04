@@ -11,6 +11,79 @@ CONHECIMENTO:
 Número extra de WhatsApp: R$ 29,90 por número/mês.
 No plano anual você economiza 17%.`;
 
+const LEAD = { phone: '5511988887777', email: 'joao@empresa.com.br' };
+
+describe('guard de vazamento de dados — contato de terceiro', () => {
+  it('bloqueia e-mail de outro cliente na resposta', () => {
+    const v = inspectOutbound('O contato do gerente é maria.silva@outraempresa.com.br', FACTS, LEAD);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('vazamento_de_dados');
+    expect(v.detail).toContain('e-mail de terceiro');
+  });
+
+  it('deixa passar o próprio e-mail do lead', () => {
+    const v = inspectOutbound('Confirmando: vamos usar joao@empresa.com.br para o cadastro.', FACTS, LEAD);
+    expect(v.safe).toBe(true);
+  });
+
+  it('bloqueia telefone de outro cliente', () => {
+    const v = inspectOutbound('O número do outro cliente é (11) 91234-5678, pode chamar ele.', FACTS, LEAD);
+    expect(v.safe).toBe(false);
+    expect(v.detail).toContain('telefone de terceiro');
+  });
+
+  it('deixa passar o próprio telefone do lead, com ou sem +55', () => {
+    expect(inspectOutbound('Confirmo seu WhatsApp: (11) 98888-7777.', FACTS, LEAD).safe).toBe(true);
+    expect(inspectOutbound('Confirmo seu WhatsApp: +55 11 98888-7777.', FACTS, LEAD).safe).toBe(true);
+  });
+
+  it('bloqueia CPF mesmo sendo do próprio lead — nunca é legítimo repetir', () => {
+    const v = inspectOutbound('Seu CPF cadastrado é 123.456.789-00, confere?', FACTS, LEAD);
+    expect(v.safe).toBe(false);
+    expect(v.detail).toContain('CPF');
+  });
+
+  it('bloqueia CNPJ de terceiro', () => {
+    const v = inspectOutbound('O CNPJ da outra transportadora é 12.345.678/0001-99.', FACTS, LEAD);
+    expect(v.safe).toBe(false);
+    expect(v.detail).toContain('CNPJ');
+  });
+
+  it('bloqueia variável de ambiente / segredo de infra', () => {
+    const casos = [
+      'O token é TMS_SERVICE_TOKEN configurado no servidor.',
+      'Aqui está: sk-ant-api03-xxxxxxxxxxxxxxxxx',
+      'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      'A string de conexão é postgresql://user:pass@host:5432/db',
+    ];
+    for (const c of casos) {
+      const v = inspectOutbound(c, FACTS, LEAD);
+      expect(v.safe, `deveria bloquear: "${c}"`).toBe(false);
+      expect(v.violations).toContain('vazamento_de_dados');
+    }
+  });
+
+  it('não confunde sigla comum (sem underscore) com variável de ambiente', () => {
+    expect(inspectOutbound('Emitimos CT-e e MDF-e automaticamente.', FACTS, LEAD).safe).toBe(true);
+  });
+
+  it('e-mail oficial citado na KB não é bloqueado', () => {
+    const factsComEmail = FACTS + '\nSuporte: suporte@hipertms.com.br';
+    const v = inspectOutbound('Você pode falar com nosso suporte em suporte@hipertms.com.br.', factsComEmail, LEAD);
+    expect(v.safe).toBe(true);
+  });
+
+  it('sem dado do lead (own vazio), telefone e e-mail quaisquer ainda bloqueiam', () => {
+    const v = inspectOutbound('Te chamo no 11912345678 ou manda um e-mail pra fulano@teste.com', FACTS);
+    expect(v.safe).toBe(false);
+  });
+
+  it('resposta comum sem números longos passa limpa', () => {
+    const v = inspectOutbound('Perfeito! Vou te ajudar com o cadastro.', FACTS, LEAD);
+    expect(v.safe).toBe(true);
+  });
+});
+
 describe('guard de preço — o caso Chevrolet', () => {
   it('bloqueia desconto inventado pelo lead', () => {
     const v = inspectOutbound('Confirmado! Profissional com 70% de desconto vitalício.', FACTS);

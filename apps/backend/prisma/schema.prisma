@@ -190,6 +190,38 @@ model Contact {
   @@map("contacts")
 }
 
+/**
+ * Registro de abuso por telefone — "3 strikes" (2026-08-04).
+ *
+ * Cada vez que shared/governance/output-guard.ts barra uma resposta da Lia
+ * (preço fora do catálogo, vazamento de prompt, ofensa, ou dado sensível de
+ * terceiro), é sinal de que quem está do outro lado tentou manipular a IA —
+ * não é erro da Lia, é ataque. Aqui a gente conta essas tentativas por
+ * telefone e, ao atingir o teto, bane: a Lia para de responder aquele
+ * número, silenciosamente (mesma lógica do wrong_person — responder
+ * confirma o número como ativo).
+ *
+ * Fica fora da tabela `contacts` de propósito: apagar/reimportar um contato
+ * (limpeza de base, por exemplo) não pode apagar o histórico de abuso junto
+ * — mesmo raciocínio do OptOutRecord.
+ */
+model ContactAbuseRecord {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  phone         String
+  strikeCount   Int       @default(0) @map("strike_count")
+  lastViolation String?   @map("last_violation") // ex.: "preco_nao_autorizado", "vazamento_de_dados"
+  lastDetail    String?   @map("last_detail")    // trecho legível — vai pro admin, nunca pro cliente
+  lastAt        DateTime? @map("last_at")
+  bannedAt      DateTime? @map("banned_at")       // null = ainda não banido
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, bannedAt])
+  @@map("contact_abuse_records")
+}
+
 // ===================== FASE 1 — CORE =====================
 model AiConversation {
   id            String             @id @default(uuid())

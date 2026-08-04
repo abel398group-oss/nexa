@@ -23,6 +23,11 @@
  *   estratégia comercial, os limites de desconto e o desenho do gate para quem quiser
  *   montar o próximo ataque. → `PROMPT`
  * - **Dano reputacional**: fazer o bot falar algo ofensivo só para o print. → `OFENSA`
+ * - **Vazamento de dado de terceiro (2026-08-04)**: a mesma técnica que engana a Lia a
+ *   "confirmar" um desconto inventado funciona para fazer ela repetir o contato de OUTRO
+ *   cliente, um CPF/CNPJ, ou um segredo de infraestrutura — bastou o guard de preço
+ *   existir para ficar claro que o padrão de ataque não é sobre preço, é sobre
+ *   convencer a Lia a dizer algo que ela não devia. → `DADOS`
  *
  * ## Contrato
  *
@@ -32,7 +37,11 @@
  * conversa nunca trava e o cliente nunca fica no silêncio; só não sai a frase suspeita.
  */
 
-export type GuardViolation = 'preco_nao_autorizado' | 'vazamento_de_prompt' | 'linguagem_ofensiva';
+export type GuardViolation =
+  | 'preco_nao_autorizado'
+  | 'vazamento_de_prompt'
+  | 'linguagem_ofensiva'
+  | 'vazamento_de_dados';
 
 export interface GuardVerdict {
   safe: boolean;
@@ -146,6 +155,75 @@ const OFFENSIVE = [
   'idiota', 'burro', 'otário', 'otario', 'vagabundo', 'lixo humano',
 ];
 
+// ── 4. VAZAMENTO DE DADO DE TERCEIRO / SEGREDO DE INFRA ───────────────────────
+
+/**
+ * A Lia atende UM lead por conversa. Ela pode citar o telefone/e-mail DELE — é
+ * dado que ele mesmo forneceu. O que ela nunca pode fazer é repetir o contato de
+ * OUTRO cliente, um CPF/CNPJ, ou um segredo de infraestrutura (chave de API,
+ * variável de ambiente, string de conexão de banco, token). Não existe cenário
+ * de venda ou suporte em que isso seja a resposta certa.
+ */
+export interface OwnData {
+  /** Telefone do contato DESTA conversa — a Lia pode citar o próprio. */
+  phone?: string | null;
+  /** E-mail do contato DESTA conversa. */
+  email?: string | null;
+}
+
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+/** Telefone BR: DDD (2 díg.) + 8 ou 9 dígitos, com/sem +55, parênteses ou traço. */
+const PHONE_RE = /(?:\+?55\s?)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b/g;
+
+/** CPF: 000.000.000-00 (pontuação opcional). Nunca legítimo citar, de ninguém. */
+const CPF_RE = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+/** CNPJ: 00.000.000/0000-00 (pontuação opcional). */
+const CNPJ_RE = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g;
+
+/**
+ * Marcadores de segredo de infraestrutura: nome de variável de ambiente
+ * (SCREAMING_SNAKE_CASE — exige `_`, para não pegar sigla comum tipo "CT-E"),
+ * formato de chave da Anthropic, cabeçalho Bearer, string de conexão de banco,
+ * ou bloco de chave privada. Nenhum tem motivo legítimo numa conversa com lead.
+ */
+const SECRET_RE =
+  /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|sk-ant-[A-Za-z0-9-]+|Bearer\s+[A-Za-z0-9._-]{10,}|(?:postgres(?:ql)?|mongodb|mysql):\/\/\S+|-----BEGIN [A-Z ]+-----/g;
+
+function onlyDigits(s: string): string {
+  return String(s ?? '').replace(/\D/g, '');
+}
+
+function detectDataLeak(text: string, allowedFacts: string, own: OwnData): string[] {
+  const achados: string[] = [];
+  const ownPhoneDigits = onlyDigits(own.phone ?? '');
+  const ownEmailLower = (own.email ?? '').trim().toLowerCase();
+  const allowedLower = String(allowedFacts ?? '').toLowerCase();
+
+  for (const m of text.matchAll(EMAIL_RE)) {
+    const email = m[0].toLowerCase();
+    if (email === ownEmailLower) continue; // e-mail do próprio lead desta conversa
+    if (allowedLower.includes(email)) continue; // veio do catálogo/KB (ex.: e-mail de suporte oficial)
+    achados.push(`e-mail de terceiro: ${m[0]}`);
+  }
+
+  for (const m of text.matchAll(PHONE_RE)) {
+    const digits = onlyDigits(m[0]);
+    if (digits.length < 10) continue; // fragmento curto — não é telefone completo
+    if (ownPhoneDigits && (digits === ownPhoneDigits || digits.endsWith(ownPhoneDigits) || ownPhoneDigits.endsWith(digits))) {
+      continue; // é o próprio telefone do lead, com ou sem DDI
+    }
+    if (allowedFacts && allowedFacts.includes(digits)) continue; // número oficial citado na KB
+    achados.push(`telefone de terceiro: ${m[0]}`);
+  }
+
+  for (const m of text.matchAll(CPF_RE)) achados.push(`documento (CPF): ${m[0]}`);
+  for (const m of text.matchAll(CNPJ_RE)) achados.push(`documento (CNPJ): ${m[0]}`);
+  for (const m of text.matchAll(SECRET_RE)) achados.push(`padrão de segredo/config: ${m[0]}`);
+
+  return achados;
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -153,8 +231,10 @@ const OFFENSIVE = [
  *
  * @param text         rascunho já aprovado pela Supervisora
  * @param allowedFacts catálogo + KB que o agente recebeu (fonte da verdade numérica)
+ * @param own          telefone/e-mail do lead DESTA conversa — o único contato que a
+ *                      Lia pode citar sem que conte como vazamento de terceiro
  */
-export function inspectOutbound(text: string, allowedFacts: string): GuardVerdict {
+export function inspectOutbound(text: string, allowedFacts: string, own: OwnData = {}): GuardVerdict {
   const violations: GuardViolation[] = [];
   const detail: string[] = [];
 
@@ -185,6 +265,13 @@ export function inspectOutbound(text: string, allowedFacts: string): GuardVerdic
   if (palavrao) {
     violations.push('linguagem_ofensiva');
     detail.push(`termo ofensivo: "${palavrao}"`);
+  }
+
+  // 4. Dado de terceiro ou segredo de infraestrutura.
+  const vazamentos = detectDataLeak(text, allowedFacts, own);
+  if (vazamentos.length) {
+    violations.push('vazamento_de_dados');
+    detail.push(...vazamentos);
   }
 
   return { safe: violations.length === 0, violations, detail: detail.join(' | ') };

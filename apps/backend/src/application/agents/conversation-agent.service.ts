@@ -16,6 +16,7 @@ import { HandoffService } from '@/application/handoff/handoff.service';
 import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
+import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -157,6 +158,7 @@ export class ConversationAgentService {
     private readonly waha: WahaClientService,
     private readonly events: EventEmitter2,
     private readonly contacts: ContactsService,
+    private readonly abuseGuard: AbuseGuardService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -165,6 +167,46 @@ export class ConversationAgentService {
     input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
   ): Promise<HandleResult> {
     const _t0 = Date.now(); // MON-009: início da medição
+
+    // BANIMENTO ("3 strikes" — shared/contacts/abuse-guard.service.ts): checado ANTES
+    // do roteador de propósito. Se o corte viesse depois, um número banido continuaria
+    // queimando chamada de IA a cada mensagem sem nunca receber resposta — o banimento
+    // existe justamente para parar isso, não só para calar a saída.
+    let ownPhone: string | null = null;
+    let ownEmail: string | null = null;
+    if (input.conversationId) {
+      const convId = input.conversationId;
+      const convForGuard = await this.prisma.aiConversation
+        .findUnique({ where: { id: convId }, select: { phone: true } })
+        .catch(() => null);
+      ownPhone = convForGuard?.phone ?? null;
+
+      if (ownPhone && (await this.abuseGuard.isBanned(tenantId, ownPhone))) {
+        this.logger.warn(`Mensagem ignorada — número banido por abuso repetido (tenant=${tenantId} phone=${ownPhone})`);
+        return {
+          route: { intent: 'unknown', agent: 'human', leadScore: 0, reason: 'número banido', source: 'fallback', confidence: 1 },
+          draft: '',
+          suggestedAction: 'none',
+          usedKnowledge: [],
+          confidence: 'high',
+          needsHuman: false,
+          supervisor: null,
+          autonomyEnabled: this.autonomy.isEnabled(),
+          autoSent: false,
+          blockedReason: 'número banido por abuso repetido — nenhuma mensagem enviada',
+        };
+      }
+
+      // E-mail do lead — permite ao guard de saída distinguir "o próprio contato
+      // falando do próprio e-mail" de "vazando e-mail de outro cliente".
+      if (ownPhone) {
+        const contact = await this.prisma.contact
+          .findFirst({ where: { tenantId, phone: ownPhone }, select: { email: true } })
+          .catch(() => null);
+        ownEmail = contact?.email ?? null;
+      }
+    }
+
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
 
@@ -298,7 +340,7 @@ export class ConversationAgentService {
           // com número: preço fora do catálogo (caso Chevrolet), recitação do prompt
           // interno (OWASP LLM07) e palavrão saindo com a marca. Só roda no caminho
           // aprovado — nos outros o texto já virou aceno seguro.
-          const guard = inspectOutbound(outbound, allowedFacts);
+          const guard = inspectOutbound(outbound, allowedFacts, { phone: ownPhone, email: ownEmail });
           if (!guard.safe) {
             outbound = SAFE_FALLBACK;
             needsHuman = true; // vale para vendas também: alguém precisa ver o que ela ia dizer
@@ -307,6 +349,12 @@ export class ConversationAgentService {
               `Guard de saída barrou resposta conv=${input.conversationId} ` +
               `intent=${route.intent} — ${guard.detail}. Rascunho: ${draft.slice(0, 160)}`,
             );
+            // O guard só dispara quando o rascunho JÁ continha algo que não devia sair —
+            // ou seja, alguém tentou manipular a Lia. Conta como tentativa ("3 strikes");
+            // ao atingir o teto, o número é banido (ver abuse-guard.service.ts).
+            if (ownPhone) {
+              await this.abuseGuard.recordStrike(tenantId, ownPhone, guard.violations, guard.detail).catch(() => null);
+            }
           }
         }
         // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
