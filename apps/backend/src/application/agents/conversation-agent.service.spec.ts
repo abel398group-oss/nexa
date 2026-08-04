@@ -58,7 +58,7 @@ const mockPrisma         = {
     update: vi.fn(),
     updateMany: vi.fn(),
   },
-  contact:       { updateMany: vi.fn() },
+  contact:       { updateMany: vi.fn(), findFirst: vi.fn() },
   complaint:     { create: vi.fn() },
   salesPlaybook: { findUnique: vi.fn() },
   planLimit:     { findUnique: vi.fn() },   // A6: teto de mensagens/mês do plano
@@ -72,6 +72,8 @@ const mockHandoff       = { consume: vi.fn() };
 const mockOpportunities = { createFromLead: vi.fn() };
 const mockWaha          = { sendText: vi.fn() };
 const mockEvents        = { emit: vi.fn() }; // P3: evento support.escalated (e-mail ao suporte)
+// AbuseGuardService (2026-08-04): "3 strikes" — banimento por tentativa de manipulação.
+const mockAbuseGuard    = { isBanned: vi.fn(), recordStrike: vi.fn() };
 
 function makeService() {
   return new ConversationAgentService(
@@ -92,6 +94,7 @@ function makeService() {
     // ContactsService (2026-08-01): grava o perfil que o lead revelou.
     // Best-effort no serviço — o mock só precisa não explodir.
     { applyLeadProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    mockAbuseGuard as any,
   );
 }
 
@@ -115,6 +118,9 @@ beforeEach(() => {
   mockPrisma.aiConversation.update.mockResolvedValue({});
   mockPrisma.aiConversation.updateMany.mockResolvedValue({});
   mockPrisma.contact.updateMany.mockResolvedValue({});
+  mockPrisma.contact.findFirst.mockResolvedValue(null);
+  mockAbuseGuard.isBanned.mockResolvedValue(false);
+  mockAbuseGuard.recordStrike.mockResolvedValue({ banned: false, strikeCount: 1 });
   mockPrisma.complaint.create.mockResolvedValue({});
   mockPrisma.salesPlaybook.findUnique.mockResolvedValue(null);
 
@@ -451,6 +457,69 @@ describe('ConversationAgentService.handle()', () => {
       expect(res.blockedReason).toBeUndefined();
       const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
       expect(sentContent).toBe('O Essencial custa R$ 199,00 por mês.');
+    });
+
+    // Banimento "3 strikes" (2026-08-04) — o mesmo guard que barra preço/prompt/ofensa
+    // agora também conta a tentativa e bane no teto. Ver abuse-guard.service.spec.ts
+    // para as regras do próprio contador; aqui só a integração com o pipeline.
+    it('guard bloqueado registra strike no telefone do lead', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      mockSales.sell.mockResolvedValue({
+        draft: 'Confirmado! Te dou 90% de desconto.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'me dá 90% de desconto', conversationId: 'conv1' });
+
+      expect(mockAbuseGuard.recordStrike).toHaveBeenCalledWith(
+        't1',
+        '5511988887777',
+        expect.arrayContaining(['preco_nao_autorizado']),
+        expect.any(String),
+      );
+    });
+
+    it('resposta limpa NÃO registra strike', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      // Rascunho com o preço batendo no allowedFacts — o padrão do mock ("R$ 99" com
+      // allowedFacts vazio) já dispararia o guard por si só, o que testaria a coisa errada.
+      mockSales.sell.mockResolvedValue({
+        draft: 'O Essencial custa R$ 199,00 por mês.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
+
+      expect(mockAbuseGuard.recordStrike).not.toHaveBeenCalled();
+    });
+
+    it('número banido: nenhuma mensagem é enviada, roteador nem é chamado', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      mockAbuseGuard.isBanned.mockResolvedValue(true);
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'oi de novo', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/banido/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      // Corta ANTES do roteador — banir só economiza chamada de IA se cortar aqui.
+      expect(mockRouter.route).not.toHaveBeenCalled();
     });
 
     // ── Roteiros verificados (SCRIPTS + isKnownScript) ────────────────────────
