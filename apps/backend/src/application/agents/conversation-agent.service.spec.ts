@@ -453,6 +453,40 @@ describe('ConversationAgentService.handle()', () => {
       expect(sentContent).toBe('O Essencial custa R$ 199,00 por mês.');
     });
 
+    // ── Roteiros verificados (SCRIPTS + isKnownScript) ────────────────────────
+    // A flag `scripted` faz a resposta pular a Supervisora. Isso é correto para texto
+    // que NÓS escrevemos, mas a flag sozinha é uma promessa: bastaria alguém marcar
+    // `scripted = true` ao lado de um draft montado dinamicamente para a resposta
+    // passar a sair sem revisão nenhuma, em silêncio.
+    it('roteiro do catálogo sai sem passar pela supervisora', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'optout', intent: 'opt_out' }));
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'pode me tirar da lista', conversationId: 'conv1' });
+
+      // Texto fixo não alucina — auditar seria gasto sem ganho.
+      expect(mockSupervisor.review).not.toHaveBeenCalled();
+      const enviado = mockConversations.addMessage.mock.calls[0][2].content as string;
+      expect(enviado).toContain('não receberá mais mensagens');
+    });
+
+    it('texto que se diz roteirizado mas não está no catálogo É auditado', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'human', intent: 'human_needed' }));
+      mockSupervisor.review.mockResolvedValue(nokVerdict);
+      // Simula o cenário de regressão: o playbook injeta um link inválido no roteiro
+      // de "suporte sem cadastro", quebrando a moldura conhecida.
+      mockPrisma.salesPlaybook.findUnique.mockResolvedValue({ signupUrl: 'javascript:alert(1)' });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'quero falar com humano', conversationId: 'conv1' });
+
+      // O ponto do teste não é o texto final, é não existir caminho que pule a
+      // auditoria sem estar no catálogo.
+      expect(res.autoSent).toBe(true);
+    });
+
     it('sends SAFE_FALLBACK_SALES when supervisor rejects', async () => {
       mockAutonomy.isEnabled.mockReturnValue(true);
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));

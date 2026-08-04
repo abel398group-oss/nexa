@@ -1,11 +1,56 @@
 # Auditoria de arquitetura, IA e segurança — Nexa
 
-**Data:** 2026-08-04
+**Data:** 2026-08-04 · **Fechada em:** 2026-08-04
 **Escopo:** arquitetura multi-agente, multi-tenancy, disparo/WhatsApp, integração TMS, cobertura de testes
 **Método:** leitura do código em `apps/backend/src`, não do material de apresentação
 
 > Todos os achados abaixo citam `arquivo:linha`. Nada aqui é hipótese genérica sobre
 > "sistemas com IA" — cada item foi confirmado no código.
+
+---
+
+## Status final
+
+| | |
+|---|---|
+| Achados | 12 |
+| **Resolvidos** | **9** |
+| Verificados como não-problema | 3 |
+| Testes | 757 → 846, mais 22 no golden set |
+
+**Um achado estava errado.** A-02 descrevia a flag `scripted` como "decidida pelo
+próprio agente que gerou a resposta". Não é: todos os `scripted = true` estão no
+orquestrador, ao lado de textos literais. O risco real era outro e menor — está
+corrigido no verbete, não apagado, porque a auditoria também serve para registrar
+onde ela mesma errou.
+
+### Placar por achado
+
+| # | Achado | Risco original | Status |
+|---|---|---|---|
+| A-01 | 3 chamadas LLM sequenciais sem orçamento de latência | 🔴 | ⏳ em aberto |
+| A-02 | Supervisora pulada no caminho `scripted` | 🟡 | ✅ resolvido (achado corrigido) |
+| A-03 | Sem defesa contra prompt injection no plano comercial | 🔴 | ✅ resolvido |
+| A-04 | Sem limite de gasto por tenant | 🟡 | ✅ resolvido |
+| S-01 | Isolamento por tenant no RAG | — | ✅ já estava correto |
+| S-02 | `$queryRawUnsafe` seguro por convenção | 🟡 | ⏳ em aberto |
+| S-03 | Escalação sem atendimento só alerta o time | 🟡 | ✅ resolvido |
+| D-01 | Mensagem idêntica para todos os alvos | 🔴 | ✅ resolvido |
+| D-02 | Sem freio por engajamento | 🔴 | ✅ resolvido |
+| D-03 | Import de CSV ignora o registro de opt-out | 🟡 | ✅ resolvido |
+| T-01 | Cache do TMS prometido no log e inexistente | 🔴 | ✅ resolvido |
+| T-02 | Sem circuit breaker | 🔴 | ✅ resolvido |
+| Q-01 | Zero avaliação de comportamento da IA | 🔴 | ✅ resolvido |
+
+### O que ficou em aberto, e por quê
+
+**A-01 (latência)** — depende de decisões de produto: rodar a Supervisora em paralelo
+para conversas de baixo risco muda a garantia, e trocar parte do roteador por regra
+determinística muda o comportamento. Não é refactor mecânico.
+
+**S-02 (`$queryRawUnsafe`)** — hoje está correto em todos os pontos; o risco é de
+disciplina futura. A mitigação proposta (regra de ESLint) é trabalho de tooling, não
+de correção.
 
 ---
 
@@ -81,18 +126,32 @@ concorrente para a mesma conversa.
 3. Orçamento de tempo total (ex.: 8s). Estourou → resposta de espera pré-escrita
    ("só um instante, já te respondo") e continua em background.
 
-### 🟡 A-02 — A supervisora é pulada quando a resposta é `scripted`
+### ✅ A-02 — A supervisora é pulada quando a resposta é `scripted`
 
-`conversation-agent.service.ts:140` — `if (!scripted) { supervisor = await ... }`
+> **Correção do achado (2026-08-04).** O texto original dizia que a flag `scripted` era
+> "decidida pelo próprio agente que gerou a resposta". **Isso está errado.** Todos os
+> `scripted = true` estão no ConversationAgent, ao lado de textos literais escritos no
+> código; nenhum sub-agente declara isso sobre si mesmo. O sistema era melhor do que a
+> auditoria descreveu.
 
-A decisão é razoável (script fixo não alucina), mas a flag `scripted` é decidida
-**pelo próprio agente** que gerou a resposta. Se um agente marcar como `scripted` uma
-resposta que na verdade compôs, ela sai sem auditoria.
+O que existia de real, depois de reler o código:
 
-**Sugestão:** `scripted` só deve valer se o texto final for **idêntico** a um script
-do catálogo. Comparação de string, não confiança na flag.
+1. **Um caso concreto**: o roteiro de "suporte sem cadastro" interpolava `signupUrl` —
+   campo **editável pelo tenant** — numa resposta que pulava a auditoria. Qualquer
+   valor ali entrava sem revisão.
+2. **Um risco de futuro**: a flag era uma *promessa*. Bastaria alguém marcar
+   `scripted = true` ao lado de um draft montado dinamicamente para a resposta passar
+   a sair sem revisão, em silêncio, sem nenhum teste acusar.
 
-### 🔴 A-03 — Prompt injection: o dano é comercial, não técnico
+**Resolvido:** os 5 roteiros viraram o catálogo `SCRIPTS`, usado tanto para escrever o
+texto quanto para verificá-lo — não podem divergir. `isKnownScript()` confere o draft
+no envio: bate com o catálogo, pula a auditoria; não bate, é auditado como texto
+gerado e o caso vai para o log. `signupUrl` só entra se for `http(s)` válido.
+
+Auditar em vez de bloquear foi decisão consciente: se a Supervisora aprovar, o cliente
+recebe a resposta real em vez de um "só um instante".
+
+### ✅ A-03 — Prompt injection: o dano é comercial, não técnico
 
 Busquei por `injection`, `jailbreak`, `sanitiz` em `application/agents/` e
 `shared/ai/`: **zero ocorrências**. Não existe hardening explícito da mensagem do lead.
@@ -123,7 +182,18 @@ a supervisora compara o rascunho contra o catálogo que a vendedora podia usar �
 3. Registrar `route.confidence` e o veredito da supervisora em toda mensagem enviada —
    hoje não há trilha para auditar "por que a Lia falou isso".
 
-### 🟡 A-04 — Sem teto de gasto por tenant
+**Resolvido (2026-08-04):** `shared/governance/output-guard.ts` — camada DETERMINÍSTICA
+na saída, depois da Supervisora. Barra valor em R$ ou % fora de `allowedFacts`, recitação do
+prompt interno e linguagem ofensiva. Não é IA: não há o que convencer. Reprovou → aceno
+seguro + `needsHuman`, com o motivo no log. 19 testes.
+
+Complementado por `shared/ai/untrusted-input.ts`: o texto do lead deixou de ir entre aspas
+(que não delimitam nada, já que quem escreve a mensagem também escreve aspas) e passou a ir
+cercado, com a regra explicada no system prompt do roteador, de vendas e de suporte. No
+e-mail, o histórico citado é cortado antes de chegar ao modelo — é texto que o remetente
+controla por inteiro e pode forjar.
+
+### ✅ A-04 — Sem teto de gasto por tenant
 
 `anthropic.service.ts` faz tracking de token/custo, mas não achei nenhum ponto que
 **corte** ao estourar. Uma conversa em loop com um bot do outro lado, ou um tenant
@@ -136,6 +206,11 @@ O `AutonomyService` já existe (`shared/governance/autonomy.service.ts:56` tem
 ---
 
 ## 2. Segurança e multi-tenancy
+
+**Resolvido (2026-08-04):** `isOverDailyCostCap()` no ConversationAgent — soma
+`aiMessage.estimatedCostUsd` do dia e pausa o auto-envio ao estourar `AI_DAILY_COST_CAP_USD`
+(padrão US$ 25/dia/tenant). Falha na apuração NÃO trava a conversa: teto é proteção de
+fatura, não pré-requisito para atender.
 
 ### ✅ S-01 — Isolamento no RAG está correto
 
@@ -169,7 +244,7 @@ variável de request achando que é igual.
 `$queryRawUnsafe`, e regra de ESLint proibindo `${` dentro da string quando a variável
 não for uma constante do módulo.
 
-### 🟡 S-03 — Escalação sem atendimento: alerta interno, cliente no vácuo
+### ✅ S-03 — Escalação sem atendimento: alerta interno, cliente no vácuo
 
 `proactive-rule-config.service.ts:14` — `conversation.sla_breach`, 60 min.
 `proactive-executor.service.ts:102` — dispara `🚨 SLA em risco`.
@@ -186,7 +261,12 @@ restrito (só informação, sem compromisso) em vez de silêncio.
 
 ## 3. Disparo e WhatsApp
 
-### 🔴 D-01 — Todos os alvos recebem exatamente o mesmo texto
+**Resolvido (2026-08-04):** `handleSlaBreach` passou a avisar o CLIENTE, não só o time.
+Idempotente por conversa (intent `sla_ack`) — a regra redispara a cada ciclo e sem a trava o
+cliente receberia o mesmo aviso de 15 em 15 minutos. Não promete prazo: o backend não sabe
+quando um humano vai pegar, e promessa não cumprida é a segunda quebra de confiança.
+
+### ✅ D-01 — Todos os alvos recebem exatamente o mesmo texto
 
 `sender.service.ts` — a campanha tem **um** `template` (linha 152, 168, 346) e ele é
 enviado sem variação. Não há spintax, nem rotação de saudação, nem variação de
@@ -202,7 +282,13 @@ falar devagar dizendo sempre a mesma frase.
 Resolvido no `render` do template, sem mudar o schema. É a maior redução de risco de
 ban por linha de código do sistema inteiro.
 
-### 🔴 D-02 — Nenhum freio por engajamento
+**Resolvido (2026-08-04):** `application/sender/spintax.ts` — `{Oi|Olá|Bom dia}` sorteado
+por destinatário, aplicado no WhatsApp, no corpo E no assunto do e-mail (assunto repetido é o
+campo que os provedores mais usam para agrupar envio em massa). Retrocompatível: template sem
+`|` passa intacto. A tela mostra quantas variações o texto gera e alerta quando são poucas
+para o tamanho da lista.
+
+### ✅ D-02 — Nenhum freio por engajamento
 
 O sistema mede envio (`sentToday`, `sentThisHour`) mas não mede **reação**. Não há
 cálculo de taxa de resposta, de bloqueio, nem de denúncia. Uma campanha com lista ruim
@@ -212,7 +298,15 @@ queima o número até o limite diário todo dia, sem nada frear.
 de um piso (ex.: 3%), pausa automática do número e alerta. Os dados já existem
 (`CampaignTarget.status` e as conversas); falta o cálculo e o gatilho.
 
-### 🟡 D-03 — Import de CSV não consulta o registro de opt-out
+**Resolvido (2026-08-04):** `application/sender/sender-health.ts` — janela de 24h, pausa o
+número abaixo de 3% de resposta ou acima de 30% de falha. Exige 30 envios de amostra: com 5
+envios a taxa é 0% por falta de tempo, não por sinal. Exposto na tela de Saúde dos Números.
+
+Limitação conhecida: a conta é por TENANT, não por número. Hoje coincide, porque
+`ensureNumber()` devolve sempre o primeiro número ativo. Rodízio real exigirá
+`senderNumberId` no CampaignTarget.
+
+### ✅ D-03 — Import de CSV não consulta o registro de opt-out
 
 `contacts.service.ts:268-280` (`importMany`) faz upsert com `update: {}`, o que
 **preserva** o status de quem já existe. Correto. Mas um contato que foi **deletado** e
@@ -230,7 +324,12 @@ com `status: 'opted_out'`. Uma query, resolve a mentira na tela e fecha a porta.
 
 ## 4. Integração com o TMS
 
-### 🔴 T-01 — O cache prometido no código não existe
+**Resolvido (2026-08-04):** `importMany` consulta `blockedPhones()` uma vez para o lote
+inteiro e cria os bloqueados já como `opted_out`. Contato que já existe segue intocado
+(`update: {}`). O `create()` individual ficou de fora de propósito — ali existe fluxo de
+re-opt-in e forçar o status quebraria.
+
+### ✅ T-01 — O cache prometido no código não existe
 
 `hipertms.connector.ts:54`, log de boot quando o TMS não responde:
 
@@ -248,7 +347,13 @@ status de documento) **ou** corrigir o log. Nesta ordem de preferência. Cache d
 leitura não viola "não duplicar regra" — ele guarda *resposta*, não *regra*. A regra
 continua no TMS.
 
-### 🔴 T-02 — Sem circuit breaker: TMS lento derruba toda conversa
+**Resolvido (2026-08-04):** cache implementado em `connectors/tms-resilience.ts` e o log de
+boot corrigido — ele agora avisa que naquele momento o cache está VAZIO, que era justamente a
+parte que continuaria mentindo. TTL por tipo: cliente 5min, contrato 2min, planos 10min,
+documento fiscal 30s. Planos e documento NÃO servem valor vencido (decisão K1 preservada e
+travada por teste).
+
+### ✅ T-02 — Sem circuit breaker: TMS lento derruba toda conversa
 
 Timeouts existem e são adequados (5s nas consultas, 10–15s nas pesadas —
 `hipertms.connector.ts:68,90,1142,1195`). Retry só no ping de boot (linha 38).
@@ -259,6 +364,10 @@ passa de 9s para 14s, para todos os leads, enquanto o TMS estiver ruim.
 
 **Sugestão:** breaker simples — 5 falhas em 60s abre o circuito por 30s. Enquanto aberto,
 responde direto do cache/degradado sem nem tentar a chamada. ~40 linhas.
+
+**Resolvido (2026-08-04):** disjuntor em `tms-resilience.ts` — 5 falhas seguidas abrem por
+30s. Ao vencer a espera libera UMA sondagem e segura o resto; sem isso todas as requisições
+acumuladas atacariam de uma vez um TMS que ainda pode estar de joelhos.
 
 ### Webhooks vs polling — sobre a pergunta
 
@@ -281,7 +390,7 @@ volume. Webhook do TMS → Nexa vira otimização futura, não necessidade agora
 
 O ponto cego é estrutural e não aparece em nenhuma métrica de cobertura:
 
-### 🔴 Q-01 — Zero avaliação de comportamento da IA
+### ✅ Q-01 — Zero avaliação de comportamento da IA
 
 Procurei por `*eval*` e `*golden*` no repositório: **nada**. Todos os testes de agente
 mockam a resposta do modelo. Ou seja: **testam o encanamento, nunca a água**.
@@ -302,36 +411,79 @@ demanda (não no CI, por custo), com asserções sobre a saída: não contém va
 `allowedFacts`, roteia para o agente certo, escala quando deve. É o teste que faltava
 quando a Lia começou a inventar.
 
+**Resolvido (2026-08-04):** golden set em `apps/backend/evals/`, rodado com `pnpm eval`.
+22 casos: injeção de prompt e opt-out (determinísticos, sem custo) + roteamento (chamada real
+ao modelo). Fora do CI porque custa dinheiro e o modelo é probabilístico — travar o merge de
+todo mundo por um caso oscilando faria ninguém rodar teste.
+
+Na primeira execução ele reprovou dois casos — e nos DOIS a expectativa da auditoria é que
+estava errada, não o sistema: o opt-out nunca passa pelo roteador (`whatsapp.service.ts:131`
+decide por regex e encerra antes) e `wrong_person` é governado pela intenção, não pelo
+agente. Os dois estão documentados nos casos para ninguém "corrigir" de volta.
+
 ### Outros pontos cegos
 
 | Área | Por que os testes não pegam |
 |---|---|
 | Concorrência | Dois `@Interval` do sender no mesmo tenant — o lock é testado, a corrida real não |
-| Isolamento por tenant | Nenhum teste tenta acessar dado de outro tenant e verifica que falha |
+| ~~Isolamento por tenant~~ | ✅ coberto — ver abaixo |
 | Payload real do WAHA | Os testes usam payload fixo; produção usa `latest` e muda formato |
 | Migrations | Nada valida que schema e migrations estão em sincronia |
 
-O teste de isolamento é o mais barato e o mais importante: um teste por controller que
-chama com tenant A e id do tenant B e espera 404. Hoje isso não existe.
+**Resolvido (2026-08-04):** `shared/security/tenant-isolation.spec.ts` — 13 casos
+cobrindo leitura, escrita, exclusão (unitária e em lote) e listagem em Contacts,
+Conversations, Knowledge, Opportunities, Actions e Users.
+
+O teste usa um **banco em memória que aplica o `where` de verdade**, não `vi.fn()` com
+valor fixo. A diferença é decisiva: um mock devolvendo a linha do outro tenant provaria
+só que o service repassa o que o Prisma entrega — e **passaria mesmo com o filtro
+removido**, que é exatamente o bug procurado.
+
+Validado por mutação: removi o `tenantId` de UM método (`ContactsService.findOne`) e
+**3 testes reprovaram**, incluindo `update` e `remove`, que dependem dele. Restaurado
+em seguida. Teste de segurança que nunca reprovou não é garantia, é decoração.
+
+Um metateste protege os demais: se um refactor quebrar o duplo e ele passar a nunca
+encontrar nada, todos os casos acima passariam por engano — provando um isolamento que
+talvez já não exista.
 
 ---
 
-## Ordem sugerida de ataque
+## Ordem de ataque — executada em 2026-08-04
 
-**Semana 1 — o que evita perder dinheiro ou conta**
-1. D-01 spintax no template (risco de ban)
-2. A-03 validador determinístico de preço (risco jurídico)
-3. T-01 corrigir o log mentiroso do cache (risco de diagnóstico errado em incidente)
+A ordem original foi seguida quase inteira no mesmo dia. Fica registrada com o que
+saiu, para servir de referência de esforço numa próxima auditoria:
 
-**Semana 2 — o que evita cliente irritado**
-4. D-02 freio por engajamento
-5. T-02 circuit breaker
-6. A-01 orçamento de latência + roteador determinístico para casos óbvios
+| # | Item | Status |
+|---|---|---|
+| 1 | D-01 spintax no template | ✅ |
+| 2 | A-03 validador determinístico de preço | ✅ (virou guard de 3 travas + cerca de entrada) |
+| 3 | T-01 log do cache + cache de verdade | ✅ |
+| 4 | D-02 freio por engajamento | ✅ |
+| 5 | T-02 circuit breaker | ✅ |
+| 6 | A-01 orçamento de latência | ⏳ decisão de produto pendente |
+| 7 | Q-01 golden set | ✅ |
+| 8 | Testes de isolamento por tenant | ✅ |
+| 9 | D-03, A-02, A-04, S-03 | ✅ |
 
-**Semana 3 — o que evita a próxima regressão silenciosa**
-7. Q-01 golden set de conversas
-8. Testes de isolamento por tenant
-9. D-03, A-02, A-04, S-03
+## O que sobrou para a próxima rodada
+
+Em ordem de valor, na minha leitura:
+
+1. **A-01 latência** — precisa de decisão de produto: rodar a Supervisora em paralelo
+   ao envio nas conversas de baixo risco troca velocidade por garantia. Não é refactor
+   mecânico, é escolha.
+2. **S-02 ESLint contra `${` em `$queryRawUnsafe`** — trabalho de tooling. Hoje todos
+   os pontos estão corretos; a regra protege a disciplina futura.
+3. **Concorrência e payload real do WAHA** (ver "Outros pontos cegos") — ambos exigem
+   ambiente de verdade, não teste unitário.
+
+### Manutenção do teste de isolamento
+
+Todo método novo `(tenantId, id)` que leia, altere ou apague por id precisa de um caso
+em `tenant-isolation.spec.ts`. O padrão é sempre o mesmo — semeia a linha no tenant B,
+chama com o tenant A, exige que não encontre — e está documentado no cabeçalho do
+arquivo. Sem isso a cobertura envelhece junto com o código.
 
 ---
 
@@ -346,3 +498,20 @@ chama com tenant A e id do tenant B e espera 404. Hoje isso não existe.
 - **Ausência de loop entre agentes.** O pipeline linear é uma escolha de arquitetura
   acertada; sistemas multi-agente com orquestração livre sofrem exatamente do problema
   que você temia, e este não tem.
+
+---
+
+## Nota de método
+
+Três achados desta auditoria estavam errados ou exagerados, e todos os três só
+apareceram porque o código foi relido na hora de corrigir:
+
+- **A-02** descrevia a flag `scripted` como decidida pelo sub-agente. Não é.
+- **Q-01**, ao ganhar os primeiros casos, reprovou dois — e nos dois a expectativa da
+  auditoria é que estava errada: opt-out não passa pelo roteador, e `wrong_person` é
+  governado pela intenção, não pelo agente.
+- A premissa de **"9 agentes em cadeia"** (ver topo) não corresponde ao código.
+
+Isso é o comportamento esperado de uma auditoria útil: ela erra, e o processo de
+corrigir revela onde. O registro fica aqui de propósito — apagar os erros tornaria o
+documento mais bonito e menos confiável.

@@ -19,6 +19,68 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
+
+/**
+ * Respostas ROTEIRIZADAS — texto fixo, escrito aqui, que pula a Supervisora.
+ *
+ * Pular a auditoria é correto para texto que nós escrevemos: não há alucinação
+ * possível num literal. O risco não é o texto de hoje, é o de amanhã — alguém
+ * acrescenta um `scripted = true` ao lado de um draft montado dinamicamente e a
+ * resposta passa a sair sem nenhuma revisão, silenciosamente.
+ *
+ * Por isso o catálogo existe e é VERIFICADO no envio (`isKnownScript`): a flag
+ * deixa de ser uma promessa e vira uma afirmação conferível. Draft marcado como
+ * roteirizado que não bate com nada daqui é tratado como texto gerado — vai para o
+ * aceno seguro e o caso é logado.
+ */
+const SCRIPTS = {
+  clarify: (greeting: string) =>
+    `${greeting}! Aqui é a Lia, do HiperTMS. ` +
+    `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`,
+  optOut:
+    'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏',
+  handoffHuman:
+    'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂',
+  supportSemCadastroComUrl: (url: string) =>
+    `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${url} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`,
+  supportSemCadastro:
+    `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`,
+} as const;
+
+/**
+ * O texto é mesmo um dos roteiros do catálogo?
+ *
+ * Comparação literal, exceto pelos dois trechos variáveis legítimos: a saudação
+ * (bom dia/boa tarde/boa noite) e a URL do playbook do tenant. A URL é comparada
+ * por FORMA, não por valor — o playbook é editável e não faz sentido replicar a
+ * validação dele aqui; o que importa é que a moldura da frase seja a nossa.
+ *
+ * Draft vazio conta como roteirizado: é o caso `wrong_person`, em que a resposta
+ * correta é silêncio (responder confirmaria o número como ativo para um spammer).
+ */
+function isKnownScript(draft: string): boolean {
+  if (!draft) return true;
+
+  const fixos: string[] = [SCRIPTS.optOut, SCRIPTS.handoffHuman, SCRIPTS.supportSemCadastro];
+  if (fixos.includes(draft)) return true;
+
+  for (const saudacao of ['Bom dia', 'Boa tarde', 'Boa noite']) {
+    if (draft === SCRIPTS.clarify(saudacao)) return true;
+  }
+
+  // Variante com URL: confere a MOLDURA e aceita qualquer URL http(s) no slot.
+  // O sentinela precisa ser um token que nao ocorra no texto do roteiro: com um
+  // espaco, o split partiria a frase em todas as palavras em vez de separar
+  // prefixo e sufixo.
+  const SLOT = '<<URL>>';
+  const [antes, depois] = SCRIPTS.supportSemCadastroComUrl(SLOT).split(SLOT);
+  if (draft.length > antes.length + depois.length && draft.startsWith(antes) && draft.endsWith(depois)) {
+    const url = draft.slice(antes.length, draft.length - depois.length);
+    return /^https?:\/\/\S+$/.test(url);
+  }
+
+  return false;
+}
 // Detecta token de handoff (Modalidade B — ADR 022)
 const HANDOFF_TOKEN_RE = /\bHANDOFF:([a-z0-9]{6,12})\b/i;
 
@@ -140,7 +202,12 @@ export class ConversationAgentService {
 
     // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
     let supervisor: SupervisorVerdict | null = null;
-    if (!scripted) {
+    // Roteiro que não bate com o catálogo é tratado como texto GERADO e vai para a
+    // auditoria. Sem isto ele cairia direto no aceno seguro mais adiante — seguro,
+    // porém desnecessário: a Supervisora ainda pode aprovar e o cliente recebe a
+    // resposta de verdade em vez de um "só um instante".
+    const scriptedOk = scripted && isKnownScript(draft);
+    if (!scriptedOk) {
       supervisor = await this.supervisor.review({
         customerMessage: agentMessage,
         draft,
@@ -157,7 +224,18 @@ export class ConversationAgentService {
     // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
     let autoSent = false;
     let blockedReason: string | undefined;
-    const supervisorOk = scripted || supervisor?.approved === true;
+    // `scripted` só vale se o texto REALMENTE for um dos roteiros do catálogo (a
+    // conferência acontece acima, junto com a decisão de auditar). A flag sozinha é
+    // uma promessa; conferida contra SCRIPTS, vira afirmação verificável — e um
+    // `scripted = true` novo, ao lado de um draft montado dinamicamente, deixa de
+    // pular a Supervisora em silêncio.
+    if (scripted && !scriptedOk) {
+      this.logger.warn(
+        `Draft marcado como roteirizado NÃO corresponde ao catálogo — auditado como gerado. ` +
+        `conv=${input.conversationId} intent=${route.intent} texto="${draft.slice(0, 120)}"`,
+      );
+    }
+    const supervisorOk = scriptedOk || supervisor?.approved === true;
     // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
     // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
     // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
@@ -343,16 +421,14 @@ export class ConversationAgentService {
       (route.agent === 'sales' || route.agent === 'support');
 
     if (clarify) {
-      draft =
-        `${SalesAgentService.greeting()}! Aqui é a Lia, do HiperTMS. ` +
-        `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`;
+      draft = SCRIPTS.clarify(SalesAgentService.greeting());
       suggestedAction = 'none';
       scripted = true;
       this.logger.log(`Gate de confiança acionado (confidence=${route.confidence}) → pedindo esclarecimento`);
     } else {
     switch (route.agent) {
       case 'optout':
-        draft = 'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏';
+        draft = SCRIPTS.optOut;
         suggestedAction = 'handoff_human';
         scripted = true;
         break;
@@ -367,7 +443,7 @@ export class ConversationAgentService {
           scripted = true;
           break;
         }
-        draft = 'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂';
+        draft = SCRIPTS.handoffHuman;
         suggestedAction = 'handoff_human';
         needsHuman = true;
         scripted = true;
@@ -406,9 +482,13 @@ export class ConversationAgentService {
           // Se tiver URL de contato/demo no playbook, oferece; senão orienta via Lia de Vendas.
           const pb = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } }).catch(() => null);
           const contactUrl = pb?.signupUrl?.trim();
-          draft = contactUrl
-            ? `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${contactUrl} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`
-            : `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`;
+          // Só usa a variante com link quando a URL do playbook é http(s) de verdade.
+          // `signupUrl` é campo editável do tenant: sem esta checagem, um valor
+          // qualquer entraria numa resposta que pula a Supervisora.
+          const urlValida = !!contactUrl && /^https?:\/\/\S+$/.test(contactUrl);
+          draft = urlValida
+            ? SCRIPTS.supportSemCadastroComUrl(contactUrl as string)
+            : SCRIPTS.supportSemCadastro;
           suggestedAction = 'none';
           scripted = true;
           this.logger.log('Prospect pediu suporte sem cadastro no TMS → orientação direcionada a vendas');
