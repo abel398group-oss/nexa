@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
+import { fenceUntrusted, UNTRUSTED_RULE } from '@/shared/ai/untrusted-input';
 
 export type Intent =
   | 'opt_out'
@@ -82,13 +83,17 @@ export class RouterAgentService {
       'pricing_question/interested/meeting_request = alto. support_question = cliente já existente. ' +
       'wrong_person/not_now = baixo. human_needed = pede humano/negociação complexa. ' +
       'isComplaint=true se for reclamação; complaintTopic ∈ [lentidao,bug,preco,atendimento,fiscal,outro]. ' +
-      'isAggressive=true se a mensagem for ofensiva/agressiva (xingamento, hostilidade).';
+      'isAggressive=true se a mensagem for ofensiva/agressiva (xingamento, hostilidade). ' +
+      // Sem esta frase a cerca abaixo é só enfeite — o modelo precisa saber o que ela significa.
+      UNTRUSTED_RULE;
 
     try {
       const out = await this.ai.completeJson<{
         intent: Intent; leadScore: number; confidence?: number; reason: string;
         isComplaint?: boolean; complaintTopic?: string; isAggressive?: boolean;
-      }>(system, `Mensagem do lead: "${message}"`);
+        // Cercado, não entre aspas: aspas não delimitam nada, porque quem escreve a
+        // mensagem também escreve aspas. Ver shared/ai/untrusted-input.ts.
+      }>(system, `Mensagem do lead:\n${fenceUntrusted(message)}`);
       let intent = out.intent ?? 'unknown';
       // ofensa/agressão → passa pro humano, nunca revida (G8)
       if (out.isAggressive) intent = 'human_needed';
