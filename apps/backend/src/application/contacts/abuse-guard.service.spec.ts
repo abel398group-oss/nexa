@@ -112,16 +112,29 @@ describe('AbuseGuardService.recordStrike', () => {
   });
 
   it('exatamente no limite da janela ainda soma (o corte é "maior que", não "maior ou igual")', async () => {
-    const prisma = makePrisma();
-    prisma.contactAbuseRecord.findUnique.mockResolvedValue({ strikeCount: 1, lastAt: horasAtras(24), bannedAt: null });
-    prisma.contactAbuseRecord.upsert.mockResolvedValue({ id: 'r1', strikeCount: 2, bannedAt: null });
-    const svc = new AbuseGuardService(prisma, makeAlert());
+    // Relógio congelado: `horasAtras(24)` mede a partir de Date.now() no MOMENTO
+    // do mock, e recordStrike() lê Date.now() de novo alguns ms depois — sob
+    // carga (suite inteira), essa deriva de poucos ms já empurra a diferença
+    // pra além de 24h e vira falso positivo de "janela expirada". Congelar o
+    // relógio faz o "exatamente no limite" ser exato de verdade.
+    const agoraFixo = new Date('2026-08-05T12:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(agoraFixo);
+    try {
+      const prisma = makePrisma();
+      const lastAt = new Date(agoraFixo.getTime() - 24 * HORA);
+      prisma.contactAbuseRecord.findUnique.mockResolvedValue({ strikeCount: 1, lastAt, bannedAt: null });
+      prisma.contactAbuseRecord.upsert.mockResolvedValue({ id: 'r1', strikeCount: 2, bannedAt: null });
+      const svc = new AbuseGuardService(prisma, makeAlert());
 
-    await svc.recordStrike('t1', '5511999999999', ['preco_nao_autorizado'], 'x');
+      await svc.recordStrike('t1', '5511999999999', ['preco_nao_autorizado'], 'x');
 
-    expect(prisma.contactAbuseRecord.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: expect.objectContaining({ strikeCount: 2 }) }),
-    );
+      expect(prisma.contactAbuseRecord.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ update: expect.objectContaining({ strikeCount: 2 }) }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('respeita ABUSE_STRIKE_WINDOW_HOURS customizado', async () => {
