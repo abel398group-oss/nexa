@@ -240,6 +240,39 @@ describe('ConversationAgentService.handle()', () => {
       );
     });
 
+    // seller-leads (F6+, prd.md critério "hot lead carrega assignedSellerId do
+    // vendedor notificado") — handoff roda ANTES de createFromLead de propósito,
+    // pra a oportunidade já nascer com o dono real do rodízio.
+    it('handle(): lead quente propaga o sellerId do handoff pra createFromLead', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 85 }),
+      );
+      mockSellers.handoff.mockResolvedValue({ assigned: true, sellerId: 's1', sellerName: 'Maria' });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero contratar o HiperTMS', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ assignedSellerId: 's1', assignedTo: 'Maria' }),
+      );
+    });
+
+    it('handle(): sem vendedor disponível no rodízio, createFromLead recebe assignedSellerId undefined (não vaza dono errado)', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 85 }),
+      );
+      mockSellers.handoff.mockResolvedValue({ assigned: false });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero contratar o HiperTMS', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ assignedSellerId: undefined }),
+      );
+    });
+
     it('escalateOnly(): wrong_person também não aciona vendedor (IA off)', async () => {
       mockRouter.route.mockResolvedValue(
         makeRoute({ agent: 'human', intent: 'wrong_person', leadScore: 0 }),

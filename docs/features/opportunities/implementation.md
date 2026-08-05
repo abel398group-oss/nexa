@@ -1,132 +1,87 @@
-# Implementação — Página de Oportunidades (Pipeline de Vendas)
+# Página de Oportunidades (Pipeline de Vendas) — estado atual
 
-> O backend de **Opportunities** já existe (CRUD + summary + mover estágio), mas
-> **não há tela**. Este doc especifica a `OpportunitiesPage` no frontend, consumindo
-> a API pronta — no padrão de listas do projeto (`docs/SPEC-LISTAS-FILTROS-CRUD.md`).
->
-> Escopo: **frontend do Nexa** + wiring (rota, menu, permissão). Backend **não muda**.
-> Status: pronto para revisão · 2026-06
+> Status: **implementado** · escrito como spec pré-construção em 2026-06,
+> reescrito como referência de estado atual em 2026-08-05 porque a página já
+> foi além do que a spec original descrevia (RBAC por vendedor, `paused`/
+> `discarded`, evolução semanal — nenhum desses estava aqui). Detalhe completo
+> da extensão por vendedor: `docs/features/seller-leads/prd.md`.
 
-## 1. Contexto
+## 1. O que existe
 
-Oportunidade = lead que virou negócio em andamento, com **estágios**
-`new → qualified → proposal → won/lost`. São criadas manualmente ou **a partir de
-lead quente** (`createFromLead`, ligado a uma conversa). Hoje o vendedor não tem
-onde ver/gerir esse pipeline — falta a página.
-
-## 2. Estado atual (o que JÁ existe)
-
-**Backend pronto** (`application/opportunities` + `presentation/http/opportunities`):
+**Backend** (`application/opportunities` + `presentation/http/opportunities`):
 
 | Método | Rota | O que faz |
 |---|---|---|
 | `GET` | `/opportunities?limit&offset&search&stage` | lista (busca por nome/empresa/telefone; filtro por estágio; paginação) → `{ items, total }` |
 | `GET` | `/opportunities/summary` | `[{ stage, count, value }]` — total e valor por estágio |
+| `GET` | `/opportunities/evolution?weeks=N` | série semanal `{ weekStart, received, won }`, até 26 semanas |
 | `GET` | `/opportunities/:id` | detalhe + `stageHistory` (histórico de mudança de estágio) |
-| `POST` | `/opportunities` | cria (campos abaixo; `stage` default `new`) |
+| `POST` | `/opportunities` | cria (`stage` default `new`) |
 | `PATCH` | `/opportunities/:id` | edita os campos (**mudança de estágio é ignorada aqui**) |
-| `PATCH` | `/opportunities/:id/stage` | move de estágio `{ stage, reason? }` → grava histórico |
+| `PATCH` | `/opportunities/:id/stage` | move de estágio `{ stage, reason?, pausedUntil?, discardReason? }` → grava histórico |
 | `DELETE` | `/opportunities/:id` | exclui |
 
-- Guard: `JwtAuthGuard + PermissionsGuard`, **`@RequirePerm('opportunities')`** (admin passa).
-- Estágios: `OPP_STAGES = ['new','qualified','proposal','won','lost']`.
+- Guard: `JwtAuthGuard + PermissionsGuard`, `@RequirePerm('opportunities')` (admin passa sempre).
+- **Estágios:** `new`, `qualified`, `proposal`, `paused`, `won`, `lost`, `discarded`
+  (`OPP_STAGES`, `opportunities.service.ts:7`). Estágio é `TEXT` no banco por
+  design — sem migration de enum a cada estágio novo.
+- **Escopo por vendedor (F6+):** toda query aceita `sellerScope`. O controller
+  deriva do JWT — role `vendedor` → `user.sellerId` (sem `sellerId` → escopo
+  `__none__`, não bate com nada, nunca vaza). Outras roles veem tudo.
+- **`paused`:** aceita `pausedUntil` opcional (data pra retomar).
+- **`discarded`:** exige `discardReason` válido (`sem_fit`, `sem_resposta`,
+  `concorrente`, `outro`) — **obrigatório desde 2026-08-05** (era opcional;
+  achado de revisão externa, ver `docs/reviews/2026-08-04-auditoria-arquitetura-seguranca.md`).
 - Campos da oportunidade: `name`, `company`, `phone`, `contactId`, `conversationId`,
-  `stage`, `interestScore`, `intent`, `summary`, `value` (Decimal), `assignedTo`,
-  `createdAt`, `updatedAt`, `stageHistory`.
+  `stage`, `interestScore`, `intent`, `summary`, `value` (Decimal), `assignedTo`
+  (texto livre, legado), `assignedSellerId` (FK real, fonte da verdade),
+  `pausedUntil`, `discardReason`, `createdAt`, `updatedAt`, `stageHistory`.
+- Criação automática (`createFromLead`): idempotente por `conversationId`
+  (fallback por `contactId`, só contra estágios ainda abertos — nunca revive
+  `won`/`lost`/`discarded`). Disparada em lead quente (`leadScore ≥ 70` ou
+  `intent === 'meeting_request'`); o handoff pro vendedor roda ANTES da
+  criação, então `assignedSellerId` já nasce com o dono real do rodízio
+  (`conversation-agent.service.ts:786-808`).
 
-**Frontend:** não existe `OpportunitiesPage`, rota nem item de menu.
+**Frontend** (`apps/frontend/src/pages/OpportunitiesPage.tsx`):
 
-## 3. Mudanças por camada (Frontend + wiring)
+- Cards de resumo (`KpiCard`) por estágio, alimentados por `/opportunities/summary`.
+- Gráfico de evolução semanal (recharts, carregado em chunk assíncrono —
+  `OpportunitiesEvolutionChart.tsx`), alimentado por `/opportunities/evolution`.
+- Lista via `StandardListPage`/`DataTable` — busca (debounce), filtro por
+  estágio, paginação.
+- Mudança de estágio **inline por `Select`** na linha — não é drag-and-drop
+  (Kanban arrastável segue fora de escopo, ver `seller-leads/prd.md`).
+- Mover para `paused`/`discarded` abre um modal dedicado que coleta
+  `pausedUntil`/`discardReason` antes do PATCH — o botão "Descartar" fica
+  desabilitado até um motivo ser escolhido (reforçado 2026-08-05 junto da
+  obrigatoriedade no backend).
+- Sair de `won`/`lost` (estágios finais) pelo dropdown pede confirmação —
+  evita reabrir um negócio fechado com um clique errado.
+- Criar/editar via modal (`POST`/`PATCH /:id`); excluir com `useConfirm()`.
+- Rota `/opportunities` protegida por `Perm perm="opportunities"`
+  (`app/App.tsx`); item de menu no grupo Vendas (`components/Layout.tsx`).
 
-### 3.1. Página `apps/frontend/src/pages/OpportunitiesPage.tsx`
+## 2. Casos de borda já tratados
 
-Seguir o **padrão canônico de listas** (referência: `ContactsPage`/`CampaignsPage`,
-`docs/SPEC-LISTAS-FILTROS-CRUD.md` §4) + uma faixa de **resumo do pipeline**:
+- `value` nulo exibido como "—", não R$ 0,00 forçado.
+- Estágio inválido: backend rejeita com 400; a UI só oferece os 7 válidos.
+- Sem a permissão `opportunities`: rota redireciona ao fallback (`/inbox`).
+- Vendedor sem `sellerId` cadastrado: escopo `__none__`, lista sempre vazia
+  (nunca cai para "ver tudo" por engano).
 
-- **Resumo (topo):** cards por estágio com `count` e `value`, alimentados por
-  `GET /opportunities/summary` (5 cards: Novo, Qualificado, Proposta, Ganho, Perdido).
-- **Lista:** tabela com colunas `name`/`company`, `phone`, `stage` (badge),
-  `interestScore`, `value`, `assignedTo`, `updatedAt`.
-  - **Busca** (debounce) → `?search=`.
-  - **Filtro por estágio** (`Select`) → `?stage=`.
-  - **Paginação** (`limit/offset`, padrão `CampaignsPage`).
-- **Criar/Editar:** mesmo `Modal` (modo create/edit) → `POST` / `PATCH /:id`.
-  Form com os campos editáveis (name, company, phone, value, interestScore, summary,
-  assignedTo). **Não** editar `stage` por aqui (a mudança de estágio é só pelo `/stage`).
-- **Mover estágio:** ação dedicada (Select inline na linha ou no detalhe) →
-  `PATCH /:id/stage { stage, reason? }`. Atualiza o resumo após mover.
-- **Excluir:** `useConfirm()` + `DELETE /:id` + toast.
-- **Detalhe (opcional, fase 2):** painel/rota `/opportunities/:id` mostrando dados +
-  `stageHistory` (timeline de mudanças de estágio).
-- Estados `EmptyState`/`LoadingState`/`ErrorState`; ações de escrita gated por permissão.
-- Componentes do design system (`Table`, `Select`, `Modal`, `Badge`/`StatusBadge`,
-  `Pagination`, `Button`, `Card`), `useConfirm`/`useToast`.
+## 3. Fora de escopo (ainda)
 
-> **Estágio como badge:** reaproveitar/estender o mapa de cores tipo
-> `conversation-status.ts` para os 5 estágios (sugestão: new=cinza, qualified=azul,
-> proposal=âmbar, won=verde, lost=vermelho). Centralizar num helper, não espalhar.
+- Kanban com drag-and-drop entre colunas (hoje é dropdown por linha).
+- Retomada automática de lead pausado quando `pausedUntil` vence (hoje é manual).
+- Dashboard comparativo entre vendedores (hoje cada um vê só o próprio funil;
+  visão agregada existe no `DashboardPage` geral, não aqui).
 
-### 3.2. Rota — `apps/frontend/src/App.tsx`
-
-Dentro da área protegida (lazy import + `Perm`):
-
-```tsx
-const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m) => ({ default: m.OpportunitiesPage })));
-// ...
-<Route path="/opportunities" element={<Perm perm="opportunities"><OpportunitiesPage /></Perm>} />
-```
-
-### 3.3. Menu — `apps/frontend/src/components/Layout.tsx`
-
-Adicionar item no grupo **Vendas** do `NAV_GROUPS` (junto de Inbox de Vendas,
-Contatos, Disparo, Vendedores, Playbook):
-
-```tsx
-{ to: '/opportunities', label: 'Oportunidades', ic: 'dollar', perm: 'opportunities' },
-```
-
-(usar um ícone existente em `icons.tsx` — ex.: `dollar`/`trophy`; conferir o set.)
-
-### 3.4. Permissão `opportunities`
-
-- O backend exige `@RequirePerm('opportunities')` (admin passa sempre).
-- Garantir que a permissão **`opportunities`** exista na lista de permissões
-  atribuíveis a perfis/usuários (tela de Usuários) — senão só o admin enxerga.
-
-### 3.5. Cliente HTTP
-
-Chamadas via `lib/api` (axios, base `/api`). Cuidado com `value` (Decimal vem como
-string/number no JSON) — formatar como moeda (R$) na UI e enviar número no payload.
-
-## 4. Ordem de implementação
-
-1. Página com **lista + busca + filtro de estágio + paginação** + cards de resumo.
-2. **Criar/editar** (modal) + **excluir** (confirm).
-3. **Mover estágio** (`/stage`) com atualização do resumo.
-4. Rota + item de menu + permissão.
-5. (Fase 2) Detalhe com `stageHistory`; (fase 3) visão **Kanban** arrastando entre
-   colunas (cada drop = `PATCH /:id/stage`).
-
-## 5. Critérios de aceite
-
-- [ ] `/opportunities` lista as oportunidades do tenant com busca, filtro por estágio e paginação.
-- [ ] Cards de resumo mostram `count` e `value` por estágio (de `/summary`).
-- [ ] Criar/editar/excluir funcionam; editar **não** muda estágio.
-- [ ] Mover estágio usa `PATCH /:id/stage` e o resumo reflete a mudança.
-- [ ] Item de menu só aparece para quem tem a permissão `opportunities` (admin sempre).
-- [ ] `value` exibido como moeda; estados vazio/carregando/erro presentes.
-
-## 6. Casos de borda
-
-- **Oportunidade criada de lead** (`createFromLead`, via conversa): aparece com
-  `conversationId`/`contactId` — oferecer link para a conversa de origem (fase 2).
-- **`value` nulo:** exibir "—" (não R$ 0,00 forçado).
-- **Estágio inválido:** o backend rejeita (400) fora de `OPP_STAGES`; a UI só oferece os 5.
-- **Permissão ausente:** sem `opportunities`, a rota redireciona ao fallback (`/inbox`).
-
-## 7. Relacionados
+## 4. Relacionados
 
 - Backend: `application/opportunities/opportunities.service.ts` +
   `presentation/http/opportunities/opportunities.controller.ts`.
-- Padrão de lista: `docs/SPEC-LISTAS-FILTROS-CRUD.md` · referência `CampaignsPage`/`ContactsPage`.
-- `docs/architecture/frontend-architecture.md` · `docs/api/api-standards.md`.
+- Extensão por vendedor (RBAC, `paused`/`discarded`, evolução): `docs/features/seller-leads/prd.md`.
+- Padrão de lista: `docs/SPEC-LISTAS-FILTROS-CRUD.md`.
+- Testes: `opportunities.service.spec.ts` (15 casos), `conversation-agent.service.spec.ts`
+  (criação automática + propagação de `assignedSellerId`).
