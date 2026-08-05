@@ -57,7 +57,7 @@ it's considered done.
 |----|------|-------|----------|----------|
 | §1 | nexa | `case-classifier-agent.service.ts:87`, `escalation-agent.service.ts:27` | High | **Fixed** |
 | §2 | tms | `usePortalSession.ts`, `SupportDrawer.tsx:699-721` | ~~High~~ | **Not a bug — see below** |
-| §3 | nexa | `ticket-intelligence.service.ts:159-167` | High | **Fixed (partial — see below)** |
+| §3 | nexa | `ticket-intelligence.service.ts:159-167` | High | **Fixed (full — semantic matching added same day)** |
 | §4 | nexa | `portal-tickets.service.ts:182-207` | High | **Fixed** |
 | §5 | nexa | `portal-tickets.service.ts` (`ensureContact`) | Medium | **Fixed** |
 | §6 | nexa | `ticket-intelligence.service.ts:70-91` | Medium | **Fixed** |
@@ -169,17 +169,39 @@ titles, and the second one was silently swallowed as a false "duplicate."
 
 5 tests added in `ticket-intelligence.service.spec.ts`.
 
-**What was deliberately NOT done.** True paraphrase matching — "certificado
-vencido" vs "o certificado expirou ontem" are still counted as different
-causes. Fixing that properly needs either a stable `rootCauseKey` from a fixed
-vocabulary (schema migration + prompt change to the diagnostic agent) or
-semantic similarity via the embeddings this repo already has wired up for the
-knowledge base (`KnowledgeService`, already injected into this same service).
-Both are real, larger changes with their own tradeoffs (vocabulary curation,
-or similarity-threshold tuning) — deliberately left out of this pass rather
-than decided unilaterally under a "fix what's necessary" instruction on a
-system already in production. Worth a dedicated follow-up if D1-A's output
-still looks too sparse after this fix lands.
+**Update 2026-08-05 (later same day) — full fix shipped.** Approved
+explicitly by Abel after a walkthrough of the two options (fixed vocabulary
+vs. semantic similarity). Went with semantic similarity, reusing this repo's
+own established pattern instead of inventing a new one:
+
+- New nullable column `AiConversation.rootCauseEmbedding` (`vector(384)`,
+  same type as `AiKnowledgeBase.embedding`) — migration
+  `20260805210000_ticket_root_cause_embedding`, additive only, no backfill
+  (populated lazily as tickets are analyzed, same "no fabricated history"
+  principle as the rest of this plan).
+- `detectRecurrence` now also embeds the current ticket's `rootCause`
+  (`EmbeddingsService.embed(..., 'passage')`, e5-small — identical call shape
+  to `KnowledgeService.storeEmbedding`), stores the vector, and queries other
+  tickets in the window above a cosine-similarity threshold
+  (`TICKET_ROOT_CAUSE_SIMILARITY`, default 0.88, env-tunable — no real
+  production data existed to calibrate against, so it starts conservative:
+  fewer false "recurring" flags, at the cost of possibly missing some real
+  ones early on).
+- Exact match (part 1, same day) and semantic match results are combined as a
+  **set of matched IDs**, not summed — a ticket that matches both ways must
+  not be counted twice.
+- Fully additive to the failure mode: if embeddings are disabled or the
+  embedding call fails, the exact-match result from part 1 is used exactly as
+  before — this can only find *more* recurrences than before, never fewer,
+  and never breaks if the embeddings service is unavailable.
+- `EmbeddingsService` is `@Global()` (same as `RedisLockService`) — no module
+  wiring needed beyond the constructor.
+
+9 tests added covering: embeddings-disabled preserves old behavior exactly,
+the embedding gets stored, semantic matches add to the exact count, a ticket
+matching both ways is deduplicated (asserted via the exact count shown in the
+notification, not just "was called"), and a failed embedding call degrades to
+the part-1 behavior without crashing.
 
 ---
 
@@ -358,22 +380,61 @@ error, it cleanly returns 401 like any other wrong token.
 
 ## Status — 2026-08-05
 
-All 9 items resolved: §1, §3, §4, §5, §6, §7, §8, §9 fixed and tested (36
-tests added/updated across nexa + tms); §2 investigated and found not to be a
-real bug (see its section — the original diagnosis didn't survive a full read
-of the effect chain). §0 (the finding that started this pass) shipped
-earlier. Nothing outside the documented scope of each item was touched.
+All 9 original items resolved: §1, §3, §4, §5, §6, §7, §8, §9 fixed and
+tested; §2 investigated and found not to be a real bug (see its section — the
+original diagnosis didn't survive a full read of the effect chain). §0 (the
+finding that started this pass) shipped earlier. One more item (§10, below)
+was added afterward — one of the two follow-ups flagged as "noticed but not
+folded in," explicitly approved and implemented in a later pass. 40 tests
+added/updated across nexa + tms.
+
+### §10 — Session-expiry errors failing silently in the reply flow, fixed
+
+**Repo:** tms. **Where:** `SupportDrawer.tsx` (`handleSelectTicket`,
+`handleReply`, `MessageThread.handleSend`).
+
+**What this is.** Noticed while confirming §2, deliberately not folded into
+this plan at the time — approved and done in a follow-up pass, not bundled
+into the original 9 without sign-off.
+
+**Confirmed.** `handleSelectTicket` caught every error (including a 401 from
+an expired session) and silently rendered an empty ticket shell, never
+calling `resetSession()` — so a dead session kept being reused on every
+following action. `handleReply` had no try/catch at all — an error (401 or
+otherwise) became an unhandled rejection. `MessageThread.handleSend` (the
+caller of `handleReply`) also had no `catch` — `sending` correctly reset via
+`finally`, but nothing told the customer the send failed, and the typed
+message stayed in the box with zero feedback.
+
+**Fix.** All three now distinguish a 401 from any other error:
+- `handleSelectTicket`: 401 → `resetSession()` (self-heals per §2's traced
+  effect chain) instead of the old empty-ticket fallback; any other error
+  keeps the exact old fallback behavior.
+- `handleReply`: 401 → `resetSession()` + throws a clear "sua sessão expirou,
+  reconectando" message; any other error → throws a generic clear message.
+  Both replace what used to be either a raw unhandled rejection or (for 401)
+  nothing at all.
+- `MessageThread.handleSend`: new `sendError` state, set in a `catch` around
+  `onReply`, rendered inline next to the input using this file's existing
+  error-text style (`text-xs text-destructive`, already used for the "abrir
+  chamado" form's own error).
+
+7 tests added in `SupportDrawer.test.tsx`: 401 on select (reauth, no empty
+ticket), 401 on reply (reauth + message shown), and a non-401 reply error
+(message shown, no reauth) — plus confirmation the existing T1/T2 suites
+(none of which simulate a rejection) are unaffected.
+
+## Earlier status note (superseded by the section above)
 
 **Not yet done, by design:**
 - **Build/test verification.** Nothing here ran in the sandbox — the backend
   doesn't build there (symlink issue) and this pass touched two repos. Before
   calling this done: `pnpm test:backend` + `cd apps/backend ; pnpm build` in
-  nexa; `pnpm --filter api test` + `pnpm --filter api build` in hipervias_v12.
-- **§3's full fix** (semantic root-cause matching) — deliberately left as a
-  flagged follow-up, not decided unilaterally.
+  nexa (**now also needs `pnpm prisma:generate` for the new migration —
+  backend must be stopped first on Windows, see CLAUDE.md**);
+  `pnpm --filter api test` + `pnpm --filter api build`, `pnpm --filter web
+  test` in hipervias_v12.
+- **§3's full fix** — done later the same day, approved explicitly. See §3's
+  own section above for what shipped.
 - **§7's originally-proposed shared-context refactor** — superseded by a
   smaller fix; the context approach was never built, on purpose (see §7).
-- Two smaller issues noticed while confirming §2 and §3, not folded into this
-  plan without separate sign-off: session-loss handling in `handleReply`/
-  `handleSelectTicket` (SupportDrawer.tsx), and the `KnowledgeService`-backed
-  semantic matching option for recurrence detection.

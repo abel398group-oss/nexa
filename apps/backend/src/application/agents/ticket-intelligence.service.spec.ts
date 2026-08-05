@@ -8,14 +8,19 @@ import { TicketIntelligenceService } from './ticket-intelligence.service';
 
 function makeDeps() {
   const prisma = {
-    aiConversation: { count: vi.fn().mockResolvedValue(0), findMany: vi.fn().mockResolvedValue([]) },
+    aiConversation: { findMany: vi.fn().mockResolvedValue([]) },
     notification: { findFirst: vi.fn().mockResolvedValue(null) },
+    $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
   } as any;
   const notifications = { create: vi.fn().mockResolvedValue({}) } as any;
   const knowledge = {} as any;
   const ai = {} as any;
   const lock = { acquire: vi.fn().mockResolvedValue(vi.fn().mockResolvedValue(undefined)) } as any;
-  return { prisma, notifications, knowledge, ai, lock };
+  // Default: embeddings desligado — testes de comparação exata ficam isolados
+  // da parte semântica, que tem seu próprio describe block mais abaixo.
+  const embeddings = { enabled: false, embed: vi.fn() } as any;
+  return { prisma, notifications, knowledge, ai, lock, embeddings };
 }
 
 // Ticket "neutro": não aciona D1-A/B/C/D, só serve pra popular o lote do §6.
@@ -43,7 +48,7 @@ function makeTicket(overrides: Partial<any> = {}) {
 }
 
 function makeService(deps: ReturnType<typeof makeDeps>) {
-  return new TicketIntelligenceService(deps.prisma, deps.notifications, deps.knowledge, deps.ai, deps.lock);
+  return new TicketIntelligenceService(deps.prisma, deps.notifications, deps.knowledge, deps.ai, deps.lock, deps.embeddings);
 }
 
 describe('TicketIntelligenceService — §3 detectRecurrence', () => {
@@ -55,17 +60,20 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
     svc = makeService(deps);
   });
 
-  it('conta recorrência com comparação case-insensitive e valor aparado', async () => {
-    deps.prisma.aiConversation.count.mockResolvedValue(2); // +1 (atual) = 3 = threshold default
+  // Helper: N tickets "batendo" na busca exata (cada um só precisa de um id único).
+  const exactMatches = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `match-${i}` }));
+
+  it('busca recorrência com comparação case-insensitive e valor aparado', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue(exactMatches(2)); // +1 (atual) = 3 = threshold default
 
     await svc.analyze(makeTicket({ rootCause: '  Certificado Vencido  ' }));
 
-    const query = deps.prisma.aiConversation.count.mock.calls[0][0];
+    const query = deps.prisma.aiConversation.findMany.mock.calls[0][0];
     expect(query.where.rootCause).toEqual({ equals: 'Certificado Vencido', mode: 'insensitive' });
   });
 
   it('não cria notificação quando a contagem fica abaixo do limiar', async () => {
-    deps.prisma.aiConversation.count.mockResolvedValue(1); // +1 = 2 < 3
+    deps.prisma.aiConversation.findMany.mockResolvedValue(exactMatches(1)); // +1 = 2 < 3
 
     await svc.analyze(makeTicket());
 
@@ -73,7 +81,7 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
   });
 
   it('dedup busca pelo trecho da causa-raiz no corpo, não pelo título com contagem', async () => {
-    deps.prisma.aiConversation.count.mockResolvedValue(2);
+    deps.prisma.aiConversation.findMany.mockResolvedValue(exactMatches(2));
 
     await svc.analyze(makeTicket({ rootCause: 'Certificado digital vencido' }));
 
@@ -83,7 +91,7 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
   });
 
   it('não duplica quando já existe notificação recente para a mesma causa (dedup real)', async () => {
-    deps.prisma.aiConversation.count.mockResolvedValue(2);
+    deps.prisma.aiConversation.findMany.mockResolvedValue(exactMatches(2));
     deps.prisma.notification.findFirst.mockResolvedValue({ id: 'notif-existing' });
 
     await svc.analyze(makeTicket());
@@ -92,7 +100,7 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
   });
 
   it('cria notificação com o snippet da causa no corpo quando o limiar é atingido', async () => {
-    deps.prisma.aiConversation.count.mockResolvedValue(2);
+    deps.prisma.aiConversation.findMany.mockResolvedValue(exactMatches(2));
 
     await svc.analyze(makeTicket({ rootCause: 'Certificado digital vencido', ticketCategory: 'fiscal' }));
 
@@ -103,6 +111,83 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
         body: expect.stringContaining('Certificado digital vencido'),
       }),
     );
+  });
+});
+
+// §3 parte 2 (conserto completo, 2026-08-05): comparação SEMÂNTICA — pega
+// causas descritas com palavras diferentes, que a comparação exata nunca pegaria.
+describe('TicketIntelligenceService — §3 parte 2 (comparação semântica)', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: TicketIntelligenceService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    deps.embeddings.enabled = true;
+    deps.embeddings.embed = vi.fn().mockResolvedValue([0.1, 0.2, 0.3]); // vetor fake — conteúdo não importa pro teste
+    svc = makeService(deps);
+  });
+
+  it('com embeddings desligado, não tenta comparação semântica (só a exata roda)', async () => {
+    deps.embeddings.enabled = false;
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+
+    await svc.analyze(makeTicket());
+
+    expect(deps.embeddings.embed).not.toHaveBeenCalled();
+    expect(deps.prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it('grava o embedding do ticket atual (fica pronto pra comparar com tickets futuros)', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+    deps.prisma.$queryRawUnsafe.mockResolvedValue([]);
+
+    await svc.analyze(makeTicket({ id: 'conv-9', rootCause: 'Certificado vencido' }));
+
+    expect(deps.prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE ai_conversations SET root_cause_embedding'),
+      expect.any(String),
+      'conv-9',
+    );
+  });
+
+  it('soma matches semânticos aos exatos (sem contar o mesmo ticket duas vezes)', async () => {
+    // exato: nenhum bateu (causas com palavras diferentes)
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+    // semântico: 2 tickets diferentes bateram por similaridade
+    deps.prisma.$queryRawUnsafe.mockResolvedValue([{ id: 'sem-1' }, { id: 'sem-2' }]);
+
+    await svc.analyze(makeTicket({ rootCause: 'o certificado da empresa expirou ontem' }));
+
+    // +1 (atual) + 2 semânticos = 3 = threshold default → deve notificar
+    expect(deps.notifications.create).toHaveBeenCalled();
+  });
+
+  it('não conta duas vezes um ticket que bate tanto na busca exata quanto na semântica', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([{ id: 'dup-1' }]); // 1 exato
+    deps.prisma.$queryRawUnsafe.mockResolvedValue([{ id: 'dup-1' }, { id: 'sem-2' }]); // mesmo id + 1 novo
+
+    await svc.analyze(makeTicket());
+
+    // union = {dup-1, sem-2} → 2 únicos + 1 (atual) = 3× — se contasse
+    // duplicado (soma ingênua 1+2), daria 4×. O número no título prova qual
+    // dos dois o código realmente fez.
+    expect(deps.notifications.create).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ title: expect.stringContaining('3×') }),
+    );
+  });
+
+  it('se a comparação semântica falhar, usa só o resultado da exata (nunca pior que antes)', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue(
+      Array.from({ length: 2 }, (_, i) => ({ id: `match-${i}` })),
+    );
+    deps.embeddings.embed = vi.fn().mockRejectedValue(new Error('modelo indisponível'));
+    const warnSpy = vi.spyOn((svc as any).logger, 'warn');
+
+    await svc.analyze(makeTicket()); // 2 exatos + 1 atual = 3 = threshold
+
+    expect(deps.notifications.create).toHaveBeenCalled(); // não quebrou, seguiu com o que tinha
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('comparação semântica falhou'));
   });
 });
 

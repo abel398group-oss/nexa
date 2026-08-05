@@ -18,6 +18,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
+import { EmbeddingsService } from '@/shared/ai/embeddings.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 
 // Quantas ocorrências do mesmo rootCause (nos últimos WINDOW_DAYS) disparam o alerta.
@@ -35,6 +36,14 @@ const LOOK_BACK_HOURS = 2;
 // — só limitamos e avisamos se o teto for atingido, em vez de crescer sem fim
 // em silêncio.
 const MAX_TICKETS_PER_RUN = Number(process.env.TICKET_INTELLIGENCE_MAX_PER_RUN ?? 500);
+
+// §3 (auditoria de suporte, 2026-08-05, conserto completo): limiar de
+// similaridade de cosseno (0–1) pra considerar duas causas-raiz "o mesmo
+// problema" mesmo com palavras diferentes. Sem dado real de produção pra
+// calibrar — começa conservador (menos falso positivo, ao custo de talvez
+// perder alguma recorrência de verdade) e é ajustável por env sem deploy de
+// código enquanto não houver histórico suficiente pra calibrar direito.
+const ROOT_CAUSE_SIMILARITY_THRESHOLD = Number(process.env.TICKET_ROOT_CAUSE_SIMILARITY ?? 0.88);
 
 type TicketRow = {
   id: string;
@@ -58,6 +67,7 @@ export class TicketIntelligenceService {
     private readonly knowledge: KnowledgeService,
     private readonly ai: AnthropicService,
     private readonly lock: RedisLockService,
+    private readonly embeddings: EmbeddingsService,
   ) {}
 
   // ── @Interval: analisa tickets fechados nas últimas LOOK_BACK_HOURS ────────
@@ -172,21 +182,65 @@ export class TicketIntelligenceService {
       Date.now() - RECURRENCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
 
-    // §3 (auditoria de suporte, 2026-08-05): case-insensitive — a IA varia
-    // maiúscula/minúscula na mesma causa-raiz entre chamadas ("Certificado
-    // vencido" vs "certificado vencido"), e igualdade exata de string fazia a
-    // recorrência quase nunca bater. Não resolve paráfrase (causa igual
-    // descrita com palavras totalmente diferentes) — isso exigiria comparação
-    // semântica (embeddings), fora do escopo deste ajuste pontual.
-    const count = await this.prisma.aiConversation.count({
+    const trimmedCause = rootCause.trim();
+
+    // §3 parte 1 (2026-08-05): case-insensitive — a IA varia maiúscula/minúscula
+    // na mesma causa-raiz entre chamadas ("Certificado vencido" vs "certificado
+    // vencido"), e igualdade exata de string fazia a recorrência quase nunca
+    // bater. Roda sempre, não depende de embeddings estarem disponíveis.
+    const exactMatches = await this.prisma.aiConversation.findMany({
       where: {
         tenantId,
-        rootCause: { equals: rootCause.trim(), mode: 'insensitive' },
+        rootCause: { equals: trimmedCause, mode: 'insensitive' },
         id: { not: conversationId },
         ticketCategory: { not: null },
         createdAt: { gte: windowStart },
       } as any,
+      select: { id: true },
     });
+    const matchedIds = new Set(exactMatches.map((m: any) => m.id as string));
+
+    // §3 parte 2 (conserto completo, 2026-08-05): comparação SEMÂNTICA — pega
+    // causas descritas com palavras diferentes ("certificado vencido" vs "o
+    // certificado da empresa expirou ontem"), que a comparação exata acima
+    // nunca pegaria. Mesmo padrão de storeEmbedding()/retrieve() em
+    // knowledge.service.ts (pgvector + e5-small). Grava o vetor deste ticket
+    // de passagem — fica pronto pra comparação de tickets futuros na mesma
+    // janela. Só roda se embeddings estiver disponível; se não estiver (ou
+    // falhar), o resultado já calculado pela comparação exata continua valendo
+    // — nunca pior que antes deste conserto.
+    if (this.embeddings.enabled) {
+      try {
+        const vec = await this.embeddings.embed(trimmedCause, 'passage');
+        if (vec) {
+          const lit = EmbeddingsService.toVectorLiteral(vec);
+          await this.prisma
+            .$executeRawUnsafe(
+              `UPDATE ai_conversations SET root_cause_embedding = $1::vector WHERE id = $2`,
+              lit,
+              conversationId,
+            )
+            .catch((e: any) => this.logger.warn(`detectRecurrence: falha ao gravar embedding (${e?.message})`));
+
+          const semanticMatches = (await this.prisma.$queryRawUnsafe(
+            `SELECT id FROM ai_conversations
+               WHERE tenant_id = $2 AND id != $3 AND ticket_category IS NOT NULL
+                 AND created_at >= $4 AND root_cause_embedding IS NOT NULL
+                 AND 1 - (root_cause_embedding <=> $1::vector) >= $5`,
+            lit,
+            tenantId,
+            conversationId,
+            windowStart,
+            ROOT_CAUSE_SIMILARITY_THRESHOLD,
+          )) as { id: string }[];
+          semanticMatches.forEach((m) => matchedIds.add(m.id));
+        }
+      } catch (e: any) {
+        this.logger.warn(`detectRecurrence: comparação semântica falhou (${e?.message}) — usando só a exata`);
+      }
+    }
+
+    const count = matchedIds.size;
 
     // Inclui o ticket atual: se total >= THRESHOLD, alerta
     if (count + 1 < RECURRENCE_THRESHOLD) return;

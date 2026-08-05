@@ -248,6 +248,11 @@ model AiConversation {
   ticketCategory   String?   @map("ticket_category") // fiscal | cte | mdfe | frete | financeiro | ...
   ticketPriority   String?   @map("ticket_priority") // critical | high | medium | low
   rootCause        String?   @map("root_cause") // causa-raiz classificada pelo DiagnosticAgent
+  // §3 (auditoria de suporte, 2026-08-05): vetor semântico do rootCause, gravado sob
+  // demanda pelo TicketIntelligenceService na primeira vez que o ticket é analisado —
+  // permite achar recorrência mesmo quando a IA descreve a mesma causa com palavras
+  // diferentes (mesmo padrão de storeEmbedding() em knowledge.service.ts).
+  rootCauseEmbedding Unsupported("vector(384)")? @map("root_cause_embedding")
   followUpOfId     String?   @map("follow_up_of_id") // N1: id do chamado anterior que originou este follow-up
   csatScore        Int?      @map("csat_score")    // N2: nota de satisfação 1–5 enviada pelo cliente
   csatComment      String?   @map("csat_comment")  // N2: comentário opcional do CSAT
