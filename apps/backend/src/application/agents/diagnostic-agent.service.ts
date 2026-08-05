@@ -12,6 +12,15 @@ export interface DiagnosticResult {
   needsMoreInfo: boolean;             // precisa de mais dados do cliente
   questionsToAsk: string[];           // perguntas pendentes
   confidence: 'high' | 'low';
+  /**
+   * TMS indisponível (disjuntor aberto) — leitura falhou por instabilidade, não
+   * porque o dado não existe. Campo de primeira classe de propósito: enquanto
+   * vivia só dentro de `diagnosticData`, o ResolutionAgent (que lê apenas
+   * rootCause/suggestedAction) nunca ficava sabendo, e o cliente recebia uma
+   * escalação comum em vez de "o sistema está instável, tente em alguns
+   * minutos" — exatamente o que a correção original queria evitar.
+   */
+  tmsUnstable: boolean;
 }
 
 @Injectable()
@@ -141,8 +150,10 @@ Mensagem atual: ${input.message}`;
     try {
       const text = await this.ai.complete(system, userMsg, { maxTokens: 450 });
       const clean = text.replace(/```(?:json)?/g, '').trim();
-      const parsed = JSON.parse(clean) as Omit<DiagnosticResult, 'diagnosticData'>;
-      return { ...parsed, diagnosticData };
+      const parsed = JSON.parse(clean) as Omit<DiagnosticResult, 'diagnosticData' | 'tmsUnstable'>;
+      // tmsUnstable vem do código, nunca do modelo — é fato observado no
+      // disjuntor, não opinião da IA.
+      return { ...parsed, diagnosticData, tmsUnstable };
     } catch (err: any) {
       this.logger.warn(`Diagnóstico falhou (${err?.message})`);
       return {
@@ -153,6 +164,7 @@ Mensagem atual: ${input.message}`;
         needsMoreInfo: true,
         questionsToAsk: ['Pode me dar mais detalhes sobre o problema?'],
         confidence: 'low',
+        tmsUnstable,
       };
     }
   }

@@ -25,6 +25,7 @@ function diag(overrides: Partial<DiagnosticResult> = {}): DiagnosticResult {
     needsMoreInfo: false,
     questionsToAsk: [],
     confidence: 'high',
+    tmsUnstable: false,
     ...overrides,
   };
 }
@@ -146,5 +147,42 @@ describe('ResolutionAgentService', () => {
 
     expect(result.resolved).toBe(false);
     expect(result.confidence).toBe('low');
+  });
+
+  // ─── TMS instável (2026-08-05) ────────────────────────────────────────────
+  // Antes o flag morria no diagnóstico e o cliente recebia escalação comum —
+  // podendo entender que o documento/contrato dele não existe.
+
+  it('instrui a avisar da instabilidade quando o TMS está fora', async () => {
+    const ai = mockAi(aiJson({}));
+    const knowledge = mockKnowledge([]);
+    const playbook = mockPlaybook('');
+    const svc = new ResolutionAgentService(ai, knowledge, playbook);
+
+    await svc.resolve({ ...baseInput, diagnostic: diag({ tmsUnstable: true }) });
+
+    const userMsg = ai.complete.mock.calls[0][1] as string;
+    expect(userMsg).toContain('SISTEMA INSTÁVEL');
+    expect(userMsg).toContain('NUNCA afirme que o documento');
+  });
+
+  it('TMS normal: nenhum aviso de instabilidade no prompt', async () => {
+    const ai = mockAi(aiJson({}));
+    const svc = new ResolutionAgentService(ai, mockKnowledge([]), mockPlaybook(''));
+
+    await svc.resolve(baseInput);
+
+    expect(ai.complete.mock.calls[0][1] as string).not.toContain('SISTEMA INSTÁVEL');
+  });
+
+  it('IA fora do ar + TMS instável: fallback fala da instabilidade, não de "não sei resolver"', async () => {
+    const ai = { complete: vi.fn().mockRejectedValue(new Error('AI fora')) } as any;
+    const svc = new ResolutionAgentService(ai, mockKnowledge([]), mockPlaybook(''));
+
+    const r = await svc.resolve({ ...baseInput, diagnostic: diag({ tmsUnstable: true }) });
+
+    expect(r.draft).toContain('instabilidade');
+    expect(r.draft).not.toContain('Não consegui identificar a solução');
+    expect(r.resolved).toBe(false);
   });
 });

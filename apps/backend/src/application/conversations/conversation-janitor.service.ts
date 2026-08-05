@@ -34,12 +34,24 @@ import { RedisLockService } from '@/shared/lock/redis-lock.service';
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
 const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
-// N4: SLA por prioridade (env-configurável). Defaults: urgente 1h, alta 4h, normal 8h, baixa 24h.
+// N4: SLA por prioridade (env-configurável). Defaults: crítico 1h, alta 4h, média 8h, baixa 24h.
+//
+// 2026-08-05: as chaves eram `urgente/alta/normal/baixa`, mas o classificador
+// grava `critical/high/medium/low` (case-classifier-agent.service.ts) — NENHUMA
+// batia, então todo ticket caía no default de 8h e um chamado CRÍTICO era
+// tratado igual a um de prioridade baixa. Agora as chaves são as que o
+// classificador realmente escreve; os nomes em PT ficam como alias porque o
+// formulário do portal grava 'normal' (portal-tickets.service.ts).
 const SLA_HOURS: Record<string, number> = {
-  urgente: Number(process.env.SLA_HOURS_URGENT ?? 1),
-  alta:    Number(process.env.SLA_HOURS_HIGH   ?? 4),
-  normal:  Number(process.env.SLA_HOURS_NORMAL ?? 8),
-  baixa:   Number(process.env.SLA_HOURS_LOW    ?? 24),
+  critical: Number(process.env.SLA_HOURS_URGENT ?? 1),
+  high:     Number(process.env.SLA_HOURS_HIGH   ?? 4),
+  medium:   Number(process.env.SLA_HOURS_NORMAL ?? 8),
+  low:      Number(process.env.SLA_HOURS_LOW    ?? 24),
+  // aliases PT — formulário do portal e tickets antigos
+  urgente:  Number(process.env.SLA_HOURS_URGENT ?? 1),
+  alta:     Number(process.env.SLA_HOURS_HIGH   ?? 4),
+  normal:   Number(process.env.SLA_HOURS_NORMAL ?? 8),
+  baixa:    Number(process.env.SLA_HOURS_LOW    ?? 24),
 };
 // Fallback quando ticketPriority não está definido → normal (8h)
 const SLA_HOURS_DEFAULT = Number(process.env.SLA_HOURS_NORMAL ?? 8);

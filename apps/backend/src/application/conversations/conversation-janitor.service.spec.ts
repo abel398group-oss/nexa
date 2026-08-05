@@ -37,6 +37,58 @@ function callNotifyClose(svc: ConversationJanitorService, phones: string[], mess
   return (svc as any).notifyClose(phones, message);
 }
 
+// As chaves do SLA eram só PT (urgente/alta/normal/baixa), mas quem grava
+// ticketPriority é o classificador, em EN (critical/high/medium/low) — nenhuma
+// batia, e TODO ticket caía no default de 8h: um chamado crítico era tratado
+// igual a um de prioridade baixa. Estes casos cobrem o vocabulário real.
+describe('ConversationJanitorService — SLA com as prioridades que o classificador grava', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationJanitorService;
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000 - 1000);
+
+  beforeEach(() => { deps = makeDeps(); svc = makeService(deps); });
+
+  it('critical (1h): alerta com 2h parado — nao espera as 8h do default', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'c1', phone: '5511', tenantId: 't1', lastActivityAt: hoursAgo(2), ticketPriority: 'critical', slaAlertedAt: null },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).toHaveBeenCalled();
+  });
+
+  it('high (4h): alerta com 5h parado', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'c2', phone: '5511', tenantId: 't1', lastActivityAt: hoursAgo(5), ticketPriority: 'high', slaAlertedAt: null },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).toHaveBeenCalled();
+  });
+
+  it('high (4h): NAO alerta com 2h parado', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'c3', phone: '5511', tenantId: 't1', lastActivityAt: hoursAgo(2), ticketPriority: 'high', slaAlertedAt: null },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('low (24h): NAO alerta com 10h parado', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'c4', phone: '5511', tenantId: 't1', lastActivityAt: hoursAgo(10), ticketPriority: 'low', slaAlertedAt: null },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('medium (8h): alerta com 9h parado', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      { id: 'c5', phone: '5511', tenantId: 't1', lastActivityAt: hoursAgo(9), ticketPriority: 'medium', slaAlertedAt: null },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).toHaveBeenCalled();
+  });
+});
+
 describe('ConversationJanitorService — N4 SLA por prioridade', () => {
   let deps: ReturnType<typeof makeDeps>;
   let svc: ConversationJanitorService;

@@ -228,6 +228,7 @@ describe('DiagnosticAgentService', () => {
       needsMoreInfo: true,
       questionsToAsk: ['Pode me dar mais detalhes sobre o problema?'],
       confidence: 'low',
+      tmsUnstable: false,
     });
   });
 
@@ -262,6 +263,41 @@ describe('DiagnosticAgentService', () => {
 
     expect(result.diagnosticData.tmsIndisponivel).toBe(true);
     expect(result.diagnosticData.contract).toBeUndefined();
+  });
+
+  // O flag precisa ser campo de primeira classe: o ResolutionAgent lê só o
+  // resultado, nunca o diagnosticData — enquanto vivia lá dentro, o cliente
+  // recebia escalação comum em vez do aviso de instabilidade.
+  it('expõe tmsUnstable no RESULTADO, não só dentro de diagnosticData', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({ isDegraded: vi.fn().mockReturnValue(true) });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: 'Meu contrato sumiu',
+      category: 'erro_sistema',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.tmsUnstable).toBe(true);
+  });
+
+  it('tmsUnstable é false quando o TMS respondeu normalmente', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({
+      getContractStatus: vi.fn().mockResolvedValue({ externalId: 'ext-1', plan: 'pro', status: 'active' }),
+    });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: 'Problema qualquer',
+      category: 'erro_sistema',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.tmsUnstable).toBe(false);
   });
 
   it('does NOT mark tmsIndisponivel when the contract simply does not exist and the breaker is closed', async () => {

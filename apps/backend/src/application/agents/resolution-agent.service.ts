@@ -50,6 +50,16 @@ export class ResolutionAgentService {
       ? `\nAção sugerida pelo diagnóstico: ${input.diagnostic.suggestedAction}`
       : '';
 
+    // TMS instável (disjuntor aberto): sem isto o caso virava "não resolvido" e
+    // escalava como um problema qualquer — o cliente não era avisado de que o
+    // sistema estava fora, e podia entender que o documento/contrato dele não
+    // existe. Instabilidade momentânea é informação que o cliente MERECE ter.
+    const instabilidadeCtx = input.diagnostic.tmsUnstable
+      ? '\nATENÇÃO — SISTEMA INSTÁVEL: a consulta ao HiperTMS falhou por indisponibilidade momentânea, ' +
+        'NÃO porque o dado não existe. Avise o cliente que houve uma instabilidade temporária e peça para ' +
+        'tentar de novo em alguns minutos. NUNCA afirme que o documento, contrato ou cadastro dele não existe.'
+      : '';
+
     const customerName = input.tmsCustomer?.name ?? 'cliente';
 
     // Persona/tom editável do SUPORTE (Config de Suporte). Só afeta o tom — as
@@ -84,7 +94,7 @@ Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
 
     const userMsg =
       `Categoria: ${input.category} | Prioridade: ${input.priority}\n` +
-      `${diagCtx}${suggCtx}\n\n` +
+      `${diagCtx}${suggCtx}${instabilidadeCtx}\n\n` +
       (kbCtx ? `Fontes KB (USE APENAS ESTAS INFORMAÇÕES):\n${kbCtx}\n\n` : 'Fontes KB: nenhum artigo encontrado para esta consulta.\n\n') +
       (input.history ? `Histórico:\n${input.history}\n\n` : '') +
       // Cercado (ver shared/ai/untrusted-input.ts). Aqui pesa ainda mais: no suporte
@@ -111,7 +121,13 @@ Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
     } catch (err: any) {
       this.logger.warn(`Resolução falhou (${err?.message})`);
       return {
-        draft: 'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente especializado que vai entrar em contato em breve.',
+        // Com o TMS fora, "não consegui identificar a solução" mente sobre a
+        // causa: o problema não é o caso do cliente, é o sistema. Dizer a
+        // verdade evita que ele conclua que o dado dele sumiu.
+        draft: input.diagnostic.tmsUnstable
+          ? 'Estamos com uma instabilidade momentânea no sistema e não consegui consultar seus dados agora. '
+            + 'Tente novamente em alguns minutos — se continuar, já deixei um atendente avisado.'
+          : 'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente especializado que vai entrar em contato em breve.',
         resolved: false,
         action: null,
         usedKnowledge,

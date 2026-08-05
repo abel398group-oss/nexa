@@ -837,12 +837,22 @@ export class ConversationAgentService {
         origin: 'chat',
       });
       // Notifica o cliente que um humano assumirá o atendimento (fire-and-forget).
+      //
+      // 2026-08-05: era `waha.sendText(conv.phone, ...)` direto. Em conversa do
+      // widget do TMS o `phone` é o externalId, e no portal vem como
+      // `portal:<id>` — mandava WhatsApp para uma string que não é telefone, a
+      // falha era engolida no catch, e justamente o cliente do chat (o canal
+      // oficial de suporte) nunca era avisado de que tinha sido escalado.
+      // `addMessage` roteia por canal: WebSocket para web_chat/portal, WAHA para
+      // WhatsApp — e ainda deixa o aviso registrado na thread.
       if (conv.phone && !conv.phone.startsWith('email:')) {
-        this.waha
-          .sendText(
-            conv.phone,
-            'Vou chamar um atendente para continuar seu atendimento. Aguarde, em breve alguém do time entrará em contato. 🙏',
-          )
+        this.conversations
+          .addMessage(tenantId, conv.id, {
+            direction: 'outbound',
+            content:
+              'Vou chamar um atendente para continuar seu atendimento. Aguarde, em breve alguém do time entrará em contato. 🙏',
+            intent: 'escalation_notice',
+          })
           .catch((e) => this.logger.warn(`Falha ao notificar escalação ao cliente: ${e?.message}`));
       }
       this.logger.log(`Suporte escalado p/ humano: conv=${conv.id} tel=${conv.phone}`);

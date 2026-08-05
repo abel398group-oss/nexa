@@ -627,6 +627,35 @@ describe('ConversationAgentService.handle()', () => {
       const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
       expect(sentContent).toMatch(/atendente|equipe/i); // SAFE_FALLBACK_SUPPORT
     });
+
+    // O aviso de escalação era `waha.sendText(conv.phone, ...)` direto. No
+    // widget do TMS o `phone` é o externalId (e no portal, `portal:<id>`) —
+    // mandava WhatsApp pra uma string que não é telefone, falhava em silêncio,
+    // e o cliente do chat nunca sabia que tinha sido escalado. `addMessage`
+    // roteia por canal (WebSocket no web_chat/portal, WAHA no WhatsApp).
+    it('avisa a escalação PELA CONVERSA, não por WhatsApp direto', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
+      mockSupervisor.review.mockResolvedValue(nokVerdict); // reprovado → needsHuman
+      mockConversations.findOne.mockResolvedValue({
+        id: 'conv1', phone: 'ext-tms-123', contactId: 'c1', status: 'open',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', {
+        message: 'meu CT-e não emite',
+        conversationId: 'conv1',
+        portalIdentity: { externalId: 'ext-tms-123', name: 'Empresa ABC' },
+      });
+
+      const avisos = mockConversations.addMessage.mock.calls.filter(
+        (c: any) => c[2]?.intent === 'escalation_notice',
+      );
+      expect(avisos).toHaveLength(1);
+      expect(avisos[0][2].content).toMatch(/atendente/i);
+      // nada de WhatsApp direto para um "telefone" que é o externalId do TMS
+      expect(mockWaha.sendText).not.toHaveBeenCalledWith('ext-tms-123', expect.anything());
+    });
   });
 
   // ── ADR 035: takeover humano por conversa ──────────────────────────────────
