@@ -20,6 +20,7 @@ import {
 import { displayPhone } from '@/shared/lib/phone';
 import { StandardListPage } from '@/components/shared/StandardListPage';
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
+import { listPartners, recordPartnerConsent, shareLeadWithPartner } from '@/entities/partner';
 import type { EvolutionPoint } from './OpportunitiesEvolutionChart';
 
 // F6+: recharts em chunk async (mesmo padrão do DashboardActivityChart)
@@ -45,6 +46,12 @@ interface Opportunity {
   contactId?: string | null;
   createdAt: string;
   updatedAt: string;
+  // F7 (RevOps): indicação a parceiro externo. `partnerConsentAt` é o carimbo
+  // de consentimento LGPD — sem ele o backend recusa o compartilhamento.
+  sharedWithPartnerId?: string | null;
+  partnerShareStatus?: string | null;
+  partnerSharedAt?: string | null;
+  partnerConsentAt?: string | null;
 }
 
 interface OppSummaryRow { stage: OppStage; count: number; value: number }
@@ -279,6 +286,14 @@ export function OpportunitiesPage() {
   const [activityForm, setActivityForm] = useState({ type: 'call', result: '', durationSec: '', notes: '' });
   const [activityBusy, setActivityBusy] = useState(false);
 
+  // Modal "Compartilhar com parceiro" (F7 — RevOps). O consentimento é marcado
+  // aqui de propósito: é o vendedor confirmando que o LEAD autorizou, e o
+  // backend recusa o compartilhamento sem esse carimbo (LGPD).
+  const [sharePrompt, setSharePrompt] = useState<Opportunity | null>(null);
+  const [sharePartnerId, setSharePartnerId] = useState('');
+  const [shareConsent, setShareConsent] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+
   // ── Queries ──
 
   const summaryQ = useQuery({
@@ -302,6 +317,15 @@ export function OpportunitiesPage() {
     }),
     placeholderData: (prev) => prev,
   });
+
+  // Só busca parceiros quando o modal de compartilhar abre — a maioria das
+  // sessões nunca usa essa ação.
+  const partnersQ = useQuery({
+    queryKey: ['partners'],
+    queryFn: () => listPartners(),
+    enabled: sharePrompt !== null,
+  });
+  const activePartners = (partnersQ.data ?? []).filter((p) => p.active);
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['opportunities'] });
@@ -385,6 +409,35 @@ export function OpportunitiesPage() {
       toast.error('Erro ao registrar atividade.');
     } finally {
       setActivityBusy(false);
+    }
+  }
+
+  function openShare(o: Opportunity) {
+    setSharePartnerId('');
+    // Consentimento já registrado antes não precisa ser remarcado — o carimbo
+    // no banco é a prova, e ele é permanente (o backend não sobrescreve).
+    setShareConsent(!!o.partnerConsentAt);
+    setSharePrompt(o);
+  }
+
+  async function submitShare() {
+    if (!sharePrompt || shareBusy || !sharePartnerId || !shareConsent) return;
+    setShareBusy(true);
+    try {
+      // Ordem obrigatória: consentimento primeiro. O backend recusa (400) o
+      // compartilhamento se `partnerConsentAt` ainda estiver vazio.
+      if (!sharePrompt.partnerConsentAt) {
+        await recordPartnerConsent(sharePrompt.id);
+      }
+      await shareLeadWithPartner(sharePrompt.id, sharePartnerId);
+      toast.success('Lead indicado ao parceiro.');
+      setSharePrompt(null);
+      invalidate();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao compartilhar.');
+    } finally {
+      setShareBusy(false);
     }
   }
 
@@ -547,6 +600,10 @@ export function OpportunitiesPage() {
           rowActions={(o) => [
             { label: 'Editar', onClick: () => openEdit(o) },
             { label: 'Registrar atividade', onClick: () => openActivity(o) },
+            {
+              label: o.sharedWithPartnerId ? 'Indicado a parceiro ✓' : 'Compartilhar com parceiro',
+              onClick: () => openShare(o),
+            },
             { label: 'Excluir', onClick: () => handleDelete(o.id, o.name), destructive: true },
           ]}
           empty={{
@@ -708,6 +765,75 @@ export function OpportunitiesPage() {
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setActivityPrompt(null)}>Cancelar</Button>
             <Button onClick={submitActivity} disabled={activityBusy}>Registrar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal compartilhar com parceiro (F7 — RevOps + LGPD) */}
+      <Modal
+        open={sharePrompt !== null}
+        onClose={() => setSharePrompt(null)}
+        title={`Compartilhar com parceiro${sharePrompt?.name ? ` — ${sharePrompt.name}` : ''}`}
+      >
+        <div className="space-y-4">
+          {sharePrompt?.sharedWithPartnerId && (
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+              Este lead já foi indicado a um parceiro
+              {sharePrompt.partnerSharedAt ? ` em ${fmtDate(sharePrompt.partnerSharedAt)}` : ''}.
+              Compartilhar de novo troca o parceiro indicado.
+            </p>
+          )}
+
+          {activePartners.length === 0 ? (
+            <p className="rounded-lg bg-base-200 p-3 text-sm text-base-content/70">
+              Nenhum parceiro ativo cadastrado. Cadastre a empresa parceira em <b>Vendas → Parceiros</b> antes
+              de indicar um lead.
+            </p>
+          ) : (
+            <>
+              <div>
+                <Label className="mb-1 block">Parceiro</Label>
+                <Select value={sharePartnerId} onChange={(e) => setSharePartnerId(e.target.value)}>
+                  <option value="">Selecione o parceiro…</option>
+                  {activePartners.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                  ))}
+                </Select>
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-base-300 p-3">
+                <input
+                  type="checkbox"
+                  checked={shareConsent}
+                  onChange={(e) => setShareConsent(e.target.checked)}
+                  disabled={!!sharePrompt?.partnerConsentAt}
+                  className="mt-0.5 size-4 accent-brand-500"
+                />
+                <span className="text-xs text-base-content/70">
+                  Confirmo que <b>o lead autorizou</b> o compartilhamento dos dados dele com este parceiro.
+                  {sharePrompt?.partnerConsentAt && (
+                    <span className="mt-1 block text-emerald-600">
+                      Consentimento já registrado em {fmtDate(sharePrompt.partnerConsentAt)}.
+                    </span>
+                  )}
+                </span>
+              </label>
+
+              <p className="text-xs text-base-content/40">
+                Sem esse aceite o compartilhamento é recusado — a LGPD exige base legal para enviar dado
+                pessoal a terceiro. Fica registrado a data e hora da autorização.
+              </p>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setSharePrompt(null)}>Cancelar</Button>
+            <Button
+              onClick={submitShare}
+              disabled={shareBusy || !sharePartnerId || !shareConsent || activePartners.length === 0}
+            >
+              Compartilhar
+            </Button>
           </div>
         </div>
       </Modal>

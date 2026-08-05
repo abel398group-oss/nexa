@@ -45,6 +45,9 @@ function KpiTable({ kpis }: { kpis: SellerKpi[] }) {
               <th className="px-4 py-2.5">Vendedor</th>
               <th className="px-4 py-2.5">Leads</th>
               <th className="px-4 py-2.5">Em andamento</th>
+              {/* F7 (RevOps): atividade manual — o que o vendedor fez por telefone/e-mail */}
+              <th className="px-4 py-2.5" title="Ligações registradas manualmente">Ligacoes</th>
+              <th className="px-4 py-2.5" title="E-mails registrados manualmente">E-mails</th>
               <th className="px-4 py-2.5">Ganhos</th>
               <th className="px-4 py-2.5">Perdidos</th>
               <th className="px-4 py-2.5">Conversao</th>
@@ -52,13 +55,15 @@ function KpiTable({ kpis }: { kpis: SellerKpi[] }) {
           </thead>
           <tbody>
             {kpis.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-base-content/40">Sem dados ainda.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-6 text-center text-base-content/40">Sem dados ainda.</td></tr>
             )}
             {kpis.map((k) => (
               <tr key={k.id} className="border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
                 <td className="px-4 py-2.5 font-medium text-base-content">{k.name}</td>
                 <td className="px-4 py-2.5 text-base-content/70">{k.leads}</td>
                 <td className="px-4 py-2.5 text-base-content/70">{k.emAndamento}</td>
+                <td className="px-4 py-2.5 text-base-content/70">{k.calls ?? 0}</td>
+                <td className="px-4 py-2.5 text-base-content/70">{k.emails ?? 0}</td>
                 <td className="px-4 py-2.5">
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">{k.ganhos}</span>
                 </td>

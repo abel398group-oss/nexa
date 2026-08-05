@@ -40,6 +40,7 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
     { to: '/contacts/abuse', label: 'Números banidos',   ic: 'ban',       perm: 'contacts' },
     { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
+    { to: '/partners',       label: 'Parceiros',         ic: 'building',  perm: 'partners' },
     { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
   ] },
 
@@ -78,6 +79,7 @@ const titles: Record<string, string> = {
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',
   '/opportunities': 'Oportunidades',
+  '/partners': 'Parceiros',
   '/campaigns': 'Disparo de Leads',
   '/sender/health': 'Saúde dos números',
   '/contacts/abuse': 'Números banidos',
