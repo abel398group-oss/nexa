@@ -30,16 +30,29 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { businessHoursBetween } from './support-hours';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
 const SUPPORT_INACTIVITY_HOURS = Number(process.env.SUPPORT_INACTIVITY_HOURS ?? 48);
-// N4: SLA por prioridade (env-configurável). Defaults: urgente 1h, alta 4h, normal 8h, baixa 24h.
+// N4: SLA por prioridade (env-configurável). Defaults: crítico 1h, alta 4h, média 8h, baixa 24h.
+//
+// 2026-08-05: as chaves eram `urgente/alta/normal/baixa`, mas o classificador
+// grava `critical/high/medium/low` (case-classifier-agent.service.ts) — NENHUMA
+// batia, então todo ticket caía no default de 8h e um chamado CRÍTICO era
+// tratado igual a um de prioridade baixa. Agora as chaves são as que o
+// classificador realmente escreve; os nomes em PT ficam como alias porque o
+// formulário do portal grava 'normal' (portal-tickets.service.ts).
 const SLA_HOURS: Record<string, number> = {
-  urgente: Number(process.env.SLA_HOURS_URGENT ?? 1),
-  alta:    Number(process.env.SLA_HOURS_HIGH   ?? 4),
-  normal:  Number(process.env.SLA_HOURS_NORMAL ?? 8),
-  baixa:   Number(process.env.SLA_HOURS_LOW    ?? 24),
+  critical: Number(process.env.SLA_HOURS_URGENT ?? 1),
+  high:     Number(process.env.SLA_HOURS_HIGH   ?? 4),
+  medium:   Number(process.env.SLA_HOURS_NORMAL ?? 8),
+  low:      Number(process.env.SLA_HOURS_LOW    ?? 24),
+  // aliases PT — formulário do portal e tickets antigos
+  urgente:  Number(process.env.SLA_HOURS_URGENT ?? 1),
+  alta:     Number(process.env.SLA_HOURS_HIGH   ?? 4),
+  normal:   Number(process.env.SLA_HOURS_NORMAL ?? 8),
+  baixa:    Number(process.env.SLA_HOURS_LOW    ?? 24),
 };
 // Fallback quando ticketPriority não está definido → normal (8h)
 const SLA_HOURS_DEFAULT = Number(process.env.SLA_HOURS_NORMAL ?? 8);
@@ -120,6 +133,9 @@ export class ConversationJanitorService {
 
     // Pre-filter: lastActivityAt < now - SLA_MIN_HOURS captura qualquer ticket que poderia ter
     // violado o SLA mais restritivo (urgente=1h). A filtragem por prioridade exata é feita em JS.
+    //
+    // Continua correto com o SLA em horas ÚTEIS: tempo útil nunca é maior que
+    // tempo corrido, então este corte só traz candidatos DEMAIS — nunca de menos.
     const outerCutoff = new Date(now.getTime() - SLA_MIN_HOURS * 60 * 60 * 1000);
 
     const candidates = await this.prisma.aiConversation.findMany({
@@ -138,10 +154,14 @@ export class ConversationJanitorService {
     const slaHours = (priority: string | null): number =>
       priority ? (SLA_HOURS[priority] ?? SLA_HOURS_DEFAULT) : SLA_HOURS_DEFAULT;
 
+    // O relógio do SLA conta apenas HORÁRIO ÚTIL (support-hours.ts). Antes
+    // corria a noite e o fim de semana inteiros: um chamado crítico (SLA 1h)
+    // que entrava no sábado estourava no próprio sábado, e o time chegava na
+    // segunda com alerta de violação que nunca teve como cumprir. Alerta
+    // impossível de cumprir é alerta que se aprende a ignorar.
     const unalerted = candidates.filter((c) => {
-      const hours = slaHours(c.ticketPriority);
-      const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
-      return c.lastActivityAt && new Date(c.lastActivityAt) < cutoff;
+      if (!c.lastActivityAt) return false;
+      return businessHoursBetween(new Date(c.lastActivityAt), now) >= slaHours(c.ticketPriority);
     });
 
     if (!unalerted.length) return;

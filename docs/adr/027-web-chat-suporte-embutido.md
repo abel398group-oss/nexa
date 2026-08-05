@@ -1,6 +1,9 @@
 # ADR 027 — Modalidade C: Web Chat de Suporte embutido (widget no HiperTMS)
 
-**Status:** Proposto · **Data:** 2026-06
+**Status:** Aceito (implementado) · **Data:** 2026-06 · **Verificado:** 2026-08-05
+> Implementado em `application/agents/web-chat.service.ts + presentation/ws/conversations.gateway.ts`. Status corrigido na auditoria do suporte
+> (`docs/reviews/2026-08-05-auditoria-suporte.md`) — estava "Proposto" com o
+> código em produção havia semanas.
 **Evolui:** ADR 022 (Botão "Falar com a Lia" — Modalidade C)
 
 > Implementa a **Modalidade C** prevista na ADR 022: um chat de suporte

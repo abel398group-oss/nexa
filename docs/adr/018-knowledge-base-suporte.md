@@ -1,6 +1,9 @@
 # ADR 018 — Knowledge Base do Suporte
 
-**Status:** Proposto · **Data:** 2026-06
+**Status:** Aceito (implementado) · **Data:** 2026-06 · **Verificado:** 2026-08-05
+> Implementado em `application/connectors/hipertms-suporte-kb.data.ts (228 tópicos) + knowledge.service.ts`. Status corrigido na auditoria do suporte
+> (`docs/reviews/2026-08-05-auditoria-suporte.md`) — estava "Proposto" com o
+> código em produção havia semanas.
 
 ## Contexto
 
