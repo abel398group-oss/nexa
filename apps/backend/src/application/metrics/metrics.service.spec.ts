@@ -137,3 +137,73 @@ describe('MetricsService.supportOverview', () => {
     expect(call.where.createdAt.lte).toEqual(new Date('2026-06-10T23:59:59.999'));
   });
 });
+
+// F7 (RevOps, 2026-08-05): atividade manual do vendedor (SellerActivity) some
+// no KPI se ninguém ligar isso aqui — cobre a junção sellersKpi/sellerOverview
+// + activityCountsBySeller.
+function mockSellersPrisma(opts: {
+  sellers?: any[];
+  convs?: any[];
+  activityRows?: any[];
+  msgByDirection?: any[];
+  aiMessages?: number;
+  complaints?: number;
+}) {
+  return {
+    seller: { findMany: vi.fn().mockResolvedValue(opts.sellers ?? []) },
+    aiConversation: { findMany: vi.fn().mockResolvedValue(opts.convs ?? []) },
+    aiMessage: {
+      groupBy: vi.fn().mockResolvedValue(opts.msgByDirection ?? []),
+      count: vi.fn().mockResolvedValue(opts.aiMessages ?? 0),
+    },
+    complaint: { count: vi.fn().mockResolvedValue(opts.complaints ?? 0) },
+    sellerActivity: { groupBy: vi.fn().mockResolvedValue(opts.activityRows ?? []) },
+  } as any;
+}
+
+describe('MetricsService.sellersKpi', () => {
+  it('merges call/email/note counts from SellerActivity per seller', async () => {
+    const prisma = mockSellersPrisma({
+      sellers: [{ id: 's1', name: 'Maria', active: true }],
+      convs: [],
+      activityRows: [
+        { sellerId: 's1', type: 'call', _count: 5 },
+        { sellerId: 's1', type: 'email', _count: 2 },
+      ],
+    });
+    const svc = new MetricsService(prisma);
+
+    const [kpi] = await svc.sellersKpi('t1');
+
+    expect(kpi).toMatchObject({ id: 's1', calls: 5, emails: 2, notes: 0 });
+  });
+
+  it('vendedor sem nenhuma atividade registrada -> zerado, não undefined', async () => {
+    const prisma = mockSellersPrisma({
+      sellers: [{ id: 's1', name: 'Maria', active: true }],
+      activityRows: [],
+    });
+    const svc = new MetricsService(prisma);
+
+    const [kpi] = await svc.sellersKpi('t1');
+
+    expect(kpi).toMatchObject({ calls: 0, emails: 0, notes: 0 });
+  });
+});
+
+describe('MetricsService.sellerOverview (via overview() com sellerId)', () => {
+  it('inclui a atividade do vendedor escopada por sellerId, não mistura com outro vendedor', async () => {
+    const prisma = mockSellersPrisma({
+      convs: [{ id: 'c1', status: 'active', contactId: 'ct1' }],
+      activityRows: [
+        { sellerId: 's1', type: 'call', _count: 3 },
+        { sellerId: 's2', type: 'call', _count: 99 },
+      ],
+    });
+    const svc = new MetricsService(prisma);
+
+    const overview = await svc.overview('t1', 's1');
+
+    expect(overview.activity).toEqual({ calls: 3, emails: 0, notes: 0 });
+  });
+});
