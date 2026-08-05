@@ -61,9 +61,9 @@ it's considered done.
 | §4 | nexa | `portal-tickets.service.ts:182-207` | High | **Fixed** |
 | §5 | nexa | `portal-tickets.service.ts` (`ensureContact`) | Medium | **Fixed** |
 | §6 | nexa | `ticket-intelligence.service.ts:70-91` | Medium | **Fixed** |
-| §7 | tms | `SupportDrawer.tsx` + `LiaChatWindow.tsx` | Medium | No — re-confirm first |
-| §8 | tms | `lia-support.service.ts:64-148` | Medium | No — re-confirm first |
-| §9 | tms | `service-token.guard.ts:34` | Low | No — re-confirm first |
+| §7 | tms | `usePortalSession.ts` | Medium | **Fixed (smaller fix than first proposed — see below)** |
+| §8 | tms | `lia-support.service.ts:64-148` | Medium | **Fixed** |
+| §9 | tms | `service-token.guard.ts:34` | Low | **Fixed** |
 
 Suggested order: §1 → §2 → §4 → §3 → the rest. §1 and §4 share a root cause
 (no re-validation / no lock around a read-then-write on `AiConversation`) and
@@ -269,60 +269,111 @@ long) without that tradeoff.
 
 ---
 
-### §7 — Two independent session exchanges when both widgets are open (Medium, not yet re-confirmed)
+### §7 — Two independent session exchanges, fixed with a smaller change than first planned
 
-**Repo:** tms. **Where:** `SupportDrawer.tsx` (mounted in `AppTopBar.tsx`) and
-`LiaChatWindow.tsx` (mounted in `ChatWidget.tsx`), each calling its own
-`usePortalSession()`.
+**Repo:** tms. **Where:** `usePortalSession.ts` only.
 
-**Claimed failure scenario.** If a customer has both the support drawer and
-the floating Lia chat bubble open in the same tab, each independently
-exchanges a handoff token and gets its own Nexa portal JWT — redundant, and a
-possible source of the exact duplicate-conversation pattern §0 just fixed on
-the Nexa side (now mitigated there, but the redundant session creation on the
-frontend is still wasteful and worth confirming isn't causing anything else).
+**Confirmed.** `SupportDrawer.tsx:587` and `LiaChatWindow.tsx:399` each call
+`usePortalSession()` independently — mounted under different parents
+(`AppTopBar.tsx` vs `ChatWidget.tsx`), both ultimately under `App.tsx`. If
+both are open at once, each fires its own handoff-token exchange.
 
-**Likely fix, if confirmed.** Share one `usePortalSession()` instance via
-context instead of two independent hook instances.
+**Why the originally-proposed fix (shared context) was NOT what shipped.**
+Sharing state via a `PortalSessionProvider` context would require wrapping a
+provider high enough in `App.tsx` to cover both mount points, and changing
+both consuming components — a real change to the app's component
+composition, on a production frontend, for a bug whose actual damage is now
+small: §0's `sourceChannel` fix already covers the duplicate-conversation risk
+regardless of which widget's session created it, so what's left is just two
+redundant network round-trips in the rare case both widgets are open at once.
+That didn't seem worth the structural risk.
+
+**What shipped instead.** A module-level (not component-level) promise cache
+in `usePortalSession.ts`: the second concurrent `initSession()` call, from
+either component, awaits the *same* in-flight exchange instead of starting a
+new one. Zero changes to `SupportDrawer.tsx`, `LiaChatWindow.tsx`, or
+`App.tsx` — both keep calling the hook exactly as before. The solo-widget
+case (by far the common one) is byte-for-byte the same code path as before.
+
+**One accepted, minor, and disclosed side effect:** the two callers can pass
+different `pathname` values (which page they were on) into `initSession()`.
+When a shared exchange is reused, only the *first* caller's pathname is sent
+as request context — the second caller's page isn't recorded. Cosmetic
+(analytics-context only, doesn't affect auth or session validity), and only
+possible in the already-rare both-widgets-open-at-once window.
+
+4 tests added in the new `usePortalSession.test.ts` (didn't exist before):
+concurrent dedup, sequential calls after settlement still fetch fresh, shared
+failure propagates to both callers, and the solo-widget case is unchanged.
 
 ---
 
-### §8 — No fallback on Nexa outage for two of the three handoff endpoints (Medium, not yet re-confirmed)
+### §8 — No error handling on Nexa outage, fixed
 
-**Repo:** tms. **Where:** `lia-support.service.ts:64-102` (`getSupportToken`),
-`109-148` (`getWebChatToken`).
+**Repo:** tms. **Where:** `lia-support.service.ts` (`getSupportToken`,
+`getWebChatToken`).
 
-**Claimed failure scenario.** Unlike `buildHandoffLink` (the legacy WhatsApp
-fallback path, which wraps its fetch and logs before degrading), these two
-have no try/catch around the fetch to Nexa. If Nexa is unreachable rather than
-returning a non-2xx, the raw exception propagates as a bare 500 with no
-fallback — the ticket-form and live-chat entry points have no degraded mode at
-all if Nexa is down.
+**Confirmed.** Unlike `buildHandoffLink` (wraps its fetch, always logs before
+degrading to the WhatsApp link), these two had no try/catch around the fetch
+to Nexa. If Nexa was unreachable (not a non-2xx response — a real network
+failure or the 5s timeout firing), the raw exception propagated uncaught, all
+the way to the controller, as a bare unhandled rejection.
 
-**Likely fix, if confirmed.** Wrap both in try/catch, log the real failure
-(per this repo's own convention, already followed elsewhere in the same file),
-and decide on a fallback — even just a clear "suporte temporariamente
-indisponível, tente novamente" is better than a raw 500.
+**Fix.** Wrapped just the `fetch()` call in try/catch in both methods. On
+failure: log the real underlying message (`err?.message` — previously
+invisible), then throw the same `UnauthorizedException` type this method
+already throws for the "response not ok" case a few lines below, with a
+clear, translated message. No new fallback mode was invented (e.g. no
+WhatsApp-link degradation like `buildHandoffLink` has) — these two methods
+return a `{token, ...}` shape the frontend uses to open a Nexa session
+directly, not a URL string, so a WhatsApp-shaped fallback would need a
+frontend contract change too. Matching the doc's own minimum bar — "a clear
+message is better than a raw 500" — without expanding scope into a
+cross-repo contract change.
+
+6 tests added in the new `lia-support.service.spec.ts` (didn't exist before):
+network failure + non-2xx + happy path, for both methods.
 
 ---
 
-### §9 — Non-constant-time token comparison (Low, not yet re-confirmed)
+### §9 — Non-constant-time token comparison, fixed
 
-**Repo:** tms. **Where:** `service-token.guard.ts:34`.
+**Repo:** tms. **Where:** `service-token.guard.ts`.
 
-**Claimed failure scenario.** `provided !== expected` is a plain string
-compare, not `crypto.timingSafeEqual` — a timing side-channel, though the
-practical exploitability against a server-to-server secret over a real network
-is low. The TMS's own security audit already flags the identical pattern in
-`asaas-webhook.service.ts`; this guard has the same gap, just not yet listed
-there.
+**Confirmed.** `provided !== expected` was a plain string compare — a timing
+side-channel (low practical exploitability against a server-to-server secret
+over a real network, but a real gap). This repo's own security audit already
+flags the identical pattern in `asaas-webhook.service.ts`; this guard had the
+same gap.
 
-**Likely fix, if confirmed.** Swap to `crypto.timingSafeEqual` with a
-length-check guard (mismatched lengths throw in `timingSafeEqual`, so pad or
-check length first).
+**Fix.** Reused that file's exact already-reviewed pattern (comment there
+calls it "Security F15") instead of inventing a new one: hash both strings to
+SHA-256 first, then `timingSafeEqual` on the fixed-length digests. This
+sidesteps `timingSafeEqual`'s own footgun — it throws on mismatched buffer
+lengths, which two arbitrary tokens being compared will usually have.
 
-## Next step
+6 tests added, including the specific regression this fix targets: a wrong
+token of a *different length* than expected no longer risks an internal
+error, it cleanly returns 401 like any other wrong token.
 
-Confirm which items to implement and in what order. §1 and §2 are ready to go
-as described. §3-§9 need the "before fixing" re-confirmation step first —
-each is scoped to a single read of the relevant file before any edit.
+## Status — 2026-08-05
+
+All 9 items resolved: §1, §3, §4, §5, §6, §7, §8, §9 fixed and tested (36
+tests added/updated across nexa + tms); §2 investigated and found not to be a
+real bug (see its section — the original diagnosis didn't survive a full read
+of the effect chain). §0 (the finding that started this pass) shipped
+earlier. Nothing outside the documented scope of each item was touched.
+
+**Not yet done, by design:**
+- **Build/test verification.** Nothing here ran in the sandbox — the backend
+  doesn't build there (symlink issue) and this pass touched two repos. Before
+  calling this done: `pnpm test:backend` + `cd apps/backend ; pnpm build` in
+  nexa; `pnpm --filter api test` + `pnpm --filter api build` in hipervias_v12.
+- **§3's full fix** (semantic root-cause matching) — deliberately left as a
+  flagged follow-up, not decided unilaterally.
+- **§7's originally-proposed shared-context refactor** — superseded by a
+  smaller fix; the context approach was never built, on purpose (see §7).
+- Two smaller issues noticed while confirming §2 and §3, not folded into this
+  plan without separate sign-off: session-loss handling in `handleReply`/
+  `handleSelectTicket` (SupportDrawer.tsx), and the `KnowledgeService`-backed
+  semantic matching option for recurrence detection.
