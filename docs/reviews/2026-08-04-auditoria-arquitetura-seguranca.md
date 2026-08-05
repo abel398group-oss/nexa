@@ -515,3 +515,57 @@ apareceram porque o código foi relido na hora de corrigir:
 Isso é o comportamento esperado de uma auditoria útil: ela erra, e o processo de
 corrigir revela onde. O registro fica aqui de propósito — apagar os erros tornaria o
 documento mais bonito e menos confiável.
+
+---
+
+## Segunda opinião (Gemini, 2026-08-05) — checada contra o código, não aceita de olho
+
+O relatório desta auditoria foi passado para o Gemini como segunda opinião. Ele
+levantou três riscos residuais. Cada um foi verificado no código antes de decidir o
+que fazer — o mesmo método da "Nota de método" acima.
+
+| # | Achado do Gemini | Veredito | Ação |
+|---|---|---|---|
+| A | DLP pode falso-positivar CPF/CNPJ do próprio lead | **Não é bug** — decisão deliberada e já testada | Nenhuma |
+| B | "3 strikes" sem janela de tempo — soma para sempre | **Bug real** | Corrigido |
+| C | Sem mensagem clara ao cliente quando o disjuntor do TMS está aberto | **Gap real** | Corrigido |
+
+**A — falso positivo de CPF/CNPJ.** `shared/governance/output-guard.ts` bloqueia
+CPF/CNPJ sempre, sem checar se é do próprio lead — ao contrário de e-mail/telefone,
+que têm essa isenção. Não é descuido: já existe teste nomeado
+`"bloqueia CPF mesmo sendo do próprio lead — nunca é legítimo repetir"`. Documento de
+terceiro nunca é legítimo de aparecer numa conversa comercial, então o trade-off
+(menos conveniência, zero chance de vazar CPF de outra pessoa) foi escolha, não erro.
+Fica registrado como decisão de produto, não como pendência.
+
+**B — `strikeCount` sem janela.** Confirmado em
+`application/contacts/abuse-guard.service.ts`: o contador somava para sempre. Um
+cliente comum que erra 3 vezes espalhadas em 6 meses seria banido igual a um
+atacante insistindo em minutos — dois sinais diferentes contados como o mesmo.
+
+**Resolvido (2026-08-05):** `ABUSE_STRIKE_WINDOW_HOURS` (padrão 24h). Strike fora da
+janela reinicia a contagem em 1 em vez de somar. O ban em si continua irreversível
+por tempo — só `unban()` manual reverte, a janela não perdoa quem já foi banido.
+17 testes cobrindo dentro/fora/exatamente-no-limite da janela, threshold e janela
+customizados por env, e o caso "banido não é perdoado pela janela".
+
+**C — silêncio quando o disjuntor do TMS está aberto.** Confirmado em
+`application/agents/diagnostic-agent.service.ts`: quando `getContractStatus`/
+`getDocumentStatus` voltavam `null` por causa do disjuntor aberto
+(`tms-resilience.ts`), a chave simplesmente sumia de `diagnosticData` — sem
+diferença nenhuma de "esse dado não existe".
+
+**Resolvido (2026-08-05):** `HiperTmsConnector.isDegraded()` expõe o estado do
+disjuntor. O diagnóstico agora marca `diagnosticData.tmsIndisponivel` quando uma
+leitura falhou por instabilidade (não por ausência do dado), e o prompt é instruído a
+avisar o cliente sobre a instabilidade temporária em vez de implicar que o
+contrato/documento não existe. 4 testes cobrindo: disjuntor aberto marca a flag,
+disjuntor fechado com dado inexistente NÃO marca, sucesso não marca mesmo com
+disjuntor aberto (não é stale), e a flag nasce independente por tipo de leitura
+(contrato vs. documento fiscal).
+
+**Nota:** o resumo de sessão enviado ao Gemini também repetiu, no roteiro sugerido,
+a premissa já corrigida de "9 agentes em cadeia" (ver Nota de método acima) — o
+pipeline real é 3 chamadas de LLM por mensagem (router → agente → supervisora). Uma
+segunda opinião externa herda os erros do que foi mostrado a ela; vale conferir a
+fonte, não só o destino, antes de aceitar uma sugestão de outra IA.
