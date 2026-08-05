@@ -31,6 +31,8 @@ interface QueueLead {
   waitingSince: string;
   pediuReuniao: boolean;
   lastMessage?: { direction: string; content: string; at: string } | null;
+  /** Campanha que originou o lead — null quando entrou por outro caminho. */
+  origemCampanha?: string | null;
 }
 
 // "há 12 min" / "há 3 h" / "há 2 d" — o vendedor pensa em quanto tempo o lead
@@ -172,6 +174,12 @@ export function SalesQueuePage() {
           <div className="text-right">
             <Badge variant={t.variant}>{t.label} · {lead.interestScore}</Badge>
             <p className="mt-1.5 text-xs text-base-content/40">esperando {esperaDesde(lead.waitingSince)}</p>
+            {lead.origemCampanha && (
+              <p className="mt-0.5 text-xs text-base-content/40" title="Campanha que originou este lead">
+                <Icon name="campaigns" className="mr-1 inline h-3 w-3 align-[-1px]" />
+                {lead.origemCampanha}
+              </p>
+            )}
           </div>
         </div>
 

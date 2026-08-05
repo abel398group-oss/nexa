@@ -130,27 +130,47 @@ export class OpportunitiesService {
     });
     if (opps.length === 0) return [];
 
-    // Ultima mensagem de cada conversa, pra o vendedor ver do que se trata sem
-    // abrir o Inbox. Uma query so para todas as conversas (evita N+1).
+    // Uma query so para todas as conversas (evita N+1). Dela saem DUAS coisas:
+    // a ultima mensagem (do que se trata, sem abrir o Inbox) e a campanha de
+    // origem — saber se o lead veio da lista de frotistas ou da de embarcadores
+    // muda o discurso do vendedor.
     const convIds = opps.map((o: any) => o.conversationId).filter(Boolean) as string[];
     const msgs = convIds.length
       ? await this.prisma.aiMessage.findMany({
           where: { conversationId: { in: convIds } },
-          select: { conversationId: true, direction: true, content: true, createdAt: true },
+          select: { conversationId: true, direction: true, content: true, createdAt: true, campaignId: true, intent: true },
           orderBy: { createdAt: 'desc' },
         })
       : [];
+
     const ultimaPorConversa = new Map<string, any>();
+    const campanhaPorConversa = new Map<string, string>();
     for (const m of msgs) {
       // como veio ordenado desc, a PRIMEIRA de cada conversa ja e a mais recente
       if (!ultimaPorConversa.has(m.conversationId)) ultimaPorConversa.set(m.conversationId, m);
+      // a campanha que abriu a conversa: como percorremos do mais novo pro mais
+      // antigo, a ULTIMA que sobrescreve e a primeira no tempo — a que originou.
+      if (m.intent === 'outbound_campaign' && m.campaignId) {
+        campanhaPorConversa.set(m.conversationId, m.campaignId);
+      }
     }
+
+    const campanhaIds = [...new Set(campanhaPorConversa.values())];
+    const campanhas = campanhaIds.length
+      ? await this.prisma.campaign.findMany({
+          where: { id: { in: campanhaIds }, tenantId },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nomePorCampanha = new Map(campanhas.map((c: any) => [c.id, c.name]));
 
     const enriched = opps.map((o: any) => {
       const last = o.conversationId ? ultimaPorConversa.get(o.conversationId) : null;
+      const campId = o.conversationId ? campanhaPorConversa.get(o.conversationId) : null;
       return {
         ...o,
         lastMessage: last ? { direction: last.direction, content: last.content, at: last.createdAt } : null,
+        origemCampanha: campId ? (nomePorCampanha.get(campId) ?? null) : null,
         // Espera contada da ultima mexida no lead — e o que o vendedor sente
         // como "esse ta parado ha tempo demais".
         waitingSince: o.updatedAt,
