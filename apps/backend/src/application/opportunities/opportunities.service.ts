@@ -165,6 +165,54 @@ export class OpportunitiesService {
     });
   }
 
+  /**
+   * Promove uma conversa a oportunidade — decisão manual do vendedor.
+   *
+   * Existe porque a criação automática só dispara em score >= 70 ou pedido
+   * explícito de reunião, e isso deixa passar lead real: em 2026-08-05 um lead
+   * que respondeu "entregar cotação o mais rápido possível" ficou de fora do
+   * funil e só existia no Inbox. Baixar o corte automático encheria o funil de
+   * quem só respondeu "oi" — quem sabe se vale é o vendedor lendo a conversa.
+   *
+   * Idempotente pelo mesmo caminho da criação automática (`createFromLead`):
+   * clicar duas vezes não duplica.
+   */
+  async createFromConversation(tenantId: string, conversationId: string, sellerScope?: string) {
+    const conv = await this.prisma.aiConversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { id: true, phone: true, contactId: true, assignedSellerId: true },
+    });
+    if (!conv) throw new NotFoundException('Conversa nao encontrada');
+
+    // Vendedor só promove conversa que é dele — mesma regra do resto da tela.
+    const dono = conv.assignedSellerId ?? null;
+    if (sellerScope && dono !== (sellerScope === '__none__' ? '__never__' : sellerScope)) {
+      throw new NotFoundException('Conversa nao encontrada');
+    }
+
+    // Nome vem do contato: a lista da campanha já trazia, e sem isto o funil
+    // mostrava só telefone (a criação automática tinha o mesmo furo).
+    const [contato, ultimaInbound] = await Promise.all([
+      conv.contactId
+        ? this.prisma.contact.findFirst({ where: { id: conv.contactId }, select: { name: true } })
+        : null,
+      this.prisma.aiMessage.findFirst({
+        where: { conversationId, direction: 'inbound' },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      }),
+    ]);
+
+    return this.createFromLead(tenantId, {
+      conversationId: conv.id,
+      contactId: conv.contactId ?? undefined,
+      phone: conv.phone ?? undefined,
+      name: contato?.name ?? undefined,
+      summary: ultimaInbound?.content?.slice(0, 120),
+      assignedSellerId: dono ?? undefined,
+    });
+  }
+
   async findOne(tenantId: string, id: string, sellerScope?: string) {
     const opp = await this.prisma.opportunity.findFirst({
       where: this.scoped({ id, tenantId }, sellerScope),
@@ -295,6 +343,18 @@ export class OpportunitiesService {
         return existing;
       }
     }
-    return this.prisma.opportunity.create({ data: { tenantId, stage: 'new', ...input } as any });
+    // Nome do contato quando o chamador nao passou (2026-08-05): a lista da
+    // campanha ja trazia o nome e o contato foi criado com ele, mas o handoff
+    // automatico nunca repassava — o funil acabava mostrando so telefone.
+    // Uma leitura indexada, e so no nascimento do lead.
+    let name = input.name;
+    if (!name && input.contactId) {
+      const contato = await this.prisma.contact
+        .findFirst({ where: { id: input.contactId }, select: { name: true } })
+        .catch(() => null);
+      name = contato?.name ?? undefined;
+    }
+
+    return this.prisma.opportunity.create({ data: { tenantId, stage: 'new', ...input, name } as any });
   }
 }

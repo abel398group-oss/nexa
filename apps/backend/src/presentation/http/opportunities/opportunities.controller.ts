@@ -24,6 +24,10 @@ class CreateOpportunityDto {
 
 class UpdateOpportunityDto extends CreateOpportunityDto {}
 
+class FromConversationDto {
+  @IsString() conversationId!: string;
+}
+
 class MoveStageDto {
   @IsIn(OPP_STAGES as any) stage!: string;
   @IsOptional() @IsString() reason?: string;
@@ -67,6 +71,17 @@ export class OpportunitiesController {
   @Get('summary')
   summary(@CurrentTenant() tenantId: string, @CurrentUser() user: any) {
     return this.opps.summary(tenantId, sellerScopeOf(user));
+  }
+
+  // F7 (RevOps): promove uma conversa a oportunidade (decisao manual do
+  // vendedor, para o que a regra automatica de score >= 70 deixa passar).
+  @Post('from-conversation')
+  fromConversation(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Body() dto: FromConversationDto,
+  ) {
+    return this.opps.createFromConversation(tenantId, dto.conversationId, sellerScopeOf(user));
   }
 
   // F7 (RevOps): fila de trabalho do vendedor, ja priorizada. Antes de :id.

@@ -127,6 +127,62 @@ describe('OpportunitiesService', () => {
     expect(prisma.opportunity.update.mock.calls[0][0].data).toMatchObject({ assignedSellerId: 's1', assignedTo: 'João' });
   });
 
+  // ── F7 (RevOps): promover conversa a oportunidade (decisao do vendedor) ───
+
+  describe('createFromConversation', () => {
+    beforeEach(() => {
+      prisma.aiConversation = { findFirst: vi.fn() };
+      prisma.aiMessage = { findFirst: vi.fn().mockResolvedValue(null) };
+      prisma.contact = { findFirst: vi.fn().mockResolvedValue(null) };
+    });
+
+    it('conversa inexistente -> 404', async () => {
+      prisma.aiConversation.findFirst.mockResolvedValue(null);
+      await expect(svc.createFromConversation('t1', 'c1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('leva nome do contato e ultima mensagem do lead como resumo', async () => {
+      prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', phone: '5511', contactId: 'ct1', assignedSellerId: 's1' });
+      prisma.contact.findFirst.mockResolvedValue({ name: 'Transportadora ABC' });
+      prisma.aiMessage.findFirst.mockResolvedValue({ content: 'Entregar cotação rápido possivel' });
+      prisma.opportunity.findFirst.mockResolvedValue(null);
+      prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+      await svc.createFromConversation('t1', 'c1');
+
+      expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({
+        tenantId: 't1', stage: 'new', conversationId: 'c1', phone: '5511',
+        name: 'Transportadora ABC', summary: 'Entregar cotação rápido possivel', assignedSellerId: 's1',
+      });
+    });
+
+    it('idempotente: conversa que ja virou oportunidade nao duplica', async () => {
+      prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', phone: '5511', contactId: null, assignedSellerId: null });
+      prisma.opportunity.findFirst.mockResolvedValue({ id: 'existente', assignedSellerId: 's1' });
+
+      const out = await svc.createFromConversation('t1', 'c1');
+
+      expect(out).toMatchObject({ id: 'existente' });
+      expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    });
+
+    it('vendedor nao promove conversa de outro vendedor -> 404', async () => {
+      prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', phone: '5511', contactId: null, assignedSellerId: 's2' });
+      await expect(svc.createFromConversation('t1', 'c1', 's1')).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    });
+  });
+
+  it('createFromLead: busca o nome do contato quando o chamador nao passa', async () => {
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Fulano Transportes' }) };
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c9', contactId: 'ct9' });
+
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ name: 'Fulano Transportes' });
+  });
+
   // ── F7 (RevOps): fila de trabalho do vendedor ─────────────────────────────
 
   describe('queue', () => {
