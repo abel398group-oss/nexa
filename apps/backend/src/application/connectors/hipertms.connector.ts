@@ -93,6 +93,16 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     return this.resilience.stats();
   }
 
+  /**
+   * O disjuntor está aberto agora? Usado pelos agentes de suporte para diferenciar
+   * "esse dado não existe" de "não consegui consultar agora" — sem isso, os dois
+   * casos chegavam ao cliente como o mesmo silêncio, e a Lia arriscava dizer que
+   * algo não existe quando na verdade o TMS só está temporariamente fora do ar.
+   */
+  isDegraded(): boolean {
+    return this.resilience.stats().circuitOpen;
+  }
+
   // Base URL da API do TMS — suporta TMS_BASE_URL (canônico) e TMS_API_BASE_URL (legado).
   // Valor esperado: http://localhost:3000/api (local) ou URL pública em produção.
   private get baseUrl(): string {

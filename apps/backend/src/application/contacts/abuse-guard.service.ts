@@ -36,6 +36,19 @@ function banThreshold(): number {
   return Number(process.env.ABUSE_BAN_THRESHOLD ?? 3);
 }
 
+/**
+ * Janela deslizante da contagem (em horas). Sem isto, `strikeCount` somava para
+ * sempre: um cliente comum que dá 3 respostas estranhas espalhadas em 6 meses
+ * (ex.: cola um código, digita algo em formato esquisito) seria banido igual a
+ * um atacante que erra 3 vezes em 10 segundos — dois sinais completamente
+ * diferentes contados como o mesmo. Padrão 24h: um atacante insistindo repete a
+ * tentativa em minutos; um cliente comum não erra 3 vezes seguidas no mesmo dia.
+ */
+function strikeWindowMs(): number {
+  const horas = Number(process.env.ABUSE_STRIKE_WINDOW_HOURS ?? 24);
+  return horas * 60 * 60 * 1000;
+}
+
 @Injectable()
 export class AbuseGuardService {
   private readonly logger = new Logger('AbuseGuard');
@@ -57,9 +70,14 @@ export class AbuseGuardService {
   /**
    * Registra uma tentativa bloqueada pelo output-guard e bane se atingir o teto.
    *
-   * Idempotente por natureza (upsert com increment) — chamadas concorrentes da
-   * mesma conversa não perdem contagem. Nunca lança: uma falha aqui não pode
-   * impedir o aceno seguro de ser enviado, que já é o comportamento correto
+   * Aplica a janela deslizante (strikeWindowMs()): se a última tentativa foi há
+   * mais tempo que a janela, a contagem REINICIA em 1 em vez de somar — o sinal
+   * de "insistindo" só existe quando as tentativas estão próximas no tempo.
+   *
+   * Não é atômico (lê, decide, grava) — aceitável aqui: o pior cenário de uma
+   * corrida entre duas violações quase simultâneas é contar 1 a mais ou a menos,
+   * nunca escapar do banimento por muito tempo. Nunca lança: uma falha aqui não
+   * pode impedir o aceno seguro de ser enviado, que já é o comportamento correto
    * independente de o strike ter sido gravado.
    */
   async recordStrike(
@@ -71,13 +89,27 @@ export class AbuseGuardService {
     if (!phone) return { banned: false, strikeCount: 0 };
 
     try {
+      const existing = await this.prisma.contactAbuseRecord.findUnique({
+        where: { tenantId_phone: { tenantId, phone } },
+      });
+
+      const now = new Date();
+      const janelaExpirada = !!existing?.lastAt && now.getTime() - existing.lastAt.getTime() > strikeWindowMs();
+      const novoCount = !existing || janelaExpirada ? 1 : existing.strikeCount + 1;
+
+      if (janelaExpirada) {
+        this.logger.log(
+          `Janela de abuso expirada para ${phone} (tenant=${tenantId}) — contagem reiniciada em 1`,
+        );
+      }
+
       const row = await this.prisma.contactAbuseRecord.upsert({
         where: { tenantId_phone: { tenantId, phone } },
         update: {
-          strikeCount: { increment: 1 },
+          strikeCount: novoCount,
           lastViolation: violations.join(','),
           lastDetail: detail.slice(0, 500),
-          lastAt: new Date(),
+          lastAt: now,
         },
         create: {
           tenantId,
@@ -85,7 +117,7 @@ export class AbuseGuardService {
           strikeCount: 1,
           lastViolation: violations.join(','),
           lastDetail: detail.slice(0, 500),
-          lastAt: new Date(),
+          lastAt: now,
         },
       });
 

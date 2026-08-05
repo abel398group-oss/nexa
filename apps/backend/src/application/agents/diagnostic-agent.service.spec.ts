@@ -6,11 +6,12 @@ function mockAi(response: string) {
   return { complete: vi.fn().mockResolvedValue(response) } as any;
 }
 
-function mockConnector(overrides: Partial<Record<'getContractStatus' | 'getDocumentStatus' | 'getRejectionInfo', any>> = {}) {
+function mockConnector(overrides: Partial<Record<'getContractStatus' | 'getDocumentStatus' | 'getRejectionInfo' | 'isDegraded', any>> = {}) {
   return {
     getContractStatus: vi.fn().mockResolvedValue(null),
     getDocumentStatus: vi.fn().mockResolvedValue(null),
     getRejectionInfo: vi.fn().mockResolvedValue(null),
+    isDegraded: vi.fn().mockReturnValue(false),
     ...overrides,
   } as any;
 }
@@ -244,5 +245,74 @@ describe('DiagnosticAgentService', () => {
 
     expect(result.confidence).toBe('low');
     expect(result.needsMoreInfo).toBe(true);
+  });
+
+  // ─── Gemini review (2026-08-05): TMS instável não pode virar "dado não existe" ──
+  it('marks diagnosticData.tmsIndisponivel when the contract lookup comes back empty because the breaker is open', async () => {
+    const ai = mockAi(aiJson({ rootCause: 'Instabilidade temporária no TMS' }));
+    const connector = mockConnector({ isDegraded: vi.fn().mockReturnValue(true) });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: 'Meu contrato sumiu',
+      category: 'erro_sistema',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.diagnosticData.tmsIndisponivel).toBe(true);
+    expect(result.diagnosticData.contract).toBeUndefined();
+  });
+
+  it('does NOT mark tmsIndisponivel when the contract simply does not exist and the breaker is closed', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({ isDegraded: vi.fn().mockReturnValue(false) });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: 'Problema qualquer',
+      category: 'erro_sistema',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.diagnosticData.tmsIndisponivel).toBeUndefined();
+  });
+
+  it('does NOT mark tmsIndisponivel when the lookup succeeds, even if the breaker later reports open', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({
+      getContractStatus: vi.fn().mockResolvedValue({ externalId: 'ext-1', plan: 'pro', status: 'active' }),
+      isDegraded: vi.fn().mockReturnValue(true),
+    });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: 'Problema qualquer',
+      category: 'erro_sistema',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.diagnosticData.contract).toBeDefined();
+    expect(result.diagnosticData.tmsIndisponivel).toBeUndefined();
+  });
+
+  it('marks tmsIndisponivel from a failed document lookup during breaker-open, independent of the contract lookup', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({
+      getDocumentStatus: vi.fn().mockResolvedValue(null),
+      isDegraded: vi.fn().mockReturnValue(true),
+    });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    const result = await svc.diagnose({
+      message: `Minha CT-e com chave ${ACCESS_KEY_44} foi rejeitada`,
+      category: 'cte',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    expect(result.diagnosticData.tmsIndisponivel).toBe(true);
   });
 });
