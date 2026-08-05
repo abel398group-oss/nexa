@@ -9,6 +9,7 @@ function makePrisma() {
       create: vi.fn(), update: vi.fn(), delete: vi.fn(), groupBy: vi.fn(),
     },
     opportunityStageHistory: { create: vi.fn() },
+    partner: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   } as any;
 }
@@ -136,5 +137,52 @@ describe('OpportunitiesService', () => {
     expect(thisWeek.received).toBe(2);
     expect(thisWeek.won).toBe(1);
     expect(prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', assignedSellerId: 's1' });
+  });
+
+  // ── F7 (RevOps): compartilhamento com parceiro externo (LGPD gate) ─────────
+
+  it('recordPartnerConsent: grava o timestamp de consentimento', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', partnerConsentAt: null });
+    prisma.opportunity.update.mockResolvedValue({ id: 'o1', partnerConsentAt: new Date() });
+    await svc.recordPartnerConsent('t1', 'o1');
+    expect(prisma.opportunity.update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'o1' },
+      data: { partnerConsentAt: expect.any(Date) },
+    });
+  });
+
+  it('recordPartnerConsent: idempotente — nao sobrescreve consentimento ja dado', async () => {
+    const jaConsentiu = new Date('2026-08-01T00:00:00.000Z');
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', partnerConsentAt: jaConsentiu });
+    const out = await svc.recordPartnerConsent('t1', 'o1');
+    expect(out).toMatchObject({ partnerConsentAt: jaConsentiu });
+    expect(prisma.opportunity.update).not.toHaveBeenCalled();
+  });
+
+  it('shareWithPartner: sem consentimento -> BadRequest, nunca compartilha (LGPD)', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', partnerConsentAt: null });
+    await expect(svc.shareWithPartner('t1', 'o1', 'p1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.partner.findFirst).not.toHaveBeenCalled();
+    expect(prisma.opportunity.update).not.toHaveBeenCalled();
+  });
+
+  it('shareWithPartner: parceiro inexistente/inativo/de outro tenant -> BadRequest', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', partnerConsentAt: new Date() });
+    prisma.partner.findFirst.mockResolvedValue(null);
+    await expect(svc.shareWithPartner('t1', 'o1', 'p1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.partner.findFirst.mock.calls[0][0].where).toMatchObject({ id: 'p1', tenantId: 't1', active: true });
+    expect(prisma.opportunity.update).not.toHaveBeenCalled();
+  });
+
+  it('shareWithPartner: com consentimento e parceiro ativo -> compartilha', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', partnerConsentAt: new Date() });
+    prisma.partner.findFirst.mockResolvedValue({ id: 'p1', tenantId: 't1', active: true });
+    prisma.opportunity.update.mockResolvedValue({ id: 'o1', partnerShareStatus: 'shared' });
+    await svc.shareWithPartner('t1', 'o1', 'p1');
+    expect(prisma.opportunity.update.mock.calls[0][0].data).toMatchObject({
+      sharedWithPartnerId: 'p1',
+      partnerShareStatus: 'shared',
+      partnerSharedAt: expect.any(Date),
+    });
   });
 });

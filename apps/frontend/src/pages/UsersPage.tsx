@@ -30,12 +30,14 @@ const AREA_LABEL: Record<string, string> = {
   dashboard: 'Painel', inbox: 'Inbox', contacts: 'Contatos', knowledge: 'Conhecimento',
   sellers: 'Vendedores', campaigns: 'Disparo', opportunities: 'Leads / Funil',
   metrics: 'Metricas', ai_control: 'Controle da IA', users: 'Usuarios',
+  partners: 'Parceiros (cross-sell)',
 };
 // Precisa espelhar AREAS do backend (users.service.ts) — o que nao estiver la e
 // descartado no create/update.
 const ALL_AREAS = [
   'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
   'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
+  'partners',
 ];
 
 // Conjuntos prontos para os papeis do dia a dia — o admin ainda pode ajustar

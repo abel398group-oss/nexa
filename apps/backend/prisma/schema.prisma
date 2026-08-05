@@ -839,11 +839,42 @@ model Opportunity {
   stageHistory   OpportunityStageHistory[]
   activities     SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
+  // F7 (RevOps, 2026-08-05): compartilhamento com parceiro externo (ex.:
+  // pneus). sharedWithPartnerId NAO e um segundo tenant — e uma empresa de
+  // fora do Nexa. partnerConsentAt precisa estar preenchido ANTES de
+  // partnerSharedAt (gate aplicado em opportunities.service.ts, LGPD).
+  sharedWithPartnerId String?   @map("shared_with_partner_id")
+  sharedWithPartner   Partner?  @relation(fields: [sharedWithPartnerId], references: [id], onDelete: SetNull)
+  partnerShareStatus  String?   @map("partner_share_status") // pending | shared | accepted | rejected | converted
+  partnerSharedAt     DateTime? @map("partner_shared_at")
+  partnerConsentAt    DateTime? @map("partner_consent_at") // presenca = consentimento dado (auditavel: QUANDO)
+
   @@index([tenantId])
   @@index([tenantId, stage])
   @@index([tenantId, conversationId])
   @@index([tenantId, assignedSellerId])
+  @@index([tenantId, sharedWithPartnerId])
   @@map("opportunities")
+}
+
+// F7 (2026-08-05, expansao RevOps): empresa parceira EXTERNA (ex.: fornecedor
+// de pneus) que recebe lead qualificado por indicacao/cross-sell. NAO e um
+// Tenant — nunca ganha acesso ao Nexa, so recebe o dado do lead compartilhado
+// (com consentimento, ver Opportunity.partnerConsentAt).
+model Partner {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  type         String // ex: 'pneus'
+  active       Boolean  @default(true)
+  contactEmail String?  @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sharedLeads  Opportunity[]
+
+  @@index([tenantId])
+  @@map("partners")
 }
 
 model OpportunityStageHistory {

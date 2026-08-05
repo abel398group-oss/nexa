@@ -162,6 +162,41 @@ export class OpportunitiesService {
     return updated;
   }
 
+  // F7 (RevOps): registra QUANDO o lead consentiu compartilhar o dado com um
+  // parceiro externo (LGPD) — presença do timestamp é a prova, não um booleano.
+  // Idempotente: consentimento já dado não é sobrescrito por uma segunda chamada.
+  async recordPartnerConsent(tenantId: string, id: string, sellerScope?: string) {
+    const opp = await this.findOne(tenantId, id, sellerScope);
+    if ((opp as any).partnerConsentAt) return opp;
+    return this.prisma.opportunity.update({
+      where: { id },
+      data: { partnerConsentAt: new Date() } as any,
+    });
+  }
+
+  // F7 (RevOps): compartilha o lead com um parceiro externo (ex.: fornecedor
+  // de pneus). Partner NUNCA é um segundo tenant — é uma empresa de fora do
+  // Nexa. Bloqueia sem consentimento prévio (LGPD) e sem parceiro ativo do
+  // MESMO tenant — nunca aceita partnerId de outro tenant.
+  async shareWithPartner(tenantId: string, id: string, partnerId: string, sellerScope?: string) {
+    const opp = await this.findOne(tenantId, id, sellerScope);
+    if (!(opp as any).partnerConsentAt) {
+      throw new BadRequestException(
+        'Lead ainda não consentiu o compartilhamento com parceiro (LGPD) — registre o consentimento antes.',
+      );
+    }
+    const partner = await (this.prisma as any).partner.findFirst({ where: { id: partnerId, tenantId, active: true } });
+    if (!partner) throw new BadRequestException('Parceiro inválido ou inativo.');
+    return this.prisma.opportunity.update({
+      where: { id },
+      data: {
+        sharedWithPartnerId: partnerId,
+        partnerShareStatus: 'shared',
+        partnerSharedAt: new Date(),
+      } as any,
+    });
+  }
+
   async remove(tenantId: string, id: string, sellerScope?: string) {
     await this.findOne(tenantId, id, sellerScope);
     await this.prisma.opportunity.delete({ where: { id } });

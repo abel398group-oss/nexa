@@ -11,6 +11,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 export const AREAS = [
   'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
   'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
+  'partners', // F7 (RevOps): cadastro de empresa parceira externa (ex.: pneus)
 ] as const;
 
 const SELECT = { id: true, email: true, name: true, role: true, permissions: true, isActive: true, sellerId: true, createdAt: true };
