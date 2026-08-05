@@ -149,6 +149,20 @@ describe('ResolutionAgentService', () => {
     expect(result.confidence).toBe('low');
   });
 
+  // A regra anti-identidade existia só no agente de DIAGNÓSTICO — e quem
+  // escreve o texto que o cliente lê é este. Sem ela, nada impedia a resposta
+  // final de pedir CNPJ a quem já veio autenticado do TMS.
+  it('proíbe pedir dado de identificação ao cliente', async () => {
+    const ai = mockAi(aiJson({}));
+    const svc = new ResolutionAgentService(ai, mockKnowledge([]), mockPlaybook(''));
+
+    await svc.resolve(baseInput);
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).toContain('NUNCA peça dados pessoais ou de identificação');
+    expect(system).toContain('CNPJ');
+  });
+
   // ─── TMS instável (2026-08-05) ────────────────────────────────────────────
   // Antes o flag morria no diagnóstico e o cliente recebia escalação comum —
   // podendo entender que o documento/contrato dele não existe.

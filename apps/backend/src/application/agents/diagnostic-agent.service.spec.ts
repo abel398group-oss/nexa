@@ -283,6 +283,52 @@ describe('DiagnosticAgentService', () => {
     expect(result.tmsUnstable).toBe(true);
   });
 
+  // No caminho do widget/portal o token do TMS não carrega o plano, então a Lia
+  // atendia todo cliente do chat como "plano: desconhecido".
+  it('usa o plano do contrato quando o cliente veio sem plano (widget/portal)', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({
+      getContractStatus: vi.fn().mockResolvedValue({ externalId: 'ext-1', plan: 'profissional', status: 'active' }),
+    });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    await svc.diagnose({
+      message: 'CT-e não emite',
+      category: 'cte',
+      history: '',
+      tmsCustomer: { externalId: 'ext-1', name: 'Empresa ABC' }, // sem plan
+    });
+
+    expect(ai.complete.mock.calls[0][1] as string).toContain('plano: profissional');
+  });
+
+  it('o plano que veio no contexto vence o do contrato', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector({
+      getContractStatus: vi.fn().mockResolvedValue({ externalId: 'ext-1', plan: 'basico', status: 'active' }),
+    });
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    await svc.diagnose({
+      message: 'CT-e não emite', category: 'cte', history: '',
+      tmsCustomer: { externalId: 'ext-1', name: 'Empresa ABC', plan: 'corporativo' },
+    });
+
+    expect(ai.complete.mock.calls[0][1] as string).toContain('plano: corporativo');
+  });
+
+  it('sem contrato e sem plano no contexto: continua desconhecido', async () => {
+    const ai = mockAi(aiJson({}));
+    const svc = new DiagnosticAgentService(ai, mockConnector());
+
+    await svc.diagnose({
+      message: 'problema', category: 'erro_sistema', history: '',
+      tmsCustomer: { externalId: 'ext-1', name: 'Empresa ABC' },
+    });
+
+    expect(ai.complete.mock.calls[0][1] as string).toContain('plano: desconhecido');
+  });
+
   it('tmsUnstable é false quando o TMS respondeu normalmente', async () => {
     const ai = mockAi(aiJson({}));
     const connector = mockConnector({

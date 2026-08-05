@@ -87,8 +87,15 @@ export class DiagnosticAgentService {
 
     if (tmsUnstable) diagnosticData.tmsIndisponivel = true;
 
+    // O plano NUNCA vem preenchido no caminho do widget/portal: o token do TMS
+    // carrega só externalId/nome/página (handoff.service.ts) — então a Lia
+    // atendia todo cliente do chat como "plano: desconhecido". O contrato já foi
+    // lido logo acima e traz o plano; usar ele fecha o buraco sem mudar o
+    // contrato do token nem gastar uma chamada a mais.
+    const planoDoContrato = (diagnosticData.contract as any)?.plan;
+    const plano = input.tmsCustomer?.plan || planoDoContrato || 'desconhecido';
     const customerCtx = input.tmsCustomer
-      ? `Cliente: ${input.tmsCustomer.name}, plano: ${input.tmsCustomer.plan ?? 'desconhecido'}`
+      ? `Cliente: ${input.tmsCustomer.name}, plano: ${plano}`
       : 'Cliente não identificado no TMS';
 
     const dataCtx = tmsUnstable
