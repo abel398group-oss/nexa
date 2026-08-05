@@ -8,14 +8,23 @@ import { TicketIntelligenceService } from './ticket-intelligence.service';
 
 function makeDeps() {
   const prisma = {
-    aiConversation: { count: vi.fn().mockResolvedValue(0) },
+    aiConversation: { count: vi.fn().mockResolvedValue(0), findMany: vi.fn().mockResolvedValue([]) },
     notification: { findFirst: vi.fn().mockResolvedValue(null) },
   } as any;
   const notifications = { create: vi.fn().mockResolvedValue({}) } as any;
   const knowledge = {} as any;
   const ai = {} as any;
-  const lock = { acquire: vi.fn() } as any;
+  const lock = { acquire: vi.fn().mockResolvedValue(vi.fn().mockResolvedValue(undefined)) } as any;
   return { prisma, notifications, knowledge, ai, lock };
+}
+
+// Ticket "neutro": não aciona D1-A/B/C/D, só serve pra popular o lote do §6.
+function makeNeutralTicket(id: string) {
+  return {
+    id, tenantId: 't1', status: 'closed', ticketCategory: 'treinamento',
+    ticketPriority: 'low', rootCause: null, outcome: null, resolvedAt: null,
+    stageHistory: [],
+  };
 }
 
 function makeTicket(overrides: Partial<any> = {}) {
@@ -94,5 +103,46 @@ describe('TicketIntelligenceService — §3 detectRecurrence', () => {
         body: expect.stringContaining('Certificado digital vencido'),
       }),
     );
+  });
+});
+
+// §6 (auditoria de suporte, 2026-08-05): teto por rodada na busca de tickets
+// fechados — antes não tinha limite nenhum.
+describe('TicketIntelligenceService — §6 teto por rodada', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: TicketIntelligenceService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('busca com take (teto) e ordena do mais antigo pro mais novo', async () => {
+    await svc.runIntelligence();
+
+    const query = deps.prisma.aiConversation.findMany.mock.calls[0][0];
+    expect(query.take).toBeGreaterThan(0);
+    expect(query.orderBy).toEqual({ endedAt: 'asc' });
+  });
+
+  it('avisa quando o teto é atingido (pode haver mais tickets na janela)', async () => {
+    const cap = Number(process.env.TICKET_INTELLIGENCE_MAX_PER_RUN ?? 500);
+    deps.prisma.aiConversation.findMany.mockResolvedValue(
+      Array.from({ length: cap }, (_, i) => makeNeutralTicket(`t-${i}`)),
+    );
+    const warnSpy = vi.spyOn((svc as any).logger, 'warn');
+
+    await svc.runIntelligence();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('teto'));
+  });
+
+  it('não avisa quando o lote vem abaixo do teto (caso comum)', async () => {
+    deps.prisma.aiConversation.findMany.mockResolvedValue([makeNeutralTicket('t-1'), makeNeutralTicket('t-2')]);
+    const warnSpy = vi.spyOn((svc as any).logger, 'warn');
+
+    await svc.runIntelligence();
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('teto'));
   });
 });

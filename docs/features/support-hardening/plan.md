@@ -58,9 +58,9 @@ it's considered done.
 | §1 | nexa | `case-classifier-agent.service.ts:87`, `escalation-agent.service.ts:27` | High | **Fixed** |
 | §2 | tms | `usePortalSession.ts`, `SupportDrawer.tsx:699-721` | ~~High~~ | **Not a bug — see below** |
 | §3 | nexa | `ticket-intelligence.service.ts:159-167` | High | **Fixed (partial — see below)** |
-| §4 | nexa | `portal-tickets.service.ts:182-207` | High | No — re-confirm first |
-| §5 | nexa | `portal-tickets.service.ts:272-290` | Medium | No — re-confirm first |
-| §6 | nexa | `ticket-intelligence.service.ts:70-91` | Medium | No — re-confirm first |
+| §4 | nexa | `portal-tickets.service.ts:182-207` | High | **Fixed** |
+| §5 | nexa | `portal-tickets.service.ts` (`ensureContact`) | Medium | **Fixed** |
+| §6 | nexa | `ticket-intelligence.service.ts:70-91` | Medium | **Fixed** |
 | §7 | tms | `SupportDrawer.tsx` + `LiaChatWindow.tsx` | Medium | No — re-confirm first |
 | §8 | tms | `lia-support.service.ts:64-148` | Medium | No — re-confirm first |
 | §9 | tms | `service-token.guard.ts:34` | Low | No — re-confirm first |
@@ -183,57 +183,89 @@ still looks too sparse after this fix lands.
 
 ---
 
-### §4 — Concurrent replies to a closed ticket can create two follow-ups (High, not yet re-confirmed)
+### §4 — Concurrent replies to a closed ticket, fixed
 
-**Repo:** nexa. **Where:** `portal-tickets.service.ts:182-207` (`reply()`,
-the reopen-window logic).
+**Repo:** nexa. **Where:** `portal-tickets.service.ts` (`reply()` +
+new `reopenOrFollowUpLocked()`).
 
-**Claimed failure scenario.** No lock/transaction between the `findFirst`
-status check and the reopen-or-follow-up write. Two near-simultaneous replies
-to the same closed ticket (WhatsApp + portal arriving close together, or a
-double-submit) can both read `status === 'closed'`, both decide it's past the
-reopen window, and both create a separate follow-up conversation — the same
-failure family as §0.
+**Confirmed.** Read the full method — no transaction or lock between the
+`findFirst` status check in `reply()` and the write in `reopenOrFollowUp()`.
+Two near-simultaneous replies to the same closed ticket (WhatsApp + portal
+arriving close together, or a double-submit) could both read `status ===
+'closed'`, both decide it's past the reopen window, and both create a
+separate follow-up conversation.
 
-**Before fixing:** confirm the read-then-write really has no transaction
-wrapping it (read the full method, not just the range already sampled).
+**Fix.** Added `reopenOrFollowUpLocked()`, which wraps the decision in the
+same `RedisLockService` already used by `ticket-intelligence.service.ts` —
+reused infrastructure, not a new mechanism. Whoever gets the lock first
+decides normally; whoever arrives while it's held waits briefly (3 retries,
+150ms apart), then re-reads the conversation fresh — if it's already been
+reopened, or a follow-up already exists (checked via `followUpOfId`, since
+the *original* ticket stays `'closed'` even after a follow-up is created —
+checking status alone would miss that case), it reuses that result instead of
+creating a second one. If the lock can't be acquired at all (Redis down), it
+falls back to the pre-fix behavior (no lock) rather than blocking the
+customer — never worse than today.
 
-**Likely fix, if confirmed.** Wrap the check + the resulting write (reopen or
-create-follow-up) in a single `prisma.$transaction`, or add a unique
-constraint that makes the second concurrent write fail loudly instead of
-silently succeeding twice.
-
----
-
-### §5 — Swallowed errors with no log (Medium, not yet re-confirmed)
-
-**Repo:** nexa. **Where:** `portal-tickets.service.ts:272-276`, `287-290`.
-
-**Claimed failure scenario.** `.catch(() => {})` around a DB update, intended
-to absorb a unique-constraint conflict, but written broadly enough to also
-swallow a transient connection error or any other failure with zero log line
-— directly against this repo's own rule that every discard path must log why.
-
-**Likely fix, if confirmed.** Catch the specific error (e.g. Prisma's unique
-constraint error code) and let anything else rethrow, or at minimum log
-`err?.message` before discarding.
+8 tests added/updated in `portal-tickets.service.spec.ts`, including the two
+existing reopen/follow-up tests (their `findFirst` mock sequence changed —
+there's now a re-read inside the lock — the assertions themselves are
+unchanged) and 3 new tests: reusing an existing follow-up, reusing an
+already-reopened ticket, and the no-lock-available fallback.
 
 ---
 
-### §6 — Unbounded batch in the 30min job (Medium, not yet re-confirmed)
+### §5 — Swallowed errors with no log, fixed
 
-**Repo:** nexa. **Where:** `ticket-intelligence.service.ts:70-91` (the
-`recentlyClosed` query) + the Redis lock at line 58.
+**Repo:** nexa. **Where:** `portal-tickets.service.ts` (`ensureContact`, both
+best-effort `contact.update` calls).
 
-**Claimed failure scenario.** No `take`/pagination on "everything closed in
-the last 2h," combined with a fixed-TTL lock that doesn't renew — if a run
-ever processes an unusually large batch, it could outlive the lock and race
-with the next scheduled run.
+**Confirmed.** `.catch(() => {})` in both spots, meant to absorb the expected
+unique-constraint conflict (phone or externalContactId already used by
+another contact), but broad enough to also swallow a transient DB failure
+with zero log line — against this repo's own rule that every discard path
+must log why.
 
-**Before fixing:** check realistic volume (how many tickets typically close in
-a 2h window) — if it's reliably small, this may not be worth the complexity of
-adding pagination now; a lock-TTL extension or a simple row cap might be
-enough.
+**Fix.** Kept the "never throw" behavior (this is a best-effort auxiliary
+update inside `ensureContact`, called from the customer-facing `open()`/
+`reply()` paths — rethrowing here would risk breaking ticket creation over a
+non-critical field sync, which is a bigger behavior change than this pass
+should make). Only added: check `e?.code === 'P2002'` (this codebase's
+established pattern for Prisma's unique-constraint code, already used in
+`sellers.service.ts:105`) — swallow that in silence as before, but
+`logger.warn` anything else, so a real DB failure is no longer invisible.
+
+2 tests added, covering both the P2002-stays-silent case and the
+real-error-gets-logged case.
+
+---
+
+### §6 — Unbounded batch in the 30min job, fixed (row cap, not full pagination)
+
+**Repo:** nexa. **Where:** `ticket-intelligence.service.ts`
+(`runIntelligenceLocked`).
+
+**Confirmed.** No `take`/limit on "everything closed in the last 2h," and the
+lock guarding concurrent runs has a fixed 900s TTL that doesn't renew mid-run.
+
+**Fix, matching the "simple row cap" option from the original note** (didn't
+have production volume data to justify full pagination, and didn't want to
+query prod to find out just for this pass): added `take:
+TICKET_INTELLIGENCE_MAX_PER_RUN` (env-configurable, default 500) plus
+`orderBy: { endedAt: 'asc' }` so if the cap is ever hit, the oldest tickets go
+first — nothing is skipped, it just spreads across more runs. Logs a warning
+when the cap is reached, so if 500/run is ever actually too low, that becomes
+visible instead of silently truncating. Left the lock TTL untouched — see
+reasoning below.
+
+**Why the lock TTL wasn't touched.** `release()` runs in a `finally` block, so
+a thrown error already releases the lock; the only case where a longer TTL
+would help is a truly hung process, and in that case a LONGER TTL is worse,
+not better — it delays recovery further after a crash/restart that skipped
+the `finally`. The row cap addresses the actual risk (a large batch running
+long) without that tradeoff.
+
+3 tests added.
 
 ---
 
