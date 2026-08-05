@@ -307,8 +307,10 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     return () => { s.close(); socketRef.current = null; };
   }, []);
 
+  // Ancora no fim da conversa (mensagem mais recente), como no WhatsApp —
+  // ao abrir a conversa e a cada mensagem nova (enviada ou recebida).
   useEffect(() => {
-    if (threadRef.current) threadRef.current.scrollTop = 0;
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [active?.id, messages.length]);
 
   // ADR 034 — deep link: /inbox?c=<conversationId> (link "Atender agora" da
@@ -927,9 +929,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 className={`flex-1 space-y-2 overflow-y-auto overflow-x-hidden p-4 ${showTimeline ? 'max-w-[calc(100%-260px)]' : ''}`}
               >
                 {(() => {
-                  const reversed = [...messages].reverse();
-                  return reversed.map((m, i) => {
-                    const showSeparator = i === 0 || dayKey(m.createdAt) !== dayKey(reversed[i - 1].createdAt);
+                  // `messages` já vem em ordem cronológica ascendente (mais antiga
+                  // primeiro — ver openGroup) — renderiza direto, sem inverter,
+                  // pra ficar mais antiga em cima / mais recente embaixo (WhatsApp).
+                  return messages.map((m, i) => {
+                    const showSeparator = i === 0 || dayKey(m.createdAt) !== dayKey(messages[i - 1].createdAt);
                     return (
                       <Fragment key={m.id}>
                         {showSeparator && (

@@ -231,37 +231,65 @@ export class KnowledgeService {
     // 1 query busca todos os títulos existentes de uma vez
     const existingList = await this.prisma.aiKnowledgeBase.findMany({
       where: { tenantId, title: { in: items.map((i) => i.title) } },
-      select: { id: true, title: true, content: true },
+      select: { id: true, title: true, content: true, category: true, topic: true, tags: true },
     });
     const existingMap = new Map(existingList.map((e: any) => [e.title, e]));
+
+    const sameTags = (a: string[] | undefined, b: string[] | undefined) =>
+      JSON.stringify([...(a ?? [])].sort()) === JSON.stringify([...(b ?? [])].sort());
 
     let created = 0;
     let updated = 0;
     for (const it of items) {
       const existing = existingMap.get(it.title);
       if (existing) {
-        // novo conteúdo → aprova imediatamente (fonte TMS é confiável — sem curadoria manual)
-        if (existing.content !== it.content) {
-          const last = await this.prisma.aiKnowledgeVersion.findFirst({
-            where: { knowledgeId: existing.id },
-            orderBy: { version: 'desc' },
-          });
-          await this.prisma.$transaction([
-            this.prisma.aiKnowledgeVersion.create({
-              data: {
-                knowledgeId: existing.id,
-                version: (last?.version ?? 0) + 1,
-                content: it.content,
-                approved: true,
-                author: `connector:${productCode}`,
-              },
-            }),
+        // 2026-08-03: a sincronização só comparava `content`, então recategorizar um
+        // artigo no conector não tinha efeito nenhum no banco — a `category` antiga
+        // ficava viva para sempre. Como os agentes FILTRAM por categoria
+        // (vendas exclui 'suporte', suporte exclui 'comercial'), um artigo com a
+        // categoria errada fica invisível para o agente que precisa dele.
+        // Agora category/topic/tags também são sincronizados.
+        const contentChanged = existing.content !== it.content;
+        const metaChanged =
+          existing.category !== it.category ||
+          existing.topic !== it.topic ||
+          !sameTags(existing.tags, it.tags);
+
+        if (contentChanged || metaChanged) {
+          const ops: any[] = [];
+          // Versão nova só quando o TEXTO muda — recategorizar não é conteúdo novo.
+          // novo conteúdo → aprova imediatamente (fonte TMS é confiável — sem curadoria manual)
+          if (contentChanged) {
+            const last = await this.prisma.aiKnowledgeVersion.findFirst({
+              where: { knowledgeId: existing.id },
+              orderBy: { version: 'desc' },
+            });
+            ops.push(
+              this.prisma.aiKnowledgeVersion.create({
+                data: {
+                  knowledgeId: existing.id,
+                  version: (last?.version ?? 0) + 1,
+                  content: it.content,
+                  approved: true,
+                  author: `connector:${productCode}`,
+                },
+              }),
+            );
+          }
+          ops.push(
             this.prisma.aiKnowledgeBase.update({
               where: { id: existing.id },
-              data: { content: it.content },
+              data: {
+                ...(contentChanged ? { content: it.content } : {}),
+                category: it.category,
+                topic: it.topic,
+                tags: it.tags ?? [],
+              },
             }),
-          ]);
-          await this.storeEmbedding(existing.id, existing.title, it.content);
+          );
+          await this.prisma.$transaction(ops);
+          // O vetor é gerado de título+conteúdo — só regenera quando o texto muda.
+          if (contentChanged) await this.storeEmbedding(existing.id, existing.title, it.content);
           updated++;
         }
         continue;

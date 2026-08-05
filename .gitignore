@@ -14,6 +14,9 @@ build/
 # template de produção (só placeholders) — deve ser versionado
 !.env.production.example
 
+# Kimi shared config
+config.toml
+
 # prisma
 *.db
 

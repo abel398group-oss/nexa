@@ -98,15 +98,38 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         throw new Error('resposta do TMS sem planos');
       }
 
-      const plans: Plan[] = rows.map((p) => ({
-        code: String(p.code ?? p.id ?? '').trim(),
-        name: String(p.name ?? p.title ?? p.code ?? '').trim(),
-        price: Number(p.price ?? p.priceMonthly ?? p.monthlyPrice ?? 0),
-        maxUsers: p.maxUsers ?? p.userLimit ?? undefined,
-        features: Array.isArray(p.features) ? p.features.map((f: any) => String(f)) : [],
-      })).filter((p) => p.code && Number.isFinite(p.price) && p.price > 0);
+      // Fallback de features por código de plano (usado só quando o TMS manda lista vazia).
+      const staticByCode = new Map(this.defaultPlans().map((p) => [p.code, p.features ?? []]));
+
+      const plans: Plan[] = rows.map((p) => {
+        const code = String(p.code ?? p.id ?? '').trim();
+        const liveFeatures = Array.isArray(p.features) ? p.features.map((f: any) => String(f)) : [];
+        return {
+          code,
+          name: String(p.name ?? p.title ?? p.code ?? '').trim(),
+          price: Number(p.price ?? p.priceMonthly ?? p.monthlyPrice ?? 0),
+          maxUsers: p.maxUsers ?? p.userLimit ?? undefined,
+          // 2026-08-03: em produção o TMS devolve `features: []` para TODOS os planos
+          // (metadata.features vazio no banco). Sem isso a Lia recebia só nome+preço e
+          // ficava sem saber descrever o que vem em cada plano. Assim que o TMS
+          // preencher metadata.features, o valor AO VIVO passa a mandar (o estático
+          // só entra quando a lista vem vazia).
+          features: liveFeatures.length > 0 ? liveFeatures : (staticByCode.get(code) ?? []),
+        };
+      // 2026-08-03: o filtro exigia `price > 0` e derrubava o Corporativo, que vem com
+      // preço 0 justamente por ser SOB CONSULTA. Resultado: a Lia recebia 3 planos e não
+      // tinha o que oferecer a lead grande. Agora preço 0 passa e é renderizado como
+      // "sob consulta" (sales-agent.service.ts) — só descartamos plano sem code ou com
+      // preço inválido/negativo.
+      }).filter((p) => p.code && Number.isFinite(p.price) && p.price >= 0);
 
       if (plans.length === 0) throw new Error('planos do TMS inválidos (sem code/preço)');
+      if (plans.every((p) => (p.features?.length ?? 0) === 0)) {
+        this.logger.warn(
+          'TMS devolveu planos sem features e não há fallback estático correspondente — ' +
+          'a Lia vai citar planos sem saber o que cada um inclui. Preencha metadata.features no TMS.',
+        );
+      }
       return plans;
     } catch (err: any) {
       // K1: quando o TMS está configurado mas indisponível → retornar [] para forçar escalação.
@@ -288,7 +311,9 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         tags: ['cte', 'mdfe', 'fiscal', 'sefaz', 'dacte', 'certificado', 'xml'],
       },
       {
-        topic: 'fiscal', category: 'suporte',
+        // category 'produto' (era 'suporte'): "preciso de certificado digital?" é pergunta
+        // de lead avaliando o custo real de entrar. Ver nota no artigo de implantação.
+        topic: 'fiscal', category: 'produto',
         title: 'Certificado digital para emissão fiscal',
         content:
           'Para emitir CT-e e MDF-e, a empresa precisa de certificado digital (A1 ou A3) no formato PFX. ' +
@@ -584,6 +609,31 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         tags: ['funil', 'crm', 'oportunidade', 'prospeccao', 'playbook', 'sdr', 'comercial', 'vendas', 'pipeline'],
       },
       {
+        // Adicionado em 2026-08-03: o módulo `proactivity` é um dos maiores do TMS e não
+        // tinha artigo nenhum na KB de vendas — a Lia sabia cobrar o número extra de
+        // WhatsApp (add-on) sem saber explicar para que serve o número.
+        topic: 'monitor-proativo', category: 'produto',
+        title: 'Monitor Proativo — o sistema avisa antes de virar problema',
+        content:
+          'O HiperTMS não espera alguém abrir o sistema para descobrir que algo travou: ele MANDA O AVISO. ' +
+          'É o Monitor Proativo, e é o que separa o HiperTMS de um sistema que só registra o que já aconteceu. ' +
+          'O que ele faz: ' +
+          '• varre a operação procurando PENDÊNCIA — embarque sem CT-e emitido, coleta ou entrega não ' +
+          'confirmada, viagem que não foi encerrada, fatura que não virou conta a receber; ' +
+          '• dispara ALERTA por WhatsApp e por e-mail para as pessoas certas — dá para escolher quem recebe ' +
+          'o quê, por canal e por assunto (pendências operacionais, fechamento, caixa); ' +
+          '• manda RESUMO periódico da operação e relatório de FECHAMENTO, sem ninguém pedir; ' +
+          '• acusa DESVIO DE CONSUMO de combustível fora do padrão do veículo; ' +
+          '• em cada embarque, cotação, viagem e fatura mostra em que etapa está e qual é a PRÓXIMA AÇÃO ' +
+          '(ex.: "emitir CT-e", "confirmar coleta", "gerar fatura") — com o botão ali, não só o aviso. ' +
+          'Argumento de venda: a dor real da transportadora não é digitar, é ESQUECER. O embarque entregue ' +
+          'que ninguém faturou, o CT-e que não saiu, a viagem aberta há duas semanas. Planilha não cobra ' +
+          'ninguém; o Monitor cobra. ' +
+          'Quantas pessoas recebem os alertas depende do plano (Básico 1 número, Essencial 3, Profissional 5) ' +
+          'e número adicional é add-on — ver o artigo de add-ons para o valor.',
+        tags: ['monitor', 'monitor proativo', 'alerta', 'aviso', 'notificacao', 'proativo', 'pendencia', 'esquecer', 'cobranca', 'whatsapp', 'lembrete', 'automatico', 'fechamento'],
+      },
+      {
         topic: 'dashboard', category: 'produto',
         title: 'Dashboard operacional — o dono enxerga a operação',
         content:
@@ -629,41 +679,82 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 
       // ── ONBOARDING E IMPLANTAÇÃO ──────────────────────────────────────────────
       {
-        topic: 'onboarding', category: 'suporte',
+        // category 'produto' (era 'suporte'): a vendedora EXCLUI 'suporte' na busca, então
+        // este artigo era invisível justamente para quem mais precisa dele — o lead
+        // perguntando "quanto tempo demora?". 'produto' é visível para vendas e suporte.
+        topic: 'onboarding', category: 'produto',
         title: 'Tempo e processo de implantação',
         content:
-          'A implantação do HiperTMS leva em média 3 a 7 dias úteis. ' +
-          'Inclui: configuração do tenant, cadastro de tabelas de frete, importação de clientes/fornecedores, ' +
-          'configuração do certificado digital, treinamento básico da equipe e testes de emissão fiscal. ' +
-          'Migração de dados de sistemas legados é opcional e tem prazo variável conforme volume. ' +
-          'O suporte durante a implantação está incluso em todos os planos.',
-        tags: ['implantacao', 'onboarding', 'prazo', 'configuracao', 'treinamento'],
+          // Reescrito em 2026-08-03 com a regra de negócio real (diretoria) + o checklist
+          // de onboarding do TMS (onboarding.service.ts). A versão anterior prometia
+          // "3 a 7 dias úteis" e treinamento — não é assim que o produto funciona.
+          'O HiperTMS NÃO tem implantação no modelo tradicional: não existe projeto, consultor alocado, ' +
+          'nem prazo de X dias para "entregar o sistema". NUNCA prometa prazo de implantação. ' +
+          'O modelo é AUTOGUIADO e didático: o cliente contrata, entra no sistema no mesmo dia e vai ' +
+          'configurando o que a operação dele precisa, no ritmo dele. ' +
+          'O próprio sistema conduz: existe um checklist de primeiros passos com barra de progresso, ' +
+          'onde cada item mostra o que falta e leva direto para a tela certa. Os itens são: ' +
+          'cadastro da empresa, certificado digital, regime tributário, empresas (clientes/fornecedores), ' +
+          'margens, tabela de lotação (FCL), tabela de fracionado (LCL), taxas administrativas, ' +
+          'categorias financeiras, orçamento anual, veículos e motoristas. ' +
+          'Isso é VANTAGEM comercial, não limitação — o cliente não fica esperando agenda de consultor ' +
+          'para começar a usar, e configura só o que a operação dele usa (quem não faz fracionado não ' +
+          'precisa mexer em LCL). ' +
+          'Como responder ao lead que pergunta "quanto tempo demora para implantar?": ' +
+          '"não tem implantação nem espera — você contrata e já entra. O sistema te guia por um checklist ' +
+          'de configuração, e o tempo depende do que a sua operação usa. Se travar em algum passo, ' +
+          'é só chamar no chat." ' +
+          'Se o lead insistir em migração de dados de um sistema antigo, NÃO prometa prazo nem escopo — ' +
+          'diga que vai confirmar com o time e encaminhe ao especialista.',
+        tags: ['implantacao', 'onboarding', 'prazo', 'configuracao', 'treinamento', 'quanto tempo', 'demora', 'comecar a usar', 'checklist', 'migracao'],
       },
       {
-        topic: 'onboarding', category: 'suporte',
+        // category 'produto' (era 'suporte'): serve tanto para o lead ("o que preciso fazer
+        // para começar?") quanto para o cliente novo. Ver nota no artigo de implantação.
+        topic: 'onboarding', category: 'produto',
         title: 'Configuração inicial — primeiros passos',
         content:
-          'Primeiros passos no HiperTMS: ' +
-          '(1) Cadastrar dados da empresa (CNPJ, endereço, certificado digital). ' +
-          '(2) Configurar tabelas de frete (importar ou criar manualmente). ' +
-          '(3) Importar clientes e fornecedores (planilha CSV ou CNPJ manual). ' +
-          '(4) Cadastrar veículos e motoristas. ' +
-          '(5) Testar emissão de CT-e em homologação. ' +
-          '(6) Criar primeiro embarque operacional.',
-        tags: ['primeiros passos', 'configuracao', 'inicio', 'cadastro'],
+          // Alinhado em 2026-08-03 ao checklist real do TMS (onboarding.service.ts).
+          'O HiperTMS mostra um checklist de configuração inicial com barra de progresso: cada item diz o ' +
+          'que ainda falta e leva direto para a tela certa. O cliente vai marcando no ritmo dele. ' +
+          'Os passos, na ordem em que o sistema apresenta: ' +
+          '(1) completar o cadastro da empresa (nome, CNPJ e endereço); ' +
+          '(2) configurar o certificado digital (necessário para CT-e/MDF-e); ' +
+          '(3) configurar o regime tributário; ' +
+          '(4) cadastrar as empresas com que opera (clientes e fornecedores); ' +
+          '(5) configurar as margens; ' +
+          '(6) configurar a tabela de lotação (FCL); ' +
+          '(7) configurar a tabela de fracionado (LCL); ' +
+          '(8) configurar as taxas administrativas; ' +
+          '(9) configurar as categorias financeiras; ' +
+          '(10) definir o orçamento anual; ' +
+          '(11) cadastrar os veículos; ' +
+          '(12) cadastrar os motoristas. ' +
+          'Não é obrigatório fazer tudo: quem não opera fracionado não precisa da tabela LCL, por exemplo. ' +
+          'O checklist é guia, não trava — o sistema já está liberado desde o primeiro acesso.',
+        tags: ['primeiros passos', 'configuracao', 'inicio', 'cadastro', 'checklist', 'onboarding', 'por onde comecar'],
       },
 
       // ── SUPORTE E INTEGRAÇÃO ──────────────────────────────────────────────────
       {
-        topic: 'suporte', category: 'suporte',
+        // category 'produto' (era 'suporte'): "como funciona o suporte?" é pergunta de LEAD,
+        // e a vendedora exclui 'suporte' da busca. Em 'produto' os dois agentes enxergam.
+        topic: 'suporte', category: 'produto',
         title: 'Canais de suporte do HiperTMS',
         content:
-          'O HiperTMS oferece suporte via: ' +
-          'Chat (painel do sistema) e e-mail para todos os planos. ' +
-          'Suporte prioritário com tempo de resposta reduzido está disponível no plano Profissional. ' +
-          'Base de conhecimento e vídeos de treinamento estão disponíveis na central de ajuda. ' +
-          'Suporte em horário comercial (segunda a sexta, 8h às 18h).',
-        tags: ['suporte', 'atendimento', 'ajuda', 'chat', 'email'],
+          // Reescrito em 2026-08-03 com o funcionamento real (diretoria).
+          'O suporte do HiperTMS funciona em DOIS NÍVEIS, nesta ordem: ' +
+          '(1) CHAT com a Lia Suporte, dentro do próprio sistema. É o primeiro contato e resolve dúvida de ' +
+          'uso, "como faço", erro comum e orientação de configuração — na hora, sem fila e sem abrir nada. ' +
+          '(2) TICKET, quando o caso precisa de gente. O cliente abre um ticket pelo próprio atendimento e ' +
+          'um ATENDENTE HUMANO assume aquele ticket. É por aí que se fala com uma pessoa — não existe ' +
+          'telefone de suporte nem atendimento humano direto no chat. ' +
+          'Isso não é "robô te empurrando" — o chat resolve a maioria e o ticket existe justamente para o ' +
+          'que a IA não deve resolver sozinha. A central de ajuda com artigos também fica dentro do sistema. ' +
+          'Suporte prioritário (fila mais rápida) é característica do plano Profissional. ' +
+          'NÃO prometa horário de atendimento, SLA de resposta em horas nem canal de telefone/WhatsApp de ' +
+          'suporte: se o lead perguntar isso, diga que confirma com o time.',
+        tags: ['suporte', 'atendimento', 'ajuda', 'chat', 'email', 'ticket', 'chamado', 'falar com humano', 'atendente', 'sla'],
       },
       {
         topic: 'integracao', category: 'produto',
@@ -683,12 +774,20 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'usuarios', category: 'produto',
         title: 'Usuários, perfis e permissões',
         content:
-          'O HiperTMS tem controle de acesso por perfil (roles). ' +
-          'Cada empresa cria os próprios perfis e define quais módulos cada usuário pode acessar. ' +
-          'Perfis padrão: Administrador (acesso total), Operação, Financeiro, Fiscal. ' +
+          // Corrigido em 2026-08-03 contra o código do TMS (system-roles.constants.ts,
+          // rbac-admin.service.ts). A versão anterior prometia criação de perfis pelo
+          // cliente e um perfil "Fiscal" — nenhum dos dois existe.
+          'O HiperTMS tem controle de acesso por perfil. Os perfis são do sistema (catálogo pronto), ' +
+          'o cliente NÃO cria perfis novos. São três disponíveis para a transportadora: ' +
+          'Administrador (acesso total), Operação e Financeiro. ' +
+          'NÃO existe perfil "Fiscal" — quem emite CT-e/MDF-e usa Operação ou Administrador. ' +
+          'O que dá flexibilidade é o ajuste por usuário: sobre o perfil, o administrador pode LIBERAR ou ' +
+          'BLOQUEAR permissões específicas de uma pessoa, sem mexer no perfil dos outros. ' +
+          'Se o lead perguntar "consigo criar um perfil só para o meu despachante?", a resposta honesta é: ' +
+          'perfil novo não, mas dá para partir de um perfil existente e ajustar as permissões daquele usuário. ' +
           'Limite de usuários depende do plano contratado. ' +
           'Login via e-mail e senha com recuperação por e-mail.',
-        tags: ['usuario', 'perfil', 'permissao', 'acesso', 'admin', 'login'],
+        tags: ['usuario', 'perfil', 'permissao', 'acesso', 'admin', 'login', 'papel', 'perfil personalizado', 'restringir'],
       },
 
       // ── DIFERENCIAIS ─────────────────────────────────────────────────────────

@@ -69,7 +69,12 @@ export class SalesAgentService {
     ]);
 
     const planTxt = plans
-      .map((p) => `- ${p.name} (${p.code}): R$${p.price}${p.maxUsers ? `, até ${p.maxUsers} usuários` : ''}${p.features?.length ? ` — ${p.features.join(', ')}` : ''}`)
+      .map((p) => {
+        // Preço 0 = plano SOB CONSULTA (Corporativo). Nunca renderizar "R$0" — a Lia
+        // repetiria isso ao lead. O catálogo diz explicitamente para não informar valor.
+        const preco = p.price > 0 ? `R$${p.price}` : 'preço SOB CONSULTA (não informar valor — encaminhar ao especialista)';
+        return `- ${p.name} (${p.code}): ${preco}${p.maxUsers ? `, até ${p.maxUsers} usuários` : ''}${p.features?.length ? ` — ${p.features.join(', ')}` : ''}`;
+      })
       .join('\n');
     const kbTxt = kb.map((k: any) => `[${k.title}]\n${k.content}`).join('\n\n');
     // tudo que a vendedora tinha permissão de usar (planos + KB) → vai p/ a supervisora auditar

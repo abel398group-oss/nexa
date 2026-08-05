@@ -86,6 +86,55 @@ describe('HiperTmsConnector — getPlans() (K1)', () => {
     expect(plans[0].price).toBe(89);
   });
 
+  // 2026-08-03: em produção o /nexa/plans devolve o Corporativo com price 0 (sob consulta).
+  // O filtro exigia price > 0 e o derrubava — a Lia recebia 3 planos e não tinha o que
+  // oferecer a lead grande. Preço 0 agora sobrevive; preço negativo continua descartado.
+  it('configurado + ok: mantem plano com price 0 (sob consulta) e descarta preço negativo', async () => {
+    process.env.TMS_BASE_URL = 'http://tms-host';
+    process.env.TMS_INTERNAL_TOKEN = 'secret';
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        plans: [
+          { code: 'basic', name: 'Básico', price: 89, maxUsers: 5, features: ['CT-e'] },
+          { code: 'corporativo', name: 'Corporativo', price: 0, features: ['SLA'] },
+          { code: 'quebrado', name: 'Quebrado', price: -1, features: [] },
+        ],
+      }),
+    } as any);
+
+    const plans = await connector.getPlans();
+
+    expect(plans.map((p) => p.code)).toEqual(['basic', 'corporativo']);
+    expect(plans.find((p) => p.code === 'corporativo')!.price).toBe(0);
+  });
+
+  // 2026-08-03: o TMS de produção devolve `features: []` para todos os planos
+  // (metadata.features vazio no banco). Sem fallback a Lia recebia só nome+preço.
+  it('configurado + ok: usa features estáticas quando o TMS devolve lista vazia', async () => {
+    process.env.TMS_BASE_URL = 'http://tms-host';
+    process.env.TMS_INTERNAL_TOKEN = 'secret';
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        plans: [
+          { code: 'essencial', name: 'Essencial', price: 199, maxUsers: 8, features: [] },
+          { code: 'basic', name: 'Básico', price: 89, maxUsers: 5, features: ['só isto'] },
+        ],
+      }),
+    } as any);
+
+    const plans = await connector.getPlans();
+
+    const essencial = plans.find((p) => p.code === 'essencial')!;
+    expect(essencial.features.length).toBeGreaterThan(0);
+    expect(essencial.features.join(' ')).toContain('Viagens');
+    // Quando o TMS MANDA features, elas mandam — o estático não sobrescreve.
+    expect(plans.find((p) => p.code === 'basic')!.features).toEqual(['só isto']);
+  });
+
   // Cenário 3: TMS configurado + API falha → retorna [] (forçar escalação, nunca preço desatualizado)
   it('configurado + falha: retorna [] para forçar escalacao (K1 — nunca preço desatualizado)', async () => {
     process.env.TMS_BASE_URL = 'http://tms-host';
