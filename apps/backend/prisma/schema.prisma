@@ -190,6 +190,36 @@ model Contact {
   @@map("contacts")
 }
 
+// Registro de abuso por telefone — "3 strikes" (2026-08-04).
+//
+// Cada vez que shared/governance/output-guard.ts barra uma resposta da Lia
+// (preço fora do catálogo, vazamento de prompt, ofensa, ou dado sensível de
+// terceiro), é sinal de que quem está do outro lado tentou manipular a IA —
+// não é erro da Lia, é ataque. Aqui a gente conta essas tentativas por
+// telefone e, ao atingir o teto, bane: a Lia para de responder aquele
+// número, silenciosamente (mesma lógica do wrong_person — responder
+// confirma o número como ativo).
+//
+// Fica fora da tabela `contacts` de propósito: apagar/reimportar um contato
+// (limpeza de base, por exemplo) não pode apagar o histórico de abuso junto
+// — mesmo raciocínio do OptOutRecord.
+model ContactAbuseRecord {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  phone         String
+  strikeCount   Int       @default(0) @map("strike_count")
+  lastViolation String?   @map("last_violation") // ex.: "preco_nao_autorizado", "vazamento_de_dados"
+  lastDetail    String?   @map("last_detail")    // trecho legível — vai pro admin, nunca pro cliente
+  lastAt        DateTime? @map("last_at")
+  bannedAt      DateTime? @map("banned_at")       // null = ainda não banido
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, bannedAt])
+  @@map("contact_abuse_records")
+}
+
 // ===================== FASE 1 — CORE =====================
 model AiConversation {
   id            String             @id @default(uuid())
@@ -474,9 +504,33 @@ model Seller {
   conversations AiConversation[]
   notifications SellerNotification[]
   opportunities Opportunity[] // F6+ (seller-leads): leads atribuidos a este vendedor
+  activities    SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
   @@index([tenantId])
   @@map("sellers")
+}
+
+// F7 (2026-08-05, expansao RevOps): registro manual de atividade do vendedor
+// humano — ate aqui nao existia NENHUM log de ligacao/e-mail manual, entao os
+// KPIs de vendedor (metrics.service.ts) so liam AiConversation/AiMessage.
+// type/result sao texto, nao enum — mesmo padrao de Opportunity.stage, evolui
+// sem migration.
+model SellerActivity {
+  id            String       @id @default(uuid())
+  tenantId      String       @map("tenant_id")
+  sellerId      String       @map("seller_id")
+  seller        Seller       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  opportunityId String?      @map("opportunity_id")
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  type          String // call | email | note
+  result        String? // atendeu | nao_atendeu | agendou_retorno | enviado | respondido | outro
+  durationSec   Int?     @map("duration_sec") // so faz sentido pra type=call
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, sellerId])
+  @@index([tenantId, opportunityId])
+  @@map("seller_activities")
 }
 
 model SellerNotification {
@@ -681,6 +735,30 @@ model EmailOptOutToken {
   @@map("email_optout_tokens")
 }
 
+// Registro PERMANENTE de quem pediu para não receber mais (LGPD).
+//
+// Existe separado de `Contact` de propósito: em 2026-08-03 um contato que havia
+// pedido opt-out foi apagado numa limpeza da base e, ao reimportar o CSV antigo,
+// voltou como `active` e recebeu campanha de novo. O opt-out morava só no
+// status do contato — apagou o contato, apagou o pedido dela.
+//
+// Esta tabela NÃO deve ser limpa junto com contatos. É a lista de bloqueio.
+model OptOutRecord {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  phone     String?                         // WhatsApp (dígitos)
+  email     String?                         // canal e-mail
+  reason    String?                         // pedido | hostilidade | link_email | manual
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Postgres permite vários NULL num índice único, então um registro só de
+  // telefone e outro só de e-mail convivem sem conflito.
+  @@unique([tenantId, phone])
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("opt_out_records")
+}
+
 // Recuperação de senha ("Esqueceu a senha?"). Uso único, TTL curto (30min).
 // Guardamos o HASH do token, não ele em claro: se o banco vazar, os links de
 // redefinição em aberto continuam inúteis — mesma lógica do refresh token.
@@ -759,12 +837,44 @@ model Opportunity {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   stageHistory   OpportunityStageHistory[]
+  activities     SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
+
+  // F7 (RevOps, 2026-08-05): compartilhamento com parceiro externo (ex.:
+  // pneus). sharedWithPartnerId NAO e um segundo tenant — e uma empresa de
+  // fora do Nexa. partnerConsentAt precisa estar preenchido ANTES de
+  // partnerSharedAt (gate aplicado em opportunities.service.ts, LGPD).
+  sharedWithPartnerId String?   @map("shared_with_partner_id")
+  sharedWithPartner   Partner?  @relation(fields: [sharedWithPartnerId], references: [id], onDelete: SetNull)
+  partnerShareStatus  String?   @map("partner_share_status") // pending | shared | accepted | rejected | converted
+  partnerSharedAt     DateTime? @map("partner_shared_at")
+  partnerConsentAt    DateTime? @map("partner_consent_at") // presenca = consentimento dado (auditavel: QUANDO)
 
   @@index([tenantId])
   @@index([tenantId, stage])
   @@index([tenantId, conversationId])
   @@index([tenantId, assignedSellerId])
+  @@index([tenantId, sharedWithPartnerId])
   @@map("opportunities")
+}
+
+// F7 (2026-08-05, expansao RevOps): empresa parceira EXTERNA (ex.: fornecedor
+// de pneus) que recebe lead qualificado por indicacao/cross-sell. NAO e um
+// Tenant — nunca ganha acesso ao Nexa, so recebe o dado do lead compartilhado
+// (com consentimento, ver Opportunity.partnerConsentAt).
+model Partner {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  type         String // ex: 'pneus'
+  active       Boolean  @default(true)
+  contactEmail String?  @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sharedLeads  Opportunity[]
+
+  @@index([tenantId])
+  @@map("partners")
 }
 
 model OpportunityStageHistory {
@@ -828,6 +938,10 @@ model PlanLimit {
   maxMessagesMonth Int?     @map("max_messages_month") // null = ilimitado
   plan                String   @default("free")           // free | starter | essencial | pro | enterprise | profissional | corporativo
   monitorExtraNumbers Int      @default(0) @map("monitor_extra_numbers") // extra WA numbers purchased (R$29.90/mo each)
+  // WA numbers included in the plan, as told by the TMS (source of truth for the
+  // plan catalogue — ADR 011). null = TMS has not synced it yet → fall back to
+  // MONITOR_WA_INCLUDED. -1 = unlimited (Corporativo), capped at the technical limit.
+  monitorNumbersIncluded Int?  @map("monitor_numbers_included")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

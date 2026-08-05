@@ -21,13 +21,25 @@ function makePrisma() {
   } as unknown as PrismaService & any;
 }
 
+// Lista de bloqueio (LGPD). Por padrão nada bloqueado; cada teste ajusta.
+function makeOptOutRegistry() {
+  return {
+    blockedPhones: vi.fn().mockResolvedValue(new Set<string>()),
+    blockedEmails: vi.fn().mockResolvedValue(new Set<string>()),
+    isBlocked: vi.fn().mockResolvedValue(false),
+    register: vi.fn().mockResolvedValue(undefined),
+  } as any;
+}
+
 describe('ContactsService', () => {
   let prisma: any;
+  let optOut: any;
   let svc: ContactsService;
 
   beforeEach(() => {
     prisma = makePrisma();
-    svc = new ContactsService(prisma);
+    optOut = makeOptOutRegistry();
+    svc = new ContactsService(prisma, optOut);
   });
 
   describe('listTags', () => {
@@ -87,12 +99,52 @@ describe('ContactsService', () => {
         { phone: '5511999998888', name: 'A' } as any,
         { phone: '5511988887777' } as any,
       ]);
-      expect(out).toEqual({ imported: 2 });
+      expect(out).toEqual({ imported: 2, blocked: 0 });
       expect(prisma.contact.upsert).toHaveBeenCalledTimes(2);
       // a chave de upsert usa tenantId_phone (idempotente, nao duplica)
       const firstCall = prisma.contact.upsert.mock.calls[0][0];
       expect(firstCall.where.tenantId_phone.tenantId).toBe('t1');
       expect(firstCall.create.tenantId).toBe('t1');
+    });
+
+    // Incidente de 2026-08-03 (Patrícia): contato apagado numa limpeza e reimportado
+    // voltava como `active`. O disparo barrava pelo registry, mas a TELA mentia — e
+    // qualquer canal novo que esquecesse de consultar a lista vazaria.
+    it('quem está na lista de bloqueio entra já como opted_out', async () => {
+      prisma.contact.upsert.mockResolvedValue({});
+      optOut.blockedPhones.mockResolvedValue(new Set(['5511999998888']));
+
+      const out = await svc.importMany('t1', [
+        { phone: '5511999998888', name: 'Patricia' } as any,
+        { phone: '5511988887777', name: 'Outro' } as any,
+      ]);
+
+      expect(out).toEqual({ imported: 2, blocked: 1 });
+      const [bloqueado, normal] = prisma.contact.upsert.mock.calls.map((c: any) => c[0].create);
+      expect(bloqueado.status).toBe('opted_out');
+      expect(bloqueado.optOutAt).toBeInstanceOf(Date);
+      expect(normal.status).toBeUndefined(); // não bloqueado → status padrão do schema
+    });
+
+    it('contato que já existe não é rebaixado nem promovido pelo import', async () => {
+      prisma.contact.upsert.mockResolvedValue({});
+      await svc.importMany('t1', [{ phone: '5511999998888' } as any]);
+      // `update: {}` preserva o status atual — inclusive um opted_out anterior.
+      expect(prisma.contact.upsert.mock.calls[0][0].update).toEqual({});
+    });
+
+    it('falha ao consultar a lista não trava o import', async () => {
+      prisma.contact.upsert.mockResolvedValue({});
+      optOut.blockedPhones.mockRejectedValue(new Error('db fora'));
+
+      const out = await svc.importMany('t1', [{ phone: '5511999998888' } as any]);
+      expect(out.imported).toBe(1);
+    });
+
+    it('lista vazia não consulta o banco', async () => {
+      const out = await svc.importMany('t1', []);
+      expect(out).toEqual({ imported: 0, blocked: 0 });
+      expect(optOut.blockedPhones).not.toHaveBeenCalled();
     });
   });
 

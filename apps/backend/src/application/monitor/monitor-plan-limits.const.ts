@@ -7,12 +7,20 @@
  * and MonitorService (TMS proxy, /monitor/external-config) so both entry points
  * apply identical plan/number gates — see docs/monitor/ajuste-limites-planos-v2-2026-07-14.md.
  *
- * Business rules (revised 2026-07-14 — supersedes 2026-07-13):
+ * Source of truth (revised 2026-08-03 — ADR 011): the **TMS owns the plan
+ * catalogue**, including how many WhatsApp numbers each plan includes. The TMS
+ * pushes that number to `PlanLimit.monitorNumbersIncluded` via plan-sync, and
+ * `monitorWaLimit` uses it whenever it is present. `MONITOR_WA_INCLUDED` below
+ * is now only a **fallback** for tenants the TMS has not synced yet (legacy
+ * rows, local dev). Do not treat it as the rule — changing a plan is done in
+ * the TMS, never here.
+ *
+ * Fallback values (mirror the TMS catalogue as of 2026-08-03):
  *   free / starter           → Monitor blocked (0 included)
- *   Básico                   → 1 included  (Monitor now available on Básico)
+ *   Básico                   → 1 included
  *   Essencial                → 3 included
  *   Profissional / pro       → 5 included
- *   Corporativo / enterprise → 5 included + extras via monitorExtraNumbers (sob consulta)
+ *   Corporativo / enterprise → unlimited in the TMS (-1), capped here at 10
  *   monitorOverride          → 10 (technical cap, platform-admin only)
  *
  * Extra numbers: R$ 29.90/number/month, contracted via TMS/Asaas.
@@ -22,7 +30,12 @@
 import { normalizePhone } from '@/shared/utils/phone.util';
 import { MAX_SEND_TIMES_PER_CONTACT } from './contact-recipient.types';
 
-/** WhatsApp numbers included per plan (case-insensitive key). */
+/**
+ * FALLBACK ONLY — WhatsApp numbers included per plan (case-insensitive key).
+ * Used when `PlanLimit.monitorNumbersIncluded` is null (tenant never synced by
+ * the TMS). The TMS value always wins; keep this table in sync with the TMS
+ * catalogue but never change a plan *here* expecting it to take effect.
+ */
 export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
   free:         0,
   starter:      0,
@@ -40,21 +53,40 @@ export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
 export const MONITOR_WA_OVERRIDE_LIMIT = 10;
 
 /**
+ * Numbers included in the plan, preferring what the TMS synced.
+ *
+ * @param plan - plan code from PlanLimit.plan (null/undefined → treated as 'free')
+ * @param included - PlanLimit.monitorNumbersIncluded as reported by the TMS.
+ *                   null/undefined → not synced yet, use the fallback table.
+ *                   Negative → "unlimited" in the TMS, capped here at the
+ *                   technical limit (Nexa never allows more than 10 numbers).
+ */
+export function monitorWaIncluded(
+  plan: string | null | undefined,
+  included?: number | null,
+): number {
+  if (included != null) {
+    return included < 0 ? MONITOR_WA_OVERRIDE_LIMIT : included;
+  }
+  return MONITOR_WA_INCLUDED[(plan ?? 'free').toLowerCase()] ?? 0;
+}
+
+/**
  * Returns the total number of WhatsApp recipients allowed for a tenant.
  *
  * @param plan - plan code from PlanLimit.plan (null/undefined → treated as 'free')
  * @param extras - PlanLimit.monitorExtraNumbers (purchased add-ons)
  * @param override - TenantNotificationConfig.monitorOverride
+ * @param included - PlanLimit.monitorNumbersIncluded (TMS value; see monitorWaIncluded)
  */
 export function monitorWaLimit(
   plan: string | null | undefined,
   extras: number,
   override: boolean,
+  included?: number | null,
 ): number {
   if (override) return MONITOR_WA_OVERRIDE_LIMIT;
-  const key = (plan ?? 'free').toLowerCase();
-  const included = MONITOR_WA_INCLUDED[key] ?? 0;
-  return included + Math.max(0, extras);
+  return monitorWaIncluded(plan, included) + Math.max(0, extras);
 }
 
 /**

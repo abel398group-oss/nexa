@@ -15,6 +15,7 @@ import { RedisLockModule } from './shared/lock/redis-lock.module';
 import { AdminModule } from './application/admin/admin.module';
 import { PortalModule } from './application/portal/portal.module';
 import { OpportunitiesModule } from './application/opportunities/opportunities.module';
+import { PartnersModule } from './application/partners/partners.module';
 import { MetricsModule } from './application/metrics/metrics.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { SellersModule } from './application/sellers/sellers.module';
@@ -84,6 +85,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     AdminModule,
     PortalModule,
     OpportunitiesModule,
+    PartnersModule,
     MetricsModule,
     WhatsappModule,
     SellersModule,

@@ -36,6 +36,14 @@ Em `apps/backend/src/application/agents/`:
 > Agentes de **Onboarding**, **Billing** e **Analytics** são alvo do ADR 003 e
 > ainda não têm serviço dedicado (consumidos hoje por conversation/support) —
 > status: backlog, sem previsão.
+
+**Playbook não é um agente** — é config editável por tenant
+(`application/playbook/playbook.service.ts`) que o `sales-agent` injeta no
+próprio prompt: persona/tom, rebatidas de objeção, e o texto de CTA por
+temperatura de lead (quente ≥70, morno ≥40, frio <40). O que NÃO é editável
+por aí é o fluxo em si — as 7 etapas (Saudação → Descoberta → Qualificação
+BANT-lite → Proposta → Objeções → CTA → Handoff) estão fixas no system prompt
+do `sales-agent.service.ts`, não no playbook.
 >
 > **Contrato do web chat (ADR 027, atualizado 2026-07-03):** o widget TMS envia
 > `web_chat:send { body }` e escuta `web_chat:message { id, body, isAgent, createdAt }`;
@@ -77,8 +85,15 @@ e o estado é compartilhado por `correlationId` (alinhado ao ADR 007 — Event C
 
 ## Mapa de decisão do Router
 
+Antes de tudo isto: `AbuseGuardService.isBanned()` corta números banidos por
+abuso repetido (3 tentativas de manipulação detectadas pelo guard de saída —
+ver `docs/ai/ai-guardrails.md` §8) ANTES de gastar qualquer chamada de IA.
+Silencioso — sem confirmar o banimento pro número, pra não dar retorno de
+ataque bem-sucedido.
+
 ```
-mensagem → Supervisor (valida saída) ← (validação de ENTRADA: ver guardrails, ainda pendente)
+mensagem → banido por abuso? → ignora silenciosamente                       ✅
+  → Supervisor (valida saída) ← (validação de ENTRADA: ver guardrails, ainda pendente)
   → opt-out (regex) → descadastra
   → risco jurídico (regex: advogado/procon/processo) → Escalação humana   ✅
   → é cliente ativo? ─sim→ Support / Billing / Onboarding (por intenção)

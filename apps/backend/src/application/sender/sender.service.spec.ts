@@ -2,9 +2,20 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { SenderService } from './sender.service';
 
+// Lista de bloqueio (LGPD). Por padrao NINGUEM esta bloqueado — os testes que
+// precisam simular alguem na lista sobrescrevem o mock.
+// Funcoes simples de proposito: `vi.restoreAllMocks()` de outros blocos zerava
+// a implementacao de vi.fn() e o mock passava a devolver undefined.
+const OPTOUT_MOCK = {
+  blockedPhones: async () => new Set<string>(),
+  blockedEmails: async () => new Set<string>(),
+  isBlocked: async () => false,
+  register: async () => undefined,
+} as any;
+
 // As regras puras nao usam as dependencias — instancia com mocks vazios.
 function makeSvc(): SenderService {
-  return new SenderService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any);
+  return new SenderService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 }
 
 // ── helpers para testes de status WhatsApp (ADR-026) ────────────────────────
@@ -52,7 +63,7 @@ function makeStatusSvc(overrides: {
     sendStatusImage: vi.fn().mockResolvedValue(wahaResult),
   };
 
-  const svc = new SenderService(prisma as any, {} as any, {} as any, {} as any, waha as any, {} as any, { acquire: async () => async () => {} } as any);
+  const svc = new SenderService(prisma as any, {} as any, {} as any, {} as any, waha as any, {} as any, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
   return { svc, prisma, waha };
 }
 
@@ -104,7 +115,7 @@ describe('SenderService — regras de negocio', () => {
     // prisma mockado sem settings salvos -> cai nos defaults de env (7-19)
     function svcWithPrisma(): SenderService {
       const prisma = { senderSettings: { findUnique: vi.fn().mockResolvedValue(null) } };
-      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any);
+      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
     }
     const within = () => (svcWithPrisma() as any).withinWaWindow('default') as Promise<boolean>;
     it('dentro do horario comercial -> true', async () => {
@@ -259,7 +270,7 @@ const MSG_TARGET = { id: 'tgt1', campaignId: 'camp1', tenantId: 't1', phone: '55
 
 describe('SenderService.tick() — envio de campanha de mensagem (harness)', () => {
   let prisma: any, contacts: any, conversations: any, followup: any, waha: any, tmsLookup: any;
-  const makeService = () => new SenderService(prisma, contacts, conversations, followup, waha, tmsLookup, { acquire: async () => async () => {} } as any);
+  const makeService = () => new SenderService(prisma, contacts, conversations, followup, waha, tmsLookup, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -484,7 +495,7 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
 describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
   const makeSvc = (prisma: any) =>
     new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any,
-      { acquire: async () => async () => {} } as any);
+      { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   it('recoloca apenas status=failed e limpa o erro', async () => {
     const prisma = {
@@ -529,7 +540,7 @@ describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
 describe('SenderService.updateCampaign — reagendar', () => {
   const makeSvc = (prisma: any) =>
     new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any,
-      { acquire: async () => async () => {} } as any);
+      { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   const prismaWith = (sent: number, status = 'running') => ({
     campaign: {
@@ -567,11 +578,72 @@ describe('SenderService.updateCampaign — reagendar', () => {
 // Nasceu de um teste real: o CSV foi subido no campo de ANEXO (não é lista de
 // envio) e a base de contatos estava vazia → campanha criada com 0 alvos, o
 // worker marcou 'done' no primeiro tick e pareceu que o disparo falhou.
+// ── Lista de bloqueio LGPD (incidente real 2026-08-03) ──────────────────────
+// A Patrícia pediu para sair, o sistema marcou opt-out corretamente. Depois a
+// base foi limpa e o CSV antigo reimportado — ela voltou como 'active' e
+// recebeu campanha de novo, 3h após escrever "vou processar esta empresa por
+// perturbação". O pedido dela morava DENTRO do contato apagado.
+// Agora o bloqueio vive em `opt_out_records`, que sobrevive à exclusão.
+describe('SenderService.createCampaign — lista de bloqueio sobrevive a limpeza de contatos', () => {
+  const BLOQUEADO = '5512996262968';
+
+  const prismaLimpo = () => ({
+    // contato NAO existe mais (foi apagado) e nao esta opted_out em lugar nenhum
+    campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
+    contact: {
+      count: vi.fn().mockResolvedValue(0),
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+    campaign: {
+      create: vi.fn().mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 'c1', ...data, _count: { targets: data.targets?.create?.length ?? 0 } })),
+    },
+  } as any);
+
+  const svcCom = (prisma: any, bloqueados: string[]) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any,
+      { batchLookup: vi.fn().mockResolvedValue(new Map()) } as any,
+      { acquire: async () => async () => {} } as any,
+      {
+        blockedPhones: async () => new Set(bloqueados),
+        blockedEmails: async () => new Set<string>(),
+        isBlocked: async (_t: string, a: any) => bloqueados.includes((a.phone ?? '').replace(/\D/g, '')),
+        register: async () => undefined,
+      } as any);
+
+  it('quem esta na lista NAO entra na fila, mesmo com o contato apagado', async () => {
+    const prisma = prismaLimpo();
+    const out = await svcCom(prisma, [BLOQUEADO]).createCampaign('t1', {
+      name: 'Reenvio', template: 'Oi',
+      phones: [{ phone: BLOQUEADO, name: 'Patricia' }, { phone: '5511988887777', name: 'Outro' }],
+    });
+
+    expect(out.included).toBe(1);            // só o "Outro"
+    expect(out.skippedOptOut).toBe(1);       // a Patricia contabilizada
+
+    const criados = prisma.campaign.create.mock.calls[0][0].data.targets.create;
+    const dela = criados.find((t: any) => t.phone === BLOQUEADO);
+    expect(dela.status).toBe('skipped');
+    expect(dela.error).toBe('opted_out');    // motivo visível no relatório
+  });
+
+  it('sem ninguem na lista, todos entram normalmente', async () => {
+    const prisma = prismaLimpo();
+    const out = await svcCom(prisma, []).createCampaign('t1', {
+      name: 'Normal', template: 'Oi',
+      phones: [{ phone: BLOQUEADO }, { phone: '5511988887777' }],
+    });
+    expect(out.included).toBe(2);
+    expect(out.skippedOptOut).toBe(0);
+  });
+});
+
 describe('SenderService.createCampaign — campanha sem destinatários', () => {
   const makeSvc = (prisma: any) =>
     new SenderService(prisma, {} as any, {} as any, {} as any, {} as any,
       { batchLookup: vi.fn().mockResolvedValue(new Map()) } as any,
-      { acquire: async () => async () => {} } as any);
+      { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   const prismaVazio = () => ({
     campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
@@ -614,7 +686,7 @@ describe('SenderService.createCampaign — campanha sem destinatários', () => {
 describe('SenderService.createCampaign — dedup entre campanhas', () => {
   let prisma: any, contacts: any, tmsLookup: any;
   const makeService = () =>
-    new SenderService(prisma, contacts, {} as any, {} as any, {} as any, tmsLookup, { acquire: async () => async () => {} } as any);
+    new SenderService(prisma, contacts, {} as any, {} as any, {} as any, tmsLookup, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   beforeEach(() => {
     prisma = {

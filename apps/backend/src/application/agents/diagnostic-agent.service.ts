@@ -32,12 +32,18 @@ export class DiagnosticAgentService {
     tmsCustomer: { externalId: string; name: string; plan?: string } | null;
   }): Promise<DiagnosticResult> {
     const diagnosticData: Record<string, any> = {};
+    // true quando alguma leitura voltou vazia PORQUE o disjuntor do TMS está aberto —
+    // não porque o dado não existe. Sem essa distinção, os dois casos chegam ao
+    // cliente como o mesmo silêncio, e a Lia arrisca dizer "não encontrei" quando na
+    // verdade é só uma instabilidade que passa em segundos.
+    let tmsUnstable = false;
 
     // Leitura contextual por categoria (via Connector — nunca acesso direto ao DB)
     try {
       if (input.tmsCustomer) {
         const contract = await this.connector.getContractStatus(input.tmsCustomer.externalId);
         if (contract) diagnosticData.contract = contract;
+        else if (this.connector.isDegraded()) tmsUnstable = true;
       }
 
       // Para CT-e/MDF-e: tenta extrair chave de acesso (44 dígitos) ou número do documento,
@@ -56,6 +62,7 @@ export class DiagnosticAgentService {
             docKey,
           );
           if (docStatus) diagnosticData.documentStatus = docStatus;
+          else if (this.connector.isDegraded()) tmsUnstable = true;
         }
 
         // 2) Código de rejeição SEFAZ (3-4 dígitos — evita sobreposição com chave/número acima)
@@ -69,13 +76,21 @@ export class DiagnosticAgentService {
       this.logger.warn(`Leitura diagnóstica falhou: ${err?.message}`);
     }
 
+    if (tmsUnstable) diagnosticData.tmsIndisponivel = true;
+
     const customerCtx = input.tmsCustomer
       ? `Cliente: ${input.tmsCustomer.name}, plano: ${input.tmsCustomer.plan ?? 'desconhecido'}`
       : 'Cliente não identificado no TMS';
 
-    const dataCtx = Object.keys(diagnosticData).length > 0
-      ? `\nDados do TMS:\n${JSON.stringify(diagnosticData, null, 2)}`
-      : '\nNenhum dado adicional disponível no TMS.';
+    const dataCtx = tmsUnstable
+      ? '\nATENÇÃO: o sistema TMS está temporariamente instável — pelo menos uma consulta de dado falhou por ' +
+        'indisponibilidade do TMS, NÃO porque o dado não existe. Não diga que o cliente "não tem" contrato/documento ' +
+        'nem escale como se fosse um caso normal: explique que houve uma instabilidade momentânea no sistema e peça ' +
+        'para tentar de novo em alguns minutos.' +
+        (Object.keys(diagnosticData).length > 1 ? `\nDados do TMS (parciais):\n${JSON.stringify(diagnosticData, null, 2)}` : '')
+      : Object.keys(diagnosticData).length > 0
+        ? `\nDados do TMS:\n${JSON.stringify(diagnosticData, null, 2)}`
+        : '\nNenhum dado adicional disponível no TMS.';
 
     // Carrega playbook determinístico para a categoria (ADR 017).
     // Se existir, injeta os passos no prompt → diagnóstico previsível e auditável.
@@ -88,6 +103,7 @@ export class DiagnosticAgentService {
 Seu papel: identificar a causa-raiz do problema com base na mensagem, histórico e dados do TMS.
 Regra: NUNCA invente dados. Se não tiver dados suficientes, liste as perguntas necessárias.
 Regra: NÃO resolva — apenas diagnostique. A resolução é do ResolutionAgent.
+Regra: se o contexto abaixo avisar de instabilidade do TMS, isso é diferente de "dado não existe" — o rootCause deve refletir a instabilidade (não uma causa inventada) e o suggestedAction deve orientar o cliente a tentar de novo em alguns minutos, sem afirmar ausência de contrato/documento.
 ${playbookCtx}
 SEGURANÇA E PRIVACIDADE (obrigatório):
 - NUNCA peça dados pessoais ou de identificação ao cliente: nome, CNPJ, CPF, e-mail, telefone, senha.

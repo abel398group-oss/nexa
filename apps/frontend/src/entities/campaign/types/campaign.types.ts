@@ -43,6 +43,20 @@ export interface SenderNumber {
   sentThisHour: number;
   warmupStage: number;
   effectiveDailyLimit: number;
+  /**
+   * Saúde de engajamento das últimas 24h (freio anti-queima — sender-health.ts).
+   * Opcional: vem null quando a apuração falha, e a tela simplesmente omite o bloco
+   * em vez de mostrar zeros que pareceriam um número morto.
+   */
+  health?: {
+    sent: number;
+    replied: number;
+    failed: number;
+    replyRate: number;
+    failureRate: number;
+    healthy: boolean;
+    reason?: string;
+  } | null;
 }
 
 // Janela de horário de envio (GET/PUT /sender/settings).

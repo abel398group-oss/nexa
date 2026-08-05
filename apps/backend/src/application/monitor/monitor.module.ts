@@ -42,6 +42,8 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
     },
   ],
   controllers: [MonitorController, MonitorIngestController, ScaleHealthController],
-  exports: [MonitorService],
+  // AdminAlertService exportado para o relatório de custo de IA (metrics/ai-cost)
+  // usar o MESMO canal de aviso ao admin — WhatsApp + e-mail já configurados.
+  exports: [MonitorService, AdminAlertService],
 })
 export class MonitorModule {}

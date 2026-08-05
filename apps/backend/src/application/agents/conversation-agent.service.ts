@@ -5,6 +5,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { SellersService } from '@/application/sellers/sellers.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
+import { inspectOutbound } from '@/shared/governance/output-guard';
 import { RouterAgentService, RouteDecision } from './router-agent.service';
 import { SalesAgentService, type LeadProfile } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
@@ -15,9 +16,72 @@ import { HandoffService } from '@/application/handoff/handoff.service';
 import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
+import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
+
+/**
+ * Respostas ROTEIRIZADAS — texto fixo, escrito aqui, que pula a Supervisora.
+ *
+ * Pular a auditoria é correto para texto que nós escrevemos: não há alucinação
+ * possível num literal. O risco não é o texto de hoje, é o de amanhã — alguém
+ * acrescenta um `scripted = true` ao lado de um draft montado dinamicamente e a
+ * resposta passa a sair sem nenhuma revisão, silenciosamente.
+ *
+ * Por isso o catálogo existe e é VERIFICADO no envio (`isKnownScript`): a flag
+ * deixa de ser uma promessa e vira uma afirmação conferível. Draft marcado como
+ * roteirizado que não bate com nada daqui é tratado como texto gerado — vai para o
+ * aceno seguro e o caso é logado.
+ */
+const SCRIPTS = {
+  clarify: (greeting: string) =>
+    `${greeting}! Aqui é a Lia, do HiperTMS. ` +
+    `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`,
+  optOut:
+    'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏',
+  handoffHuman:
+    'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂',
+  supportSemCadastroComUrl: (url: string) =>
+    `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${url} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`,
+  supportSemCadastro:
+    `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`,
+} as const;
+
+/**
+ * O texto é mesmo um dos roteiros do catálogo?
+ *
+ * Comparação literal, exceto pelos dois trechos variáveis legítimos: a saudação
+ * (bom dia/boa tarde/boa noite) e a URL do playbook do tenant. A URL é comparada
+ * por FORMA, não por valor — o playbook é editável e não faz sentido replicar a
+ * validação dele aqui; o que importa é que a moldura da frase seja a nossa.
+ *
+ * Draft vazio conta como roteirizado: é o caso `wrong_person`, em que a resposta
+ * correta é silêncio (responder confirmaria o número como ativo para um spammer).
+ */
+function isKnownScript(draft: string): boolean {
+  if (!draft) return true;
+
+  const fixos: string[] = [SCRIPTS.optOut, SCRIPTS.handoffHuman, SCRIPTS.supportSemCadastro];
+  if (fixos.includes(draft)) return true;
+
+  for (const saudacao of ['Bom dia', 'Boa tarde', 'Boa noite']) {
+    if (draft === SCRIPTS.clarify(saudacao)) return true;
+  }
+
+  // Variante com URL: confere a MOLDURA e aceita qualquer URL http(s) no slot.
+  // O sentinela precisa ser um token que nao ocorra no texto do roteiro: com um
+  // espaco, o split partiria a frase em todas as palavras em vez de separar
+  // prefixo e sufixo.
+  const SLOT = '<<URL>>';
+  const [antes, depois] = SCRIPTS.supportSemCadastroComUrl(SLOT).split(SLOT);
+  if (draft.length > antes.length + depois.length && draft.startsWith(antes) && draft.endsWith(depois)) {
+    const url = draft.slice(antes.length, draft.length - depois.length);
+    return /^https?:\/\/\S+$/.test(url);
+  }
+
+  return false;
+}
 // Detecta token de handoff (Modalidade B — ADR 022)
 const HANDOFF_TOKEN_RE = /\bHANDOFF:([a-z0-9]{6,12})\b/i;
 
@@ -75,6 +139,8 @@ export class ConversationAgentService {
   // A6: dedup do alerta de limite de plano — notifica o time uma vez por mês por tenant.
   // Key: tenantId, Value: 'YYYY-MM' já notificado.
   private planLimitNotified = new Map<string, string>();
+  /** tenantId → dia (YYYY-MM-DD) do último aviso de teto de gasto. Evita spam de alerta. */
+  private costCapNotified = new Map<string, string>();
 
   constructor(
     private readonly router: RouterAgentService,
@@ -92,6 +158,7 @@ export class ConversationAgentService {
     private readonly waha: WahaClientService,
     private readonly events: EventEmitter2,
     private readonly contacts: ContactsService,
+    private readonly abuseGuard: AbuseGuardService,
   ) {}
 
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
@@ -100,6 +167,46 @@ export class ConversationAgentService {
     input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
   ): Promise<HandleResult> {
     const _t0 = Date.now(); // MON-009: início da medição
+
+    // BANIMENTO ("3 strikes" — shared/contacts/abuse-guard.service.ts): checado ANTES
+    // do roteador de propósito. Se o corte viesse depois, um número banido continuaria
+    // queimando chamada de IA a cada mensagem sem nunca receber resposta — o banimento
+    // existe justamente para parar isso, não só para calar a saída.
+    let ownPhone: string | null = null;
+    let ownEmail: string | null = null;
+    if (input.conversationId) {
+      const convId = input.conversationId;
+      const convForGuard = await this.prisma.aiConversation
+        .findUnique({ where: { id: convId }, select: { phone: true } })
+        .catch(() => null);
+      ownPhone = convForGuard?.phone ?? null;
+
+      if (ownPhone && (await this.abuseGuard.isBanned(tenantId, ownPhone))) {
+        this.logger.warn(`Mensagem ignorada — número banido por abuso repetido (tenant=${tenantId} phone=${ownPhone})`);
+        return {
+          route: { intent: 'unknown', agent: 'human', leadScore: 0, reason: 'número banido', source: 'fallback', confidence: 1 },
+          draft: '',
+          suggestedAction: 'none',
+          usedKnowledge: [],
+          confidence: 'high',
+          needsHuman: false,
+          supervisor: null,
+          autonomyEnabled: this.autonomy.isEnabled(),
+          autoSent: false,
+          blockedReason: 'número banido por abuso repetido — nenhuma mensagem enviada',
+        };
+      }
+
+      // E-mail do lead — permite ao guard de saída distinguir "o próprio contato
+      // falando do próprio e-mail" de "vazando e-mail de outro cliente".
+      if (ownPhone) {
+        const contact = await this.prisma.contact
+          .findFirst({ where: { tenantId, phone: ownPhone }, select: { email: true } })
+          .catch(() => null);
+        ownEmail = contact?.email ?? null;
+      }
+    }
+
     let route = await this.router.route(input.message);
     const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
 
@@ -137,7 +244,12 @@ export class ConversationAgentService {
 
     // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
     let supervisor: SupervisorVerdict | null = null;
-    if (!scripted) {
+    // Roteiro que não bate com o catálogo é tratado como texto GERADO e vai para a
+    // auditoria. Sem isto ele cairia direto no aceno seguro mais adiante — seguro,
+    // porém desnecessário: a Supervisora ainda pode aprovar e o cliente recebe a
+    // resposta de verdade em vez de um "só um instante".
+    const scriptedOk = scripted && isKnownScript(draft);
+    if (!scriptedOk) {
       supervisor = await this.supervisor.review({
         customerMessage: agentMessage,
         draft,
@@ -154,7 +266,18 @@ export class ConversationAgentService {
     // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
     let autoSent = false;
     let blockedReason: string | undefined;
-    const supervisorOk = scripted || supervisor?.approved === true;
+    // `scripted` só vale se o texto REALMENTE for um dos roteiros do catálogo (a
+    // conferência acontece acima, junto com a decisão de auditar). A flag sozinha é
+    // uma promessa; conferida contra SCRIPTS, vira afirmação verificável — e um
+    // `scripted = true` novo, ao lado de um draft montado dinamicamente, deixa de
+    // pular a Supervisora em silêncio.
+    if (scripted && !scriptedOk) {
+      this.logger.warn(
+        `Draft marcado como roteirizado NÃO corresponde ao catálogo — auditado como gerado. ` +
+        `conv=${input.conversationId} intent=${route.intent} texto="${draft.slice(0, 120)}"`,
+      );
+    }
+    const supervisorOk = scriptedOk || supervisor?.approved === true;
     // aceno seguro quando não dá pra confiar no rascunho gerado — mantém a conversa andando,
     // SEM prometer um retorno que talvez não venha (a IA continua dona da conversa).
     // No suporte: fallback diferente — avisa que vai escalar (não manda pitch de vendas).
@@ -188,6 +311,11 @@ export class ConversationAgentService {
         // por aqui, então continua funcionando. Alerta o time uma vez por mês.
         blockedReason = 'limite mensal de mensagens do plano atingido — auto-envio pausado';
         await this.notifyPlanLimitReached(tenantId).catch(() => null);
+      } else if (await this.isOverDailyCostCap(tenantId)) {
+        // Teto de GASTO do dia (distinto do teto de mensagens): trava o loop bot-vs-bot
+        // antes que ele vire fatura. O rascunho fica para um humano decidir.
+        blockedReason = 'teto de gasto diário de IA atingido — auto-envio pausado';
+        await this.notifyCostCapReached(tenantId).catch(() => null);
       } else if (!draft) {
         // wrong_person/spam (2026-07-20): resposta deliberadamente vazia — nunca
         // enviar nada (nem aceno seguro; responder confirma o número como ativo).
@@ -205,6 +333,29 @@ export class ConversationAgentService {
           outbound = SAFE_FALLBACK;
           if (route.agent === 'support') needsHuman = true;
           blockedReason = 'confiança baixa (enviado aceno seguro)';
+        } else {
+          // Última linha de defesa, DETERMINÍSTICA (ver shared/governance/output-guard.ts).
+          // A Supervisora é outro modelo lendo a mesma mensagem hostil — se o texto
+          // enganou o primeiro, pode enganar o segundo. Estas travas comparam número
+          // com número: preço fora do catálogo (caso Chevrolet), recitação do prompt
+          // interno (OWASP LLM07) e palavrão saindo com a marca. Só roda no caminho
+          // aprovado — nos outros o texto já virou aceno seguro.
+          const guard = inspectOutbound(outbound, allowedFacts, { phone: ownPhone, email: ownEmail });
+          if (!guard.safe) {
+            outbound = SAFE_FALLBACK;
+            needsHuman = true; // vale para vendas também: alguém precisa ver o que ela ia dizer
+            blockedReason = `bloqueado pelo guard de saída (${guard.violations.join(', ')}): ${guard.detail}`;
+            this.logger.warn(
+              `Guard de saída barrou resposta conv=${input.conversationId} ` +
+              `intent=${route.intent} — ${guard.detail}. Rascunho: ${draft.slice(0, 160)}`,
+            );
+            // O guard só dispara quando o rascunho JÁ continha algo que não devia sair —
+            // ou seja, alguém tentou manipular a Lia. Conta como tentativa ("3 strikes");
+            // ao atingir o teto, o número é banido (ver abuse-guard.service.ts).
+            if (ownPhone) {
+              await this.abuseGuard.recordStrike(tenantId, ownPhone, guard.violations, guard.detail).catch(() => null);
+            }
+          }
         }
         // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
         const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
@@ -318,16 +469,14 @@ export class ConversationAgentService {
       (route.agent === 'sales' || route.agent === 'support');
 
     if (clarify) {
-      draft =
-        `${SalesAgentService.greeting()}! Aqui é a Lia, do HiperTMS. ` +
-        `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`;
+      draft = SCRIPTS.clarify(SalesAgentService.greeting());
       suggestedAction = 'none';
       scripted = true;
       this.logger.log(`Gate de confiança acionado (confidence=${route.confidence}) → pedindo esclarecimento`);
     } else {
     switch (route.agent) {
       case 'optout':
-        draft = 'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏';
+        draft = SCRIPTS.optOut;
         suggestedAction = 'handoff_human';
         scripted = true;
         break;
@@ -342,7 +491,7 @@ export class ConversationAgentService {
           scripted = true;
           break;
         }
-        draft = 'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂';
+        draft = SCRIPTS.handoffHuman;
         suggestedAction = 'handoff_human';
         needsHuman = true;
         scripted = true;
@@ -381,9 +530,13 @@ export class ConversationAgentService {
           // Se tiver URL de contato/demo no playbook, oferece; senão orienta via Lia de Vendas.
           const pb = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } }).catch(() => null);
           const contactUrl = pb?.signupUrl?.trim();
-          draft = contactUrl
-            ? `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${contactUrl} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`
-            : `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`;
+          // Só usa a variante com link quando a URL do playbook é http(s) de verdade.
+          // `signupUrl` é campo editável do tenant: sem esta checagem, um valor
+          // qualquer entraria numa resposta que pula a Supervisora.
+          const urlValida = !!contactUrl && /^https?:\/\/\S+$/.test(contactUrl);
+          draft = urlValida
+            ? SCRIPTS.supportSemCadastroComUrl(contactUrl as string)
+            : SCRIPTS.supportSemCadastro;
           suggestedAction = 'none';
           scripted = true;
           this.logger.log('Prospect pediu suporte sem cadastro no TMS → orientação direcionada a vendas');
@@ -720,6 +873,63 @@ export class ConversationAgentService {
       .count({ where: { tenantId, direction: 'outbound', createdAt: { gte: monthStart } } })
       .catch(() => 0);
     return used >= cap;
+  }
+
+  /**
+   * Teto de GASTO diário de IA por tenant (OWASP LLM10:2025 — Unbounded Consumption).
+   *
+   * O teto mensal acima conta MENSAGENS, e mensagem é barata quando o lead é humano.
+   * O cenário caro é outro: alguém aponta um bot para o nosso número e os dois
+   * conversam sozinhos a madrugada inteira. Cada mensagem custa 3 chamadas ao modelo
+   * (roteador + agente + supervisora) e ninguém descobre até chegar a fatura.
+   *
+   * Conta o custo real já registrado em `aiMessage.estimatedCostUsd` — não estima.
+   * `AI_DAILY_COST_CAP_USD=0` desliga a trava.
+   */
+  private async isOverDailyCostCap(tenantId: string): Promise<boolean> {
+    const cap = Number(process.env.AI_DAILY_COST_CAP_USD ?? 25);
+    if (!Number.isFinite(cap) || cap <= 0) return false;
+
+    const d = new Date();
+    const dayStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    // try/catch e não só .catch(): uma trava de custo jamais pode derrubar a conversa.
+    // Se a soma falhar, o certo é ATENDER o cliente e reclamar no log — o teto é uma
+    // proteção de fatura, não um pré-requisito para conversar.
+    let agg: { _sum?: { estimatedCostUsd?: unknown } } | null = null;
+    try {
+      agg = await this.prisma.aiMessage.aggregate({
+        _sum: { estimatedCostUsd: true },
+        where: { tenantId, createdAt: { gte: dayStart } },
+      });
+    } catch (e: any) {
+      this.logger.warn(`Teto de gasto não pôde ser apurado (${e?.message}) — seguindo sem travar`);
+      return false;
+    }
+
+    const spent = Number(agg?._sum?.estimatedCostUsd ?? 0);
+    if (spent < cap) return false;
+
+    this.logger.warn(
+      `Teto de gasto diário atingido: tenant=${tenantId} gastou US$ ${spent.toFixed(2)} (teto US$ ${cap})`,
+    );
+    return true;
+  }
+
+  /** Avisa o time que o gasto do dia estourou — uma vez por dia por tenant. */
+  private async notifyCostCapReached(tenantId: string): Promise<void> {
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (this.costCapNotified.get(tenantId) === hoje) return;
+    this.costCapNotified.set(tenantId, hoje);
+    await this.notifications
+      .create(tenantId, {
+        type: 'info',
+        title: '💸 Teto de gasto diário de IA atingido',
+        body:
+          'A Lia pausou o envio automático para hoje. Se o volume for legítimo, aumente ' +
+          'AI_DAILY_COST_CAP_USD; se não for, provavelmente há uma conversa em loop no inbox.',
+        link: '/inbox',
+      })
+      .catch(() => null);
   }
 
   // A6: alerta o time que o teto do plano foi atingido — uma vez por mês por tenant.

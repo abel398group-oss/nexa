@@ -57,9 +57,22 @@ goal tracking.
 
 ## Acceptance
 
-- [ ] Vendedor login lists/edits ONLY own opportunities (401-free, zero leak).
-- [ ] Admin/gestor unchanged (see all).
-- [ ] Hot lead → opportunity carries `assignedSellerId` of the notified seller.
-- [ ] moveStage validates new stages; discard stores reason; pause stores date.
-- [ ] Evolution endpoint returns weekly received×won respecting scope.
-- [ ] `pnpm test:backend` green; frontend typecheck green; migrate deploy run by Abel.
+Verified 2026-08-05 against the shipped code + test suite (feature was already
+live in production; this checklist had never been closed out):
+
+- [x] Vendedor login lists/edits ONLY own opportunities (401-free, zero leak).
+      `opportunities.service.spec.ts` — sellerScope filters by `assignedSellerId`,
+      `__none__` maps to a scope that never matches.
+- [x] Admin/gestor unchanged (see all). No `sellerScope` → no filter applied
+      (`OpportunitiesService.scoped()`).
+- [x] Hot lead → opportunity carries `assignedSellerId` of the notified seller.
+      Was implemented (`conversation-agent.service.ts:805`) but had NO test —
+      added `conversation-agent.service.spec.ts` "lead quente propaga o sellerId
+      do handoff pra createFromLead" (+ the no-seller-available case).
+- [x] moveStage validates new stages; discard stores reason; pause stores date.
+      `opportunities.service.spec.ts`. Discard reason is now **mandatory**
+      (tightened 2026-08-05, was optional — see `docs/reviews/2026-08-04-auditoria-arquitetura-seguranca.md`).
+- [x] Evolution endpoint returns weekly received×won respecting scope.
+      `opportunities.service.spec.ts` "evolution: agrupa recebidos e ganhos...".
+- [x] `pnpm test:backend` green; frontend typecheck green; migration already
+      applied (columns are live and in use in production).

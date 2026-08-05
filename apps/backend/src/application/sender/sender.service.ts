@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
@@ -10,6 +11,9 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
 import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
+import { spin, spinVariants } from './spintax';
+import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -17,6 +21,8 @@ const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19); // 19h
 // delay entre envios: aleatório 30-90s (anti-ban) — varia a cada envio
 const DELAY_MIN_MS = Number(process.env.SENDER_DELAY_MIN_MS ?? 30000);
 const DELAY_MAX_MS = Number(process.env.SENDER_DELAY_MAX_MS ?? 90000);
+// Validade do veredito de saúde de engajamento (a query varre 24h de alvos).
+const HEALTH_CACHE_MS = 10 * 60_000;
 // limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce
 const WARMUP_DAILY = [10, 15, 20, 30];
 
@@ -31,6 +37,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   // Estado local como fallback quando Redis não está disponível
   private lastSentAt = 0;
   private nextDelayMs = DELAY_MIN_MS;
+  /** Veredito de saúde por tenant — a query varre 24h e não pode rodar a cada tick. */
+  private healthCache = new Map<string, { at: number; unhealthy: boolean }>();
   private redis: Redis | null = null;
 
   onModuleInit() {
@@ -88,6 +96,11 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     private readonly waha: WahaClientService,
     private readonly tmsLookup: TmsLookupService,
     private readonly lock: RedisLockService,
+    private readonly optOutRegistry: OptOutRegistryService,
+    // Opcional de propósito: as specs constroem este serviço posicionalmente, e o
+    // freio de engajamento não pode depender de notificação para funcionar — sem
+    // ela o número ainda é desativado e o motivo ainda vai para o log.
+    private readonly notifications?: NotificationsService,
   ) {}
 
   // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
@@ -136,11 +149,94 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
   async listNumbers(tenantId: string) {
     const numbers = await this.prisma.senderNumber.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
+    const health = await this.engagementHealth(tenantId).catch(() => null);
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
+    // e com a saúde de engajamento das últimas 24h (freio anti-queima).
     return numbers.map((n: any) => ({
       ...n,
       effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
+      health,
     }));
+  }
+
+  /**
+   * Saúde de engajamento do tenant nas últimas 24h (ver sender-health.ts).
+   *
+   * ESCOPO: por TENANT, não por número. Hoje `ensureNumber()` sempre devolve o
+   * primeiro número ativo, então na prática há um número disparando por vez e os
+   * dois recortes coincidem. Quando existir rodízio de verdade, isto precisa de um
+   * `senderNumberId` no CampaignTarget para não somar a reputação de números
+   * diferentes no mesmo balde.
+   *
+   * "Respondeu" = existe mensagem inbound daquele telefone DEPOIS do envio. Um SQL
+   * só, com EXISTS — carregar as conversas para cruzar em memória não escala com a
+   * base de leads.
+   */
+  async engagementHealth(tenantId: string): Promise<HealthAssessment> {
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const rows = await this.prisma.$queryRaw<{ sent: bigint; replied: bigint; failed: bigint }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE t.status = 'sent')   AS sent,
+        COUNT(*) FILTER (WHERE t.status = 'failed') AS failed,
+        COUNT(*) FILTER (
+          WHERE t.status = 'sent' AND EXISTS (
+            SELECT 1
+              FROM ai_messages m
+              JOIN ai_conversations c ON c.id = m.conversation_id
+             WHERE c.tenant_id = t.tenant_id
+               AND c.phone = t.phone
+               AND m.direction = 'inbound'
+               AND m.created_at >= t.sent_at
+          )
+        ) AS replied
+      FROM campaign_targets t
+      WHERE t.tenant_id = ${tenantId}
+        AND t.phone <> ''
+        AND t.created_at >= ${desde}
+    `;
+    const r = rows[0] ?? { sent: 0n, replied: 0n, failed: 0n };
+    return assessHealth(
+      { sent: Number(r.sent), replied: Number(r.replied), failed: Number(r.failed) },
+      healthThresholdsFromEnv(),
+    );
+  }
+
+  /**
+   * Freio: desativa o número quando o engajamento despenca.
+   *
+   * Roda no tick, mas o veredito é cacheado por 10 min — a query varre 24h de alvos e
+   * não pode rodar a cada 15s. Desativar é reversível pela tela de Saúde dos Números;
+   * o custo de reativar à mão é irrisório perto do de perder o chip.
+   */
+  private async pauseIfUnhealthy(tenantId: string, numberId: string): Promise<boolean> {
+    const cached = this.healthCache.get(tenantId);
+    if (cached && Date.now() - cached.at < HEALTH_CACHE_MS) return cached.unhealthy;
+
+    let verdict: HealthAssessment;
+    try {
+      verdict = await this.engagementHealth(tenantId);
+    } catch (e: any) {
+      // Freio é proteção, não pré-requisito: se a apuração falhar, o disparo segue.
+      this.logger.warn(`Saúde de engajamento não apurada (${e?.message}) — disparo segue`);
+      return false;
+    }
+
+    this.healthCache.set(tenantId, { at: Date.now(), unhealthy: !verdict.healthy });
+    if (verdict.healthy) return false;
+
+    await this.prisma.senderNumber.update({ where: { id: numberId }, data: { active: false } });
+    this.logger.warn(`FREIO DE ENGAJAMENTO: número desativado (tenant=${tenantId}) — ${verdict.reason}`);
+    await this.notifications
+      ?.create(tenantId, {
+        type: 'info',
+        title: '🛑 Disparo pausado — engajamento baixo',
+        body:
+          `${verdict.reason}. O número foi desativado para não ser bloqueado pelo WhatsApp. ` +
+          `Revise a lista e a mensagem antes de reativar em Saúde dos Números.`,
+        link: '/numeros',
+      })
+      .catch(() => null);
+    return true;
   }
 
   // ---------- campanhas ----------
@@ -216,6 +312,21 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       });
       const blocked = new Set(optedOut.map((o: any) => o.phone));
       targets = targets.filter((t) => !blocked.has(t.phone));
+    }
+
+    // ── Lista de bloqueio LGPD (2026-08-03) ──────────────────────────────────
+    // Vem da tabela `opt_out_records`, que sobrevive à exclusão do contato.
+    // Sem isto, limpar a base e reimportar a lista antiga ressuscitava quem
+    // tinha pedido para sair — aconteceu em produção.
+    let optOutBloqueados: { phone: string; name?: string | null }[] = [];
+    if (targets.length) {
+      const bloqueados = await this.optOutRegistry.blockedPhones(tenantId, targets.map((t) => t.phone));
+      optOutBloqueados = targets.filter((t) => bloqueados.has((t.phone ?? '').replace(/\D/g, '')));
+      targets = targets.filter((t) => !bloqueados.has((t.phone ?? '').replace(/\D/g, '')));
+      if (optOutBloqueados.length) {
+        skippedOptOut += optOutBloqueados.length;
+        this.logger.log(`Campanha "${dto.name}": ${optOutBloqueados.length} na lista de bloqueio (opt-out) — pulados`);
+      }
     }
 
     // ── Blocklist (2026-08-01): concorrentes marcados status='blocked' ────────
@@ -353,6 +464,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...suspectList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'suspeito_concorrente' })),
             // telefone inelegível: motivo específico no relatório (estrangeiro, fixo, DDD…)
             ...invalidList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: rejectionReason(t.phone) ?? 'telefone_invalido' })),
+            // pediu para não receber mais (lista de bloqueio LGPD)
+            ...optOutBloqueados.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'opted_out' })),
           ],
         },
       },
@@ -728,9 +841,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
                 ? statusCampaign.mediaUrl
                 : mediaBase + (statusCampaign.mediaUrl.startsWith('/') ? '' : '/') + statusCampaign.mediaUrl)
             : null;
+          // Status é UM post só — o spin aqui não é anti-ban, é para as chaves não
+          // vazarem literalmente caso o usuário reaproveite um template com variação.
+          const statusText = spin(statusCampaign.template ?? '');
           const result = resolvedMediaUrl
-            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusCampaign.template || undefined)
-            : await this.waha.sendStatusText(statusCampaign.template);
+            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusText || undefined)
+            : await this.waha.sendStatusText(statusText);
           if (result.sent) {
             await this.prisma.campaign.update({
               where: { id: statusCampaign.id },
@@ -792,6 +908,27 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // Freio por ENGAJAMENTO (ver sender-health.ts): os limites acima medem só o que
+      // SAI. Este mede o que VOLTA — lista ruim queima o chip mesmo respeitando todos
+      // os tetos, porque quem decide banir é o WhatsApp e o sinal dele é o silêncio
+      // de quem recebe.
+      if (await this.pauseIfUnhealthy(campaign.tenantId, number.id)) return;
+
+      await this.dispatchOneTarget(campaign, number);
+    } catch (e: any) {
+      this.logger.error(`tick falhou: ${e?.message}`);
+    }
+  }
+
+  /**
+   * Processa UM alvo `queued` da campanha (achar → travar → mandar). Extraído
+   * de `tickLocked()` (2026-08-05, prep pro Item 4 — fila BullMQ, ver
+   * docs/infra/item4-fila-disparo-campanha-bullmq-2026-08.md): mesma lógica,
+   * só isolada — `tick()` já checou janela/limite/antiban/saúde ANTES de
+   * chamar isto, então aqui assume que "pode mandar agora" já foi decidido.
+   * Sem mudança de comportamento — é o mesmo código de antes, só em outro lugar.
+   */
+  private async dispatchOneTarget(campaign: any, number: any): Promise<void> {
       const target = await this.prisma.campaignTarget.findFirst({
         where: { campaignId: campaign.id, status: 'queued' },
         orderBy: { createdAt: 'asc' },
@@ -811,6 +948,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
       // pula opt-outs (LGPD) e blocklist (concorrentes) — defesa em profundidade:
       // quem for bloqueado DEPOIS da campanha criada ainda é barrado aqui.
+      // Lista de bloqueio ANTES de tocar no contato: se a pessoa pediu para sair,
+      // nem recriamos o cadastro dela a partir da campanha.
+      if (await this.optOutRegistry.isBlocked(campaign.tenantId, { phone: target.phone })) {
+        this.logger.log(`Alvo ${target.phone} está na lista de bloqueio (opt-out) — pulado`);
+        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: 'opted_out' } });
+        return;
+      }
+
       const contact = await this.contacts.create(campaign.tenantId, { phone: target.phone, name: target.name ?? undefined, source: 'outbound' });
       if (contact.status === 'opted_out' || contact.status === 'blocked') {
         const reason = contact.status === 'opted_out' ? 'opted_out' : 'bloqueado';
@@ -944,9 +1089,6 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         const retryDelay = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
         await this.writeAntibanState(Date.now(), retryDelay);
       }
-    } catch (e: any) {
-      this.logger.error(`tick falhou: ${e?.message}`);
-    }
   }
 
   // saudação por horário (Brasília) — business-rules §10
@@ -1000,6 +1142,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    // Spintax DEPOIS do {{...}}: quando o lead não tem nome o placeholder já saiu,
+    // então nenhuma chave remanescente pode ser confundida com grupo de variação.
+    // Sem `|` no template o texto passa intacto — campanhas antigas não mudam.
+    txt = spin(txt);
     if (!first) txt = SenderService.tidyMissingName(txt);
     const footerEnabled = process.env.LGPD_OPT_OUT_FOOTER !== 'false';
     if (footerEnabled && !txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;

@@ -2,6 +2,23 @@ import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@
 import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
 import { MANUAIS_KB } from './hipertms-manuais.data';
 import { SUPORTE_KB } from './hipertms-suporte-kb.data';
+import { TmsResilience } from './tms-resilience';
+
+/**
+ * TTLs de cache por tipo de leitura (ms). Curtos de propósito: o TMS continua sendo a
+ * fonte da verdade (ADR 011) — isto só evita perguntar a mesma coisa 50x por minuto e
+ * dá o que responder quando ele está fora.
+ *
+ * Quanto mais volátil o dado, menor o TTL. Catálogo de planos muda raramente; status
+ * de documento fiscal muda o tempo todo, e responder status vencido é pior que dizer
+ * "não consegui consultar agora".
+ */
+const TTL = {
+  plans: 10 * 60_000,     // catálogo comercial — muda por decisão, não por operação
+  customer: 5 * 60_000,   // cadastro do cliente
+  contract: 2 * 60_000,   // plano/limite do contrato
+  document: 30_000,       // status de CT-e/MDF-e — muito volátil
+} as const;
 
 // HiperTmsConnector — 1º conector (ADR 008/010).
 // Integração REAL com a API do HiperTMS via TMS_BASE_URL (env).
@@ -12,6 +29,79 @@ import { SUPORTE_KB } from './hipertms-suporte-kb.data';
 export class HiperTmsConnector implements Connector, OnModuleInit {
   readonly productCode = 'hipertms';
   private readonly logger = new Logger('HiperTmsConnector');
+
+  /**
+   * Cache de leitura + disjuntor (ver tms-resilience.ts).
+   * 5 falhas seguidas desarmam por 30s; enquanto desarmado ninguém paga o timeout.
+   */
+  private readonly resilience = new TmsResilience({
+    failureThreshold: Number(process.env.TMS_BREAKER_FAILURES ?? 5),
+    openMs: Number(process.env.TMS_BREAKER_OPEN_MS ?? 30_000),
+  });
+
+  /**
+   * Executa uma leitura no TMS com cache e disjuntor.
+   *
+   * Ordem: cache fresco → disjuntor → chamada real. Em qualquer falha devolve o último
+   * valor conhecido (ainda que vencido) e, se nem isso existir, `null` — que é
+   * exatamente o que estes métodos já retornavam em erro. Nenhum chamador precisa
+   * mudar; quem tem fallback próprio (`getPlans`) continua tratando o null.
+   *
+   * Só LEITURA passa por aqui. Escrita nunca é cacheada nem servida de cache.
+   *
+   * `serveStaleOnError: false` para dados em que valor vencido é PIOR que não ter
+   * resposta — preço e status fiscal. Ali a decisão já existente (K1) é a Lia admitir
+   * que não conseguiu consultar, e não arriscar citar um número velho.
+   */
+  private async cachedRead<T>(
+    key: string,
+    ttlMs: number,
+    fn: () => Promise<T>,
+    opts: { serveStaleOnError?: boolean } = {},
+  ): Promise<T | null> {
+    const serveStale = opts.serveStaleOnError !== false;
+
+    const fresh = this.resilience.getFresh<T>(key, ttlMs);
+    if (fresh !== undefined) return fresh;
+
+    if (this.resilience.isBlocked()) {
+      const stale = serveStale ? this.resilience.getStale<T>(key) : undefined;
+      this.logger.debug(`TMS com disjuntor aberto — ${key} servido do cache (${stale !== undefined ? 'stale' : 'vazio'})`);
+      return stale ?? null;
+    }
+
+    try {
+      const value = await fn();
+      this.resilience.recordSuccess();
+      this.resilience.set(key, value);
+      return value;
+    } catch (err: any) {
+      this.resilience.recordFailure();
+      const stale = serveStale ? this.resilience.getStale<T>(key) : undefined;
+      const { circuitOpen, consecutiveFailures } = this.resilience.stats();
+      this.logger.warn(
+        `TMS falhou em ${key}: ${err?.message} — ` +
+        `${stale !== undefined ? 'servindo cache vencido' : 'sem cache'} ` +
+        `(falhas=${consecutiveFailures}${circuitOpen ? ', disjuntor ABERTO' : ''})`,
+      );
+      return stale ?? null;
+    }
+  }
+
+  /** Exposto para o health check — sem conteúdo cacheado, só contadores. */
+  resilienceStats() {
+    return this.resilience.stats();
+  }
+
+  /**
+   * O disjuntor está aberto agora? Usado pelos agentes de suporte para diferenciar
+   * "esse dado não existe" de "não consegui consultar agora" — sem isso, os dois
+   * casos chegavam ao cliente como o mesmo silêncio, e a Lia arriscava dizer que
+   * algo não existe quando na verdade o TMS só está temporariamente fora do ar.
+   */
+  isDegraded(): boolean {
+    return this.resilience.stats().circuitOpen;
+  }
 
   // Base URL da API do TMS — suporta TMS_BASE_URL (canônico) e TMS_API_BASE_URL (legado).
   // Valor esperado: http://localhost:3000/api (local) ou URL pública em produção.
@@ -49,9 +139,16 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
       if (i < attempts) {
         this.logger.debug(`TMS ping tentativa ${i}/${attempts}: ${result.detail} — aguardando...`);
       } else {
+        // Esta mensagem já prometeu "Lia usará dados em cache" numa época em que
+        // cache nenhum existia. Agora existe (ver tms-resilience.ts) — mas no BOOT
+        // ele está vazio, então a promessa continuaria falsa. Log de incidente
+        // precisa dizer o que de fato acontece: sem TMS e sem cache quente, a Lia
+        // atende sem contexto de cliente e escala o que depender do TMS.
         this.logger.warn(
           `⚠️  TMS inacessível no boot: ${result.detail}. ` +
-          `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. Lia usará dados em cache enquanto TMS estiver fora.`,
+          `Verifique TMS_BASE_URL e TMS_SERVICE_TOKEN. ` +
+          `Cache ainda VAZIO neste momento: até a primeira leitura bem-sucedida, ` +
+          `consultas de cliente/contrato retornam vazio e a Lia escala em vez de responder.`,
         );
       }
     }
@@ -81,22 +178,28 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     if (!this.configured) {
       return this.defaultPlans(); // TMS não configurado — usa catálogo conhecido
     }
-    try {
-      // /nexa/plans retorna shape compatível com o Connector: { plans: [{code, name, price, maxUsers, features}] }
-      const url = `${this.baseUrl}/nexa/plans`;
 
-      const res = await fetch(url, {
-        headers: this.authHeader,
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
+    // K1 mantido: `serveStaleOnError: false`. O cache aqui existe só para não pedir o
+    // catálogo a cada mensagem — na FALHA a Lia volta a receber [] e escala, em vez de
+    // citar um preço que pode ter mudado. Preço errado dito por escrito vira oferta
+    // (casos Chevrolet/Air Canada); "vou confirmar os valores" não custa nada.
+    const plans = await this.cachedRead<Plan[]>(
+      'plans',
+      TTL.plans,
+      async () => {
+        // /nexa/plans retorna shape compatível com o Connector: { plans: [{code, name, price, maxUsers, features}] }
+        const res = await fetch(`${this.baseUrl}/nexa/plans`, {
+          headers: this.authHeader,
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) throw new Error(`TMS retornou ${res.status}`);
 
-      // Aceita tanto { plans: [...] } quanto [...] direto.
-      const data = await res.json() as { plans?: any[] } | any[];
-      const rows = Array.isArray(data) ? data : data?.plans;
-      if (!Array.isArray(rows) || rows.length === 0) {
-        throw new Error('resposta do TMS sem planos');
-      }
+        // Aceita tanto { plans: [...] } quanto [...] direto.
+        const data = await res.json() as { plans?: any[] } | any[];
+        const rows = Array.isArray(data) ? data : data?.plans;
+        if (!Array.isArray(rows) || rows.length === 0) {
+          throw new Error('resposta do TMS sem planos');
+        }
 
       // Fallback de features por código de plano (usado só quando o TMS manda lista vazia).
       const staticByCode = new Map(this.defaultPlans().map((p) => [p.code, p.features ?? []]));
@@ -600,10 +703,12 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'funil-vendas', category: 'produto',
         title: 'Funil de vendas e playbook de prospecção dentro do TMS',
         content:
+          'ATENÇÃO: isto descreve um MÓDULO que a transportadora usa DEPOIS de ser cliente, para vender ' +
+          'frete PARA OS CLIENTES DELA — não é algo que a Lia faz com o lead atual desta conversa. ' +
           'O HiperTMS tem funil comercial próprio: oportunidades de venda com etapas, e um PLAYBOOK de ' +
           'prospecção em passos — cada oportunidade mostra em que passo do processo está e o que falta fazer. ' +
-          'Também tem enriquecimento geográfico das empresas do funil (localiza a empresa no mapa), útil para ' +
-          'planejar visita e rota comercial. ' +
+          'Também tem enriquecimento geográfico das empresas do funil da transportadora (localiza a empresa ' +
+          'no mapa), útil para ela planejar visita e rota comercial aos próprios clientes. ' +
           'Diferencial relevante: a transportadora não precisa de um CRM separado para o comercial dela. ' +
           'Vender frete e operar frete ficam no mesmo lugar — a cotação vira embarque sem redigitar.',
         tags: ['funil', 'crm', 'oportunidade', 'prospeccao', 'playbook', 'sdr', 'comercial', 'vendas', 'pipeline'],
@@ -1062,7 +1167,15 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 
   async getDocumentStatus(tenantId: string, type: 'cte' | 'mdfe', key: string): Promise<DocumentStatus | null> {
     if (!this.configured) return null;
-    try {
+
+    // TTL curtíssimo (30s) e SEM cache vencido: status fiscal muda a toda hora. Dizer
+    // "seu CT-e foi autorizado" com base numa leitura de 10 minutos atrás é pior que
+    // dizer "não consegui consultar agora" — o cache aqui só absorve a repetição de
+    // quem manda a mesma chave três vezes seguidas.
+    return this.cachedRead<DocumentStatus | null>(
+      `doc:${tenantId}:${type}:${key}`,
+      TTL.document,
+      async () => {
       const url =
         `${this.baseUrl}/nexa/fiscal/document` +
         `?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`;
@@ -1106,10 +1219,9 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         rejectionCode: d.rejectionCode,
         rejectionMessage: d.rejectionMessage,
       };
-    } catch (err: any) {
-      this.logger.warn(`getDocumentStatus erro — ${err?.message}`);
-      return null;
-    }
+      },
+      { serveStaleOnError: false },
+    );
   }
 
   async getRejectionInfo(code: string): Promise<RejectionInfo | null> {
@@ -1160,7 +1272,11 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 
   async getContractStatus(externalId: string): Promise<ContractStatus | null> {
     if (!this.configured || !externalId) return null;
-    try {
+
+    // Contrato serve cache vencido na falha: saber que o cliente é Essencial e está
+    // ativo, com dado de 5 minutos atrás, é muito melhor que a Lia atender sem
+    // contexto nenhum. Não é número que ela promete ao lead — é contexto de suporte.
+    return this.cachedRead<ContractStatus | null>(`contract:${externalId}`, TTL.contract, async () => {
       const url = `${this.baseUrl}/nexa/contract?tenantId=${encodeURIComponent(externalId)}`;
       const res = await fetch(url, {
         headers: this.authHeader,
@@ -1183,10 +1299,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         documentsUsed:  typeof k.documentsUsed === 'number' ? k.documentsUsed : undefined,
         documentsLimit: typeof k.documentsLimit === 'number' ? k.documentsLimit : undefined,
       };
-    } catch (err: any) {
-      this.logger.warn(`getContractStatus(${externalId}) falhou: ${err?.message}`);
-      return null;
-    }
+    });
   }
 
   // Verifica se o telefone já tem cadastro no HiperTMS.
@@ -1196,7 +1309,10 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     if (!this.configured) {
       return null; // TMS não configurado — lead ainda é prospect
     }
-    try {
+    // Identidade quase não muda, e é a consulta MAIS repetida do sistema: roda a cada
+    // mensagem recebida para descobrir se o telefone é cliente ou prospect. É onde o
+    // cache mais economiza e onde o dado vencido é mais inofensivo.
+    return this.cachedRead<TmsCustomer | null>(`customer:${phone}`, TTL.customer, async () => {
       const url =
         `${this.baseUrl}/nexa/customers/by-phone` +
         `?phone=${encodeURIComponent(phone)}`;
@@ -1220,10 +1336,7 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         status:       status as TmsCustomer['status'],
         registeredAt: c.registeredAt ?? undefined,
       };
-    } catch (err: any) {
-      this.logger.warn(`lookupCustomer(${phone}) falhou: ${err?.message}`);
-      return null;
-    }
+    });
   }
 
   // Monitor proativo — busca eventos classificados pelo TMS para um tenant.

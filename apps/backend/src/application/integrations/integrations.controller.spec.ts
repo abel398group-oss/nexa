@@ -94,6 +94,53 @@ describe('IntegrationsController — plan-sync (U9/U10)', () => {
     ).resolves.not.toThrow();
   });
 
+  // ── monitorNumbersIncluded (2026-08-03, ADR 011) ───────────────────────────
+  // O catálogo de planos é do TMS. Antes o Nexa decidia sozinho quantos números
+  // cada plano inclui (MONITOR_WA_INCLUDED) e desalinhava a cada mudança lá.
+  it('persiste monitorNumbersIncluded quando o TMS envia', async () => {
+    const prisma = makePrisma();
+    const ctrl = new IntegrationsController(prisma);
+
+    await ctrl.planSync(SECRET, {
+      tenantId: 'tenant-1',
+      plan: 'essencial',
+      monitorNumbersIncluded: 3,
+    });
+
+    expect(prisma.planLimit.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ monitorNumbersIncluded: 3 }),
+        create: expect.objectContaining({ monitorNumbersIncluded: 3 }),
+      }),
+    );
+  });
+
+  it('omitir monitorNumbersIncluded preserva o valor atual (não reseta)', async () => {
+    const prisma = makePrisma();
+    const ctrl = new IntegrationsController(prisma);
+
+    await ctrl.planSync(SECRET, { tenantId: 'tenant-1', plan: 'profissional' });
+
+    const [callArgs] = prisma.planLimit.upsert.mock.calls;
+    expect(callArgs[0].update).not.toHaveProperty('monitorNumbersIncluded');
+    // No create não dá para "preservar" — grava null e o fallback por plano assume.
+    expect(callArgs[0].create.monitorNumbersIncluded).toBeNull();
+  });
+
+  it('aceita -1 (ilimitado no TMS) sem estourar validação', async () => {
+    const prisma = makePrisma();
+    const ctrl = new IntegrationsController(prisma);
+
+    await ctrl.planSync(SECRET, {
+      tenantId: 'tenant-1',
+      plan: 'corporativo',
+      monitorNumbersIncluded: -1,
+    });
+
+    const [callArgs] = prisma.planLimit.upsert.mock.calls;
+    expect(callArgs[0].update.monitorNumbersIncluded).toBe(-1);
+  });
+
   // secret inválido → rejeita
   it('secret inválido → ForbiddenException', async () => {
     const prisma = makePrisma();

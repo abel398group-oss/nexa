@@ -38,6 +38,9 @@ const mockPrisma = {
     findMany: vi.fn(),
     update: vi.fn(),
   },
+  aiMessage: {
+    findFirst: vi.fn(),
+  },
   aiConversation: {
     findMany: vi.fn(),
     updateMany: vi.fn(),
@@ -47,12 +50,15 @@ const mockPrisma = {
 
 const mockAutonomy     = { isEnabled: vi.fn() };
 const mockNotifications = { create: vi.fn() };
+// SLA estourado avisa o CLIENTE, não só o time (handleSlaBreach → ackCustomerWaiting).
+const mockConversations = { addMessage: vi.fn() };
 
 function makeService() {
   return new ProactiveExecutorService(
     mockPrisma as any,
     mockAutonomy as any,
     mockNotifications as any,
+    mockConversations as any,
   );
 }
 
@@ -69,6 +75,8 @@ beforeEach(() => {
 
   mockAutonomy.isEnabled.mockReturnValue(false); // OFF by default
   mockNotifications.create.mockResolvedValue(undefined);
+  mockConversations.addMessage.mockResolvedValue(undefined);
+  mockPrisma.aiMessage.findFirst.mockResolvedValue(null); // ainda nao avisou o cliente
 });
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -155,6 +163,54 @@ describe('sla_breach handler', () => {
       't1',
       expect.objectContaining({ type: 'escalation' }),
     );
+    expect(mockPrisma.pendingConversationEvent.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'RESOLVED', resolvedAt: expect.any(Date) } }),
+    );
+  });
+
+  // Antes só existia o alerta interno: quem foi escalado às 18h de sexta ficava sem
+  // resposta nenhuma até segunda, sem saber se alguém tinha visto.
+  it('avisa o CLIENTE que a mensagem está com a equipe', async () => {
+    mockPrisma.pendingConversationEvent.findMany.mockResolvedValue([
+      makeEvent({ ruleId: 'conversation.sla_breach', severity: 'CRITICAL' }),
+    ]);
+
+    await makeService().executeAll();
+
+    expect(mockConversations.addMessage).toHaveBeenCalledWith(
+      't1',
+      'conv1',
+      expect.objectContaining({ direction: 'outbound', intent: 'sla_ack' }),
+    );
+    const enviado = mockConversations.addMessage.mock.calls[0][2].content as string;
+    // Não pode prometer prazo: o backend não sabe quando um humano vai pegar, e
+    // promessa não cumprida é a segunda quebra de confiança.
+    expect(enviado).not.toMatch(/\d+\s*(min|hora|h\b|dia)/i);
+  });
+
+  it('não repete o aviso enquanto ninguém atende', async () => {
+    mockPrisma.pendingConversationEvent.findMany.mockResolvedValue([
+      makeEvent({ ruleId: 'conversation.sla_breach', severity: 'CRITICAL' }),
+    ]);
+    mockPrisma.aiMessage.findFirst.mockResolvedValue({ id: 'msg-ja-avisou' });
+
+    await makeService().executeAll();
+
+    // A regra redispara a cada ciclo; sem esta trava o cliente receberia
+    // "já estamos vendo" de 15 em 15 minutos, o que irrita mais que o silêncio.
+    expect(mockConversations.addMessage).not.toHaveBeenCalled();
+    expect(mockNotifications.create).toHaveBeenCalled(); // o time continua sendo alertado
+  });
+
+  it('falha ao avisar o cliente não impede o evento de ser resolvido', async () => {
+    mockPrisma.pendingConversationEvent.findMany.mockResolvedValue([
+      makeEvent({ ruleId: 'conversation.sla_breach', severity: 'CRITICAL' }),
+    ]);
+    mockConversations.addMessage.mockRejectedValue(new Error('WAHA fora'));
+
+    await makeService().executeAll();
+
+    // Sem isso a fila de eventos entope e o time para de receber alerta de SLA.
     expect(mockPrisma.pendingConversationEvent.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'RESOLVED', resolvedAt: expect.any(Date) } }),
     );

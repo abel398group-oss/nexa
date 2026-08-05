@@ -67,13 +67,33 @@ O Supervisor valida toda mensagem **antes** de processar (ADR 012):
 
 ## 4. Validação de saída (anti-alucinação / LGPD / tom)
 
-O Supervisor valida toda resposta **antes** de enviar:
+Duas camadas independentes validam toda resposta **antes** de enviar — de
+propósito não é só uma: um supervisor de IA auditando um texto hostil pode ser
+enganado pela mesma manipulação que gerou o texto (`output-guard.ts`, cabeçalho).
 
+**Camada 1 — Supervisor (LLM, `supervisor-agent.service.ts`)**:
 - **Anti-alucinação**: se não há conteúdo **aprovado** na KB que responda, a Lia
   diz "não encontrei, vou encaminhar" — nunca inventa (ADR 006 D5).
 - **LGPD**: não expõe dado pessoal de terceiros nem de outro tenant.
 - **Tom**: respeita o tom de marca; sem promessas comerciais não autorizadas
   (desconto, prazo, condição especial → escala).
+
+**Camada 2 — guard determinístico, não-IA (`shared/governance/output-guard.ts`,
+`inspectOutbound()`)**: roda em código puro, sem chamar modelo nenhum, então não
+pode ser convencido por prompt injection. Bloqueia:
+- **Preço/percentual fora do catálogo**: todo `R$`/`%` no rascunho precisa
+  aparecer literalmente em `allowedFacts` (planos + KB entregues ao agente) —
+  senão é `preco_nao_autorizado`. Motivado pelos casos reais Chevrolet (chatbot
+  "vendeu" carro por US$1, dez/2023) e Air Canada (chatbot inventou política de
+  reembolso e perdeu na justiça, 2024) — citados no código.
+- **Vazamento de prompt** (OWASP LLM07:2025).
+- **Ofensa saindo com a marca**.
+- **Dado de terceiro/segredo**: CPF/CNPJ (sempre bloqueado, mesmo se for do
+  próprio lead — não é falso positivo, é decisão deliberada), telefone/e-mail de
+  OUTRO cliente, chave de API, string de conexão de banco.
+
+Nunca lança exceção nem reescreve o texto — quem chama decide o que fazer no
+bloqueio (hoje: resposta segura genérica + registra a tentativa, ver §8).
 
 ## 5. Confiança mínima
 
@@ -100,8 +120,28 @@ ou da fala do lead (ADR 005 D2). Toda query é filtrada por tenant.
 Nunca logar JWT, chaves, credenciais ou payloads sensíveis (ADR 005 D6). Memória,
 conversas e health score são dado pessoal sob LGPD (ver `docs/ai/memory-strategy.md`).
 
+## 8. Banimento por abuso repetido ("3 strikes", `abuse-guard.service.ts`)
+
+Cada bloqueio do guard de saída (§4 camada 2) é sempre uma tentativa de
+manipulação capturada, nunca a Lia errando sozinha — o guard só dispara quando o
+rascunho JÁ continha algo que não devia sair. `AbuseGuardService.recordStrike()`
+conta essas tentativas por telefone; ao atingir o teto (`ABUSE_BAN_THRESHOLD`,
+padrão 3), silencia o número — igual banimento de rede social.
+
+- **Janela deslizante** (`ABUSE_STRIKE_WINDOW_HOURS`, padrão 24h): tentativa fora
+  da janela reinicia a contagem em 1 em vez de somar para sempre — sem isso um
+  cliente comum errando 3x espalhado em meses seria banido igual a um atacante
+  insistindo em minutos.
+- **Banimento é silencioso**: sem confirmar pro número que foi banido — dar esse
+  retorno ensina o atacante quantas tentativas faltavam.
+- **Reversão só manual** (`unban()`), painel em `/contacts/abuse`. A janela de
+  tempo não perdoa quem já foi banido, só evita banir quem não devia ter sido.
+- Checado em `isBanned()` ANTES do Router (ver "Mapa de decisão", `ai-agents.md`)
+  — número banido não gasta nem uma chamada de IA.
+
 ## Relacionados
 
 - ADR 005 — Segurança e Permissões · ADR 012 — Segurança da IA & Prompt Injection
 - `docs/ai/ai-review-process.md` · `docs/security/security-overview.md`
 - `application/actions/action-policy.ts` · `shared/governance/autonomy.service.ts`
+- `shared/governance/output-guard.ts` · `application/contacts/abuse-guard.service.ts`

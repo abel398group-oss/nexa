@@ -103,6 +103,68 @@ export class OpportunitiesService {
     return [...buckets.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
   }
 
+  // F7 (RevOps): estagios em que o lead ainda esta "vivo" e precisa de acao do
+  // vendedor. paused fica de FORA de proposito — pausado e uma decisao dele de
+  // nao mexer agora; se voltasse pra fila, a pausa nao serviria pra nada.
+  private static readonly QUEUE_STAGES = ['new', 'qualified', 'proposal'];
+
+  /**
+   * Fila de trabalho do vendedor: os leads dele que ainda esperam acao, na
+   * ordem em que valem ser atacados.
+   *
+   * Existe porque o vendedor tinha que cruzar duas telas (Inbox pra ler a
+   * conversa, Oportunidades pra mover o estagio) e decidir sozinho por quem
+   * comecar. Aqui a ordem ja vem pronta e o contexto vem junto.
+   *
+   * Prioridade (aplicada em memoria — sao no maximo `take` linhas, e SQL com
+   * CASE aqui ficaria pior de ler que o ganho):
+   *   1. pediu reuniao (`intent = meeting_request`) — e o sinal mais forte
+   *   2. score maior primeiro
+   *   3. quem esta esperando ha mais tempo
+   */
+  async queue(tenantId: string, sellerScope?: string, take = 30) {
+    const opps = await this.prisma.opportunity.findMany({
+      where: this.scoped({ tenantId, stage: { in: OpportunitiesService.QUEUE_STAGES } }, sellerScope),
+      take,
+      orderBy: { updatedAt: 'asc' },
+    });
+    if (opps.length === 0) return [];
+
+    // Ultima mensagem de cada conversa, pra o vendedor ver do que se trata sem
+    // abrir o Inbox. Uma query so para todas as conversas (evita N+1).
+    const convIds = opps.map((o: any) => o.conversationId).filter(Boolean) as string[];
+    const msgs = convIds.length
+      ? await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds } },
+          select: { conversationId: true, direction: true, content: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const ultimaPorConversa = new Map<string, any>();
+    for (const m of msgs) {
+      // como veio ordenado desc, a PRIMEIRA de cada conversa ja e a mais recente
+      if (!ultimaPorConversa.has(m.conversationId)) ultimaPorConversa.set(m.conversationId, m);
+    }
+
+    const enriched = opps.map((o: any) => {
+      const last = o.conversationId ? ultimaPorConversa.get(o.conversationId) : null;
+      return {
+        ...o,
+        lastMessage: last ? { direction: last.direction, content: last.content, at: last.createdAt } : null,
+        // Espera contada da ultima mexida no lead — e o que o vendedor sente
+        // como "esse ta parado ha tempo demais".
+        waitingSince: o.updatedAt,
+        pediuReuniao: o.intent === 'meeting_request',
+      };
+    });
+
+    return enriched.sort((a, b) => {
+      if (a.pediuReuniao !== b.pediuReuniao) return a.pediuReuniao ? -1 : 1;
+      if (b.interestScore !== a.interestScore) return b.interestScore - a.interestScore;
+      return new Date(a.waitingSince).getTime() - new Date(b.waitingSince).getTime();
+    });
+  }
+
   async findOne(tenantId: string, id: string, sellerScope?: string) {
     const opp = await this.prisma.opportunity.findFirst({
       where: this.scoped({ id, tenantId }, sellerScope),
@@ -137,8 +199,11 @@ export class OpportunitiesService {
     if (!OPP_STAGES.includes(toStage as any)) {
       throw new BadRequestException(`Estagio invalido. Use: ${OPP_STAGES.join(', ')}`);
     }
-    if (toStage === 'discarded' && opts.discardReason && !DISCARD_REASONS.includes(opts.discardReason as any)) {
-      throw new BadRequestException(`Motivo invalido. Use: ${DISCARD_REASONS.join(', ')}`);
+    // Sem isto, discardReason ficava null em quem descarta sem informar motivo — e o
+    // painel de motivo de perda (sellerOverview) perdia justamente os casos que mais
+    // precisa explicar. Achado da revisão externa (Gemini, 2026-08-05), confirmado no código.
+    if (toStage === 'discarded' && (!opts.discardReason || !DISCARD_REASONS.includes(opts.discardReason as any))) {
+      throw new BadRequestException(`Motivo obrigatorio ao descartar. Use: ${DISCARD_REASONS.join(', ')}`);
     }
     const opp = await this.findOne(tenantId, id, sellerScope);
     if (opp.stage === toStage) return opp;
@@ -157,6 +222,41 @@ export class OpportunitiesService {
       }),
     ]);
     return updated;
+  }
+
+  // F7 (RevOps): registra QUANDO o lead consentiu compartilhar o dado com um
+  // parceiro externo (LGPD) — presença do timestamp é a prova, não um booleano.
+  // Idempotente: consentimento já dado não é sobrescrito por uma segunda chamada.
+  async recordPartnerConsent(tenantId: string, id: string, sellerScope?: string) {
+    const opp = await this.findOne(tenantId, id, sellerScope);
+    if ((opp as any).partnerConsentAt) return opp;
+    return this.prisma.opportunity.update({
+      where: { id },
+      data: { partnerConsentAt: new Date() } as any,
+    });
+  }
+
+  // F7 (RevOps): compartilha o lead com um parceiro externo (ex.: fornecedor
+  // de pneus). Partner NUNCA é um segundo tenant — é uma empresa de fora do
+  // Nexa. Bloqueia sem consentimento prévio (LGPD) e sem parceiro ativo do
+  // MESMO tenant — nunca aceita partnerId de outro tenant.
+  async shareWithPartner(tenantId: string, id: string, partnerId: string, sellerScope?: string) {
+    const opp = await this.findOne(tenantId, id, sellerScope);
+    if (!(opp as any).partnerConsentAt) {
+      throw new BadRequestException(
+        'Lead ainda não consentiu o compartilhamento com parceiro (LGPD) — registre o consentimento antes.',
+      );
+    }
+    const partner = await (this.prisma as any).partner.findFirst({ where: { id: partnerId, tenantId, active: true } });
+    if (!partner) throw new BadRequestException('Parceiro inválido ou inativo.');
+    return this.prisma.opportunity.update({
+      where: { id },
+      data: {
+        sharedWithPartnerId: partnerId,
+        partnerShareStatus: 'shared',
+        partnerSharedAt: new Date(),
+      } as any,
+    });
   }
 
   async remove(tenantId: string, id: string, sellerScope?: string) {

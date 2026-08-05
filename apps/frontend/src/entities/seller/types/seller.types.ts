@@ -19,6 +19,12 @@ export interface SellerKpi {
   ganhos: number;
   perdidos: number;
   taxaConversao: number;
+  // F7 (RevOps): atividade registrada manualmente pelo vendedor
+  // (SellerActivity). Diferente dos campos acima, que derivam do que a IA
+  // processou — estes medem o trabalho humano: telefone e e-mail.
+  calls: number;
+  emails: number;
+  notes: number;
 }
 
 // Forma reduzida usada em seletores (ex.: reatribuir lead no Inbox).

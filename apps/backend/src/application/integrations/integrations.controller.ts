@@ -62,6 +62,21 @@ class PlanSyncDto {
   @Min(0)
   @Max(100)
   monitorExtraNumbers?: number;
+
+  /**
+   * WhatsApp numbers included in the plan, as defined in the TMS plan catalogue
+   * (system_admin_plan.monitor_numbers_included). The TMS owns this number —
+   * Nexa only enforces it (ADR 011). `-1` means unlimited (Corporativo); Nexa
+   * caps it at its own technical limit.
+   *
+   * Optional for backward compatibility: omitting it preserves the current
+   * value, and a tenant that was never synced falls back to MONITOR_WA_INCLUDED.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(-1)
+  @Max(100)
+  monitorNumbersIncluded?: number;
 }
 
 // C2 (auditoria 2026-07-08): endpoint server-to-server (TMS → Nexa), autenticado por
@@ -78,11 +93,13 @@ export class IntegrationsController {
    * Called by HiperTMS whenever a tenant's plan or extra WhatsApp licenses change.
    * Updates PlanLimit.plan and (optionally) PlanLimit.monitorExtraNumbers.
    *
-   * Body:  { tenantId?, tmsTenantId?, plan, monitorExtraNumbers? }
+   * Body:  { tenantId?, tmsTenantId?, plan, monitorExtraNumbers?, monitorNumbersIncluded? }
    * Auth:  x-tms-secret header must match env TMS_SYNC_SECRET
    *
-   * monitorExtraNumbers is optional — omitting it preserves the current value.
-   * The TMS must send it when the tenant buys or cancels add-on numbers.
+   * monitorExtraNumbers and monitorNumbersIncluded are optional — omitting either
+   * preserves its current value. The TMS must send monitorExtraNumbers when the
+   * tenant buys or cancels add-on numbers, and monitorNumbersIncluded on every
+   * sync so the plan catalogue stays authoritative (ADR 011).
    */
   @Post('plan-sync')
   async planSync(
@@ -105,23 +122,40 @@ export class IntegrationsController {
       );
     }
 
-    // Only update monitorExtraNumbers when the TMS explicitly sends it.
-    // Omitting the field preserves the current value (no accidental reset to 0).
+    // Only update these when the TMS explicitly sends them.
+    // Omitting a field preserves the current value (no accidental reset to 0).
     const extraUpdate =
       dto.monitorExtraNumbers !== undefined
         ? { monitorExtraNumbers: dto.monitorExtraNumbers }
         : {};
+    const includedUpdate =
+      dto.monitorNumbersIncluded !== undefined
+        ? { monitorNumbersIncluded: dto.monitorNumbersIncluded }
+        : {};
 
     const updated = await this.prisma.planLimit.upsert({
       where:  { tenantId },
-      create: { tenantId, plan: dto.plan, monitorExtraNumbers: dto.monitorExtraNumbers ?? 0 },
-      update: { plan: dto.plan, ...extraUpdate },
-      select: { tenantId: true, plan: true, monitorExtraNumbers: true, updatedAt: true },
+      create: {
+        tenantId,
+        plan: dto.plan,
+        monitorExtraNumbers: dto.monitorExtraNumbers ?? 0,
+        // null when the TMS omits it → monitorWaIncluded() falls back to the table
+        monitorNumbersIncluded: dto.monitorNumbersIncluded ?? null,
+      },
+      update: { plan: dto.plan, ...extraUpdate, ...includedUpdate },
+      select: {
+        tenantId: true,
+        plan: true,
+        monitorExtraNumbers: true,
+        monitorNumbersIncluded: true,
+        updatedAt: true,
+      },
     });
 
     this.logger.log(
       `plan-sync: tenant=${tenantId} plan=${dto.plan}` +
-      (dto.monitorExtraNumbers !== undefined ? ` extraNumbers=${dto.monitorExtraNumbers}` : ''),
+      (dto.monitorExtraNumbers !== undefined ? ` extraNumbers=${dto.monitorExtraNumbers}` : '') +
+      (dto.monitorNumbersIncluded !== undefined ? ` included=${dto.monitorNumbersIncluded}` : ''),
     );
     return { synced: true, ...updated };
   }

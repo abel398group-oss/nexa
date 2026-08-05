@@ -3,12 +3,16 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/create-contact.dto';
 import { normalizePhone } from '@/shared/utils/phone.util';
+import { OptOutRegistryService } from './opt-out-registry.service';
 
 @Injectable()
 export class ContactsService {
   private readonly logger = new Logger('Contacts');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly optOutRegistry: OptOutRegistryService,
+  ) {}
 
   async findAll(tenantId: string, q: PaginationQueryDto, tag?: string): Promise<Paginated<any>> {
     const where: any = { tenantId };
@@ -217,7 +221,20 @@ export class ContactsService {
 
   // reativa um contato que tinha optado por sair (uso MANUAL pelo admin, com consentimento)
   async reactivate(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
+    const c = await this.findOne(tenantId, id);
+    // Tira também da lista de bloqueio permanente. Sem isto o disparo continuaria
+    // pulando a pessoa e a tela mentiria: "reativei mas ela nunca recebe".
+    // É ação MANUAL e consciente do admin — diferente de apagar o contato, que
+    // não deve revogar o pedido de opt-out.
+    await this.prisma.optOutRecord.deleteMany({
+      where: {
+        tenantId,
+        OR: [
+          ...(c.phone ? [{ phone: c.phone }] : []),
+          ...(c.email ? [{ email: c.email }] : []),
+        ],
+      },
+    }).catch(() => undefined);
     return this.prisma.contact.update({ where: { id }, data: { status: 'active', optOutAt: null } });
   }
 
@@ -251,18 +268,49 @@ export class ContactsService {
     return { unblocked: r.count };
   }
 
-  // Import em lote (CSV já parseado em array). Idempotente por phone.
+  /**
+   * Import em lote (CSV já parseado em array). Idempotente por phone.
+   *
+   * Consulta a lista de bloqueio ANTES de criar: quem já pediu para sair volta como
+   * `opted_out`, não como `active`.
+   *
+   * Sem isto, o contato apagado numa limpeza e reimportado voltava ativo. O disparo
+   * até barrava (o registry é consultado na criação da campanha e antes do envio),
+   * mas a TELA mentia: você via 500 contatos disparáveis tendo 480, e qualquer canal
+   * novo que esquecesse de consultar o registry vazaria. Foi assim que a Patrícia
+   * recebeu campanha 3h depois de escrever que ia processar a empresa.
+   *
+   * Uma query para o lote inteiro — não uma por contato.
+   */
   async importMany(tenantId: string, contacts: CreateContactDto[]) {
+    if (!contacts?.length) return { imported: 0, blocked: 0 };
+
+    const bloqueados = await this.optOutRegistry
+      .blockedPhones(tenantId, contacts.map((c) => c.phone))
+      .catch(() => new Set<string>()); // falha na consulta não pode travar o import
+
     let created = 0;
+    let blocked = 0;
     for (const c of contacts) {
       const phone = normalizePhone(c.phone) || c.phone;
+      const estaBloqueado = bloqueados.has(phone.replace(/\D/g, ''));
+      if (estaBloqueado) blocked++;
       await this.prisma.contact.upsert({
         where: { tenantId_phone: { tenantId, phone } },
-        update: {},
-        create: { tenantId, ...c, phone, tags: c.tags ?? [] },
+        update: {}, // já existe: preserva o status atual (inclusive opted_out)
+        create: {
+          tenantId,
+          ...c,
+          phone,
+          tags: c.tags ?? [],
+          ...(estaBloqueado ? { status: 'opted_out', optOutAt: new Date() } : {}),
+        },
       });
       created++;
     }
-    return { imported: created };
+    if (blocked > 0) {
+      this.logger.log(`Import: ${blocked} de ${created} contatos entraram já descadastrados (lista de bloqueio)`);
+    }
+    return { imported: created, blocked };
   }
 }

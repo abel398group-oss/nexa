@@ -9,6 +9,8 @@ import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TranscriptionService } from '@/shared/ai/transcription.service';
 import { InternalNumbersService } from './internal-numbers.service';
+import { isOptOutMessage } from './opt-out-detection';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 
 interface Normalized {
   phone: string;
@@ -24,7 +26,9 @@ interface Normalized {
 
 // QUAL-002: 'cancelar' removido — palavra genérica usada em contextos de negócio (ex: "cancelar pedido")
 // que causava falsos opt-outs. Opt-out requer palavras inequívocas (parar, sair, stop, unsubscribe).
-const STOP_WORDS = ['parar', 'sair', 'remover', 'nao quero', 'descadastrar', 'pare', 'stop', 'unsubscribe'];
+// A lista de palavras soltas com `includes` saiu de cena em 2026-08-03: deixava
+// passar "para de mandar msg" e, pior, descadastrava quem escrevia "parece
+// interessante" ('pare' dentro de 'parece'). Ver opt-out-detection.ts.
 
 const RATE_LIMIT_MS = Number(process.env.INBOUND_RATE_LIMIT_MS ?? 12000); // anti-resposta-dupla (G2)
 
@@ -44,6 +48,7 @@ export class WhatsappService {
     private readonly transcription: TranscriptionService,
     private readonly emitter: EventEmitter2,
     private readonly internalNumbers: InternalNumbersService,
+    private readonly optOutRegistry: OptOutRegistryService,
   ) {}
 
   // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
@@ -123,9 +128,7 @@ export class WhatsappService {
 
     const isValidBrazilPhone = isValidBR(phone);
     const normalizedText = String(text).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
-    const isOptOut = STOP_WORDS.some((w) =>
-      normalizedText.includes(w.normalize('NFD').replace(/\p{Diacritic}/gu, '')),
-    );
+    const isOptOut = isOptOutMessage(String(text));
     const isMedia = isValidBrazilPhone && normalizedText.length === 0;
 
     // nome do contato vindo do WhatsApp (pushName) — exibir no inbox (ADR 020: fonte 'pushname')
@@ -314,7 +317,7 @@ export class WhatsappService {
         this.logger.debug(`Áudio transcrito de ${n.phone}`);
         n.text = r.transcript;
         n.normalizedText = r.transcript.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
-        n.isOptOut = STOP_WORDS.some((w) => n.normalizedText.includes(w.normalize('NFD').replace(/\p{Diacritic}/gu, '')));
+        n.isOptOut = isOptOutMessage(r.transcript);
         n.isMedia = false;
         n.shouldProcess = true;
         inboundAudioUrl = r.audioUrl;
@@ -336,6 +339,9 @@ export class WhatsappService {
         where: { id: contact.id },
         data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() },
       });
+      // Lista de bloqueio PERMANENTE, fora do contato: se o contato for apagado
+      // numa limpeza e a lista reimportada, o pedido continua valendo.
+      await this.optOutRegistry.register(tenantId, { phone: n.phone, email: contact.email }, 'pedido');
       const optConv = await this.prisma.aiConversation.findFirst({ where: { tenantId, phone: n.phone, status: 'open' } });
       if (optConv) {
         // registra a mensagem do cliente no histórico

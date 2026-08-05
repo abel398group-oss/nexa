@@ -33,12 +33,16 @@ const NAV_GROUPS: NavGroup[] = [
 
   // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
   { label: 'Vendas', icon: 'dollar', items: [
+    // Primeiro item de propósito: é a tela onde o vendedor TRABALHA (F7 — RevOps).
+    { to: '/fila',           label: 'Minha fila',        ic: 'zap',       perm: 'opportunities' },
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
     { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
     { to: '/campaigns',      label: 'Disparo',           ic: 'campaigns', perm: 'campaigns' },
     { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
+    { to: '/contacts/abuse', label: 'Números banidos',   ic: 'ban',       perm: 'contacts' },
     { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
+    { to: '/partners',       label: 'Parceiros',         ic: 'building',  perm: 'partners' },
     { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
   ] },
 
@@ -77,8 +81,11 @@ const titles: Record<string, string> = {
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',
   '/opportunities': 'Oportunidades',
+  '/partners': 'Parceiros',
+  '/fila': 'Minha fila',
   '/campaigns': 'Disparo de Leads',
   '/sender/health': 'Saúde dos números',
+  '/contacts/abuse': 'Números banidos',
   '/playbook': 'Playbook de Vendas',
   '/users': 'Usuários & Acessos',
   '/settings/email-channel': 'Canal de E-mail',

@@ -86,6 +86,44 @@ const campaignSchema = z
 // validação real de e-mail (em vez de só checar '@')
 const isEmail = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
 
+// ── Spintax: quantas mensagens diferentes o template gera ──────────────────────
+// Espelha spinVariants() do backend (application/sender/spintax.ts). Aqui é só
+// para o contador da tela; quem sorteia de verdade é o backend, no envio.
+const spinVariants = (text: string): number => {
+  let total = 1;
+  for (const m of text.matchAll(/\{([^{}]*\|[^{}]*)\}/g)) total *= m[1].split('|').length;
+  return total;
+};
+
+/**
+ * Contador de variações abaixo do campo de mensagem.
+ *
+ * Existe porque texto idêntico repetido é o sinal mais forte de spam para o
+ * WhatsApp — mais que a cadência de envio. O número serve de termômetro: com uma
+ * lista de 300 e uma única versão do texto, o usuário precisa ver isso na hora de
+ * escrever, não depois do número cair.
+ */
+const SpintaxHint: React.FC<{ text: string; recipients: number }> = ({ text, recipients }) => {
+  const variants = spinVariants(text);
+  const poucas = variants < 4 && recipients > 30;
+  return (
+    <p className={`mt-1 text-[11px] ${poucas ? 'text-amber-500' : 'text-base-content/35'}`}>
+      {variants > 1 ? (
+        <>
+          {variants} versões diferentes desta mensagem.{' '}
+          {poucas && 'Poucas para o tamanho da lista — some mais opções.'}
+        </>
+      ) : (
+        <>
+          Todos recebem o texto <strong>idêntico</strong>. Use{' '}
+          <code className="rounded bg-base-200 px-1">{'{Oi|Olá|Bom dia}'}</code> para variar e reduzir
+          o risco de bloqueio.
+        </>
+      )}
+    </p>
+  );
+};
+
 export function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
   const [numbers, setNumbers] = useState<SenderNumber[]>([]);
@@ -1525,7 +1563,7 @@ export function CampaignsPage() {
                 <div>
                   <label className="mb-1 block text-xs font-medium text-base-content/60">
                     Corpo do e-mail
-                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'} e {'{{saudacao}}'}</span>
+                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'}, {'{{saudacao}}'} e {'{op1|op2}'}</span>
                   </label>
                   <textarea
                     className="input w-full py-2 text-sm"
@@ -1533,6 +1571,14 @@ export function CampaignsPage() {
                     value={emailTemplate}
                     onChange={(e) => setEmailTemplate(e.target.value)}
                     required
+                  />
+                  <SpintaxHint
+                    text={emailTemplate}
+                    recipients={
+                      fromContacts
+                        ? (activeCount ?? 0)
+                        : emailsText.split('\n').filter((l) => isEmail(l)).length
+                    }
                   />
                   <p className="mt-1 text-[11px] text-base-content/35">
                     Assinatura + link de descadastro (LGPD) adicionados automaticamente no rodapé.
@@ -1667,7 +1713,7 @@ export function CampaignsPage() {
                 <div>
                   <label className="mb-1 block text-xs font-medium text-base-content/60">
                     Mensagem
-                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'} e {'{{saudacao}}'}</span>
+                    <span className="ml-2 font-normal text-base-content/30">use {'{{nome}}'}, {'{{saudacao}}'} e {'{op1|op2}'}</span>
                   </label>
                   <textarea
                     className="input w-full py-2"
@@ -1675,6 +1721,16 @@ export function CampaignsPage() {
                     value={template}
                     onChange={(e) => setTemplate(e.target.value)}
                     required
+                  />
+                  {/* Em "todos"/"tag" o público real vem da base, não da seleção manual —
+                      usa activeCount para o aviso não sumir justo na campanha grande. */}
+                  <SpintaxHint
+                    text={template}
+                    recipients={
+                      audience === 'manual'
+                        ? manualSelected.size + avulsos.length
+                        : (activeCount ?? 0)
+                    }
                   />
                   {formErrors.message && <p className="mt-1 text-xs text-red-500">{formErrors.message}</p>}
                 </div>

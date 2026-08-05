@@ -60,3 +60,52 @@ geram efeito colateral.
   (ex.: sync de contratos, cancelamentos).
 - O gate de features do Monitor (ADR 032) lê o campo `plan` do `TenantNotificationConfig`
   populado por este endpoint.
+
+---
+
+## Adendo 2026-08-03 — `monitorNumbersIncluded` (o TMS volta a mandar nos limites)
+
+### Problema
+
+O ADR 011 diz que o TMS é a fonte de verdade do catálogo de planos, mas a
+quantidade de números de WhatsApp inclusa em cada plano estava **escrita no código
+do Nexa** (`MONITOR_WA_INCLUDED`, em `application/monitor/monitor-plan-limits.const.ts`).
+Duas fontes para o mesmo fato → divergência silenciosa: em 03/08/2026 o catálogo do
+TMS tinha `monitor_numbers_included = 1` nos quatro planos enquanto o Nexa aplicava
+1/3/5/5. Ninguém percebeu porque quem gateia é o Nexa — o valor do TMS não era lido
+por nada.
+
+Havia ainda uma **terceira** cópia da mesma regra no frontend do TMS
+(`WA_NUMBERS_INCLUDED`, duplicada em `SubscriptionPlanCard.tsx` e
+`admin/subscription/PlanCard.tsx`), usada para mostrar o número no card de planos.
+
+### Decisão
+
+O payload do `plan-sync` ganha `monitorNumbersIncluded`, vindo direto de
+`system_admin_plan.monitor_numbers_included`:
+
+```
+POST /api/integrations/plan-sync
+x-tms-secret: <TMS_SYNC_SECRET>
+{ tmsTenantId, plan, monitorExtraNumbers?, monitorNumbersIncluded? }
+```
+
+- Persistido em `PlanLimit.monitorNumbersIncluded` (coluna nova, **nullable**).
+- `monitorWaIncluded(plan, included)` usa o valor do TMS quando presente;
+  `MONITOR_WA_INCLUDED` vira **fallback** para tenants nunca sincronizados.
+- `-1` no TMS significa ilimitado → o Nexa aplica seu teto técnico
+  (`MONITOR_WA_OVERRIDE_LIMIT`, 10).
+- Cancelamento envia `monitorNumbersIncluded: 0` junto com `plan: 'free'`, senão o
+  tenant cancelado ficaria com o teto do plano que não paga mais.
+- Os cards do frontend do TMS passam a ler `plan.monitorNumbersIncluded`.
+
+### Retrocompatibilidade e ordem de deploy
+
+O campo é `@IsOptional()` e omiti-lo preserva o valor atual — um TMS antigo
+continua funcionando contra um Nexa novo. Pela REGRA 1 do `REGRAS-SQUAD.md`, a
+ordem é **receptor primeiro**: Nexa (migration + DTO) → depois TMS.
+
+### O que continua no Nexa
+
+O teto técnico de 10 números e o `monitorOverride` (destravamento por
+platform-admin) são decisões operacionais do Nexa, não do catálogo — seguem aqui.

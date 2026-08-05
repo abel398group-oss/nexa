@@ -71,9 +71,15 @@ Connector (interface):
 - **roadmap:** mantém-se; a "decisão módulo vs serviço" fica **RESOLVIDA = serviço/plataforma**
 
 ## Pendências de implementação
-- Definir a interface `Connector` em detalhe (quando construir a Fase 3 — Billing)
-- Auth próprio da plataforma (Fase 2)
-- Credencial de serviço para a API do TMS
+
+Verificado 2026-08-05 — as três já estão resolvidas no código:
+
+- [x] Interface `Connector` em detalhe → `application/connectors/connector.interface.ts`,
+  implementada por `HiperTmsConnector`.
+- [x] Auth próprio da plataforma → JWT + cookie HttpOnly (`shared/auth/`) e
+  módulo `users` — não reusa login do TMS.
+- [x] Credencial de serviço para a API do TMS → `TMS_INTERNAL_TOKEN`/`TMS_SERVICE_TOKEN`,
+  enviada como `Authorization: Bearer` em toda chamada (`hipertms.connector.ts`).
 
 ## Nota
 Decisão estratégica do dono (visão de produto + múltiplos SaaS). Não reabrir sem mudança

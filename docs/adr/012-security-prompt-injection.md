@@ -46,6 +46,16 @@ Toda ação declara se exige backend e se exige humano:
 **Regra:** ações marcadas "exige humano = sim" NUNCA são executadas pela IA nem
 auto-aprovadas pelo backend — exigem confirmação humana explícita.
 
+**Fora desta tabela, de propósito:** o `suggestedAction` do agente de vendas
+(`none` / `schedule_meeting` / `handoff_human`, em `sales-agent.service.ts`) não
+passa pela Action Policy acima. É orquestração de atendimento (transferir a
+conversa para um vendedor, sugerir agendar reunião), não uma ação com efeito
+colateral crítico/irreversível no ERP — a categoria que esta tabela existe para
+travar. `handoff_human` já cai direto num humano (o vendedor), então a garantia
+de confirmação humana continua valendo, só que pelo rodízio de vendedor em vez
+desta tabela. Registrado aqui (2026-08-05) depois de uma segunda opinião externa
+perguntar se era um buraco de governança — não é, mas não estava escrito até agora.
+
 ### Kill Switch (parada de emergência)
 Flag global capaz de parar a autonomia da IA instantaneamente quando algo der errado:
 ```

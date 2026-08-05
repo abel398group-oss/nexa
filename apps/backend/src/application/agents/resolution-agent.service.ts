@@ -3,6 +3,7 @@ import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { PlaybookService } from '@/application/playbook/playbook.service';
 import { SalesAgentService } from './sales-agent.service';
+import { fenceUntrusted, UNTRUSTED_RULE } from '@/shared/ai/untrusted-input';
 import { DiagnosticResult } from './diagnostic-agent.service';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
 import { HELP_URLS, HELP_BASE_URL } from '@/application/connectors/hipertms-help-urls.data';
@@ -71,6 +72,7 @@ REGRAS CRÍTICAS:
 QUANDO declarar resolved=true: a Fonte KB cobre diretamente o problema E você forneceu os passos ou a resposta completa. Perguntar "consegue fazer isso?" ou "deu certo?" no final NÃO é motivo para resolved=false.
 QUANDO declarar resolved=false: KB não cobre o problema, a causa é desconhecida, ou o caso exige ação que só o suporte humano pode fazer.
 LÍNGUA: português do Brasil.
+${UNTRUSTED_RULE}
 
 Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
 {
@@ -85,7 +87,10 @@ Responda APENAS com JSON válido (sem markdown, sem texto extra fora do JSON):
       `${diagCtx}${suggCtx}\n\n` +
       (kbCtx ? `Fontes KB (USE APENAS ESTAS INFORMAÇÕES):\n${kbCtx}\n\n` : 'Fontes KB: nenhum artigo encontrado para esta consulta.\n\n') +
       (input.history ? `Histórico:\n${input.history}\n\n` : '') +
-      `Mensagem do cliente: ${input.message}`;
+      // Cercado (ver shared/ai/untrusted-input.ts). Aqui pesa ainda mais: no suporte
+      // a mensagem pode chegar por e-mail, e aí o atacante nem precisa conversar —
+      // basta MANDAR um e-mail com a instrução escondida no corpo.
+      `Mensagem do cliente:\n${fenceUntrusted(input.message)}`;
 
     try {
       // maxTokens 600: respostas de suporte com passos precisam de mais espaço que vendas

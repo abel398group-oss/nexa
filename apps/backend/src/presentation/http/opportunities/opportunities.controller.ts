@@ -32,6 +32,11 @@ class MoveStageDto {
   @IsOptional() @IsIn(DISCARD_REASONS as any) discardReason?: string;
 }
 
+// F7 (RevOps): compartilhar lead com parceiro externo.
+class SharePartnerDto {
+  @IsString() partnerId!: string;
+}
+
 /**
  * F6+ seller-leads: role `vendedor` opera SOMENTE os proprios leads — o escopo
  * vem do JWT (user.sellerId), nunca de query/body. Vendedor sem sellerId vira
@@ -62,6 +67,13 @@ export class OpportunitiesController {
   @Get('summary')
   summary(@CurrentTenant() tenantId: string, @CurrentUser() user: any) {
     return this.opps.summary(tenantId, sellerScopeOf(user));
+  }
+
+  // F7 (RevOps): fila de trabalho do vendedor, ja priorizada. Antes de :id.
+  @Get('queue')
+  queue(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query('take') take?: string) {
+    const n = take ? parseInt(take, 10) : 30;
+    return this.opps.queue(tenantId, sellerScopeOf(user), Number.isFinite(n) ? Math.min(n, 100) : 30);
   }
 
   // F6+: grafico de evolucao semanal (recebidos × fechados). Antes de :id.
@@ -119,6 +131,23 @@ export class OpportunitiesController {
       { pausedUntil: dto.pausedUntil, discardReason: dto.discardReason },
       sellerScopeOf(user),
     );
+  }
+
+  // F7 (RevOps): registra o consentimento do lead pra compartilhar com parceiro externo (LGPD).
+  @Patch(':id/partner-consent')
+  recordPartnerConsent(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Param('id') id: string) {
+    return this.opps.recordPartnerConsent(tenantId, id, sellerScopeOf(user));
+  }
+
+  // F7 (RevOps): compartilha o lead com o parceiro (bloqueia sem consentimento prévio).
+  @Post(':id/share-partner')
+  shareWithPartner(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: SharePartnerDto,
+  ) {
+    return this.opps.shareWithPartner(tenantId, id, dto.partnerId, sellerScopeOf(user));
   }
 
   @Delete(':id')

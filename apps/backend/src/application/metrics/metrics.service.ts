@@ -510,12 +510,17 @@ export class MetricsService {
       where: { tenantId, assignedSellerId: { not: null } },
       select: { assignedSellerId: true, outcome: true, status: true },
     });
+    // F7 (RevOps): atividade manual (ligação/e-mail/nota) do vendedor humano —
+    // sem isto o KPI só refletia o que a IA processou, nunca o trabalho do
+    // vendedor por telefone/e-mail (`SellerActivity`, ver seller-activity.service.ts).
+    const activityBySeller = await this.activityCountsBySeller(tenantId);
     return sellers.map((s: any) => {
       const mine = convs.filter((c: any) => c.assignedSellerId === s.id);
       const ganhos = mine.filter((c: any) => c.outcome === 'won').length;
       const perdidos = mine.filter((c: any) => c.outcome === 'lost').length;
       const emAndamento = mine.filter((c: any) => !c.outcome).length;
       const fechados = ganhos + perdidos;
+      const activity = activityBySeller.get(s.id) ?? { calls: 0, emails: 0, notes: 0 };
       return {
         id: s.id,
         name: s.name,
@@ -525,8 +530,28 @@ export class MetricsService {
         ganhos,
         perdidos,
         taxaConversao: fechados > 0 ? Math.round((ganhos / fechados) * 100) : 0,
+        ...activity,
       };
     });
+  }
+
+  // `as any`: sellerActivity só existe no client Prisma REGENERADO (mesmo
+  // padrão de opportunities.service.ts pros campos F6+).
+  private async activityCountsBySeller(tenantId: string): Promise<Map<string, { calls: number; emails: number; notes: number }>> {
+    const rows = await (this.prisma as any).sellerActivity.groupBy({
+      by: ['sellerId', 'type'],
+      where: { tenantId },
+      _count: true,
+    });
+    const bySeller = new Map<string, { calls: number; emails: number; notes: number }>();
+    for (const r of rows as any[]) {
+      const entry = bySeller.get(r.sellerId) ?? { calls: 0, emails: 0, notes: 0 };
+      if (r.type === 'call') entry.calls = r._count as number;
+      else if (r.type === 'email') entry.emails = r._count as number;
+      else if (r.type === 'note') entry.notes = r._count as number;
+      bySeller.set(r.sellerId, entry);
+    }
+    return bySeller;
   }
 
   // Dashboard do VENDEDOR — só a carteira dele.
@@ -539,10 +564,11 @@ export class MetricsService {
     const asMap = (rows: any[], key: string) =>
       rows.reduce((acc, r) => ({ ...acc, [r[key] ?? 'null']: r._count }), {} as Record<string, number>);
 
-    const [msgByDirection, aiMessages, complaintsTotal] = await Promise.all([
+    const [msgByDirection, aiMessages, complaintsTotal, activityBySeller] = await Promise.all([
       convIds.length ? this.prisma.aiMessage.groupBy({ by: ['direction'], where: { conversationId: { in: convIds } }, _count: true }) : [],
       convIds.length ? this.prisma.aiMessage.count({ where: { conversationId: { in: convIds }, direction: 'outbound', metadata: { path: ['aiGenerated'], equals: true } } }) : 0,
       convIds.length ? this.prisma.complaint.count({ where: { conversationId: { in: convIds } } }) : 0,
+      this.activityCountsBySeller(tenantId),
     ]);
     const outbound = (msgByDirection as any[]).find((m) => m.direction === 'outbound')?._count ?? 0;
     const inbound = (msgByDirection as any[]).find((m) => m.direction === 'inbound')?._count ?? 0;
@@ -554,6 +580,8 @@ export class MetricsService {
         byStatus: convs.reduce((a: Record<string, number>, c: any) => ({ ...a, [c.status]: (a[c.status] ?? 0) + 1 }), {} as Record<string, number>),
       },
       messages: { inbound, outbound, aiGenerated: aiMessages, aiSharePct: outbound > 0 ? Math.round((aiMessages / outbound) * 100) : 0 },
+      // F7 (RevOps): ligação/e-mail/nota registrados manualmente por este vendedor.
+      activity: activityBySeller.get(sellerId) ?? { calls: 0, emails: 0, notes: 0 },
       ai: { tokensIn: 0, tokensOut: 0, estimatedCostUsd: 0 },
       knowledge: { total: 0 },
       events: { byStatus: {}, dlq: 0 },

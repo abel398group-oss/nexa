@@ -26,12 +26,15 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ 
 const SellersPage = lazy(() => import('@/pages/SellersPage').then((m) => ({ default: m.SellersPage })));
 const CampaignsPage = lazy(() => import('@/pages/CampaignsPage').then((m) => ({ default: m.CampaignsPage })));
 const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) => ({ default: m.NumberHealthPage })));
+const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
 const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
 const SupportEmailSettingsPage = lazy(() => import('@/pages/SupportEmailSettingsPage').then((m) => ({ default: m.SupportEmailSettingsPage })));
 const MonitorConfigPage = lazy(() => import('@/pages/MonitorConfigPage').then((m) => ({ default: m.MonitorConfigPage })));
 const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m) => ({ default: m.OpportunitiesPage })));
+const PartnersPage = lazy(() => import('@/pages/PartnersPage').then((m) => ({ default: m.PartnersPage })));
+const SalesQueuePage = lazy(() => import('@/pages/SalesQueuePage').then((m) => ({ default: m.SalesQueuePage })));
 const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
 // Portal do cliente — área pública e independente (auth própria, fora do Layout interno).
 const PortalPage = lazy(() => import('@/pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
@@ -80,8 +83,11 @@ export default function App() {
                     <Route path="/support/config" element={<Perm perm="ai_control"><SupportConfigPage /></Perm>} />
                     <Route path="/support/clients" element={<Perm perm="inbox"><SupportClientsPage /></Perm>} />
                     <Route path="/contacts" element={<Perm perm="contacts"><ContactsPage /></Perm>} />
+                    <Route path="/contacts/abuse" element={<Perm perm="contacts"><AbuseGuardPage /></Perm>} />
                     <Route path="/knowledge" element={<Perm perm="knowledge"><KnowledgePage /></Perm>} />
                     <Route path="/opportunities" element={<Perm perm="opportunities"><OpportunitiesPage /></Perm>} />
+                    <Route path="/partners" element={<Perm perm="partners"><PartnersPage /></Perm>} />
+                    <Route path="/fila" element={<Perm perm="opportunities"><SalesQueuePage /></Perm>} />
                     <Route path="/sellers" element={<Perm perm="sellers"><SellersPage /></Perm>} />
                     <Route path="/campaigns" element={<Perm perm="campaigns"><CampaignsPage /></Perm>} />
                     <Route path="/sender/health" element={<Perm perm="campaigns"><NumberHealthPage /></Perm>} />

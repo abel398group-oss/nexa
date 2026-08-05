@@ -16,6 +16,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
+import { stripQuotedReply } from '@/shared/ai/untrusted-input';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { EmailReplyService } from './email-reply.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
@@ -193,9 +194,14 @@ export class EmailService {
       return { ok: true, email: n.fromAddress, autonomy: 'email_off' as const };
     }
 
-    // 6) Processa com a Lia (mesmo pipeline do WhatsApp)
+    // 6) Processa com a Lia (mesmo pipeline do WhatsApp).
+    //
+    // O que vai para o modelo é o corpo SEM o histórico citado. A mensagem completa
+    // já foi gravada acima e continua visível no inbox — aqui o recorte é proposital:
+    // o trecho citado é texto que o remetente controla por inteiro e pode forjar
+    // ("nossa mensagem anterior" concedendo desconto). Ver shared/ai/untrusted-input.ts.
     const agentResult = await this.agent.handle(tenantId, {
-      message: n.bodyText,
+      message: stripQuotedReply(n.bodyText),
       conversationId: conv.id,
     });
 

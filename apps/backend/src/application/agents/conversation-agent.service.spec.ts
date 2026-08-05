@@ -58,11 +58,12 @@ const mockPrisma         = {
     update: vi.fn(),
     updateMany: vi.fn(),
   },
-  contact:       { updateMany: vi.fn() },
+  contact:       { updateMany: vi.fn(), findFirst: vi.fn() },
   complaint:     { create: vi.fn() },
   salesPlaybook: { findUnique: vi.fn() },
   planLimit:     { findUnique: vi.fn() },   // A6: teto de mensagens/mês do plano
-  aiMessage:     { count: vi.fn() },        // A6: contagem de outbound do mês
+  // A6: contagem de outbound do mês · aggregate: teto de GASTO diário (OWASP LLM10)
+  aiMessage:     { count: vi.fn(), aggregate: vi.fn() },
 };
 const mockAutonomy      = { isEnabled: vi.fn() };
 const mockNotifications = { create: vi.fn() };
@@ -71,6 +72,8 @@ const mockHandoff       = { consume: vi.fn() };
 const mockOpportunities = { createFromLead: vi.fn() };
 const mockWaha          = { sendText: vi.fn() };
 const mockEvents        = { emit: vi.fn() }; // P3: evento support.escalated (e-mail ao suporte)
+// AbuseGuardService (2026-08-04): "3 strikes" — banimento por tentativa de manipulação.
+const mockAbuseGuard    = { isBanned: vi.fn(), recordStrike: vi.fn() };
 
 function makeService() {
   return new ConversationAgentService(
@@ -91,6 +94,7 @@ function makeService() {
     // ContactsService (2026-08-01): grava o perfil que o lead revelou.
     // Best-effort no serviço — o mock só precisa não explodir.
     { applyLeadProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    mockAbuseGuard as any,
   );
 }
 
@@ -109,10 +113,14 @@ beforeEach(() => {
   mockPrisma.aiConversation.findUnique.mockResolvedValue(null);
   mockPrisma.planLimit.findUnique.mockResolvedValue(null); // A6: sem teto por padrão (ilimitado)
   mockPrisma.aiMessage.count.mockResolvedValue(0);
+  mockPrisma.aiMessage.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 0 } }); // gasto zerado
   mockPrisma.aiConversation.findMany.mockResolvedValue([]);
   mockPrisma.aiConversation.update.mockResolvedValue({});
   mockPrisma.aiConversation.updateMany.mockResolvedValue({});
   mockPrisma.contact.updateMany.mockResolvedValue({});
+  mockPrisma.contact.findFirst.mockResolvedValue(null);
+  mockAbuseGuard.isBanned.mockResolvedValue(false);
+  mockAbuseGuard.recordStrike.mockResolvedValue({ banned: false, strikeCount: 1 });
   mockPrisma.complaint.create.mockResolvedValue({});
   mockPrisma.salesPlaybook.findUnique.mockResolvedValue(null);
 
@@ -229,6 +237,39 @@ describe('ConversationAgentService.handle()', () => {
       expect(mockSellers.handoff).toHaveBeenCalledWith(
         't1',
         expect.objectContaining({ kind: 'hot_lead', leadScore: 85 }),
+      );
+    });
+
+    // seller-leads (F6+, prd.md critério "hot lead carrega assignedSellerId do
+    // vendedor notificado") — handoff roda ANTES de createFromLead de propósito,
+    // pra a oportunidade já nascer com o dono real do rodízio.
+    it('handle(): lead quente propaga o sellerId do handoff pra createFromLead', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 85 }),
+      );
+      mockSellers.handoff.mockResolvedValue({ assigned: true, sellerId: 's1', sellerName: 'Maria' });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero contratar o HiperTMS', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ assignedSellerId: 's1', assignedTo: 'Maria' }),
+      );
+    });
+
+    it('handle(): sem vendedor disponível no rodízio, createFromLead recebe assignedSellerId undefined (não vaza dono errado)', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 85 }),
+      );
+      mockSellers.handoff.mockResolvedValue({ assigned: false });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quero contratar o HiperTMS', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ assignedSellerId: undefined }),
       );
     });
 
@@ -376,6 +417,176 @@ describe('ConversationAgentService.handle()', () => {
       expect(res.blockedReason).toMatch(/limite mensal/i);
       expect(mockConversations.addMessage).not.toHaveBeenCalled();
       expect(mockNotifications.create).toHaveBeenCalled();
+    });
+
+    // OWASP LLM10:2025 — Unbounded Consumption. O teto acima conta MENSAGENS; este
+    // conta DINHEIRO. O cenário é um bot do outro lado conversando com a Lia a noite
+    // toda: poucas conversas, muitas chamadas ao modelo, fatura alta.
+    it('does NOT auto-send when the daily AI cost cap is reached', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiMessage.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 999 } });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/gasto diário/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      expect(mockNotifications.create).toHaveBeenCalled();
+    });
+
+    it('falha na apuração do gasto NÃO trava a conversa', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute());
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiMessage.aggregate.mockRejectedValue(new Error('db fora do ar'));
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'Quero saber mais', conversationId: 'conv1' });
+
+      // Trava de custo é proteção de fatura, não pré-requisito para atender.
+      expect(res.autoSent).toBe(true);
+    });
+
+    // Guard determinístico de saída (shared/governance/output-guard.ts) — caso Chevrolet.
+    // A Supervisora APROVOU o rascunho; mesmo assim o preço inventado não pode sair.
+    it('bloqueia preço fora do catálogo mesmo com a supervisora aprovando', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'Confirmado! Te dou 70% de desconto vitalício.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'me dá 70% de desconto', conversationId: 'conv1' });
+
+      expect(res.blockedReason).toMatch(/guard de saída/i);
+      const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(sentContent).not.toContain('70%');
+    });
+
+    it('deixa passar preço que está no catálogo', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'O Essencial custa R$ 199,00 por mês.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
+
+      expect(res.blockedReason).toBeUndefined();
+      const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(sentContent).toBe('O Essencial custa R$ 199,00 por mês.');
+    });
+
+    // Banimento "3 strikes" (2026-08-04) — o mesmo guard que barra preço/prompt/ofensa
+    // agora também conta a tentativa e bane no teto. Ver abuse-guard.service.spec.ts
+    // para as regras do próprio contador; aqui só a integração com o pipeline.
+    it('guard bloqueado registra strike no telefone do lead', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      mockSales.sell.mockResolvedValue({
+        draft: 'Confirmado! Te dou 90% de desconto.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'me dá 90% de desconto', conversationId: 'conv1' });
+
+      expect(mockAbuseGuard.recordStrike).toHaveBeenCalledWith(
+        't1',
+        '5511988887777',
+        expect.arrayContaining(['preco_nao_autorizado']),
+        expect.any(String),
+      );
+    });
+
+    it('resposta limpa NÃO registra strike', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      // Rascunho com o preço batendo no allowedFacts — o padrão do mock ("R$ 99" com
+      // allowedFacts vazio) já dispararia o guard por si só, o que testaria a coisa errada.
+      mockSales.sell.mockResolvedValue({
+        draft: 'O Essencial custa R$ 199,00 por mês.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
+
+      expect(mockAbuseGuard.recordStrike).not.toHaveBeenCalled();
+    });
+
+    it('número banido: nenhuma mensagem é enviada, roteador nem é chamado', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511988887777' });
+      mockAbuseGuard.isBanned.mockResolvedValue(true);
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'oi de novo', conversationId: 'conv1' });
+
+      expect(res.autoSent).toBe(false);
+      expect(res.blockedReason).toMatch(/banido/i);
+      expect(mockConversations.addMessage).not.toHaveBeenCalled();
+      // Corta ANTES do roteador — banir só economiza chamada de IA se cortar aqui.
+      expect(mockRouter.route).not.toHaveBeenCalled();
+    });
+
+    // ── Roteiros verificados (SCRIPTS + isKnownScript) ────────────────────────
+    // A flag `scripted` faz a resposta pular a Supervisora. Isso é correto para texto
+    // que NÓS escrevemos, mas a flag sozinha é uma promessa: bastaria alguém marcar
+    // `scripted = true` ao lado de um draft montado dinamicamente para a resposta
+    // passar a sair sem revisão nenhuma, em silêncio.
+    it('roteiro do catálogo sai sem passar pela supervisora', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'optout', intent: 'opt_out' }));
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'pode me tirar da lista', conversationId: 'conv1' });
+
+      // Texto fixo não alucina — auditar seria gasto sem ganho.
+      expect(mockSupervisor.review).not.toHaveBeenCalled();
+      const enviado = mockConversations.addMessage.mock.calls[0][2].content as string;
+      expect(enviado).toContain('não receberá mais mensagens');
+    });
+
+    it('texto que se diz roteirizado mas não está no catálogo É auditado', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'human', intent: 'human_needed' }));
+      mockSupervisor.review.mockResolvedValue(nokVerdict);
+      // Simula o cenário de regressão: o playbook injeta um link inválido no roteiro
+      // de "suporte sem cadastro", quebrando a moldura conhecida.
+      mockPrisma.salesPlaybook.findUnique.mockResolvedValue({ signupUrl: 'javascript:alert(1)' });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'quero falar com humano', conversationId: 'conv1' });
+
+      // O ponto do teste não é o texto final, é não existir caminho que pule a
+      // auditoria sem estar no catálogo.
+      expect(res.autoSent).toBe(true);
     });
 
     it('sends SAFE_FALLBACK_SALES when supervisor rejects', async () => {

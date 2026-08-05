@@ -147,6 +147,41 @@ export function NumberHealthPage() {
                     <div className="mt-1 text-[11px] text-base-content/40">teto por hora (anti-ban)</div>
                   </div>
                 </div>
+
+                {/* Engajamento — os medidores acima contam só o que SAI. Quem decide
+                    banir um número é o WhatsApp, e o sinal dele é quanta gente responde.
+                    Sem este bloco a tela dizia "tudo dentro do limite" com o chip queimando. */}
+                {n.health && (
+                  <div className="mt-4 border-t border-base-200 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-base-content/60">Engajamento (24h)</span>
+                      <span
+                        className={`text-xs font-medium ${
+                          n.health.healthy ? 'text-base-content' : 'text-red-600 dark:text-red-400'
+                        }`}
+                      >
+                        {n.health.replied} de {n.health.sent} responderam
+                        <span className="text-base-content/40">
+                          {' '}({(n.health.replyRate * 100).toFixed(1)}%)
+                        </span>
+                        {n.health.failed > 0 && (
+                          <span className="text-base-content/40"> · {n.health.failed} falhas</span>
+                        )}
+                      </span>
+                    </div>
+                    {!n.health.healthy && n.health.reason && (
+                      <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 dark:bg-red-500/10 dark:text-red-300">
+                        <strong>Disparo travado:</strong> {n.health.reason}. Revise a lista e a
+                        mensagem antes de reativar.
+                      </p>
+                    )}
+                    {n.health.healthy && n.health.sent < 30 && (
+                      <p className="mt-1 text-[11px] text-base-content/40">
+                        Amostra pequena ({n.health.sent} envios) — o freio só avalia a partir de 30.
+                      </p>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}
