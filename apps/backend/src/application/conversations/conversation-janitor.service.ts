@@ -30,6 +30,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { businessHoursBetween } from './support-hours';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
@@ -132,6 +133,9 @@ export class ConversationJanitorService {
 
     // Pre-filter: lastActivityAt < now - SLA_MIN_HOURS captura qualquer ticket que poderia ter
     // violado o SLA mais restritivo (urgente=1h). A filtragem por prioridade exata é feita em JS.
+    //
+    // Continua correto com o SLA em horas ÚTEIS: tempo útil nunca é maior que
+    // tempo corrido, então este corte só traz candidatos DEMAIS — nunca de menos.
     const outerCutoff = new Date(now.getTime() - SLA_MIN_HOURS * 60 * 60 * 1000);
 
     const candidates = await this.prisma.aiConversation.findMany({
@@ -150,10 +154,14 @@ export class ConversationJanitorService {
     const slaHours = (priority: string | null): number =>
       priority ? (SLA_HOURS[priority] ?? SLA_HOURS_DEFAULT) : SLA_HOURS_DEFAULT;
 
+    // O relógio do SLA conta apenas HORÁRIO ÚTIL (support-hours.ts). Antes
+    // corria a noite e o fim de semana inteiros: um chamado crítico (SLA 1h)
+    // que entrava no sábado estourava no próprio sábado, e o time chegava na
+    // segunda com alerta de violação que nunca teve como cumprir. Alerta
+    // impossível de cumprir é alerta que se aprende a ignorar.
     const unalerted = candidates.filter((c) => {
-      const hours = slaHours(c.ticketPriority);
-      const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
-      return c.lastActivityAt && new Date(c.lastActivityAt) < cutoff;
+      if (!c.lastActivityAt) return false;
+      return businessHoursBetween(new Date(c.lastActivityAt), now) >= slaHours(c.ticketPriority);
     });
 
     if (!unalerted.length) return;

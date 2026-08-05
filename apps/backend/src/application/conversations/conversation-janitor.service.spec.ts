@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConversationJanitorService } from './conversation-janitor.service';
 
 // ─── N4: Janitor — SLA por prioridade + dedup DB + notifyClose ───────────────
@@ -41,12 +41,22 @@ function callNotifyClose(svc: ConversationJanitorService, phones: string[], mess
 // ticketPriority é o classificador, em EN (critical/high/medium/low) — nenhuma
 // batia, e TODO ticket caía no default de 8h: um chamado crítico era tratado
 // igual a um de prioridade baixa. Estes casos cobrem o vocabulário real.
+// Relógio fixo: quarta-feira, 17:00 BRT (20:00 UTC). Sem isto os casos ficam
+// dependentes da hora em que a suíte roda — o SLA agora conta horário útil, e
+// "9 horas atrás" às 6h da manhã tem menos horas úteis do que às 17h.
+const QUARTA_17H_BRT = new Date('2026-08-05T20:00:00Z');
+
 describe('ConversationJanitorService — SLA com as prioridades que o classificador grava', () => {
   let deps: ReturnType<typeof makeDeps>;
   let svc: ConversationJanitorService;
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000 - 1000);
 
-  beforeEach(() => { deps = makeDeps(); svc = makeService(deps); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(QUARTA_17H_BRT);
+    deps = makeDeps(); svc = makeService(deps);
+  });
+  afterEach(() => vi.useRealTimers());
 
   it('critical (1h): alerta com 2h parado — nao espera as 8h do default', async () => {
     deps.prisma.aiConversation.findMany.mockResolvedValue([
@@ -87,6 +97,34 @@ describe('ConversationJanitorService — SLA com as prioridades que o classifica
     await callAlertSla(svc);
     expect(deps.notifications.create).toHaveBeenCalled();
   });
+
+  // O caso que gerava o alerta impossível: o relógio corria a noite e o fim de
+  // semana, e o time chegava na segunda com violação que nunca teve como atender.
+  it('fim de semana NAO conta: critico aberto sabado nao alerta no domingo', async () => {
+    vi.setSystemTime(new Date('2026-08-09T15:00:00Z')); // domingo, 12:00 BRT
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      {
+        id: 'c6', phone: '5511', tenantId: 't1',
+        lastActivityAt: new Date('2026-08-08T13:00:00Z'), // sábado 10:00 BRT
+        ticketPriority: 'critical', slaAlertedAt: null,
+      },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('mesmo critico do fim de semana alerta na segunda, depois de 1h util', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:30:00Z')); // segunda, 09:30 BRT
+    deps.prisma.aiConversation.findMany.mockResolvedValue([
+      {
+        id: 'c7', phone: '5511', tenantId: 't1',
+        lastActivityAt: new Date('2026-08-08T13:00:00Z'), // sábado 10:00 BRT
+        ticketPriority: 'critical', slaAlertedAt: null,
+      },
+    ]);
+    await callAlertSla(svc);
+    expect(deps.notifications.create).toHaveBeenCalled();
+  });
 });
 
 describe('ConversationJanitorService — N4 SLA por prioridade', () => {
@@ -96,9 +134,13 @@ describe('ConversationJanitorService — N4 SLA por prioridade', () => {
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000 - 1000);
 
   beforeEach(() => {
+    // mesmo relógio fixo do bloco acima — o SLA conta horário útil
+    vi.useFakeTimers();
+    vi.setSystemTime(QUARTA_17H_BRT);
     deps = makeDeps();
     svc = makeService(deps);
   });
+  afterEach(() => vi.useRealTimers());
 
   it('urgente (1h): alerta ticket com lastActivityAt há 2h', async () => {
     deps.prisma.aiConversation.findMany.mockResolvedValue([

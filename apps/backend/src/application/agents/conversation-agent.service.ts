@@ -17,6 +17,7 @@ import { OpportunitiesService } from '@/application/opportunities/opportunities.
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
+import { isWithinSupportHours, nextOpeningLabel, supportHoursLabel } from '@/application/conversations/support-hours';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -846,11 +847,17 @@ export class ConversationAgentService {
       // `addMessage` roteia por canal: WebSocket para web_chat/portal, WAHA para
       // WhatsApp — e ainda deixa o aviso registrado na thread.
       if (conv.phone && !conv.phone.startsWith('email:')) {
+        // Fora do expediente, "em breve" pode ser 8 horas ou o fim de semana
+        // inteiro. Dizer a verdade custa menos confiança do que a espera em si:
+        // o cliente para de atualizar o chat esperando algo que não vem.
+        const aviso = isWithinSupportHours()
+          ? 'Vou chamar um atendente para continuar seu atendimento. Aguarde, em breve alguém do time entrará em contato. 🙏'
+          : `Vou encaminhar para um atendente. Nosso time atende ${supportHoursLabel()}, então ele retoma ${nextOpeningLabel()} — `
+            + 'seu chamado já está registrado e é um dos primeiros da fila. 🙏';
         this.conversations
           .addMessage(tenantId, conv.id, {
             direction: 'outbound',
-            content:
-              'Vou chamar um atendente para continuar seu atendimento. Aguarde, em breve alguém do time entrará em contato. 🙏',
+            content: aviso,
             intent: 'escalation_notice',
           })
           .catch((e) => this.logger.warn(`Falha ao notificar escalação ao cliente: ${e?.message}`));
