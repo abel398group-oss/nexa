@@ -914,6 +914,21 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       // de quem recebe.
       if (await this.pauseIfUnhealthy(campaign.tenantId, number.id)) return;
 
+      await this.dispatchOneTarget(campaign, number);
+    } catch (e: any) {
+      this.logger.error(`tick falhou: ${e?.message}`);
+    }
+  }
+
+  /**
+   * Processa UM alvo `queued` da campanha (achar → travar → mandar). Extraído
+   * de `tickLocked()` (2026-08-05, prep pro Item 4 — fila BullMQ, ver
+   * docs/infra/item4-fila-disparo-campanha-bullmq-2026-08.md): mesma lógica,
+   * só isolada — `tick()` já checou janela/limite/antiban/saúde ANTES de
+   * chamar isto, então aqui assume que "pode mandar agora" já foi decidido.
+   * Sem mudança de comportamento — é o mesmo código de antes, só em outro lugar.
+   */
+  private async dispatchOneTarget(campaign: any, number: any): Promise<void> {
       const target = await this.prisma.campaignTarget.findFirst({
         where: { campaignId: campaign.id, status: 'queued' },
         orderBy: { createdAt: 'asc' },
@@ -1074,9 +1089,6 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         const retryDelay = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
         await this.writeAntibanState(Date.now(), retryDelay);
       }
-    } catch (e: any) {
-      this.logger.error(`tick falhou: ${e?.message}`);
-    }
   }
 
   // saudação por horário (Brasília) — business-rules §10
