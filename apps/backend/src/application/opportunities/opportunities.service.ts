@@ -214,7 +214,7 @@ export class OpportunitiesService {
     // mostrava só telefone (a criação automática tinha o mesmo furo).
     const [contato, ultimaInbound] = await Promise.all([
       conv.contactId
-        ? this.prisma.contact.findFirst({ where: { id: conv.contactId }, select: { name: true } })
+        ? this.prisma.contact.findFirst({ where: { id: conv.contactId }, select: { name: true, company: true } })
         : null,
       this.prisma.aiMessage.findFirst({
         where: { conversationId, direction: 'inbound' },
@@ -228,6 +228,7 @@ export class OpportunitiesService {
       contactId: conv.contactId ?? undefined,
       phone: conv.phone ?? undefined,
       name: contato?.name ?? undefined,
+      company: contato?.company ?? undefined,
       summary: ultimaInbound?.content?.slice(0, 120),
       assignedSellerId: dono ?? undefined,
     });
@@ -342,7 +343,7 @@ export class OpportunitiesService {
   // duplicar o lead nem "reviver" um won/lost/discarded antigo do mesmo contato.
   async createFromLead(
     tenantId: string,
-    input: { conversationId?: string; contactId?: string; phone?: string; name?: string; interestScore?: number; intent?: string; summary?: string; assignedTo?: string; assignedSellerId?: string },
+    input: { conversationId?: string; contactId?: string; phone?: string; name?: string; company?: string; interestScore?: number; intent?: string; summary?: string; assignedTo?: string; assignedSellerId?: string },
   ) {
     const dedupeWhere = input.conversationId
       ? { tenantId, conversationId: input.conversationId }
@@ -363,18 +364,19 @@ export class OpportunitiesService {
         return existing;
       }
     }
-    // Nome do contato quando o chamador nao passou (2026-08-05): a lista da
-    // campanha ja trazia o nome e o contato foi criado com ele, mas o handoff
-    // automatico nunca repassava — o funil acabava mostrando so telefone.
-    // Uma leitura indexada, e so no nascimento do lead.
-    let name = input.name;
-    if (!name && input.contactId) {
+    // Nome e empresa do contato quando o chamador nao passou (2026-08-05): a
+    // lista da campanha ja trazia e o contato foi criado com eles, mas o
+    // handoff automatico nunca repassava — o funil mostrava so telefone, com a
+    // coluna Empresa sempre vazia. Uma leitura indexada, so no nascimento do lead.
+    let { name, company } = input;
+    if ((!name || !company) && input.contactId) {
       const contato = await this.prisma.contact
-        .findFirst({ where: { id: input.contactId }, select: { name: true } })
+        .findFirst({ where: { id: input.contactId }, select: { name: true, company: true } })
         .catch(() => null);
-      name = contato?.name ?? undefined;
+      name = name ?? contato?.name ?? undefined;
+      company = company ?? contato?.company ?? undefined;
     }
 
-    return this.prisma.opportunity.create({ data: { tenantId, stage: 'new', ...input, name } as any });
+    return this.prisma.opportunity.create({ data: { tenantId, stage: 'new', ...input, name, company } as any });
   }
 }

@@ -173,14 +173,38 @@ describe('OpportunitiesService', () => {
     });
   });
 
-  it('createFromLead: busca o nome do contato quando o chamador nao passa', async () => {
-    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Fulano Transportes' }) };
+  it('createFromLead: busca nome e empresa do contato quando o chamador nao passa', async () => {
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Fulano', company: 'Fulano Transportes' }) };
     prisma.opportunity.findFirst.mockResolvedValue(null);
     prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
 
     await svc.createFromLead('t1', { conversationId: 'c9', contactId: 'ct9' });
 
-    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ name: 'Fulano Transportes' });
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({
+      name: 'Fulano', company: 'Fulano Transportes',
+    });
+  });
+
+  it('createFromLead: o que o chamador passa vence o cadastro do contato', async () => {
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Nome antigo', company: 'Empresa antiga' }) };
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c9', contactId: 'ct9', name: 'Nome novo' });
+
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({
+      name: 'Nome novo', company: 'Empresa antiga',
+    });
+  });
+
+  it('createFromLead: sem contactId nao consulta contato', async () => {
+    prisma.contact = { findFirst: vi.fn() };
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c9', phone: '5511' });
+
+    expect(prisma.contact.findFirst).not.toHaveBeenCalled();
   });
 
   // ── F7 (RevOps): fila de trabalho do vendedor ─────────────────────────────
