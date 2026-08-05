@@ -13,17 +13,39 @@
 
 ## Gatilho de implementação/ativação
 
-Executar quando QUALQUER um acontecer:
+**Gatilho principal (o mais provável e o mais claro): migração para a API
+OFICIAL do WhatsApp (Meta Cloud API).** Levantado pelo Abel em 2026-08-05 e
+está certo — é a virada que torna a fila obrigatória, não opcional:
 
-- volume de campanha sustentado crescer (mais leads, mais parceiros como o de
-  pneus, mais canais) a ponto do ritmo de disparo virar reclamação visível, OU
+| | WAHA (hoje, não-oficial) | API oficial (Meta) |
+|---|---|---|
+| Risco de ban por volume | alto — o número finge ser um celular | não existe (remetente autorizado) |
+| Teto diário | 30/dia no warmup máximo (`WARMUP_DAILY`) | milhares (escalona por tier de qualidade) |
+| Delay entre mensagens | 30-90s obrigatório (anti-ban) | não precisa |
+| Gargalo real | a regra anti-ban | **o polling de 15s** |
+
+Com o polling atual, o teto físico é ~1 mensagem a cada 15s = ~4/min = ~240/h.
+Hoje isso é folga enorme (o limite real é 30/dia). Com a API oficial liberando
+milhares/dia, esse mesmo polling vira o teto — daí a fila deixa de ser
+organização e vira necessidade.
+
+Ordem correta, portanto: **API oficial primeiro, fila depois.** Construir a
+fila antes é estrada de 4 pistas para 30 carros/dia.
+
+> Ao planejar a API oficial, contar também com o que ela muda no PRODUTO, não
+> só na infra: mensagem de primeiro contato exige **template aprovado pela
+> Meta** (não é texto livre — mexe no editor de campanha e no spintax), e a
+> cobrança é **por conversa**. Nada disso é problema da fila, mas entra no
+> mesmo projeto.
+
+Outros gatilhos possíveis (menos prováveis de vir antes do acima):
+
 - decidir implementar um POOL de verdade com mais de um `SenderNumber` ativo
-  por tenant (hoje só existe paralelismo nenhum — ver "O que a fila NÃO
-  resolve" abaixo), OU
+  por tenant (hoje não há paralelismo nenhum — ver "O que a fila NÃO resolve"), OU
 - decisão explícita do Abel de priorizar isso.
 
-**Não é gatilho:** "a fila vai deixar mais rápido". Ver a seção seguinte —
-não é esse o ganho.
+**Não é gatilho:** "a fila vai deixar mais rápido" *enquanto estivermos no
+WAHA*. Ver a seção seguinte — nesse cenário não é esse o ganho.
 
 ## O que a fila NÃO resolve (importante não vender errado)
 
