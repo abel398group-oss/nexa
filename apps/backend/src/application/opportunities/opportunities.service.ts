@@ -119,8 +119,9 @@ export class OpportunitiesService {
    * Prioridade (aplicada em memoria — sao no maximo `take` linhas, e SQL com
    * CASE aqui ficaria pior de ler que o ganho):
    *   1. pediu reuniao (`intent = meeting_request`) — e o sinal mais forte
-   *   2. score maior primeiro
-   *   3. quem esta esperando ha mais tempo
+   *   2. parado ha mais de STALE_LEAD_DAYS — sobe pra nao afundar na lista
+   *   3. score maior primeiro
+   *   4. quem esta esperando ha mais tempo
    */
   async queue(tenantId: string, sellerScope?: string, take = 30) {
     const opps = await this.prisma.opportunity.findMany({
@@ -164,9 +165,15 @@ export class OpportunitiesService {
       : [];
     const nomePorCampanha = new Map(campanhas.map((c: any) => [c.id, c.name]));
 
+    // Lead sem acao do vendedor ha dias sobe na fila em vez de afundar (mesmo
+    // corte do aviso diario — ver stale-lead.service.ts).
+    const limiteParado = Number(process.env.STALE_LEAD_DAYS ?? 3) * 24 * 60 * 60 * 1000;
+    const agora = Date.now();
+
     const enriched = opps.map((o: any) => {
       const last = o.conversationId ? ultimaPorConversa.get(o.conversationId) : null;
       const campId = o.conversationId ? campanhaPorConversa.get(o.conversationId) : null;
+      const paradoMs = agora - new Date(o.updatedAt).getTime();
       return {
         ...o,
         lastMessage: last ? { direction: last.direction, content: last.content, at: last.createdAt } : null,
@@ -175,11 +182,14 @@ export class OpportunitiesService {
         // como "esse ta parado ha tempo demais".
         waitingSince: o.updatedAt,
         pediuReuniao: o.intent === 'meeting_request',
+        parado: paradoMs > limiteParado,
+        paradoHaDias: Math.floor(paradoMs / (24 * 60 * 60 * 1000)),
       };
     });
 
     return enriched.sort((a, b) => {
       if (a.pediuReuniao !== b.pediuReuniao) return a.pediuReuniao ? -1 : 1;
+      if (a.parado !== b.parado) return a.parado ? -1 : 1;
       if (b.interestScore !== a.interestScore) return b.interestScore - a.interestScore;
       return new Date(a.waitingSince).getTime() - new Date(b.waitingSince).getTime();
     });

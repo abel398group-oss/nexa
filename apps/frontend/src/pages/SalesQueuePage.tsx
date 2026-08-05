@@ -33,6 +33,9 @@ interface QueueLead {
   lastMessage?: { direction: string; content: string; at: string } | null;
   /** Campanha que originou o lead — null quando entrou por outro caminho. */
   origemCampanha?: string | null;
+  /** Sem ação do vendedor há mais de STALE_LEAD_DAYS (padrão 3). */
+  parado?: boolean;
+  paradoHaDias?: number;
 }
 
 // "há 12 min" / "há 3 h" / "há 2 d" — o vendedor pensa em quanto tempo o lead
@@ -198,6 +201,12 @@ export function SalesQueuePage() {
               Pediu reunião — prioridade máxima.
             </p>
           )}
+          {lead.parado && (
+            <p className="mt-2 text-sm text-red-500">
+              <Icon name="clock" className="mr-1 inline h-4 w-4 align-[-3px]" />
+              Parado há {lead.paradoHaDias} dias sem contato — retome ou marque como perdido.
+            </p>
+          )}
           {lead.lastMessage && (
             <p className="mt-2 text-xs leading-relaxed text-base-content/50">
               <span className="text-base-content/40">
@@ -261,8 +270,8 @@ export function SalesQueuePage() {
                   <span className="flex-1 truncate text-sm text-base-content">
                     {p.company || p.name || displayPhone(p.phone ?? '') || 'Lead sem nome'}
                   </span>
-                  <span className="text-xs text-base-content/40">
-                    {p.pediuReuniao ? 'pediu reunião' : esperaDesde(p.waitingSince)}
+                  <span className={`text-xs ${p.parado ? 'text-red-500' : 'text-base-content/40'}`}>
+                    {p.pediuReuniao ? 'pediu reunião' : p.parado ? `parado ${p.paradoHaDias}d` : esperaDesde(p.waitingSince)}
                   </span>
                 </button>
               );

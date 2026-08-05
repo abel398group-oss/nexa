@@ -833,6 +833,9 @@ model Opportunity {
   assignedSeller Seller?  @relation(fields: [assignedSellerId], references: [id], onDelete: SetNull)
   pausedUntil    DateTime? @map("paused_until")   // stage=paused: quando retomar
   discardReason  String?   @map("discard_reason") // stage=discarded: sem_fit | sem_resposta | concorrente | outro
+  // F7 (RevOps): ultimo aviso de "lead parado" — evita repetir o mesmo lead
+  // todo dia no sino ate alguem mexer nele.
+  staleNotifiedAt DateTime? @map("stale_notified_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -854,6 +857,7 @@ model Opportunity {
   @@index([tenantId, conversationId])
   @@index([tenantId, assignedSellerId])
   @@index([tenantId, sharedWithPartnerId])
+  @@index([tenantId, updatedAt])
   @@map("opportunities")
 }
 

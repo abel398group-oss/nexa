@@ -244,6 +244,31 @@ describe('OpportunitiesService', () => {
       expect(out[0].pediuReuniao).toBe(true);
     });
 
+    it('lead parado sobe na frente de score maior — nao afunda na lista', async () => {
+      process.env.STALE_LEAD_DAYS = '3';
+      const dias = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'recente-alto', interestScore: 95, updatedAt: dias(0) }),
+        opp({ id: 'parado-baixo', interestScore: 50, updatedAt: dias(6) }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['parado-baixo', 'recente-alto']);
+      expect(out[0].parado).toBe(true);
+      expect(out[0].paradoHaDias).toBe(6);
+      expect(out[1].parado).toBe(false);
+    });
+
+    it('reuniao ainda vence lead parado', async () => {
+      process.env.STALE_LEAD_DAYS = '3';
+      const dias = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'parado', interestScore: 50, updatedAt: dias(9) }),
+        opp({ id: 'reuniao', interestScore: 50, intent: 'meeting_request', updatedAt: dias(0) }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['reuniao', 'parado']);
+    });
+
     it('sem reuniao, ordena por score desc', async () => {
       prisma.opportunity.findMany.mockResolvedValue([
         opp({ id: 'baixo', interestScore: 40 }),
