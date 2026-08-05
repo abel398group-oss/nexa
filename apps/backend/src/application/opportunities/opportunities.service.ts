@@ -103,6 +103,68 @@ export class OpportunitiesService {
     return [...buckets.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
   }
 
+  // F7 (RevOps): estagios em que o lead ainda esta "vivo" e precisa de acao do
+  // vendedor. paused fica de FORA de proposito — pausado e uma decisao dele de
+  // nao mexer agora; se voltasse pra fila, a pausa nao serviria pra nada.
+  private static readonly QUEUE_STAGES = ['new', 'qualified', 'proposal'];
+
+  /**
+   * Fila de trabalho do vendedor: os leads dele que ainda esperam acao, na
+   * ordem em que valem ser atacados.
+   *
+   * Existe porque o vendedor tinha que cruzar duas telas (Inbox pra ler a
+   * conversa, Oportunidades pra mover o estagio) e decidir sozinho por quem
+   * comecar. Aqui a ordem ja vem pronta e o contexto vem junto.
+   *
+   * Prioridade (aplicada em memoria — sao no maximo `take` linhas, e SQL com
+   * CASE aqui ficaria pior de ler que o ganho):
+   *   1. pediu reuniao (`intent = meeting_request`) — e o sinal mais forte
+   *   2. score maior primeiro
+   *   3. quem esta esperando ha mais tempo
+   */
+  async queue(tenantId: string, sellerScope?: string, take = 30) {
+    const opps = await this.prisma.opportunity.findMany({
+      where: this.scoped({ tenantId, stage: { in: OpportunitiesService.QUEUE_STAGES } }, sellerScope),
+      take,
+      orderBy: { updatedAt: 'asc' },
+    });
+    if (opps.length === 0) return [];
+
+    // Ultima mensagem de cada conversa, pra o vendedor ver do que se trata sem
+    // abrir o Inbox. Uma query so para todas as conversas (evita N+1).
+    const convIds = opps.map((o: any) => o.conversationId).filter(Boolean) as string[];
+    const msgs = convIds.length
+      ? await this.prisma.aiMessage.findMany({
+          where: { conversationId: { in: convIds } },
+          select: { conversationId: true, direction: true, content: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const ultimaPorConversa = new Map<string, any>();
+    for (const m of msgs) {
+      // como veio ordenado desc, a PRIMEIRA de cada conversa ja e a mais recente
+      if (!ultimaPorConversa.has(m.conversationId)) ultimaPorConversa.set(m.conversationId, m);
+    }
+
+    const enriched = opps.map((o: any) => {
+      const last = o.conversationId ? ultimaPorConversa.get(o.conversationId) : null;
+      return {
+        ...o,
+        lastMessage: last ? { direction: last.direction, content: last.content, at: last.createdAt } : null,
+        // Espera contada da ultima mexida no lead — e o que o vendedor sente
+        // como "esse ta parado ha tempo demais".
+        waitingSince: o.updatedAt,
+        pediuReuniao: o.intent === 'meeting_request',
+      };
+    });
+
+    return enriched.sort((a, b) => {
+      if (a.pediuReuniao !== b.pediuReuniao) return a.pediuReuniao ? -1 : 1;
+      if (b.interestScore !== a.interestScore) return b.interestScore - a.interestScore;
+      return new Date(a.waitingSince).getTime() - new Date(b.waitingSince).getTime();
+    });
+  }
+
   async findOne(tenantId: string, id: string, sellerScope?: string) {
     const opp = await this.prisma.opportunity.findFirst({
       where: this.scoped({ id, tenantId }, sellerScope),

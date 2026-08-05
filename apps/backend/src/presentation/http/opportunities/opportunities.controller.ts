@@ -69,6 +69,13 @@ export class OpportunitiesController {
     return this.opps.summary(tenantId, sellerScopeOf(user));
   }
 
+  // F7 (RevOps): fila de trabalho do vendedor, ja priorizada. Antes de :id.
+  @Get('queue')
+  queue(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query('take') take?: string) {
+    const n = take ? parseInt(take, 10) : 30;
+    return this.opps.queue(tenantId, sellerScopeOf(user), Number.isFinite(n) ? Math.min(n, 100) : 30);
+  }
+
   // F6+: grafico de evolucao semanal (recebidos × fechados). Antes de :id.
   @Get('evolution')
   evolution(

@@ -33,6 +33,8 @@ const NAV_GROUPS: NavGroup[] = [
 
   // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
   { label: 'Vendas', icon: 'dollar', items: [
+    // Primeiro item de propósito: é a tela onde o vendedor TRABALHA (F7 — RevOps).
+    { to: '/fila',           label: 'Minha fila',        ic: 'zap',       perm: 'opportunities' },
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
     { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
@@ -80,6 +82,7 @@ const titles: Record<string, string> = {
   '/sellers': 'Vendedores',
   '/opportunities': 'Oportunidades',
   '/partners': 'Parceiros',
+  '/fila': 'Minha fila',
   '/campaigns': 'Disparo de Leads',
   '/sender/health': 'Saúde dos números',
   '/contacts/abuse': 'Números banidos',

@@ -127,6 +127,86 @@ describe('OpportunitiesService', () => {
     expect(prisma.opportunity.update.mock.calls[0][0].data).toMatchObject({ assignedSellerId: 's1', assignedTo: 'João' });
   });
 
+  // ── F7 (RevOps): fila de trabalho do vendedor ─────────────────────────────
+
+  describe('queue', () => {
+    const opp = (over: any = {}) => ({
+      id: 'o1', tenantId: 't1', stage: 'new', interestScore: 50, intent: null,
+      conversationId: null, updatedAt: new Date('2026-08-05T10:00:00Z'), ...over,
+    });
+
+    beforeEach(() => {
+      prisma.aiMessage = { findMany: vi.fn().mockResolvedValue([]) };
+    });
+
+    it('so traz estagios abertos — pausado e fechados ficam de fora', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([]);
+      await svc.queue('t1');
+      expect(prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({
+        tenantId: 't1', stage: { in: ['new', 'qualified', 'proposal'] },
+      });
+    });
+
+    it('escopa por vendedor', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([]);
+      await svc.queue('t1', 's1');
+      expect(prisma.opportunity.findMany.mock.calls[0][0].where).toMatchObject({ assignedSellerId: 's1' });
+    });
+
+    it('quem pediu reuniao vem primeiro, mesmo com score menor', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'alto', interestScore: 95 }),
+        opp({ id: 'reuniao', interestScore: 60, intent: 'meeting_request' }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['reuniao', 'alto']);
+      expect(out[0].pediuReuniao).toBe(true);
+    });
+
+    it('sem reuniao, ordena por score desc', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'baixo', interestScore: 40 }),
+        opp({ id: 'alto', interestScore: 90 }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['alto', 'baixo']);
+    });
+
+    it('empate no score: quem espera ha mais tempo vem primeiro', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'novo', updatedAt: new Date('2026-08-05T10:00:00Z') }),
+        opp({ id: 'antigo', updatedAt: new Date('2026-08-01T10:00:00Z') }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['antigo', 'novo']);
+    });
+
+    it('anexa a ultima mensagem da conversa (mais recente), sem N+1', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([opp({ conversationId: 'c1' })]);
+      prisma.aiMessage.findMany.mockResolvedValue([
+        { conversationId: 'c1', direction: 'inbound', content: 'a mais nova', createdAt: new Date('2026-08-05T12:00:00Z') },
+        { conversationId: 'c1', direction: 'outbound', content: 'a antiga', createdAt: new Date('2026-08-05T09:00:00Z') },
+      ]);
+      const out = await svc.queue('t1');
+      expect(out[0].lastMessage).toMatchObject({ content: 'a mais nova', direction: 'inbound' });
+      expect(prisma.aiMessage.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('lead sem conversa nao quebra — lastMessage vira null', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([opp({ conversationId: null })]);
+      const out = await svc.queue('t1');
+      expect(out[0].lastMessage).toBeNull();
+      expect(prisma.aiMessage.findMany).not.toHaveBeenCalled();
+    });
+
+    it('fila vazia nao consulta mensagens', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([]);
+      const out = await svc.queue('t1');
+      expect(out).toEqual([]);
+      expect(prisma.aiMessage.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   it('evolution: agrupa recebidos e ganhos por semana respeitando o escopo', async () => {
     const now = new Date();
     prisma.opportunity.findMany.mockResolvedValue([{ createdAt: now }, { createdAt: now }]);
