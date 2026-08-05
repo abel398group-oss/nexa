@@ -59,3 +59,18 @@ export interface ContactListResult {
   items: Contact[];
   total: number;
 }
+
+/**
+ * Número banido pelo "3 strikes" (guard de saída da Lia — bloqueou 3x uma
+ * tentativa de manipulação, ex.: preço inventado, vazamento de dado, ofensa).
+ * A Lia para de responder o telefone em silêncio até alguém desbanir aqui.
+ */
+export interface BannedContact {
+  id: string;
+  phone: string;
+  strikeCount: number;
+  lastViolation: string | null;
+  lastDetail: string | null;
+  lastAt: string | null;
+  bannedAt: string;
+}

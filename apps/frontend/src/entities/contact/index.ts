@@ -8,6 +8,7 @@ export type {
   ContactListResult,
   ContactCampaign,
   TagCount,
+  BannedContact,
 } from './types/contact.types';
 
 export {
@@ -26,4 +27,6 @@ export {
   bulkUnblockContacts,
   importContacts,
   getContactCampaigns,
+  listBannedContacts,
+  unbanContact,
 } from './api/contact.api';

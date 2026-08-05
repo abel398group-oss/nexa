@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ 
 const SellersPage = lazy(() => import('@/pages/SellersPage').then((m) => ({ default: m.SellersPage })));
 const CampaignsPage = lazy(() => import('@/pages/CampaignsPage').then((m) => ({ default: m.CampaignsPage })));
 const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) => ({ default: m.NumberHealthPage })));
+const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
 const EmailChannelSettingsPage = lazy(() => import('@/pages/EmailChannelSettingsPage').then((m) => ({ default: m.EmailChannelSettingsPage })));
@@ -80,6 +81,7 @@ export default function App() {
                     <Route path="/support/config" element={<Perm perm="ai_control"><SupportConfigPage /></Perm>} />
                     <Route path="/support/clients" element={<Perm perm="inbox"><SupportClientsPage /></Perm>} />
                     <Route path="/contacts" element={<Perm perm="contacts"><ContactsPage /></Perm>} />
+                    <Route path="/contacts/abuse" element={<Perm perm="contacts"><AbuseGuardPage /></Perm>} />
                     <Route path="/knowledge" element={<Perm perm="knowledge"><KnowledgePage /></Perm>} />
                     <Route path="/opportunities" element={<Perm perm="opportunities"><OpportunitiesPage /></Perm>} />
                     <Route path="/sellers" element={<Perm perm="sellers"><SellersPage /></Perm>} />

@@ -10,6 +10,7 @@ import type {
   ContactCampaign,
   ImportContactInput,
   TagCount,
+  BannedContact,
 } from '../types/contact.types';
 
 export async function listContacts(params: ContactListParams = {}): Promise<ContactListResult> {
@@ -95,6 +96,18 @@ export async function bulkBlockContacts(ids: string[]): Promise<{ blocked: numbe
 
 export async function bulkUnblockContacts(ids: string[]): Promise<{ unblocked: number }> {
   const r = await api.post('/contacts/bulk-unblock', { ids });
+  return r.data;
+}
+
+// Números banidos pelo "3 strikes" (ver output-guard.ts + abuse-guard.service.ts).
+export async function listBannedContacts(): Promise<BannedContact[]> {
+  const r = await api.get('/contacts/abuse/banned');
+  return r.data;
+}
+
+// Reverte o banimento — decisão manual, para o caso de falso positivo do filtro.
+export async function unbanContact(phone: string): Promise<{ ok: boolean }> {
+  const r = await api.post(`/contacts/abuse/${encodeURIComponent(phone)}/unban`);
   return r.data;
 }
 
