@@ -435,6 +435,23 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedSeller, assignedSellerId } : c)));
   }
 
+  /**
+   * Promove a conversa a oportunidade (F7 — RevOps). A criação automática só
+   * dispara em score >= 70 ou pedido de reunião, e isso deixa passar lead real
+   * — quem lê a conversa e sabe se vale é o vendedor. Idempotente no backend:
+   * clicar de novo não duplica.
+   */
+  async function promoverParaOportunidade() {
+    if (!active) return;
+    try {
+      await api.post('/opportunities/from-conversation', { conversationId: active.id });
+      toast.success('Lead adicionado ao funil — aparece em Minha fila.');
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao adicionar ao funil.');
+    }
+  }
+
   // suporte: marcar o chamado como resolvido (fecha) ou reabrir
   async function resolveTicket(resolved: boolean) {
     if (!active) return;
@@ -839,6 +856,15 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                       <option value="">Sem vendedor</option>
                       {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select>
+
+                    {/* F7: joga a conversa no funil quando a regra automática não pegou */}
+                    <button
+                      onClick={promoverParaOportunidade}
+                      className="rounded-md border border-base-300 px-2.5 py-1 text-xs font-medium text-base-content/70 transition-colors hover:bg-base-100"
+                      title="Adicionar este lead ao funil de vendas (aparece em Minha fila)"
+                    >
+                      <span className="inline-flex items-center gap-1"><Icon name="dollar" className="h-3.5 w-3.5" /> Virar oportunidade</span>
+                    </button>
 
                     {/* resultado da venda */}
                     <span className="text-xs text-base-content/50">Resultado:</span>
