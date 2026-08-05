@@ -676,10 +676,12 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'funil-vendas', category: 'produto',
         title: 'Funil de vendas e playbook de prospecção dentro do TMS',
         content:
+          'ATENÇÃO: isto descreve um MÓDULO que a transportadora usa DEPOIS de ser cliente, para vender ' +
+          'frete PARA OS CLIENTES DELA — não é algo que a Lia faz com o lead atual desta conversa. ' +
           'O HiperTMS tem funil comercial próprio: oportunidades de venda com etapas, e um PLAYBOOK de ' +
           'prospecção em passos — cada oportunidade mostra em que passo do processo está e o que falta fazer. ' +
-          'Também tem enriquecimento geográfico das empresas do funil (localiza a empresa no mapa), útil para ' +
-          'planejar visita e rota comercial. ' +
+          'Também tem enriquecimento geográfico das empresas do funil da transportadora (localiza a empresa ' +
+          'no mapa), útil para ela planejar visita e rota comercial aos próprios clientes. ' +
           'Diferencial relevante: a transportadora não precisa de um CRM separado para o comercial dela. ' +
           'Vender frete e operar frete ficam no mesmo lugar — a cotação vira embarque sem redigitar.',
         tags: ['funil', 'crm', 'oportunidade', 'prospeccao', 'playbook', 'sdr', 'comercial', 'vendas', 'pipeline'],
