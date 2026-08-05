@@ -504,9 +504,33 @@ model Seller {
   conversations AiConversation[]
   notifications SellerNotification[]
   opportunities Opportunity[] // F6+ (seller-leads): leads atribuidos a este vendedor
+  activities    SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
   @@index([tenantId])
   @@map("sellers")
+}
+
+// F7 (2026-08-05, expansao RevOps): registro manual de atividade do vendedor
+// humano — ate aqui nao existia NENHUM log de ligacao/e-mail manual, entao os
+// KPIs de vendedor (metrics.service.ts) so liam AiConversation/AiMessage.
+// type/result sao texto, nao enum — mesmo padrao de Opportunity.stage, evolui
+// sem migration.
+model SellerActivity {
+  id            String       @id @default(uuid())
+  tenantId      String       @map("tenant_id")
+  sellerId      String       @map("seller_id")
+  seller        Seller       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  opportunityId String?      @map("opportunity_id")
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  type          String // call | email | note
+  result        String? // atendeu | nao_atendeu | agendou_retorno | enviado | respondido | outro
+  durationSec   Int?     @map("duration_sec") // so faz sentido pra type=call
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, sellerId])
+  @@index([tenantId, opportunityId])
+  @@map("seller_activities")
 }
 
 model SellerNotification {
@@ -813,6 +837,7 @@ model Opportunity {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   stageHistory   OpportunityStageHistory[]
+  activities     SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
   @@index([tenantId])
   @@index([tenantId, stage])
