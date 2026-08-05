@@ -27,6 +27,15 @@ const RECURRENCE_WINDOW_DAYS = Number(process.env.TICKET_RECURRENCE_WINDOW_DAYS 
 // Janela retrospectiva de busca de tickets fechados (para não reprocessar o histórico inteiro).
 const LOOK_BACK_HOURS = 2;
 
+// §6 (auditoria de suporte, 2026-08-05): teto de segurança por rodada. Sem
+// isso, a busca de "tudo fechado nas últimas 2h" não tinha limite nenhum —
+// um lote fora do comum poderia levar a rodada além do TTL da trava (900s) e
+// colidir com a próxima rodada agendada. Não paginamos (a próxima rodada, 30
+// min depois, já reprocessa o que sobrar, já que a janela de 2h se sobrepõe)
+// — só limitamos e avisamos se o teto for atingido, em vez de crescer sem fim
+// em silêncio.
+const MAX_TICKETS_PER_RUN = Number(process.env.TICKET_INTELLIGENCE_MAX_PER_RUN ?? 500);
+
 type TicketRow = {
   id: string;
   tenantId: string;
@@ -88,9 +97,17 @@ export class TicketIntelligenceService {
           take: 1,
         },
       },
+      orderBy: { endedAt: 'asc' }, // mais antigos primeiro — se cortar pelo teto, o resto sai na próxima rodada
+      take: MAX_TICKETS_PER_RUN,
     });
 
     if (!recentlyClosed.length) return;
+    if (recentlyClosed.length >= MAX_TICKETS_PER_RUN) {
+      this.logger.warn(
+        `Ticket intelligence: teto de ${MAX_TICKETS_PER_RUN} atingido nesta rodada — ` +
+        'pode haver mais tickets fechados na janela do que o processado; serão pegos na(s) próxima(s) rodada(s).',
+      );
+    }
     this.logger.debug(`Analisando ${recentlyClosed.length} ticket(s) fechado(s) na janela`);
 
     for (const ticket of recentlyClosed) {

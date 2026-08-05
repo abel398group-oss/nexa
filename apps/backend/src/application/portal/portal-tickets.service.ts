@@ -5,6 +5,7 @@ import { Paginated, PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { PortalCustomer } from './portal-session.service';
 
 // Janela de reabertura: chamado fechado há menos que este valor é reaberto;
@@ -23,6 +24,7 @@ export class PortalTicketsService {
     private readonly agent: ConversationAgentService,
     private readonly notifications: NotificationsService,
     private readonly events: EventEmitter2,
+    private readonly lock: RedisLockService,
   ) {}
 
   private readonly listFields = {
@@ -189,7 +191,7 @@ export class PortalTicketsService {
     // N1: chamado fechado → decide entre reabrir e criar follow-up antes de processar.
     let conversationId = owned.id;
     if ((owned.status as string) === 'closed') {
-      conversationId = await this.reopenOrFollowUp(customer, owned);
+      conversationId = await this.reopenOrFollowUpLocked(customer, owned);
     } else if ((owned.status as string) !== 'open' && (owned.status as string) !== 'escalated') {
       this.logger.warn(`N1: reply em chamado ${owned.id} com status=${owned.status} — processando normalmente`);
     }
@@ -204,6 +206,59 @@ export class PortalTicketsService {
       portalIdentity: { externalId: customer.externalId, name: customer.name },
     });
     return this.detail(customer, conversationId);
+  }
+
+  // §4 (auditoria de suporte, 2026-08-05): trava a decisão de reabrir/criar
+  // follow-up por chamado. Sem isso, duas respostas quase simultâneas ao mesmo
+  // chamado fechado (double-clique, ou WhatsApp+portal chegando perto um do
+  // outro) liam status='closed' as duas e cada uma criava um follow-up
+  // separado. Reusa o RedisLockService já usado no ticket-intelligence job —
+  // sem Redis configurado, acquire() vira no-op e o comportamento é o mesmo
+  // de antes (sem trava), nunca pior.
+  private async reopenOrFollowUpLocked(
+    customer: PortalCustomer,
+    owned: { id: string; status: string | null; endedAt: Date | null; lastActivityAt: Date | null; contactId: string; phone: string; ticketCategory: string | null },
+  ): Promise<string> {
+    const lockKey = `lock:portal-reply-reopen:${owned.id}`;
+    let release = await this.lock.acquire(lockKey, 10);
+    for (let attempt = 0; !release && attempt < 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 150));
+      release = await this.lock.acquire(lockKey, 10);
+    }
+    if (!release) {
+      this.logger.warn(`N1: lock indisponível para ${owned.id} — processando sem trava (fallback, comportamento pré-fix)`);
+      return this.reopenOrFollowUp(customer, owned);
+    }
+    try {
+      // Releitura DENTRO da trava: outra chamada pode ter decidido enquanto
+      // esperávamos o lock.
+      const fresh = await this.prisma.aiConversation.findFirst({
+        where: { id: owned.id },
+        select: {
+          id: true, status: true, endedAt: true, lastActivityAt: true,
+          contactId: true, phone: true, ticketCategory: true,
+        },
+      });
+      if (!fresh) return owned.id;
+      if ((fresh.status as string) !== 'closed') {
+        // Já foi reaberto por uma chamada concorrente enquanto esperávamos.
+        return fresh.id;
+      }
+      // Segue fechado — mas um follow-up já pode ter sido criado por uma
+      // chamada concorrente (o chamado ORIGINAL continua 'closed' mesmo
+      // depois de um follow-up nascer, então a checagem de status acima
+      // sozinha não pega esse caso).
+      const existingFollowUp = await this.prisma.aiConversation.findFirst({
+        where: { tenantId: customer.tenantId, followUpOfId: owned.id } as any,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (existingFollowUp) return existingFollowUp.id;
+
+      return await this.reopenOrFollowUp(customer, fresh);
+    } finally {
+      await release();
+    }
   }
 
   // N1: lógica de reabertura vs. follow-up para chamados fechados.
@@ -270,9 +325,16 @@ export class PortalTicketsService {
     });
     if (existing) {
       if (realPhone && existing.phone.startsWith('portal:')) {
+        // §5 (auditoria de suporte, 2026-08-05): best-effort mesmo — nunca lança
+        // (não quebra o fluxo do cliente por causa de um update auxiliar) — mas
+        // agora loga. Antes, QUALQUER erro sumia em silêncio, não só o conflito
+        // de unique esperado; uma falha real de banco aqui era invisível.
         await this.prisma.contact
           .update({ where: { id: existing.id }, data: { phone: realPhone } })
-          .catch(() => {}); // ignora conflito de unique (telefone ja usado por outro contato)
+          .catch((e: any) => {
+            if (e?.code === 'P2002') return; // esperado: telefone já usado por outro contato
+            this.logger.warn(`ensureContact: falha ao atualizar phone de ${existing.id} (${e?.message})`);
+          });
       }
       return existing;
     }
@@ -284,10 +346,15 @@ export class PortalTicketsService {
         where: { tenantId: customer.tenantId, phone: realPhone },
       });
       if (byPhone) {
-        // Associa o externalContactId desta sessao ao contato existente (best-effort)
+        // Associa o externalContactId desta sessao ao contato existente (best-effort).
+        // §5: mesma lógica — nunca lança, mas agora loga o que não for o conflito
+        // de unique esperado.
         await this.prisma.contact
           .update({ where: { id: byPhone.id }, data: { externalContactId: customer.externalId } })
-          .catch(() => {}); // ignora se externalContactId ja estiver em uso por outro
+          .catch((e: any) => {
+            if (e?.code === 'P2002') return; // esperado: externalContactId já em uso por outro
+            this.logger.warn(`ensureContact: falha ao associar externalContactId em ${byPhone.id} (${e?.message})`);
+          });
         return byPhone;
       }
     }
