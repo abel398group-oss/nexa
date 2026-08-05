@@ -137,8 +137,11 @@ export class OpportunitiesService {
     if (!OPP_STAGES.includes(toStage as any)) {
       throw new BadRequestException(`Estagio invalido. Use: ${OPP_STAGES.join(', ')}`);
     }
-    if (toStage === 'discarded' && opts.discardReason && !DISCARD_REASONS.includes(opts.discardReason as any)) {
-      throw new BadRequestException(`Motivo invalido. Use: ${DISCARD_REASONS.join(', ')}`);
+    // Sem isto, discardReason ficava null em quem descarta sem informar motivo — e o
+    // painel de motivo de perda (sellerOverview) perdia justamente os casos que mais
+    // precisa explicar. Achado da revisão externa (Gemini, 2026-08-05), confirmado no código.
+    if (toStage === 'discarded' && (!opts.discardReason || !DISCARD_REASONS.includes(opts.discardReason as any))) {
+      throw new BadRequestException(`Motivo obrigatorio ao descartar. Use: ${DISCARD_REASONS.join(', ')}`);
     }
     const opp = await this.findOne(tenantId, id, sellerScope);
     if (opp.stage === toStage) return opp;

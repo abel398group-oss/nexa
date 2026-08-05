@@ -108,6 +108,16 @@ describe('OpportunitiesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  // Achado da revisão externa (Gemini, 2026-08-05): sem isto, discardReason ficava
+  // null e o painel de motivo de perda perdia justamente os casos sem explicação.
+  it('moveStage discarded SEM motivo -> BadRequest (motivo agora obrigatorio)', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', stageHistory: [] });
+    await expect(
+      svc.moveStage('t1', 'o1', 'discarded'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('createFromLead: adota assignedSellerId quando oportunidade existe sem dono', async () => {
     prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', conversationId: 'c1', assignedSellerId: null, assignedTo: null });
     prisma.opportunity.update.mockResolvedValue({ id: 'o1', assignedSellerId: 's1' });

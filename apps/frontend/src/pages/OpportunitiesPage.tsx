@@ -593,7 +593,10 @@ export function OpportunitiesPage() {
           )}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setStagePrompt(null)}>Cancelar</Button>
-            <Button onClick={confirmStagePrompt} disabled={stageBusy}>
+            <Button
+              onClick={confirmStagePrompt}
+              disabled={stageBusy || (stagePrompt?.stage === 'discarded' && !discardReasonInput)}
+            >
               {stagePrompt?.stage === 'paused' ? 'Pausar' : 'Descartar'}
             </Button>
           </div>
