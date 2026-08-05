@@ -18,6 +18,19 @@ revisões registram um **retrato de um momento**.
 Referências que apontavam para os caminhos antigos já foram atualizadas
 (`docs/ANALISE_CONSOLIDADA.md`, `PROGRESS.md`).
 
+## Auditorias por módulo (2026-08)
+
+Feitas com o mesmo método: ler o código e comparar com a intenção declarada,
+citando `arquivo:linha`. As duas estão fechadas.
+
+- [`2026-08-04-auditoria-arquitetura-seguranca.md`](2026-08-04-auditoria-arquitetura-seguranca.md) —
+  arquitetura, IA, multi-tenancy, disparo e segurança. 12 achados; inclui a
+  segunda opinião externa (Gemini) e o que dela se confirmou.
+- [`2026-08-05-auditoria-suporte.md`](2026-08-05-auditoria-suporte.md) —
+  fluxo de suporte ponta a ponta (widget no TMS → Lia → ticket → humano).
+  6 achados, todos corrigidos; corrigiu também o status de 6 ADRs que estavam
+  "Proposto" com o código em produção.
+
 > `TESTE_MANUAL.md` (raiz) foi mantido como **guia vivo** de teste manual — não é
 > um relatório datado, então não migrou para cá.
 

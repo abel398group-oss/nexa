@@ -1,6 +1,9 @@
 # ADR 017 — Playbooks de Diagnóstico Guiado
 
-**Status:** Proposto · **Data:** 2026-06
+**Status:** Aceito (implementado) · **Data:** 2026-06 · **Verificado:** 2026-08-05
+> Implementado em `application/agents/support-playbooks.const.ts, injetado em diagnostic-agent.service.ts`. Status corrigido na auditoria do suporte
+> (`docs/reviews/2026-08-05-auditoria-suporte.md`) — estava "Proposto" com o
+> código em produção havia semanas.
 
 ## Contexto
 

@@ -1,6 +1,9 @@
 # ADR 016 — Classificação de Chamados do Suporte
 
-**Status:** Proposto · **Data:** 2026-06
+**Status:** Aceito (implementado) · **Data:** 2026-06 · **Verificado:** 2026-08-05
+> Implementado em `application/agents/case-classifier-agent.service.ts (12 categorias, 4 prioridades)`. Status corrigido na auditoria do suporte
+> (`docs/reviews/2026-08-05-auditoria-suporte.md`) — estava "Proposto" com o
+> código em produção havia semanas.
 
 ## Contexto
 
