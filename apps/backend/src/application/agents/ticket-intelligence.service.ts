@@ -155,11 +155,16 @@ export class TicketIntelligenceService {
       Date.now() - RECURRENCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
 
-    // Conta quantas outras conversas com a mesma causa-raiz foram fechadas na janela
+    // §3 (auditoria de suporte, 2026-08-05): case-insensitive — a IA varia
+    // maiúscula/minúscula na mesma causa-raiz entre chamadas ("Certificado
+    // vencido" vs "certificado vencido"), e igualdade exata de string fazia a
+    // recorrência quase nunca bater. Não resolve paráfrase (causa igual
+    // descrita com palavras totalmente diferentes) — isso exigiria comparação
+    // semântica (embeddings), fora do escopo deste ajuste pontual.
     const count = await this.prisma.aiConversation.count({
       where: {
         tenantId,
-        rootCause,
+        rootCause: { equals: rootCause.trim(), mode: 'insensitive' },
         id: { not: conversationId },
         ticketCategory: { not: null },
         createdAt: { gte: windowStart },
@@ -170,13 +175,19 @@ export class TicketIntelligenceService {
     if (count + 1 < RECURRENCE_THRESHOLD) return;
 
     const title = `🔁 Recorrência detectada (${count + 1}× em ${RECURRENCE_WINDOW_DAYS}d)`;
+    const causeSnippet = rootCause.trim().slice(0, 120);
 
-    // Dedup: não cria se já existe notificação com o mesmo título nas últimas 24h
+    // Dedup — corrigido junto (mesma função, mesmo achado §3): o título antigo
+    // só continha a contagem ("3× em 30d"), nunca a causa. Duas causas
+    // DIFERENTES que batessem o mesmo número no mesmo dia geravam o MESMO
+    // título, e a segunda ficava silenciosamente suprimida como se fosse
+    // duplicata da primeira. Agora dedupe pelo trecho da causa-raiz (já
+    // gravado no corpo da notificação abaixo), não pelo título variável.
     const existing = await this.prisma.notification.findFirst({
       where: {
         tenantId,
         type: 'recurrence',
-        title,
+        body: { contains: causeSnippet, mode: 'insensitive' },
         createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
     });
@@ -185,7 +196,7 @@ export class TicketIntelligenceService {
     await this.notifications.create(tenantId, {
       type: 'recurrence',
       title,
-      body: `Causa: "${rootCause.slice(0, 120)}" · Categoria: ${category ?? 'n/a'}. Considere criar um playbook ou artigo de KB para automatizar a resolução.`,
+      body: `Causa: "${causeSnippet}" · Categoria: ${category ?? 'n/a'}. Considere criar um playbook ou artigo de KB para automatizar a resolução.`,
       link: '/support',
     });
 

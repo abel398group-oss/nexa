@@ -325,12 +325,16 @@ export class ConversationsService {
     externalId: string,
     name: string | null,
   ): Promise<{ conversationId: string; isNew: boolean }> {
-    // Reutiliza conversa aberta se existir
+    // Reutiliza conversa aberta se existir. Inclui 'portal' além de 'web_chat':
+    // o formulário "abrir chamado" (portal-tickets.service.ts) cria a conversa
+    // com sourceChannel 'portal' — sem isso, um cliente que abre chamado pelo
+    // formulário e depois abre o chat ao vivo ganhava uma SEGUNDA conversa,
+    // porque esta busca só enxergava 'web_chat'.
     const existing = await this.prisma.aiConversation.findFirst({
       where: {
         tenantId,
         externalId,
-        sourceChannel: 'web_chat' as any,
+        sourceChannel: { in: ['web_chat', 'portal'] as any },
         status: { notIn: ['closed', 'opt_out'] as any },
       },
       select: { id: true },

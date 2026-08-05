@@ -106,6 +106,50 @@ describe('CaseClassifierAgentService', () => {
     expect(result.requiresHuman).toBe(false);
   });
 
+  // ─── §1 (auditoria 2026-08-05) — normalização antes da trava D6 ─────────
+  // Sem normalizar, a IA respondendo "Fiscal" (maiúscula) ou "Low" fazia a
+  // comparação === falhar em silêncio e pular a trava de segurança inteira.
+  it('D6: still forces requiresHuman when the AI returns category with different casing', async () => {
+    const ai = mockAi(json({ category: 'Fiscal', confidence: 'low', requiresHuman: false }));
+    const svc = new CaseClassifierAgentService(ai);
+
+    const result = await svc.classify('Rejeição SEFAZ 562');
+
+    expect(result.requiresHuman).toBe(true);
+    expect(result.category).toBe('fiscal'); // normalizado
+  });
+
+  it('D6: still forces requiresHuman when the AI returns confidence with different casing', async () => {
+    const ai = mockAi(json({ category: 'financeiro', confidence: 'Low', requiresHuman: false }));
+    const svc = new CaseClassifierAgentService(ai);
+
+    const result = await svc.classify('Minha fatura está errada');
+
+    expect(result.requiresHuman).toBe(true);
+    expect(result.confidence).toBe('low'); // normalizado
+  });
+
+  it('D6: forces requiresHuman + logs a warning when the AI returns an unrecognized category with low confidence (fail-safe, cannot rule out fiscal/financeiro)', async () => {
+    const ai = mockAi(json({ category: 'compliance', confidence: 'low', requiresHuman: false }));
+    const svc = new CaseClassifierAgentService(ai);
+    const warnSpy = vi.spyOn((svc as any).logger, 'warn');
+
+    const result = await svc.classify('Preciso de um relatório de conformidade');
+
+    expect(result.requiresHuman).toBe(true);
+    expect(result.category).toBe('compliance'); // não inventa categoria, só sinaliza
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('categoria não reconhecida'));
+  });
+
+  it('D6: does NOT force requiresHuman for an unrecognized category with high confidence', async () => {
+    const ai = mockAi(json({ category: 'compliance', confidence: 'high', requiresHuman: false }));
+    const svc = new CaseClassifierAgentService(ai);
+
+    const result = await svc.classify('Preciso de um relatório de conformidade');
+
+    expect(result.requiresHuman).toBe(false);
+  });
+
   // ─── Fallback em caso de falha ───────────────────────────────────────────
   it('falls back to treinamento/medium/low when the AI response is not valid JSON', async () => {
     const ai = mockAi('isto não é JSON');

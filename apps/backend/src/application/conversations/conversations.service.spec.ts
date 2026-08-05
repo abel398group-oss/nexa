@@ -8,6 +8,7 @@ function makeDeps() {
     aiConversation: {
       findFirst: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
+      create: vi.fn(),
     },
     aiMessage: { create: vi.fn().mockResolvedValue({ id: 'msg-1' }) },
     conversationStageHistory: { create: vi.fn().mockResolvedValue({}) },
@@ -175,5 +176,38 @@ describe('ConversationsService — ADR 035 takeover humano', () => {
     const updateCall = deps.prisma.aiConversation.update.mock.calls[0][0];
     expect(updateCall.data.humanTakeoverAt).toBeNull();
     expect(updateCall.data.status).toBe('closed');
+  });
+});
+
+// ─── findOrCreateWebChat — reaproveita chamado aberto pelo formulário (portal) ─
+// Regressão: a busca só olhava sourceChannel 'web_chat', então um cliente que
+// abria chamado pelo formulário (sourceChannel 'portal') e depois abria o chat
+// ao vivo ganhava uma SEGUNDA conversa em vez de continuar na mesma.
+
+describe('ConversationsService — findOrCreateWebChat reaproveita portal e web_chat', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('busca inclui tanto web_chat quanto portal no sourceChannel', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ id: 'conv-portal-1' });
+
+    await svc.findOrCreateWebChat('t1', 'ext-1', 'Cliente Teste');
+
+    const query = deps.prisma.aiConversation.findFirst.mock.calls[0][0];
+    expect(query.where.sourceChannel).toEqual({ in: ['web_chat', 'portal'] });
+  });
+
+  it('chamado aberto pelo formulário (sourceChannel portal) é reaproveitado, não duplicado', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ id: 'conv-portal-1' });
+
+    const result = await svc.findOrCreateWebChat('t1', 'ext-1', 'Cliente Teste');
+
+    expect(result).toEqual({ conversationId: 'conv-portal-1', isNew: false });
+    expect(deps.prisma.aiConversation.create).not.toHaveBeenCalled();
   });
 });

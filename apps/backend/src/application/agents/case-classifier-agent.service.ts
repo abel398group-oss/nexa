@@ -27,6 +27,15 @@ export interface ClassificationResult {
   reasoning?: string;       // para auditoria
 }
 
+// Vocabulário válido de category — usado para normalizar a saída da IA antes
+// de comparar (auditoria de suporte 2026-08-05, achado §1). Sem isso, "Fiscal"
+// (maiúscula) ou espaço a mais fazia a trava de segurança ADR 015 D6 falhar
+// em silêncio, sem log nenhum avisando.
+const KNOWN_CATEGORIES: TicketCategory[] = [
+  'fiscal', 'cte', 'mdfe', 'frete', 'financeiro', 'cadastro',
+  'frota', 'usuarios', 'integracoes', 'api', 'erro_sistema', 'treinamento',
+];
+
 @Injectable()
 export class CaseClassifierAgentService {
   private readonly logger = new Logger('CaseClassifierAgent');
@@ -83,8 +92,26 @@ Regra de segurança: se category for "fiscal" ou "financeiro" E confidence for "
       const clean = text.replace(/```(?:json)?/g, '').trim();
       const parsed = JSON.parse(clean) as ClassificationResult;
 
-      // Garantia de segurança ADR 015 D6
-      if ((parsed.category === 'fiscal' || parsed.category === 'financeiro') && parsed.confidence === 'low') {
+      // Normaliza ANTES de comparar (achado §1, auditoria 2026-08-05): a IA
+      // varia caixa/espaço na resposta livre; comparar o valor cru contra
+      // 'fiscal'/'financeiro'/'low' faz a trava de segurança abaixo falhar
+      // em silêncio quando o texto não bate byte a byte.
+      const rawCategory = String(parsed.category ?? '').trim().toLowerCase();
+      const categoryKnown = KNOWN_CATEGORIES.includes(rawCategory as TicketCategory);
+      if (categoryKnown) parsed.category = rawCategory as TicketCategory;
+      if (!categoryKnown) {
+        this.logger.warn(
+          `Classificador retornou categoria não reconhecida ("${parsed.category}") — ` +
+          'mantendo valor original para auditoria, mas tratando como potencialmente sensível.',
+        );
+      }
+      parsed.confidence = String(parsed.confidence ?? '').trim().toLowerCase() === 'high' ? 'high' : 'low';
+
+      // Garantia de segurança ADR 015 D6 — sobre valores normalizados.
+      // Categoria não reconhecida também força humano: não dá pra garantir
+      // que NÃO é fiscal/financeiro se a IA fugiu do vocabulário esperado.
+      const isFiscalOrFinancial = parsed.category === 'fiscal' || parsed.category === 'financeiro';
+      if ((isFiscalOrFinancial || !categoryKnown) && parsed.confidence === 'low') {
         parsed.requiresHuman = true;
       }
 
