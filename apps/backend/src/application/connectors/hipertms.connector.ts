@@ -201,46 +201,47 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
           throw new Error('resposta do TMS sem planos');
         }
 
-      // Fallback de features por código de plano (usado só quando o TMS manda lista vazia).
-      const staticByCode = new Map(this.defaultPlans().map((p) => [p.code, p.features ?? []]));
+        // Fallback de features por código de plano (usado só quando o TMS manda lista vazia).
+        const staticByCode = new Map(this.defaultPlans().map((p) => [p.code, p.features ?? []]));
 
-      const plans: Plan[] = rows.map((p) => {
-        const code = String(p.code ?? p.id ?? '').trim();
-        const liveFeatures = Array.isArray(p.features) ? p.features.map((f: any) => String(f)) : [];
-        return {
-          code,
-          name: String(p.name ?? p.title ?? p.code ?? '').trim(),
-          price: Number(p.price ?? p.priceMonthly ?? p.monthlyPrice ?? 0),
-          maxUsers: p.maxUsers ?? p.userLimit ?? undefined,
-          // 2026-08-03: em produção o TMS devolve `features: []` para TODOS os planos
-          // (metadata.features vazio no banco). Sem isso a Lia recebia só nome+preço e
-          // ficava sem saber descrever o que vem em cada plano. Assim que o TMS
-          // preencher metadata.features, o valor AO VIVO passa a mandar (o estático
-          // só entra quando a lista vem vazia).
-          features: liveFeatures.length > 0 ? liveFeatures : (staticByCode.get(code) ?? []),
-        };
-      // 2026-08-03: o filtro exigia `price > 0` e derrubava o Corporativo, que vem com
-      // preço 0 justamente por ser SOB CONSULTA. Resultado: a Lia recebia 3 planos e não
-      // tinha o que oferecer a lead grande. Agora preço 0 passa e é renderizado como
-      // "sob consulta" (sales-agent.service.ts) — só descartamos plano sem code ou com
-      // preço inválido/negativo.
-      }).filter((p) => p.code && Number.isFinite(p.price) && p.price >= 0);
+        const parsed: Plan[] = rows.map((p) => {
+          const code = String(p.code ?? p.id ?? '').trim();
+          const liveFeatures = Array.isArray(p.features) ? p.features.map((f: any) => String(f)) : [];
+          return {
+            code,
+            name: String(p.name ?? p.title ?? p.code ?? '').trim(),
+            price: Number(p.price ?? p.priceMonthly ?? p.monthlyPrice ?? 0),
+            maxUsers: p.maxUsers ?? p.userLimit ?? undefined,
+            // 2026-08-03: em produção o TMS devolve `features: []` para TODOS os planos
+            // (metadata.features vazio no banco). Sem isso a Lia recebia só nome+preço e
+            // ficava sem saber descrever o que vem em cada plano. Assim que o TMS
+            // preencher metadata.features, o valor AO VIVO passa a mandar (o estático
+            // só entra quando a lista vem vazia).
+            features: liveFeatures.length > 0 ? liveFeatures : (staticByCode.get(code) ?? []),
+          };
+        // 2026-08-03: o filtro exigia `price > 0` e derrubava o Corporativo, que vem com
+        // preço 0 justamente por ser SOB CONSULTA. Resultado: a Lia recebia 3 planos e não
+        // tinha o que oferecer a lead grande. Agora preço 0 passa e é renderizado como
+        // "sob consulta" (sales-agent.service.ts) — só descartamos plano sem code ou com
+        // preço inválido/negativo.
+        }).filter((p) => p.code && Number.isFinite(p.price) && p.price >= 0);
 
-      if (plans.length === 0) throw new Error('planos do TMS inválidos (sem code/preço)');
-      if (plans.every((p) => (p.features?.length ?? 0) === 0)) {
-        this.logger.warn(
-          'TMS devolveu planos sem features e não há fallback estático correspondente — ' +
-          'a Lia vai citar planos sem saber o que cada um inclui. Preencha metadata.features no TMS.',
-        );
-      }
-      return plans;
-    } catch (err: any) {
-      // K1: quando o TMS está configurado mas indisponível → retornar [] para forçar escalação.
-      // Lia nunca cita preço possivelmente desatualizado; deve dizer "vou confirmar os valores".
-      // (defaultPlans() é usado apenas quando TMS não está configurado — modo offline/demo.)
-      this.logger.warn(`getPlans falhou (${err?.message}) — conector indisponível, retornando [] para forçar escalação`);
-      return [];
-    }
+        if (parsed.length === 0) throw new Error('planos do TMS inválidos (sem code/preço)');
+        if (parsed.every((p) => (p.features?.length ?? 0) === 0)) {
+          this.logger.warn(
+            'TMS devolveu planos sem features e não há fallback estático correspondente — ' +
+            'a Lia vai citar planos sem saber o que cada um inclui. Preencha metadata.features no TMS.',
+          );
+        }
+        return parsed;
+      },
+      // K1: TMS configurado mas indisponível → [] (nunca cache vencido), a Lia escala
+      // dizendo "vou confirmar os valores". defaultPlans() só entra quando o TMS não
+      // está configurado (modo offline/demo), lá em cima.
+      { serveStaleOnError: false },
+    );
+
+    return plans ?? [];
   }
 
   // Catálogo offline do HiperTMS — usado APENAS quando TMS_API_BASE_URL não está configurado.

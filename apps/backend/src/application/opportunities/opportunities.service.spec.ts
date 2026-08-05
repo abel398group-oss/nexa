@@ -173,14 +173,38 @@ describe('OpportunitiesService', () => {
     });
   });
 
-  it('createFromLead: busca o nome do contato quando o chamador nao passa', async () => {
-    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Fulano Transportes' }) };
+  it('createFromLead: busca nome e empresa do contato quando o chamador nao passa', async () => {
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Fulano', company: 'Fulano Transportes' }) };
     prisma.opportunity.findFirst.mockResolvedValue(null);
     prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
 
     await svc.createFromLead('t1', { conversationId: 'c9', contactId: 'ct9' });
 
-    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ name: 'Fulano Transportes' });
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({
+      name: 'Fulano', company: 'Fulano Transportes',
+    });
+  });
+
+  it('createFromLead: o que o chamador passa vence o cadastro do contato', async () => {
+    prisma.contact = { findFirst: vi.fn().mockResolvedValue({ name: 'Nome antigo', company: 'Empresa antiga' }) };
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c9', contactId: 'ct9', name: 'Nome novo' });
+
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({
+      name: 'Nome novo', company: 'Empresa antiga',
+    });
+  });
+
+  it('createFromLead: sem contactId nao consulta contato', async () => {
+    prisma.contact = { findFirst: vi.fn() };
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c9', phone: '5511' });
+
+    expect(prisma.contact.findFirst).not.toHaveBeenCalled();
   });
 
   // ── F7 (RevOps): fila de trabalho do vendedor ─────────────────────────────
@@ -193,6 +217,7 @@ describe('OpportunitiesService', () => {
 
     beforeEach(() => {
       prisma.aiMessage = { findMany: vi.fn().mockResolvedValue([]) };
+      prisma.campaign = { findMany: vi.fn().mockResolvedValue([]) };
     });
 
     it('so traz estagios abertos — pausado e fechados ficam de fora', async () => {
@@ -217,6 +242,31 @@ describe('OpportunitiesService', () => {
       const out = await svc.queue('t1');
       expect(out.map((o: any) => o.id)).toEqual(['reuniao', 'alto']);
       expect(out[0].pediuReuniao).toBe(true);
+    });
+
+    it('lead parado sobe na frente de score maior — nao afunda na lista', async () => {
+      process.env.STALE_LEAD_DAYS = '3';
+      const dias = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'recente-alto', interestScore: 95, updatedAt: dias(0) }),
+        opp({ id: 'parado-baixo', interestScore: 50, updatedAt: dias(6) }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['parado-baixo', 'recente-alto']);
+      expect(out[0].parado).toBe(true);
+      expect(out[0].paradoHaDias).toBe(6);
+      expect(out[1].parado).toBe(false);
+    });
+
+    it('reuniao ainda vence lead parado', async () => {
+      process.env.STALE_LEAD_DAYS = '3';
+      const dias = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+      prisma.opportunity.findMany.mockResolvedValue([
+        opp({ id: 'parado', interestScore: 50, updatedAt: dias(9) }),
+        opp({ id: 'reuniao', interestScore: 50, intent: 'meeting_request', updatedAt: dias(0) }),
+      ]);
+      const out = await svc.queue('t1');
+      expect(out.map((o: any) => o.id)).toEqual(['reuniao', 'parado']);
     });
 
     it('sem reuniao, ordena por score desc', async () => {
@@ -246,6 +296,44 @@ describe('OpportunitiesService', () => {
       const out = await svc.queue('t1');
       expect(out[0].lastMessage).toMatchObject({ content: 'a mais nova', direction: 'inbound' });
       expect(prisma.aiMessage.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('mostra a campanha de origem do lead', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([opp({ conversationId: 'c1' })]);
+      prisma.aiMessage.findMany.mockResolvedValue([
+        { conversationId: 'c1', direction: 'inbound', content: 'tenho interesse', createdAt: new Date('2026-08-05T12:00:00Z'), campaignId: null, intent: null },
+        { conversationId: 'c1', direction: 'outbound', content: 'oi', createdAt: new Date('2026-08-05T09:00:00Z'), campaignId: 'camp1', intent: 'outbound_campaign' },
+      ]);
+      prisma.campaign.findMany.mockResolvedValue([{ id: 'camp1', name: 'Frotistas SP' }]);
+
+      const out = await svc.queue('t1');
+
+      expect(out[0].origemCampanha).toBe('Frotistas SP');
+      expect(prisma.campaign.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1' });
+    });
+
+    it('quando a conversa teve 2 campanhas, mostra a que ORIGINOU (a mais antiga)', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([opp({ conversationId: 'c1' })]);
+      prisma.aiMessage.findMany.mockResolvedValue([
+        { conversationId: 'c1', direction: 'outbound', content: 'segunda', createdAt: new Date('2026-08-05T12:00:00Z'), campaignId: 'nova', intent: 'outbound_campaign' },
+        { conversationId: 'c1', direction: 'outbound', content: 'primeira', createdAt: new Date('2026-08-01T09:00:00Z'), campaignId: 'origem', intent: 'outbound_campaign' },
+      ]);
+      prisma.campaign.findMany.mockResolvedValue([
+        { id: 'origem', name: 'Frotistas SP' }, { id: 'nova', name: 'Reengajamento' },
+      ]);
+
+      const out = await svc.queue('t1');
+      expect(out[0].origemCampanha).toBe('Frotistas SP');
+    });
+
+    it('lead criado a mao (sem campanha) tem origem null e nao consulta campanhas', async () => {
+      prisma.opportunity.findMany.mockResolvedValue([opp({ conversationId: 'c1' })]);
+      prisma.aiMessage.findMany.mockResolvedValue([
+        { conversationId: 'c1', direction: 'inbound', content: 'oi', createdAt: new Date(), campaignId: null, intent: null },
+      ]);
+      const out = await svc.queue('t1');
+      expect(out[0].origemCampanha).toBeNull();
+      expect(prisma.campaign.findMany).not.toHaveBeenCalled();
     });
 
     it('lead sem conversa nao quebra — lastMessage vira null', async () => {
