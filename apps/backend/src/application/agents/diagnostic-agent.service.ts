@@ -78,7 +78,18 @@ export class DiagnosticAgentService {
         const rejCodeMatch = input.message.match(/\b([0-9]{3,4})\b/);
         if (rejCodeMatch) {
           const rejInfo = await this.connector.getRejectionInfo(rejCodeMatch[1]);
-          if (rejInfo) diagnosticData.rejectionInfo = rejInfo;
+          if (rejInfo) {
+            diagnosticData.rejectionInfo = rejInfo;
+          } else {
+            // F11: a tabela local cobre só ~21 códigos "top N" (comentário no
+            // próprio connector). Fora dela, getRejectionInfo() voltava null em
+            // silêncio — a IA ficava sem pista nenhuma e sem log pra saber que
+            // o código nem foi consultado. Agora fica registrado, e o prompt
+            // recebe a instrução explícita de não inventar o significado do
+            // código (ver rejectionCodeUnknown no dataCtx abaixo).
+            this.logger.warn(`Código de rejeição SEFAZ ${rejCodeMatch[1]} não está na tabela local — sem match em getRejectionInfo()`);
+            diagnosticData.rejectionCodeUnknown = rejCodeMatch[1];
+          }
         }
       }
     } catch (err: any) {
@@ -101,14 +112,23 @@ export class DiagnosticAgentService {
       ? `Cliente: ${input.tmsCustomer.name}, plano: ${plano}${paginaCtx}`
       : 'Cliente não identificado no TMS';
 
+    // F11: código de rejeição fora da tabela local (~21 códigos cobertos, ver
+    // comentário em hipertms.connector.ts) — instrui a IA a não inventar o
+    // significado do código em vez de simplesmente não ter o que dizer sobre ele.
+    const rejUnknownCtx = diagnosticData.rejectionCodeUnknown
+      ? `\nO código de rejeição SEFAZ ${diagnosticData.rejectionCodeUnknown} não está na base local de códigos conhecidos. ` +
+        'NÃO invente o que ele significa. Diga que vai verificar o código específico com o time técnico (consulta ao MOC/manual da SEFAZ) e escale.'
+      : '';
+
     const dataCtx = tmsUnstable
       ? '\nATENÇÃO: o sistema TMS está temporariamente instável — pelo menos uma consulta de dado falhou por ' +
         'indisponibilidade do TMS, NÃO porque o dado não existe. Não diga que o cliente "não tem" contrato/documento ' +
         'nem escale como se fosse um caso normal: explique que houve uma instabilidade momentânea no sistema e peça ' +
         'para tentar de novo em alguns minutos.' +
+        rejUnknownCtx +
         (Object.keys(diagnosticData).length > 1 ? `\nDados do TMS (parciais):\n${JSON.stringify(diagnosticData, null, 2)}` : '')
       : Object.keys(diagnosticData).length > 0
-        ? `\nDados do TMS:\n${JSON.stringify(diagnosticData, null, 2)}`
+        ? `${rejUnknownCtx}\nDados do TMS:\n${JSON.stringify(diagnosticData, null, 2)}`
         : '\nNenhum dado adicional disponível no TMS.';
 
     // Carrega playbook determinístico para a categoria (ADR 017).
