@@ -462,3 +462,61 @@ describe('HiperTmsConnector — syncTicket() (F9)', () => {
     expect(r.error).toBe('timeout');
   });
 });
+
+// ─── F15: getRejectionInfo() — tabela local de códigos SEFAZ (2026-08-06) ────
+// Conferida contra o catálogo oficial do MOC-CTe; 9 códigos da tabela antiga
+// (21 entradas) estavam com significado errado (não erro de digitação — código
+// apontando pra causa completamente diferente da real). Corrigidos + tabela
+// ampliada pra 30 entradas. Testes cobrem: um código corrigido de fato (não só
+// renomeado), o código removido por falta de fonte confiável, um código novo,
+// e o caso "não encontrado".
+describe('HiperTmsConnector — getRejectionInfo() (F15)', () => {
+  let connector: HiperTmsConnector;
+
+  beforeEach(() => {
+    connector = makeConnector();
+  });
+
+  it('código corrigido: 205 agora é "CT-e denegado", não mais o significado antigo errado', async () => {
+    const info = await connector.getRejectionInfo('205');
+    expect(info).not.toBeNull();
+    expect(info!.message.toLowerCase()).toContain('denegado');
+  });
+
+  it('código 519 é o CFOP inválido (antes documentado incorretamente como 539)', async () => {
+    const info = await connector.getRejectionInfo('519');
+    expect(info).not.toBeNull();
+    expect(info!.message.toLowerCase()).toContain('cfop');
+  });
+
+  it('código 218 é "CT-e já cancelado" (antes documentado incorretamente como 562)', async () => {
+    const info = await connector.getRejectionInfo('218');
+    expect(info).not.toBeNull();
+    expect(info!.message.toLowerCase()).toContain('cancelado');
+  });
+
+  it('códigos 280/281 cobrem certificado inválido vs expirado separadamente', async () => {
+    const invalido = await connector.getRejectionInfo('280');
+    const expirado = await connector.getRejectionInfo('281');
+    expect(invalido).not.toBeNull();
+    expect(expirado).not.toBeNull();
+    expect(expirado!.message.toLowerCase()).toContain('vencida');
+  });
+
+  it('código 302 foi removido: não havia fonte confiável pra confirmar o mapeamento antigo', async () => {
+    const info = await connector.getRejectionInfo('302');
+    expect(info).toBeNull();
+  });
+
+  it('código desconhecido retorna null (não inventa resposta)', async () => {
+    const info = await connector.getRejectionInfo('123456');
+    expect(info).toBeNull();
+  });
+
+  it('código novo (999, genérico) retorna categoria e ação sugerida', async () => {
+    const info = await connector.getRejectionInfo('999');
+    expect(info).not.toBeNull();
+    expect(info!.category).toBeTruthy();
+    expect(info!.suggestedAction).toBeTruthy();
+  });
+});

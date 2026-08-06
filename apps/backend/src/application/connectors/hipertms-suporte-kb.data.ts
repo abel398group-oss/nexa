@@ -81,16 +81,20 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '2. Abra o CT-e e veja o código de rejeição exibido no campo "Situação fiscal".\n' +
       '3. Corrija a causa raiz (veja tabela de códigos abaixo) e emita um novo CT-e.\n' +
       'Rejeições NÃO consomem numeração — você pode emitir com o mesmo número após corrigir.\n' +
-      'Códigos frequentes: 539 (CFOP inválido), 562 (CT-e já cancelado), 204 (duplicidade), 581 (certificado expirado).\n' +
+      'Códigos frequentes: 519 (CFOP inválido), 218 (CT-e já cancelado), 204 (duplicidade), 280/281 (certificado inválido/expirado).\n' +
       'Se o código não aparecer na lista conhecida, acione o suporte com o XML do CT-e.',
     tags: ['cte', 'rejeicao', 'sefaz', 'rejeitado', 'codigo rejeicao', 'erro fiscal'],
   },
   {
     topic: 'cte-rejeicao',
     category: 'suporte',
-    title: 'Código SEFAZ 539 — CFOP inválido para a UF',
+    title: 'Código SEFAZ 519 — CFOP inválido para a UF',
     content:
-      'Rejeição 539: o CFOP informado no CT-e não é válido para a combinação de UF de origem e destino.\n' +
+      // F15 (2026-08-06): artigo era titulado "Código 539" — conferido contra
+      // o catálogo oficial do MOC-CTe, 539 é outra coisa (duplicidade de CT-e
+      // com diferença de chave de acesso). O código real pra CFOP inválido é
+      // 519. Conteúdo/orientação não mudou, só o número.
+      'Rejeição 519: o CFOP informado no CT-e não é válido para a combinação de UF de origem e destino.\n' +
       'O HiperTMS usa CFOP 5352 (operação interna) e 6352 (operação interestadual).\n' +
       'Possíveis causas:\n' +
       '- A UF de origem ou destino está errada nos dados do embarque.\n' +
@@ -99,17 +103,20 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '1. Verifique o endereço completo (com UF) do remetente e destinatário.\n' +
       '2. Atualize o cadastro em Cadastros → Clientes/Remetentes e Destinatários.\n' +
       '3. Emita o CT-e novamente.',
-    tags: ['539', 'cfop', 'uf', 'rejeicao', 'cte', 'intraestadual', 'interestadual'],
+    tags: ['519', 'cfop', 'uf', 'rejeicao', 'cte', 'intraestadual', 'interestadual'],
   },
   {
     topic: 'cte-rejeicao',
     category: 'suporte',
-    title: 'Código SEFAZ 562 — CT-e já cancelado',
+    title: 'Código SEFAZ 218 — CT-e já cancelado',
     content:
-      'Rejeição 562: tentativa de cancelar um CT-e que já foi cancelado anteriormente.\n' +
+      // F15 (2026-08-06): era "Código 562" — 562 real é sobre valor de ICMS
+      // em CT-e substituto, não sobre cancelamento. O código real de "já
+      // cancelado" é 218 (denegado, que é status fiscal diferente, é o 205).
+      'Rejeição 218: tentativa de cancelar um CT-e que já foi cancelado anteriormente.\n' +
       'Solução: não há ação necessária — o CT-e já está cancelado. Verifique o status em Operação → CT-e.\n' +
       'Se precisar de um novo documento, emita um CT-e substituto.',
-    tags: ['562', 'cancelamento', 'cte', 'ja cancelado', 'rejeicao'],
+    tags: ['218', 'cancelamento', 'cte', 'ja cancelado', 'rejeicao'],
   },
   {
     topic: 'cte-rejeicao',
@@ -127,16 +134,20 @@ export const SUPORTE_KB: KnowledgeItem[] = [
   {
     topic: 'cte-rejeicao',
     category: 'suporte',
-    title: 'Código SEFAZ 581 — Certificado digital inválido ou expirado',
+    title: 'Código SEFAZ 280/281 — Certificado digital inválido ou expirado',
     content:
-      'Rejeição 581: o certificado digital do emitente está inválido, expirado ou com senha incorreta.\n' +
+      // F15 (2026-08-06): era "Código 581" — 581 real é sobre o campo "Valor
+      // da Carga" do modal, não sobre certificado. Os códigos reais de
+      // certificado são 280 (inválido, genérico) e 281 (data de validade —
+      // ou seja, expirado especificamente).
+      'Rejeição 280 (certificado inválido) ou 281 (data de validade vencida): o certificado digital do emitente está inválido, expirado ou com senha incorreta.\n' +
       'Solução:\n' +
       '1. Acesse Administração → Configurações Fiscais → Certificados.\n' +
       '2. Verifique a data de validade do certificado.\n' +
-      '3. Se expirado: adquira um novo certificado junto à Autoridade Certificadora (Serpro, Certisign, etc.).\n' +
-      '4. Se válido mas com erro: remova e faça upload novamente, informando a senha correta.\n' +
+      '3. Se expirado (código 281): adquira um novo certificado junto à Autoridade Certificadora (Serpro, Certisign, etc.).\n' +
+      '4. Se válido mas com erro (código 280): remova e faça upload novamente, informando a senha correta.\n' +
       '5. Após renovar, emita o CT-e novamente.',
-    tags: ['581', 'certificado', 'expirado', 'invalido', 'pfx', 'senha', 'rejeicao'],
+    tags: ['280', '281', 'certificado', 'expirado', 'invalido', 'pfx', 'senha', 'rejeicao'],
   },
   {
     topic: 'cte-rejeicao',
@@ -166,7 +177,10 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       '4. Confirme — a CC-e é transmitida à SEFAZ.\n' +
       'Limitações da Carta de Correção:\n' +
       '- NÃO pode corrigir: valor total do frete, CNPJ das partes, dados do modal, número da NF-e.\n' +
-      '- Se a correção necessária não é permitida por CC-e, é necessário cancelar e reemitir o CT-e (prazo máximo de cancelamento: 24h após a autorização, exceto com NF-e vinculada).',
+      // F15 (2026-08-06): prazo corrigido de "24h" pra "7 dias (168h)" — conferido
+      // contra o catálogo oficial (código 220: "CT-e autorizado há mais de 7
+      // dias (168 horas)" é o limite real de cancelamento pra CT-e).
+      '- Se a correção necessária não é permitida por CC-e, é necessário cancelar e reemitir o CT-e (prazo máximo de cancelamento: 7 dias/168h após a autorização, exceto com NF-e vinculada).',
     tags: ['carta de correcao', 'cce', 'corrigir cte', 'cte errado', 'correcao fiscal'],
   },
   {
@@ -174,14 +188,16 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     category: 'suporte',
     title: 'Como cancelar um CT-e autorizado',
     content:
-      'Prazo para cancelamento: até 24h após a autorização pela SEFAZ (exceto quando há MDF-e vinculado ativo).\n' +
+      // F15 (2026-08-06): prazo corrigido de "24h" pra "7 dias (168h)" —
+      // conferido contra o catálogo oficial de rejeição (código 220).
+      'Prazo para cancelamento: até 7 dias (168h) após a autorização pela SEFAZ (exceto quando há MDF-e vinculado ativo).\n' +
       'Como cancelar:\n' +
       '1. Acesse Operação → CT-e e abra o documento.\n' +
       '2. Clique em "Cancelar CT-e".\n' +
       '3. Informe o motivo do cancelamento (mínimo 15 caracteres).\n' +
       '4. Confirme — o cancelamento é transmitido à SEFAZ.\n' +
       'Após o cancelamento, o CT-e fica com status "Cancelado" e você pode emitir um novo.\n' +
-      'Se o prazo de 24h passou, não é possível cancelar — neste caso use a Carta de Correção ou emita um CT-e Complementar/Substituto.',
+      'Se o prazo de 7 dias passou, não é possível cancelar — neste caso use a Carta de Correção ou emita um CT-e Complementar/Substituto.',
     tags: ['cancelar cte', 'cancelamento', 'prazo cancelamento', 'cte cancelado'],
   },
 
@@ -208,14 +224,32 @@ export const SUPORTE_KB: KnowledgeItem[] = [
     category: 'suporte',
     title: 'MDF-e rejeitado — principais causas',
     content:
+      // F15 (2026-08-06): "código 581" corrigido — o certificado é 280/281.
       'Causas comuns de rejeição do MDF-e:\n' +
-      '1. Certificado digital inválido ou expirado (código 581): renove o certificado.\n' +
+      '1. Certificado digital inválido (código 280) ou expirado (código 281): renove o certificado.\n' +
       '2. RNTRC não informado ou inválido: verifique o número RNTRC do veículo em Frota → Veículos.\n' +
       '3. Placa do veículo inválida: confira o cadastro do veículo em Frota → Veículos.\n' +
       '4. CT-e não autorizado vinculado: todos os CT-e incluídos no MDF-e devem estar autorizados antes da emissão do MDF-e.\n' +
       '5. UF de início/término inválida: verifique se a rota está corretamente cadastrada.\n' +
       'Verifique o código de rejeição retornado e corrija a causa antes de reemitir.',
     tags: ['mdfe', 'rejeicao', 'rntrc', 'placa', 'cte nao autorizado', 'mdf-e rejeitado'],
+  },
+  {
+    topic: 'mdfe-problemas',
+    category: 'suporte',
+    title: 'RNTRC não informado ou inválido — CT-e/MDF-e',
+    content:
+      // F15 (2026-08-06): antes vivia nos códigos SEFAZ 524/525 da tabela de
+      // rejeição, mas 524/525 reais são sobre CFOP e Carta de Correção — não
+      // achei o código SEFAZ real específico pra validação de RNTRC. A
+      // orientação continua válida (é um problema real e comum), só não fica
+      // mais presa a um número de código que não é dela.
+      'RNTRC (Registro Nacional de Transportadores Rodoviários de Cargas) é obrigatório pra emissão de CT-e/MDF-e em transporte rodoviário de carga.\n' +
+      'Dois lugares onde o RNTRC pode estar faltando ou errado:\n' +
+      '1. RNTRC da empresa (emitente): informar em Administração → Dados da Empresa. Deve ter 8 dígitos.\n' +
+      '2. RNTRC do veículo: verificar em Frota → Veículos → aba Documentos. Deve ser o RNTRC do proprietário ou arrendatário do veículo.\n' +
+      'Se o CT-e/MDF-e for rejeitado citando RNTRC, confira os dois cadastros antes de reemitir.',
+    tags: ['rntrc', 'antt', 'registro transportador', 'cte rejeitado', 'mdfe rejeitado'],
   },
 
   // ══════════════════════════════════════════════════════════

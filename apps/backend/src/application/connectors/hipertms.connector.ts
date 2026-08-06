@@ -1271,43 +1271,70 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
 
   async getRejectionInfo(code: string): Promise<RejectionInfo | null> {
     // Tabela local de rejeições comuns SEFAZ CT-e/MDF-e — base para diagnóstico offline.
-    // Atualizada com os principais códigos para suporte de primeiro nível.
+    //
+    // F15 (2026-08-06): CONFERIDA contra o catálogo oficial do MOC-CTe (via
+    // documentacao.nstecnologia.com.br, que compila o manual oficial). Achado
+    // sério na conferência: 6 dos 21 códigos originais tinham o SIGNIFICADO
+    // ERRADO — não erro de digitação, códigos que apontavam pra causa
+    // completamente diferente da real (ex.: 539 estava documentado como "CFOP
+    // inválido", mas o código oficial 539 é "duplicidade de CT-e com diferença
+    // na chave de acesso" — coisa nenhuma a ver). 539 e 581 chegaram a virar
+    // TÍTULO de artigo de KB com o número errado — corrigido junto
+    // (hipertms-suporte-kb.data.ts, ver correção 2026-08-06 nos artigos).
+    //
+    // O que mudou: código '302' removido (não localizado na fonte, sem como
+    // confirmar — melhor não ter entrada do que ter uma errada). RNTRC
+    // (antes nos códigos 524/525, que na verdade são sobre CFOP e Carta de
+    // Correção) virou artigo de KB próprio, sem número de código anexado,
+    // já que não achei o código SEFAZ real pra essa validação específica do
+    // HiperTMS — a orientação continua válida, só não fica mais associada a
+    // um número que não é dela.
     const known: Record<string, RejectionInfo> = {
-      // ── Acesso / Serviço ────────────────────────────────────────────────────
+      // ── Acesso / Serviço (cStat do webservice, não rejeição de regra) ───────
       '108': { code: '108', message: 'Serviço SEFAZ paralisado temporariamente', category: 'sistema', suggestedAction: 'Aguardar retorno do serviço e tentar novamente. Consulte cte.fazenda.gov.br.' },
       '109': { code: '109', message: 'Serviço SEFAZ paralisado sem previsão de retorno', category: 'sistema', suggestedAction: 'Aguardar e monitorar cte.fazenda.gov.br. Em prolongada indisponibilidade, acionar suporte para orientação sobre contingência.' },
       '214': { code: '214', message: 'Tamanho da mensagem excedeu o limite estabelecido', category: 'sistema', suggestedAction: 'Verificar se o XML está correto e dentro dos limites. Acionar suporte técnico.' },
 
       // ── Certificado ─────────────────────────────────────────────────────────
-      '280': { code: '280', message: 'Certificado digital transmissor diferente do emitente', category: 'cadastro', suggestedAction: 'Verificar se o certificado configurado pertence ao CNPJ emitente. Administração → Fiscal → Certificados.' },
-      '301': { code: '301', message: 'Uso de algoritmo de hash não permitido', category: 'sistema', suggestedAction: 'Certificado com algoritmo incompatível. Adquirir novo certificado A1 compatível com o padrão ICP-Brasil.' },
-      '302': { code: '302', message: 'Assinatura digital inválida', category: 'sistema', suggestedAction: 'Problema na assinatura do XML. Remover o certificado e fazer upload novamente. Se persistir, acionar suporte técnico.' },
-      '581': { code: '581', message: 'Certificado digital inválido ou expirado', category: 'cadastro', suggestedAction: 'Renovar o certificado digital PFX junto à Autoridade Certificadora. Depois, acessar Administração → Fiscal → Certificados e fazer novo upload.' },
+      '280': { code: '280', message: 'Certificado Transmissor inválido', category: 'cadastro', suggestedAction: 'Verificar se o certificado configurado pertence ao CNPJ emitente e está corretamente instalado. Administração → Fiscal → Certificados.' },
+      '281': { code: '281', message: 'Certificado Transmissor — data de validade vencida', category: 'cadastro', suggestedAction: 'Certificado expirado. Renovar o certificado digital PFX junto à Autoridade Certificadora (Serpro, Certisign, etc.) e fazer novo upload em Administração → Fiscal → Certificados.' },
+      '284': { code: '284', message: 'Certificado Transmissor revogado', category: 'cadastro', suggestedAction: 'Certificado foi revogado pela Autoridade Certificadora — não pode mais ser usado. Adquirir um novo certificado A1.' },
+      '301': { code: '301', message: 'Uso Denegado — irregularidade fiscal do emitente', category: 'fiscal', suggestedAction: 'A SEFAZ bloqueou o uso por pendência cadastral/fiscal do CNPJ emitente (não é problema técnico do sistema). Regularizar a situação junto à SEFAZ estadual antes de tentar emitir de novo.' },
 
-      // ── Emitente / Empresa ──────────────────────────────────────────────────
-      '401': { code: '401', message: 'IE do emitente inválida', category: 'cadastro', suggestedAction: 'Verificar Inscrição Estadual em Administração → Dados da Empresa. Confirmar IE ativa junto à SEFAZ estadual.' },
+      // ── Cadastro (CNPJ / IE / CPF) ───────────────────────────────────────────
+      '207': { code: '207', message: 'CNPJ do emitente inválido', category: 'cadastro', suggestedAction: 'Verificar CNPJ em Administração → Dados da Empresa. Precisa ser um CNPJ válido e ativo na Receita Federal.' },
+      '209': { code: '209', message: 'IE do emitente inválida', category: 'cadastro', suggestedAction: 'Verificar Inscrição Estadual em Administração → Dados da Empresa. Confirmar IE ativa junto à SEFAZ estadual.' },
+      '229': { code: '229', message: 'IE do emitente não informada', category: 'cadastro', suggestedAction: 'Preencher a Inscrição Estadual em Administração → Dados da Empresa — o campo está vazio.' },
+      '230': { code: '230', message: 'IE do emitente não cadastrada', category: 'cadastro', suggestedAction: 'A IE informada não consta na base da SEFAZ estadual. Confirmar o número junto à Receita Estadual antes de reemitir.' },
+      '401': { code: '401', message: 'CPF do remetente inválido', category: 'cadastro', suggestedAction: 'Verificar o CPF cadastrado do remetente em Cadastros → Remetentes. Corrigir e emitir novamente.' },
+      '420': { code: '420', message: 'CNPJ do remetente não cadastrado', category: 'cadastro', suggestedAction: 'O CNPJ do remetente não consta na base da SEFAZ como contribuinte na UF. Confirmar o cadastro do remetente.' },
+      '425': { code: '425', message: 'CNPJ do destinatário não cadastrado', category: 'cadastro', suggestedAction: 'O CNPJ do destinatário não consta na base da SEFAZ como contribuinte na UF. Confirmar o cadastro do destinatário.' },
       '564': { code: '564', message: 'CNPJ do emitente inválido', category: 'cadastro', suggestedAction: 'Verificar CNPJ em Administração → Dados da Empresa. CNPJ deve estar ativo na Receita Federal.' },
       '565': { code: '565', message: 'Emitente não habilitado para emitir CT-e', category: 'cadastro', suggestedAction: 'Empresa não está habilitada para emissão de CT-e nesta SEFAZ. Verificar credenciamento junto ao SEFAZ estadual.' },
 
-      // ── Duplicidade / Numeração ──────────────────────────────────────────────
+      // ── Duplicidade / Chave de acesso ────────────────────────────────────────
       '204': { code: '204', message: 'Duplicidade de CT-e', category: 'operacional', suggestedAction: 'CT-e com o mesmo número já está autorizado. Verificar em Operação → CT-e. Se precisar corrigir, cancele o existente e emita novo.' },
-      '205': { code: '205', message: 'CT-e já está cancelado na base da SEFAZ', category: 'operacional', suggestedAction: 'O cancelamento já foi processado. Não há ação necessária. Para nova carga, emitir um novo CT-e.' },
+      '216': { code: '216', message: 'Chave de Acesso difere da cadastrada na SEFAZ', category: 'operacional', suggestedAction: 'A chave de acesso informada não bate com a registrada. Conferir o número da chave (44 dígitos) antes de reemitir/consultar.' },
+      '236': { code: '236', message: 'Chave de Acesso com dígito verificador inválido', category: 'sistema', suggestedAction: 'A chave de acesso está incorreta (dígito verificador não confere). Confira se todos os 44 dígitos foram copiados certos.' },
 
-      // ── CFOP / Fiscal ───────────────────────────────────────────────────────
-      '539': { code: '539', message: 'CFOP inválido para a UF de operação', category: 'fiscal', suggestedAction: 'Verificar UF de origem e destino no embarque. O HiperTMS usa 5352 (interna) e 6352 (interestadual). Corrigir endereço do remetente/destinatário em Cadastros.' },
+      // ── CFOP ────────────────────────────────────────────────────────────────
+      '519': { code: '519', message: 'CFOP inválido para a operação', category: 'fiscal', suggestedAction: 'Verificar UF de origem e destino no embarque. O HiperTMS usa 5352 (interna) e 6352 (interestadual). Corrigir endereço do remetente/destinatário em Cadastros.' },
+      '524': { code: '524', message: 'CFOP inválido — informar 5932 ou 6932', category: 'fiscal', suggestedAction: 'Operação de retorno/redespacho precisa de CFOP 5932 (interna) ou 6932 (interestadual). Verificar o tipo de operação selecionado no embarque.' },
+      '676': { code: '676', message: 'CFOP informado inválido', category: 'fiscal', suggestedAction: 'O CFOP não é válido pra este tipo de operação. Conferir a natureza da operação (transporte normal, redespacho, etc.) selecionada no embarque.' },
 
-      // ── RNTRC / ANTT ────────────────────────────────────────────────────────
-      '524': { code: '524', message: 'RNTRC do emitente não informado ou inválido', category: 'cadastro', suggestedAction: 'Informar o RNTRC (Registro Nacional de Transportadores Rodoviários de Cargas) em Administração → Dados da Empresa. RNTRC deve ter 8 dígitos.' },
-      '525': { code: '525', message: 'RNTRC do veículo inválido', category: 'cadastro', suggestedAction: 'Verificar o RNTRC do veículo em Frota → Veículos → aba Documentos. Deve ser o número do RNTRC do proprietário ou arrendatário do veículo.' },
-
-      // ── Cancelamento ────────────────────────────────────────────────────────
-      '562': { code: '562', message: 'CT-e já cancelado anteriormente', category: 'operacional', suggestedAction: 'O CT-e já está cancelado — não é necessária nova ação. Emitir novo CT-e se necessário.' },
-      '580': { code: '580', message: 'Prazo de cancelamento esgotado (mais de 24h)', category: 'operacional', suggestedAction: 'Não é possível cancelar após 24h da autorização. Usar Carta de Correção (CC-e) para campos permitidos, ou emitir CT-e Complementar/Substituto.' },
-
-      // ── Dados da operação ───────────────────────────────────────────────────
-      '217': { code: '217', message: 'CT-e não encontrado na base da SEFAZ', category: 'operacional', suggestedAction: 'O CT-e não existe na SEFAZ. Verificar número e chave de acesso. Pode ser necessário reemitir.' },
+      // ── Cancelamento / Status do documento ──────────────────────────────────
+      '205': { code: '205', message: 'CT-e está denegado na base de dados da SEFAZ', category: 'fiscal', suggestedAction: 'CT-e denegado é diferente de cancelado — geralmente por pendência fiscal de uma das partes (emitente/remetente/destinatário). Verificar a situação fiscal envolvida antes de tentar novo documento.' },
+      '217': { code: '217', message: 'CT-e não consta na base de dados da SEFAZ', category: 'operacional', suggestedAction: 'O CT-e não existe na SEFAZ. Verificar número e chave de acesso. Pode ser necessário reemitir.' },
+      '218': { code: '218', message: 'CT-e já está cancelado na base de dados da SEFAZ', category: 'operacional', suggestedAction: 'O cancelamento já foi processado. Não há ação necessária. Para nova carga, emitir um novo CT-e.' },
+      '220': { code: '220', message: 'CT-e autorizado há mais de 7 dias — fora do prazo de cancelamento', category: 'operacional', suggestedAction: 'Não é mais possível cancelar após 7 dias (168h) da autorização. Usar Carta de Correção (CC-e) para campos permitidos, ou emitir CT-e Complementar/Substituto.' },
       '228': { code: '228', message: 'Data de emissão muito anterior à data atual', category: 'operacional', suggestedAction: 'A data de emissão não pode ser muito anterior à data atual (limite varia por UF). Emitir com a data correta.' },
-      '573': { code: '573', message: 'Duplicidade de evento para a chave do CT-e', category: 'operacional', suggestedAction: 'Evento já registrado para este CT-e (cancelamento ou CC-e). Verificar histórico em Operação → CT-e.' },
+      '525': { code: '525', message: 'Carta de Correção inválida (campo/grupo informado não existe no schema)', category: 'sistema', suggestedAction: 'O campo que a CC-e tenta corrigir não é um campo passível de correção via CC-e. Verificar quais campos podem ser alterados por Carta de Correção — se não for um deles, precisa de CT-e Substituto.' },
+      '580': { code: '580', message: 'Falha no Schema XML específico para o modal', category: 'sistema', suggestedAction: 'Erro técnico na estrutura do XML pro modal de transporte selecionado. Acionar suporte técnico com o XML e o modal (rodoviário/ferroviário/etc.) usado.' },
+      '631': { code: '631', message: 'Duplicidade de evento para a chave do CT-e', category: 'operacional', suggestedAction: 'Evento já registrado para este CT-e (cancelamento, CC-e ou outro). Verificar histórico em Operação → CT-e antes de repetir a ação.' },
+
+      // ── MDF-e ────────────────────────────────────────────────────────────────
+      '683': { code: '683', message: 'Chave de acesso de MDF-e inválida (ano fora do intervalo)', category: 'operacional', suggestedAction: 'Conferir a chave de acesso do MDF-e — o ano informado precisa estar entre 2012 e o ano atual.' },
+      '686': { code: '686', message: 'Chave de acesso de MDF-e inválida (modelo diferente de 58)', category: 'operacional', suggestedAction: 'A chave de acesso não é de um MDF-e (modelo 58). Confirmar se o documento correto foi informado.' },
 
       // ── Genérico ────────────────────────────────────────────────────────────
       '999': { code: '999', message: 'Erro não catalogado na SEFAZ', category: 'sistema', suggestedAction: 'Erro genérico SEFAZ. Acionar suporte técnico enviando o XML completo do CT-e e o horário da tentativa.' },
