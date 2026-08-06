@@ -35,6 +35,23 @@ const MAX_ATTEMPTS = 5;
 const BACKOFF_SECONDS = [10, 30, 120, 600, 1800];
 const RETRY_LOCK_KEY = 'ticket-sync:retry:lock';
 
+/**
+ * Reduz o status interno da conversa (6 valores: open, waiting_customer,
+ * waiting_internal, escalated, opt_out, closed) para o par que foi de fato
+ * combinado com o time do TMS (open | closed).
+ *
+ * Achado em produção (2026-08-06): o primeiro ticket sincronizado tinha
+ * status `escalated` (Lia chamou um humano, ainda não fechou) e o TMS
+ * devolveu 400 — a validação deles foi construída em cima da especificação,
+ * que só documentou "closed" e "open" como exemplo. Nunca documentei os
+ * outros 4 estados internos, então normalizar aqui é mais simples e mais
+ * seguro do que pedir pro TMS aceitar um vocabulário que nem faz sentido
+ * pro cliente ver ("waiting_internal" não diz nada pra quem está de fora).
+ */
+function normalizeStatusForTms(status: string): 'open' | 'closed' {
+  return status === 'closed' ? 'closed' : 'open';
+}
+
 type TicketSyncConversation = {
   id: string;
   tenantId: string;
@@ -105,7 +122,7 @@ export class TicketSyncService {
       ticketNumber: conv.ticketNumber,
       category: conv.ticketCategory,
       priority: conv.ticketPriority,
-      status: conv.status,
+      status: normalizeStatusForTms(conv.status),
       subject: conv.subject,
       rootCause: conv.rootCause,
       // Resolvido pela Lia = ela resolveu sem NENHUM humano assumir. Uma vez que

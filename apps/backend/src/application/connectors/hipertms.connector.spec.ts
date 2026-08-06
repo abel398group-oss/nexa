@@ -426,10 +426,33 @@ describe('HiperTmsConnector — syncTicket() (F9)', () => {
   });
 
   it('4xx/5xx: ok=false com status e erro — não lança', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400 } as any);
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => '' } as any);
     const r = await connector.syncTicket({ ticketNumber: 1 });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(400);
+  });
+
+  // Achado em produção (2026-08-06): o erro só guardava "HTTP 400", sem o
+  // detalhe da validação — descobrir a causa exigia pedir log de dentro do
+  // TMS. O corpo da resposta já vem com a lista de erros; só faltava ler.
+  it('400 de validação: inclui o corpo da resposta no erro', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false, status: 400,
+      text: async () => '{"message":["status must be one of: open, closed"]}',
+    } as any);
+    const r = await connector.syncTicket({ ticketNumber: 1, status: 'escalated' });
+    expect(r.error).toContain('status must be one of');
+  });
+
+  it('corpo da resposta indisponível (stream já consumido etc): não quebra', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false, status: 500,
+      text: async () => { throw new Error('stream consumido'); },
+    } as any);
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(500);
+    expect(r.error).toBe('HTTP 500');
   });
 
   it('rede falha (timeout/DNS): ok=false com a mensagem do erro, não lança', async () => {

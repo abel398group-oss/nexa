@@ -136,7 +136,12 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         signal: AbortSignal.timeout(10_000),
       });
       if (res.ok) return { ok: true, status: res.status };
-      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+      // 2026-08-06: era só `HTTP ${status}` — um 400 de validação (categoria,
+      // status, csatScore fora do contrato) ficava sem detalhe nenhum no log,
+      // e descobrir a causa exigia pedir o log de dentro do TMS. O corpo da
+      // resposta deles já vem com a lista de erros — só não estava sendo lido.
+      const detalhe = await res.text().catch(() => '');
+      return { ok: false, status: res.status, error: `HTTP ${res.status}${detalhe ? `: ${detalhe.slice(0, 300)}` : ''}` };
     } catch (err: any) {
       return { ok: false, error: err?.message ?? 'erro desconhecido' };
     }

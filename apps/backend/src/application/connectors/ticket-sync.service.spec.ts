@@ -96,6 +96,25 @@ describe('TicketSyncService', () => {
       expect(connector.syncTicket.mock.calls[0][0].resolvedByAi).toBe(false);
     });
 
+    // Achado em produção (2026-08-06): o primeiro ticket real tinha status
+    // 'escalated' (Lia chamou humano, ainda não fechou) e o TMS devolveu 400 —
+    // a especificação só documentou 'closed'/'open' como valores possíveis.
+    it('normaliza status interno pra open/closed — TMS só conhece esses dois', async () => {
+      const prisma = makePrisma();
+      const connector = makeConnector();
+      const svc = new TicketSyncService(prisma, connector, makeLock());
+
+      for (const interno of ['open', 'waiting_customer', 'waiting_internal', 'escalated', 'opt_out']) {
+        prisma.aiConversation.findUnique.mockResolvedValue(conv({ status: interno }));
+        await svc.syncOne('c1');
+        expect(connector.syncTicket.mock.calls.at(-1)[0].status).toBe('open');
+      }
+
+      prisma.aiConversation.findUnique.mockResolvedValue(conv({ status: 'closed' }));
+      await svc.syncOne('c1');
+      expect(connector.syncTicket.mock.calls.at(-1)[0].status).toBe('closed');
+    });
+
     it('resolvedByAi é null quando o ticket ainda não fechou (status != closed)', async () => {
       const prisma = makePrisma();
       prisma.aiConversation.findUnique.mockResolvedValue(conv({ status: 'open' }));

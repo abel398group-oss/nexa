@@ -43,10 +43,19 @@ já é preenchido e nunca foi enviado a lugar nenhum:
 | `ticketCategory` | `String?` | `case-classifier-agent.service.ts` — 12 valores (fiscal, cte, mdfe, frete, financeiro, cadastro, frota, usuarios, integracoes, api, erro_sistema, treinamento) | `"cte"` |
 | `ticketPriority` | `String?` | Mesmo classificador — `critical \| high \| medium \| low` | `"high"` |
 | `rootCause` | `String?` | `DiagnosticAgent` — causa-raiz em texto livre | `"Certificado digital vencido"` |
-| `status` | enum | `open \| escalated \| closed \| ...` | `"closed"` |
+| `status` | enum | `open \| waiting_customer \| waiting_internal \| escalated \| opt_out \| closed` — **normalizado pra `open`/`closed` antes de sair** (ver nota abaixo) | `"closed"` |
 | `resolvedAt` | `DateTime?` | Quando a IA marcou como resolvido | — |
 | `csatScore` | `Int?` | Nota 1-5 que o cliente dá no encerramento | `4` |
 | `subject` | `String?` | Resumo curto do chamado | `"CT-e não emite"` |
+
+> **Nota (2026-08-06):** o primeiro ticket sincronizado em produção tinha
+> status interno `escalated` (Lia chamou humano, ainda não fechado) e o TMS
+> devolveu 400 — a validação deles foi construída certinha em cima do que este
+> documento tinha (só `open`/`closed` como exemplo, os outros 4 estados nunca
+> foram documentados). Corrigido do lado Nexa: `TicketSyncService` normaliza
+> qualquer status interno pra `open` ou `closed` antes de enviar — **o TMS
+> nunca recebe os outros 4 valores**, o contrato original está correto sem
+> precisar mudar nada do lado deles.
 
 ## O que o Nexa propõe enviar
 
