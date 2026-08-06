@@ -29,35 +29,56 @@ describe('AnthropicService — timeout & retry (C1)', () => {
     json: async () => ({ content: [{ text }], usage: { input_tokens: 3, output_tokens: 5 } }),
   });
 
+  // CI fix (2026-08-06): estes dois testes esperavam o backoff real
+  // (setTimeout de até ~1s, base 500ms + jitter — anthropic.service.ts:178)
+  // dentro do timeout padrão de 5s do vitest. Sob CI carregado/lento, um
+  // setTimeout de ~1s pode legitimamente não disparar a tempo — não é bug de
+  // aplicação, é teste dependente de relógio real. Mesmo padrão já usado em
+  // monitor-dispatch.service.spec.ts: fake timers + advanceTimersByTimeAsync,
+  // pra rodar em milissegundos de tempo real, imune à carga da máquina.
   it('retenta uma vez em 429 e então tem sucesso', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, status: 429, text: async () => 'rate limited' })
-      .mockResolvedValueOnce(okResponse('resposta'));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 429, text: async () => 'rate limited' })
+        .mockResolvedValueOnce(okResponse('resposta'));
+      vi.stubGlobal('fetch', fetchMock);
 
-    const { AnthropicService } = await import('./anthropic.service');
-    const svc = new AnthropicService();
+      const { AnthropicService } = await import('./anthropic.service');
+      const svc = new AnthropicService();
 
-    await expect(svc.complete('sys', 'user')).resolves.toBe('resposta');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      const promise = svc.complete('sys', 'user');
+      await vi.advanceTimersByTimeAsync(2_000); // > backoff máximo (base 500ms + jitter até 500ms)
+      await expect(promise).resolves.toBe('resposta');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('retenta em 503 (5xx) e propaga usage no completeWithUsage', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'unavailable' })
-      .mockResolvedValueOnce(okResponse('oi'));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'unavailable' })
+        .mockResolvedValueOnce(okResponse('oi'));
+      vi.stubGlobal('fetch', fetchMock);
 
-    const { AnthropicService } = await import('./anthropic.service');
-    const svc = new AnthropicService();
+      const { AnthropicService } = await import('./anthropic.service');
+      const svc = new AnthropicService();
 
-    const out = await svc.completeWithUsage('sys', 'user');
-    expect(out.text).toBe('oi');
-    expect(out.tokensIn).toBe(3);
-    expect(out.tokensOut).toBe(5);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      const promise = svc.completeWithUsage('sys', 'user');
+      await vi.advanceTimersByTimeAsync(2_000);
+      const out = await promise;
+      expect(out.text).toBe('oi');
+      expect(out.tokensIn).toBe(3);
+      expect(out.tokensOut).toBe(5);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('NÃO retenta em 400 (erro do cliente) — falha na 1ª tentativa', async () => {
