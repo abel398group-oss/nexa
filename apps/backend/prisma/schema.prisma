@@ -394,6 +394,13 @@ model AiKnowledgeBase {
   // Vetor semântico (RAG / pgvector). Tipo não nativo do Prisma → lido/escrito via SQL bruto.
   embedding      Unsupported("vector(384)")?
   createdAt      DateTime             @default(now()) @map("created_at")
+  // F11 (2026-08-06, fix de auditoria): retrieve() nunca respeitava
+  // AiKnowledgeVersion.approved — um rascunho do TicketIntelligenceService
+  // (autor "lucio", não revisado) ficava visível pra Lia assim que era criado.
+  // Default TRUE de propósito: os 1438 artigos já existentes (conector +
+  // painel) continuam visíveis sem backfill — só criações NOVAS com
+  // autoApprove=false (hoje: só o Lúcio) nascem com approved=false.
+  approved       Boolean              @default(true) @map("approved")
 
   versions AiKnowledgeVersion[]
 

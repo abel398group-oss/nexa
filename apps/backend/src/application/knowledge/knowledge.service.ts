@@ -121,7 +121,7 @@ export class KnowledgeService {
           const rows = (await this.prisma.$queryRawUnsafe(
             `SELECT id, title, content, category, topic, 1 - (embedding <=> $1::vector) AS score
                FROM ai_knowledge_base
-              WHERE tenant_id = $2 AND embedding IS NOT NULL${filtros}
+              WHERE tenant_id = $2 AND embedding IS NOT NULL AND approved = true${filtros}
               ORDER BY embedding <=> $1::vector
               LIMIT $3`,
             ...params,
@@ -159,8 +159,8 @@ export class KnowledgeService {
     } else {
       all = await this.prisma.aiKnowledgeBase.findMany({
         where: produto
-          ? { tenantId, OR: [{ productCode: produto }, { productCode: null }] }
-          : { tenantId },
+          ? { tenantId, approved: true, OR: [{ productCode: produto }, { productCode: null }] }
+          : { tenantId, approved: true },
         take: 100,
         orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
       });
@@ -227,6 +227,7 @@ export class KnowledgeService {
         title: dto.title,
         content: dto.content,
         tags: dto.tags ?? [],
+        approved: autoApprove,
         versions: {
           create: { version: 1, content: dto.content, approved: autoApprove, author },
         },
@@ -345,7 +346,7 @@ export class KnowledgeService {
             this.prisma.aiKnowledgeBase.update({
               where: { id: existing.id },
               data: {
-                ...(contentChanged ? { content: it.content } : {}),
+                ...(contentChanged ? { content: it.content, approved: true } : {}),
                 category: it.category,
                 topic: it.topic,
                 tags: it.tags ?? [],
@@ -400,7 +401,7 @@ export class KnowledgeService {
       }),
       this.prisma.aiKnowledgeBase.update({
         where: { id: kb.id },
-        data: { content: version.content },
+        data: { content: version.content, approved: true },
       }),
     ]);
     this.invalidateCache(tenantId);

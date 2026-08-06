@@ -64,7 +64,11 @@ export class KnowledgeController {
 
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateKnowledgeDto) {
-    return this.knowledge.create(tenantId, dto);
+    // F11: quem cria pelo painel É a curadoria humana — autoApprove=true.
+    // Só o rascunho automático do TicketIntelligenceService ("lucio") nasce
+    // não aprovado (default do parâmetro), pra passar por revisão antes de
+    // aparecer nas respostas da Lia. Ver knowledge.service.ts (retrieve/create).
+    return this.knowledge.create(tenantId, dto, 'human-panel', true);
   }
 
   // importa conhecimento de um produto conectado (ex.: hipertms)

@@ -14,6 +14,8 @@ interface KB {
   title: string;
   content: string;
   productCode?: string;
+  /** F11: rascunho gerado pelo TicketIntelligenceService ainda não revisado por humano. */
+  approved?: boolean;
   versions?: Version[];
 }
 
@@ -130,6 +132,23 @@ export function KnowledgePage() {
       setBusy(false);
     }
   }
+  async function approve() {
+    if (!sel?.versions?.length) return;
+    setBusy(true);
+    try {
+      // versions vem ordenado desc (findOne) — [0] é a versão mais recente
+      await api.post(`/knowledge/versions/${sel.versions[0].id}/approve`);
+      toast.success('Artigo aprovado! A Lia já pode usar este conhecimento.');
+      await invalidate();
+      const r = await api.get(`/knowledge/${sel.id}`);
+      setSel(r.data);
+    } catch {
+      toast.error('Erro ao aprovar.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function del() {
     if (!sel) return;
     const ok = await confirm({
@@ -265,7 +284,14 @@ export function KnowledgePage() {
               >
                 <input type="checkbox" checked={selected.has(k.id)} onChange={() => toggleSel(k.id)} className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500" />
                 <button onClick={() => open(k)} className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-medium text-base-content">{k.title}</div>
+                  <div className="flex items-center gap-1.5 truncate text-sm font-medium text-base-content">
+                    {k.approved === false && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700" title="Rascunho gerado pela IA — ainda não revisado">
+                        Rascunho
+                      </span>
+                    )}
+                    <span className="truncate">{k.title}</span>
+                  </div>
                   <div className="mt-0.5 truncate text-xs text-base-content/50">{k.category} · {k.topic}</div>
                 </button>
               </div>
@@ -351,11 +377,23 @@ export function KnowledgePage() {
               <div className="text-xs uppercase text-base-content/40">{sel.category} · {sel.topic}</div>
               {!editing && (
                 <div className="flex gap-1">
+                  {sel.approved === false && (
+                    <Button size="sm" onClick={approve} loading={busy} className="bg-amber-600 hover:bg-amber-700">
+                      {!busy && <Icon name="check" className="h-4 w-4" />} Aprovar
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={startEdit} title="Editar"><Icon name="edit" className="h-4 w-4" /> Editar</Button>
                   <button onClick={del} title="Excluir" className="inline-flex h-8 items-center gap-1 rounded-md px-2 py-1 text-sm text-red-500 hover:bg-red-50"><Icon name="trash" className="h-4 w-4" /> Excluir</button>
                 </div>
               )}
             </div>
+            {sel.approved === false && (
+              <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <Icon name="knowledge" className="h-3.5 w-3.5 shrink-0" />
+                Rascunho gerado automaticamente a partir de um chamado resolvido — a Lia só vai usar este
+                conteúdo depois que você aprovar.
+              </div>
+            )}
 
             {editing ? (
               <div className="mb-6 space-y-3">

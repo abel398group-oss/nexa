@@ -113,7 +113,7 @@ describe('KnowledgeService.retrieve — separação por produto', () => {
 
     await svc.retrieve('t1', 'quanto custa o plano', 3);
 
-    expect(prisma.aiKnowledgeBase.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1' });
+    expect(prisma.aiKnowledgeBase.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1', approved: true });
   });
 
   it('com productCode: filtra NO BANCO pelo produto + genéricos', async () => {
@@ -124,6 +124,7 @@ describe('KnowledgeService.retrieve — separação por produto', () => {
 
     expect(prisma.aiKnowledgeBase.findMany.mock.calls[0][0].where).toEqual({
       tenantId: 't1',
+      approved: true,
       OR: [{ productCode: 'pneus' }, { productCode: null }],
     });
   });
