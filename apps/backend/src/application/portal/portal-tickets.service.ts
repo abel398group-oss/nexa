@@ -105,8 +105,10 @@ export class PortalTicketsService {
     });
     if (!ticket) throw new NotFoundException('Chamado nao encontrado');
 
+    // F12: nota interna nunca aparece pro cliente do portal — consulta própria,
+    // não reaproveita ConversationsService.getMessages (ver seção "F12" lá).
     const messages = await this.prisma.aiMessage.findMany({
-      where: { conversationId: id },
+      where: { conversationId: id, isInternal: false } as any,
       orderBy: { createdAt: 'asc' },
       select: { id: true, direction: true, content: true, intent: true, ack: true, createdAt: true },
     });

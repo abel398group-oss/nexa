@@ -124,6 +124,8 @@ model User {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   sessions Session[]
+  // F12: chamados de suporte atribuídos a este analista (assignedAnalystId).
+  assignedConversations AiConversation[]
 
   @@index([tenantId])
   @@map("users")
@@ -240,6 +242,12 @@ model AiConversation {
   assignedSellerId String?   @map("assigned_seller_id")
   assignedSeller   Seller?   @relation(fields: [assignedSellerId], references: [id])
   assignedAt       DateTime? @map("assigned_at")
+  // F12 (2026-08-06, operação do time de suporte): dono humano do chamado —
+  // não confundir com assignedSellerId (vendedor, lado comercial). Ver
+  // docs/reviews/2026-08-06-auditoria-operacao-time-suporte.md, item 1.
+  assignedAnalystId   String?   @map("assigned_analyst_id")
+  assignedAnalyst     User?     @relation(fields: [assignedAnalystId], references: [id])
+  assignedAnalystAt   DateTime? @map("assigned_analyst_at")
   lastActivityAt   DateTime? @map("last_activity_at") // atualizado a cada msg — base da regra de 7 dias
   outcome          String?   @map("outcome") // won | lost | no_response | opt_out | resolved
   outcomeAt        DateTime? @map("outcome_at")
@@ -332,6 +340,11 @@ model AiMessage {
   campaignId       String?          @map("campaign_id")
   ack              Int              @default(0) // 0 pend,1 enviado ✓,2 entregue ✓✓,3 lido ✓✓azul
   createdAt        DateTime         @default(now()) @map("created_at")
+  // F12 (2026-08-06): nota interna — visível só pra equipe de suporte, NUNCA
+  // despachada pro cliente (WAHA/widget/portal). Default false preserva todo
+  // histórico existente. Ver ConversationsService.addMessage/getMessages e
+  // ConversationsGateway.handleMessageCreated pros pontos que filtram isto.
+  isInternal       Boolean          @default(false) @map("is_internal")
 
   @@index([conversationId])
   @@index([correlationId])

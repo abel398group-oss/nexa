@@ -17,11 +17,20 @@ export class ConversationsService {
   ) {}
 
   // Inbox: lista conversas do tenant
-  async findAll(tenantId: string, q: PaginationQueryDto, sellerId?: string): Promise<Paginated<any>> {
+  // F12: assignedAnalystId !== undefined filtra por dono do chamado —
+  // string = só daquele analista, null = só fila sem dono (não confundir
+  // com "omitido" = sem filtro, todo mundo vê tudo).
+  async findAll(
+    tenantId: string,
+    q: PaginationQueryDto,
+    sellerId?: string,
+    assignedAnalystId?: string | null,
+  ): Promise<Paginated<any>> {
     // Exclui conversas arquivadas da listagem padrão.
     // OR necessário: `outcome != 'archived'` em SQL exclui rows com NULL (three-valued logic).
     const where: any = { tenantId, OR: [{ outcome: null }, { outcome: { not: 'archived' } }] };
     if (sellerId) where.assignedSellerId = sellerId; // carteira do vendedor
+    if (assignedAnalystId !== undefined) where.assignedAnalystId = assignedAnalystId;
     if (q.search) where.phone = { contains: q.search };
     const [items, total] = await Promise.all([
       this.prisma.aiConversation.findMany({
@@ -31,6 +40,7 @@ export class ConversationsService {
         orderBy: { startedAt: 'desc' },
         include: {
           assignedSeller: { select: { name: true } },
+          assignedAnalyst: { select: { id: true, name: true } },
         },
       }).then(async (convs: any[]) => {
         // Enriquece com dados do contato (nome, tags) via phone+tenantId
@@ -212,6 +222,41 @@ export class ConversationsService {
     return { id, assignedSellerId: updated.assignedSellerId, assignedSeller: updated.assignedSeller };
   }
 
+  // F12: atribui/reatribui um chamado de SUPORTE a um analista humano (userId
+  // null = devolve pra fila geral). Não confundir com assign() acima, que é
+  // o vendedor do lado comercial.
+  async assignAnalyst(tenantId: string, id: string, userId: string | null) {
+    await this.findOne(tenantId, id); // valida escopo do tenant
+    if (userId) {
+      // Aceita usuário do tenant OU admin da plataforma (tenantId null) — mesmo
+      // universo de quem já pode operar o Inbox via EffectiveTenantInterceptor.
+      const analyst = await this.prisma.user.findFirst({
+        where: { id: userId, OR: [{ tenantId }, { tenantId: null }] },
+        select: { id: true },
+      });
+      if (!analyst) throw new NotFoundException('Analista não encontrado');
+    }
+    const updated = await this.prisma.aiConversation.update({
+      where: { id },
+      data: { assignedAnalystId: userId, assignedAnalystAt: userId ? new Date() : null },
+      include: { assignedAnalyst: { select: { id: true, name: true } } },
+    });
+    this.events.emit('conversation.updated', { tenantId, conversationId: id });
+    return { id, assignedAnalystId: updated.assignedAnalystId, assignedAnalyst: updated.assignedAnalyst };
+  }
+
+  // F12: lista enxuta de analistas do tenant pro seletor de atribuição do Inbox.
+  // Deliberadamente fora do UsersController (@RequirePerm('users'), admin-only
+  // de gestão de conta) — qualquer operador autenticado do Inbox precisa poder
+  // ver a quem atribuir um chamado, sem precisar de permissão de administrar usuários.
+  async listAnalysts(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // Suporte: marca o chamado como resolvido (fecha) ou reabre. Grava histórico.
   // C1: fechamento manual (resolved=true) gera csatToken — operador fecha no Inbox
   // e o cliente ainda precisa poder avaliar via WhatsApp ou portal.
@@ -300,10 +345,13 @@ export class ConversationsService {
     }).catch(() => null); // não bloqueia se a conversa já foi fechada
   }
 
-  async getMessages(tenantId: string, id: string) {
+  // F12: includeInternal=false por padrão de propósito — todo caminho que
+  // alimenta o cliente (widget/portal) ou o prompt da IA precisa do default
+  // seguro. Só a rota HTTP do Inbox (analista logado) passa includeInternal:true.
+  async getMessages(tenantId: string, id: string, opts: { includeInternal?: boolean } = {}) {
     await this.findOne(tenantId, id);
     return this.prisma.aiMessage.findMany({
-      where: { conversationId: id },
+      where: { conversationId: id, ...(opts.includeInternal ? {} : { isInternal: false }) },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -401,6 +449,13 @@ export class ConversationsService {
       /** ADR 035: true only on the human inbox route — first human outbound activates takeover. */
       byHuman?: boolean;
       /**
+       * F12: nota interna — visível só pra equipe de suporte no Inbox, NUNCA
+       * despachada ao cliente. Quando true: não ativa o takeover ADR 035 (não
+       * é uma resposta ao cliente) e NUNCA passa pelo envio WAHA, mesmo em
+       * conversa de WhatsApp.
+       */
+      isInternal?: boolean;
+      /**
        * DISP-001: quando true, uma recusa do WAHA vira exceção em vez de só um
        * warn no log. Usado pelo disparo de campanha, que precisa distinguir
        * "entregue" de "tentou e falhou" para não marcar o alvo como 'sent'.
@@ -416,7 +471,7 @@ export class ConversationsService {
     // ADR 035: first outbound sent by a human activates the per-conversation
     // takeover — Lia switches to draft-only mode until release (close or
     // explicit return). Lia's own sends (metadata.aiGenerated) never set this.
-    if (dto.byHuman && dto.direction === 'outbound' && !(conv as any).humanTakeoverAt) {
+    if (dto.byHuman && dto.direction === 'outbound' && !dto.isInternal && !(conv as any).humanTakeoverAt) {
       await this.prisma.aiConversation.update({
         where: { id: conv.id },
         data: { humanTakeoverAt: new Date() } as any,
@@ -442,7 +497,8 @@ export class ConversationsService {
         tokensIn: dto.tokensIn,
         tokensOut: dto.tokensOut,
         estimatedCostUsd: dto.estimatedCostUsd,
-      },
+        isInternal: dto.isInternal ?? false,
+      } as any,
     });
     // atualiza timestamp de última atividade (base da regra de auto-fechamento em 7 dias)
     await this.touchActivity(conv.id);
@@ -454,7 +510,9 @@ export class ConversationsService {
 
     // saída → entrega no WhatsApp via WAHA.
     // web_chat e portal: resposta já vai pelo WebSocket (message.created); WAHA não é chamado.
-    if (dto.direction === 'outbound' && (conv.sourceChannel as string) !== 'web_chat' && (conv.sourceChannel as string) !== 'portal') {
+    // F12: nota interna NUNCA sai pro WhatsApp, mesmo em conversa desse canal —
+    // regra de segurança crítica, não é só uma otimização de rota.
+    if (!dto.isInternal && dto.direction === 'outbound' && (conv.sourceChannel as string) !== 'web_chat' && (conv.sourceChannel as string) !== 'portal') {
       const r = await this.waha.sendText(conv.phone, dto.content);
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);

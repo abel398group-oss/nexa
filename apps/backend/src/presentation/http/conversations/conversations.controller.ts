@@ -23,10 +23,27 @@ export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
   @Get()
-  async findAll(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query() q: PaginationQueryDto) {
-    const result = await this.conversations.findAll(tenantId, q, sellerScope(user));
+  async findAll(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Query() q: PaginationQueryDto,
+    // F12: fila do Inbox de suporte — 'mine' | 'unassigned' | 'all' (default).
+    @Query('queue') queue?: string,
+  ) {
+    const assignedAnalystId =
+      queue === 'mine' ? user?.userId
+      : queue === 'unassigned' ? null
+      : undefined;
+    const result = await this.conversations.findAll(tenantId, q, sellerScope(user), assignedAnalystId);
     this.logger.log(`[list] tenantId=${tenantId} role=${user?.role} total=${result.total} items=${result.items.length}`);
     return result;
+  }
+
+  // F12: lista analistas do tenant pro seletor de atribuição — antes de :id
+  // de propósito, senão o Nest casa "analysts" como um :id.
+  @Get('analysts')
+  listAnalysts(@CurrentTenant() tenantId: string) {
+    return this.conversations.listAnalysts(tenantId);
   }
 
   @Get(':id')
@@ -36,7 +53,8 @@ export class ConversationsController {
 
   @Get(':id/messages')
   messages(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.getMessages(tenantId, id);
+    // F12: rota do Inbox (analista autenticado) — único chamador que vê nota interna.
+    return this.conversations.getMessages(tenantId, id, { includeInternal: true });
   }
 
   @Get(':id/timeline')
@@ -68,6 +86,19 @@ export class ConversationsController {
     @Body() dto: { sellerId: string | null },
   ) {
     return this.conversations.assign(tenantId, id, dto.sellerId ?? null);
+  }
+
+  // F12: atribuição de chamado de SUPORTE a um analista humano — "Assumir
+  // chamado" no frontend chama isto com { userId: user.id } (o próprio
+  // analista logado); reatribuir a outro analista manda o userId dele;
+  // { userId: null } devolve pra fila geral.
+  @Patch(':id/assign-analyst')
+  assignAnalyst(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: { userId: string | null },
+  ) {
+    return this.conversations.assignAnalyst(tenantId, id, dto.userId ?? null);
   }
 
   // Suporte: resolver (fecha com outcome=resolved) ou reabrir o chamado.
@@ -104,10 +135,19 @@ export class ConversationsController {
   addMessage(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { direction: 'inbound' | 'outbound'; content: string; intent?: string; metadata?: Record<string, unknown> },
+    @Body() dto: {
+      direction: 'inbound' | 'outbound';
+      content: string;
+      intent?: string;
+      metadata?: Record<string, unknown>;
+      /** F12: nota interna — nunca sai pro cliente. Ver ConversationsService.addMessage. */
+      isInternal?: boolean;
+    },
   ) {
     // ADR 035: this route is the human inbox — an outbound here is a human
     // reply and activates the per-conversation takeover (Lia goes draft-only).
+    // F12: internal notes never activate takeover — that's handled by the
+    // isInternal guard inside addMessage(), not here.
     return this.conversations.addMessage(tenantId, id, { ...dto, byHuman: dto.direction === 'outbound' });
   }
 

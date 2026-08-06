@@ -67,6 +67,16 @@ describe('PortalTicketsService — isolamento do cliente', () => {
     expect(out.messages).toHaveLength(1);
   });
 
+  // F12: nota interna do analista NUNCA pode aparecer no portal do cliente.
+  it('detail: filtra isInternal=false na consulta de mensagens', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', status: 'open' });
+    prisma.aiMessage.findMany.mockResolvedValue([]);
+    await svc.detail(customer, 'c1');
+    expect(prisma.aiMessage.findMany.mock.calls[0][0].where).toMatchObject({
+      conversationId: 'c1', isInternal: false,
+    });
+  });
+
   it('reply: 404 quando o chamado nao e do cliente (ownership)', async () => {
     prisma.aiConversation.findFirst.mockResolvedValue(null);
     await expect(svc.reply(customer, 'alheio', 'msg')).rejects.toBeInstanceOf(NotFoundException);

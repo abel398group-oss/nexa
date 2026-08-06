@@ -199,6 +199,12 @@ export class ConversationsGateway
     }
 
     client.join(`conv:${data.conversationId}`);
+    // F12: só quem entra por AQUI (inbox do operador, com tenantId no socket)
+    // também entra na sala "staff" — o widget do cliente (handleConnection,
+    // canal web_chat/portal) nunca chama 'join' e nunca ganha esta sala. É o
+    // que garante que handleMessageCreated() consiga separar nota interna de
+    // mensagem pro cliente: a sala staff nunca tem um socket de cliente dentro.
+    if (tenantId) client.join(`staff:conv:${data.conversationId}`);
     return { joined: data.conversationId };
   }
 
@@ -268,15 +274,26 @@ export class ConversationsGateway
   // ── Evento interno: nova mensagem criada → empurra para a sala ───────────────
   @OnEvent('message.created')
   handleMessageCreated(payload: { conversationId: string; message: unknown }) {
-    const room = `conv:${payload.conversationId}`;
-    this.server.to(room).emit('message', payload.message);
-    // Contrato ADR 027 do widget TMS: evento 'web_chat:message' { id, body, isAgent, createdAt }.
     const m = payload.message as {
       id?: string;
       content?: string;
       direction?: string;
       createdAt?: Date | string;
+      isInternal?: boolean;
     } | null;
+
+    // F12: nota interna nunca entra na sala compartilhada com o cliente
+    // (conv:<id> tem tanto o operador quanto o widget do cliente conectados —
+    // ver onJoin/handleConnection). Vai só pra staff:conv:<id>, sala que o
+    // widget do cliente nunca ganha. Retorna cedo: não gera web_chat:message.
+    if (m?.isInternal) {
+      this.server.to(`staff:conv:${payload.conversationId}`).emit('message', payload.message);
+      return;
+    }
+
+    const room = `conv:${payload.conversationId}`;
+    this.server.to(room).emit('message', payload.message);
+    // Contrato ADR 027 do widget TMS: evento 'web_chat:message' { id, body, isAgent, createdAt }.
     // Só outbound (resposta da Lia/operador): o widget já ecoa a própria mensagem localmente.
     if (m?.id && m.content != null && m.direction === 'outbound') {
       this.server.to(room).emit('web_chat:message', {
