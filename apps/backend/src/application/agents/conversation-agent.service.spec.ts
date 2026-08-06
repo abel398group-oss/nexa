@@ -742,6 +742,12 @@ describe('ConversationAgentService.handle()', () => {
       expect(res.route.agent).toBe('support');
       expect(mockHandoff.consume).toHaveBeenCalledWith('abc123xyz');
       expect(mockSupport.ask).toHaveBeenCalled();
+      // F10: page do token de handoff deve chegar ao SupportAgent via tmsCustomer,
+      // pra habilitar a saudação contextual (ver diagnostic/resolution-agent).
+      expect(mockSupport.ask).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ tmsCustomer: expect.objectContaining({ page: '/frota' }) }),
+      );
     });
 
     it('does not force support when HANDOFF token is invalid/expired', async () => {
@@ -797,6 +803,22 @@ describe('ConversationAgentService.handle()', () => {
 
       expect(res.route.agent).toBe('support');
       expect(mockSupport.ask).toHaveBeenCalled();
+    });
+
+    it('propagates portalIdentity.page to SupportAgent via tmsCustomer (F10)', async () => {
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+
+      const svc = makeService();
+      await svc.handle('t1', {
+        message: 'não consigo emitir CT-e',
+        conversationId: 'conv1',
+        portalIdentity: { externalId: 'ext42', name: 'Empresa XYZ', page: '/fiscal/cte' },
+      });
+
+      expect(mockSupport.ask).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ tmsCustomer: expect.objectContaining({ page: '/fiscal/cte' }) }),
+      );
     });
   });
 });

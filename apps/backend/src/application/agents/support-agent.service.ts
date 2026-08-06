@@ -52,7 +52,7 @@ export class SupportAgentService {
     input: {
       question: string;
       conversationId?: string;
-      tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string } | null;
+      tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string; page?: string | null } | null;
     },
   ): Promise<AgentReply> {
 
@@ -122,7 +122,7 @@ export class SupportAgentService {
 
     // ── 2. DIAGNÓSTICO ──────────────────────────────────────────────────────
     const tmsForDiag = input.tmsCustomer?.externalId
-      ? { externalId: input.tmsCustomer.externalId, name: input.tmsCustomer.name, plan: input.tmsCustomer.plan }
+      ? { externalId: input.tmsCustomer.externalId, name: input.tmsCustomer.name, plan: input.tmsCustomer.plan, page: input.tmsCustomer.page }
       : null;
 
     const diag = await this.diagnostic.diagnose({
@@ -147,7 +147,7 @@ export class SupportAgentService {
       priority: classification.priority,
       diagnostic: diag,
       history,
-      tmsCustomer: input.tmsCustomer ? { name: input.tmsCustomer.name } : null,
+      tmsCustomer: input.tmsCustomer ? { name: input.tmsCustomer.name, page: input.tmsCustomer.page } : null,
     });
 
     // ── 4. ESCALONAMENTO ────────────────────────────────────────────────────

@@ -63,6 +63,10 @@ interface WebChatSocketData {
   externalId: string;
   name: string | null;
   conversationId: string;
+  // F10 (contexto do widget, 2026-08-06): tela de origem do handoff — já vinha
+  // no token (`HandoffContext.page`) mas morria aqui, no socket. A Lia nunca
+  // sabia de qual tela o cliente veio, mesmo o dado já estando disponível.
+  page: string | null;
 }
 
 @WebSocketGateway({ cors: { origin: wsCorsOrigin, credentials: true }, path: '/ws' })
@@ -151,6 +155,7 @@ export class ConversationsGateway
       tenantId: ctx.tenantId,
       externalId: ctx.externalId,
       name: ctx.name ?? null,
+      page: ctx.page ?? null,
       conversationId,
     };
 
@@ -228,6 +233,7 @@ export class ConversationsGateway
       conversationId: d.conversationId,
       externalId: d.externalId,
       name: d.name,
+      page: d.page,
       message: text,
     });
 

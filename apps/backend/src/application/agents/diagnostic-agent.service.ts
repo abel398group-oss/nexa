@@ -38,7 +38,7 @@ export class DiagnosticAgentService {
     message: string;
     category: TicketCategory;
     history: string;
-    tmsCustomer: { externalId: string; name: string; plan?: string } | null;
+    tmsCustomer: { externalId: string; name: string; plan?: string; page?: string | null } | null;
   }): Promise<DiagnosticResult> {
     const diagnosticData: Record<string, any> = {};
     // true quando alguma leitura voltou vazia PORQUE o disjuntor do TMS está aberto —
@@ -94,8 +94,11 @@ export class DiagnosticAgentService {
     // contrato do token nem gastar uma chamada a mais.
     const planoDoContrato = (diagnosticData.contract as any)?.plan;
     const plano = input.tmsCustomer?.plan || planoDoContrato || 'desconhecido';
+    // F10: tela do TMS de onde o cliente abriu o chat (vem do token de handoff, ADR 027).
+    // Permite saudação contextual ("vi que você está na tela de X") em vez de genérica.
+    const paginaCtx = input.tmsCustomer?.page ? `, na tela: ${input.tmsCustomer.page}` : '';
     const customerCtx = input.tmsCustomer
-      ? `Cliente: ${input.tmsCustomer.name}, plano: ${plano}`
+      ? `Cliente: ${input.tmsCustomer.name}, plano: ${plano}${paginaCtx}`
       : 'Cliente não identificado no TMS';
 
     const dataCtx = tmsUnstable

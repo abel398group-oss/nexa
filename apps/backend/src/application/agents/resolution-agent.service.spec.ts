@@ -199,4 +199,25 @@ describe('ResolutionAgentService', () => {
     expect(r.draft).not.toContain('Não consegui identificar a solução');
     expect(r.resolved).toBe(false);
   });
+
+  // ─── F10: page (tela do TMS de origem do chat, do token de handoff) ────────
+  it('inclui a tela do TMS no prompt quando tmsCustomer.page está presente', async () => {
+    const ai = mockAi(aiJson({}));
+    const svc = new ResolutionAgentService(ai, mockKnowledge([]), mockPlaybook(''));
+
+    await svc.resolve({ ...baseInput, tmsCustomer: { name: 'Fulano', page: '/fiscal/cte' } });
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).toContain('/fiscal/cte');
+  });
+
+  it('não menciona tela quando tmsCustomer.page está ausente', async () => {
+    const ai = mockAi(aiJson({}));
+    const svc = new ResolutionAgentService(ai, mockKnowledge([]), mockPlaybook(''));
+
+    await svc.resolve(baseInput);
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).not.toContain('O cliente abriu o chat a partir da tela');
+  });
 });

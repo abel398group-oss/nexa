@@ -397,4 +397,37 @@ describe('DiagnosticAgentService', () => {
 
     expect(result.diagnosticData.tmsIndisponivel).toBe(true);
   });
+
+  // ─── F10: page (tela do TMS de origem do chat, do token de handoff) ────────
+  it('inclui a tela do TMS no prompt quando tmsCustomer.page está presente', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector();
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    await svc.diagnose({
+      message: 'não emite CT-e',
+      category: 'cte',
+      history: '',
+      tmsCustomer: { ...customer, page: '/fiscal/cte' },
+    });
+
+    const userMsg = ai.complete.mock.calls[0][1];
+    expect(userMsg).toContain('/fiscal/cte');
+  });
+
+  it('não menciona tela quando tmsCustomer.page está ausente', async () => {
+    const ai = mockAi(aiJson({}));
+    const connector = mockConnector();
+    const svc = new DiagnosticAgentService(ai, connector);
+
+    await svc.diagnose({
+      message: 'não emite CT-e',
+      category: 'cte',
+      history: '',
+      tmsCustomer: customer,
+    });
+
+    const userMsg = ai.complete.mock.calls[0][1];
+    expect(userMsg).not.toContain('na tela:');
+  });
 });

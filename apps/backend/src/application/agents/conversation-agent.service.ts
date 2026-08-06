@@ -165,7 +165,7 @@ export class ConversationAgentService {
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
   async handle(
     tenantId: string,
-    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
   ): Promise<HandleResult> {
     const _t0 = Date.now(); // MON-009: início da medição
 
@@ -416,7 +416,7 @@ export class ConversationAgentService {
   // Devolve a rota (possivelmente ajustada) + o rascunho final e seus metadados.
   private async generateResponse(
     tenantId: string,
-    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null } },
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
     route: RouteDecision,
     ctx: {
       agentMessage: string;
@@ -425,7 +425,7 @@ export class ConversationAgentService {
       msgs: any[];
       liaAlreadyTalked: boolean;
       handoffContext: unknown;
-      tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+      tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
       hasPanel: boolean;
     },
   ): Promise<{
@@ -597,12 +597,12 @@ export class ConversationAgentService {
   // Devolve a rota (possivelmente ajustada) + a identidade + a mensagem limpa que os agentes leem.
   private async resolveIdentity(
     tenantId: string,
-    input: { message: string; conversationId?: string; portalIdentity?: { externalId: string; name?: string | null } },
+    input: { message: string; conversationId?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
     route: RouteDecision,
   ): Promise<{
     route: RouteDecision;
     handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null;
-    tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+    tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
     hasPanel: boolean;
     agentMessage: string;
   }> {
@@ -612,7 +612,7 @@ export class ConversationAgentService {
     const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
     let handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null = null;
     // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
-    let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean } | undefined;
+    let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
 
     if (handoffMatch) {
       handoffContext = await this.handoff.consume(handoffMatch[1]);
@@ -620,7 +620,7 @@ export class ConversationAgentService {
         route = { ...route, agent: 'support' };
         // identidade segura: o nome vem do token (TMS autenticado), então a Lia já sabe quem é
         if (handoffContext.name) {
-          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false };
+          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false, page: handoffContext.page ?? null };
         }
         this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} nome=${handoffContext.name ?? '-'} page=${handoffContext.page ?? '-'}`);
       } else {
@@ -633,7 +633,7 @@ export class ConversationAgentService {
     // Portal do cliente: identidade vem da SESSAO (token), nao do telefone -> forca suporte.
     if (input.portalIdentity) {
       route = { ...route, agent: 'support' };
-      tmsCustomer = { externalId: input.portalIdentity.externalId, name: input.portalIdentity.name ?? 'Cliente', isAdmin: false };
+      tmsCustomer = { externalId: input.portalIdentity.externalId, name: input.portalIdentity.name ?? 'Cliente', isAdmin: false, page: input.portalIdentity.page ?? null };
       this.logger.log(`Portal: identidade da sessao ext=${input.portalIdentity.externalId} -> rota suporte`);
     }
     // Remove marcadores da mensagem antes de processar (não aparecem na resposta)

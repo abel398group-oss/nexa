@@ -34,7 +34,7 @@ export class ResolutionAgentService {
     priority: TicketPriority;
     diagnostic: DiagnosticResult;
     history: string;
-    tmsCustomer: { name: string } | null;
+    tmsCustomer: { name: string; page?: string | null } | null;
   }): Promise<ResolutionResult> {
     // Busca KB com 4 resultados — suporte precisa de mais contexto que vendas
     const kb = await this.knowledge.retrieve(input.tenantId, input.message, 4, { excludeCategories: ['comercial'] });
@@ -61,6 +61,11 @@ export class ResolutionAgentService {
       : '';
 
     const customerName = input.tmsCustomer?.name ?? 'cliente';
+    // F10: tela do TMS de onde o cliente abriu o chat (handoff.service.ts) — permite
+    // saudação contextual em vez de genérica. Só aparece se o widget mandou a página.
+    const pageCtx = input.tmsCustomer?.page
+      ? `\nO cliente abriu o chat a partir da tela "${input.tmsCustomer.page}" do HiperTMS — se fizer sentido, use isso para contextualizar a saudação/resposta (ex.: "vi que você está em ${input.tmsCustomer.page}"), mas não invente relação com o problema se não houver uma.`
+      : '';
 
     // Persona/tom editável do SUPORTE (Config de Suporte). Só afeta o tom — as
     // regras fixas abaixo (anti-alucinação, usar só KB/diagnóstico) prevalecem.
@@ -69,7 +74,7 @@ export class ResolutionAgentService {
 
     const system = `Você é a Lia, assistente de SUPORTE do HiperTMS.
 ${supportTone}Você está atendendo ${customerName}, que já é cliente ativo.
-NÃO tente vender. Foco ÚNICO: resolver o problema do cliente.
+NÃO tente vender. Foco ÚNICO: resolver o problema do cliente.${pageCtx}
 
 REGRAS CRÍTICAS:
 - Resposta curta e direta para WhatsApp. PROIBIDO markdown (asteriscos, underline, #, backtick).

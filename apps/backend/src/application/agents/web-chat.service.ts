@@ -23,6 +23,9 @@ export interface WebChatInboundEvent {
   conversationId: string;
   externalId: string;
   name: string | null;
+  // F10: tela do TMS de onde o cliente abriu o chat — já existia no token,
+  // só não chegava até aqui. Ver conversations.gateway.ts (WebChatSocketData).
+  page: string | null;
   message: string;
 }
 
@@ -43,7 +46,7 @@ export class WebChatService {
         conversationId: event.conversationId,
         // portalIdentity → pipeline sabe que é cliente autenticado → rota suporte direto
         // identidade vem do token (TMS autenticado), nunca do que o cliente digitou (LGPD)
-        portalIdentity: { externalId: event.externalId, name: event.name },
+        portalIdentity: { externalId: event.externalId, name: event.name, page: event.page },
       });
     } catch (err: any) {
       this.logger.error(

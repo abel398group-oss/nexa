@@ -233,3 +233,43 @@ describe('SupportAgentService — C1 CSAT intake via WhatsApp (ticket fechado)',
     expect(deps.classifier.classify).toHaveBeenCalled();
   });
 });
+
+// ─── F10: propagação de tmsCustomer.page (tela do TMS de origem do chat) ─────
+describe('SupportAgentService — F10 propagação de page', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: SupportAgentService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({
+      resolvedAt: null, autoCloseAt: null, status: 'open', outcome: null, csatToken: null, csatScore: null,
+    });
+  });
+
+  it('repassa page ao DiagnosticAgent e ao ResolutionAgent quando presente no tmsCustomer', async () => {
+    await svc.ask('t1', {
+      question: 'nao consigo emitir CT-e',
+      conversationId: 'c1',
+      tmsCustomer: { externalId: 'ext1', name: 'João', isAdmin: false, page: '/fiscal/cte' },
+    });
+
+    expect(deps.diagnostic.diagnose).toHaveBeenCalledWith(
+      expect.objectContaining({ tmsCustomer: expect.objectContaining({ page: '/fiscal/cte' }) }),
+    );
+    expect(deps.resolution.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ tmsCustomer: expect.objectContaining({ page: '/fiscal/cte' }) }),
+    );
+  });
+
+  it('sem tmsCustomer: nao quebra e page nao aparece', async () => {
+    await svc.ask('t1', { question: 'nao consigo emitir CT-e', conversationId: 'c1' });
+
+    expect(deps.diagnostic.diagnose).toHaveBeenCalledWith(
+      expect.objectContaining({ tmsCustomer: null }),
+    );
+    expect(deps.resolution.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ tmsCustomer: null }),
+    );
+  });
+});
