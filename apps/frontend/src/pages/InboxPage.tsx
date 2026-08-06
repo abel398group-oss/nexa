@@ -25,6 +25,7 @@ import {
   assignSeller as reassignSeller,
   assignAnalyst as reassignAnalyst,
   listAnalystsMini,
+  setLinkedIssue as saveLinkedIssueApi,
   setConversationResolved,
   archiveConversation,
   deleteConversation,
@@ -130,6 +131,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [queueFilter, setQueueFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
   // F12: composer em modo "nota interna" — nunca sai pro cliente.
   const [isInternalMode, setIsInternalMode] = useState(false);
+  // F13: edição inline do link da issue de dev vinculada ao chamado.
+  const [editingIssue, setEditingIssue] = useState(false);
+  const [issueUrlInput, setIssueUrlInput] = useState('');
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -400,6 +404,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setTmsLookup(null);
     setShowTimeline(false);
     setIsInternalMode(false); // F12: nunca herda o modo nota-interna da conversa anterior
+    setEditingIssue(false); // F13: idem pro editor de issue de dev
     // histórico unificado: junta as mensagens de todas as conversas do contato, em ordem
     Promise.all(
       g.convs.map((cv) => getConversationMessages(cv.id)),
@@ -464,6 +469,23 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     const assignedAnalystId = r?.assignedAnalystId ?? null;
     setActive((a) => (a ? { ...a, assignedAnalyst, assignedAnalystId } : a));
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedAnalyst, assignedAnalystId } : c)));
+  }
+
+  // F13: vincula/remove o link da issue de dev — vincular move o chamado pra
+  // waiting_internal no backend (só se ainda não estava fechado/opt-out).
+  async function saveLinkedIssue(url: string | null) {
+    if (!active) return;
+    try {
+      const r = await saveLinkedIssueApi(active.id, url);
+      const linkedIssueUrl = r?.linkedIssueUrl ?? null;
+      const status = r?.status ?? active.status;
+      setActive((a) => (a ? { ...a, linkedIssueUrl, status } : a));
+      setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, linkedIssueUrl, status } : c)));
+      setEditingIssue(false);
+      setIssueUrlInput('');
+    } catch {
+      toast.error('Link inválido — precisa ser uma URL http(s).');
+    }
   }
 
   /**
@@ -755,6 +777,15 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                             {c.assignedAnalystId === user?.id ? 'Você' : (c.assignedAnalyst?.name ?? 'Analista')}
                           </span>
                         )}
+                        {/* F13: chamado com issue de dev vinculada — bate o olho na lista */}
+                        {scope === 'support' && c.linkedIssueUrl && (
+                          <span
+                            title={`Issue vinculada: ${c.linkedIssueUrl}`}
+                            className="inline-flex items-center gap-0.5 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                          >
+                            🔗 dev
+                          </span>
+                        )}
                         {c.campaign && (
                           <span
                             title={`Veio da campanha: ${c.campaign.name}`}
@@ -1032,6 +1063,70 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                     {active.escalationSummary}
                   </pre>
                 </div>
+              </div>
+            )}
+
+            {/* F13: link de issue de dev (Jira/GitHub/ClickUp/Trello) — ponte manual com N3 */}
+            {scope === 'support' && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-base-200 bg-[var(--surface)] px-4 py-2">
+                <span className="text-[11px] text-base-content/40 shrink-0">Issue de Dev:</span>
+                {editingIssue ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={issueUrlInput}
+                      onChange={(e) => setIssueUrlInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && saveLinkedIssue(issueUrlInput.trim() || null)}
+                      placeholder="https://jira.../BUG-123, github.com/.../issues/42..."
+                      className="min-w-[280px] flex-1 rounded-full border border-dashed border-base-300 bg-transparent px-2.5 py-0.5 text-[11px] text-base-content outline-none placeholder:text-base-content/40 focus:border-brand-500"
+                    />
+                    <button
+                      onClick={() => saveLinkedIssue(issueUrlInput.trim() || null)}
+                      className="rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-medium text-white hover:bg-brand-700"
+                    >
+                      Salvar
+                    </button>
+                    <button
+                      onClick={() => { setEditingIssue(false); setIssueUrlInput(''); }}
+                      className="text-[11px] text-base-content/50 hover:text-base-content"
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                ) : active.linkedIssueUrl ? (
+                  <>
+                    <a
+                      href={active.linkedIssueUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex max-w-[320px] items-center gap-1 truncate rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-500/15 dark:text-violet-300"
+                      title={active.linkedIssueUrl}
+                    >
+                      🔗 <span className="truncate">{active.linkedIssueUrl}</span>
+                    </a>
+                    <button
+                      onClick={() => { setIssueUrlInput(active.linkedIssueUrl ?? ''); setEditingIssue(true); }}
+                      className="text-base-content/40 hover:text-base-content"
+                      title="Editar link"
+                    >
+                      <Icon name="edit" className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => saveLinkedIssue(null)}
+                      className="text-base-content/40 hover:text-red-500"
+                      title="Remover vínculo"
+                    >
+                      <Icon name="close" className="h-3 w-3" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setIssueUrlInput(''); setEditingIssue(true); }}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-base-300 px-2.5 py-0.5 text-[11px] text-base-content/50 hover:border-brand-500 hover:text-brand-600"
+                  >
+                    <Icon name="plus" className="h-3 w-3" /> Vincular issue
+                  </button>
+                )}
               </div>
             )}
 

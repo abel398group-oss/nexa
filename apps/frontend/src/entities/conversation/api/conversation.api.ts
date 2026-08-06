@@ -65,6 +65,16 @@ export async function listAnalystsMini(): Promise<AnalystMini[]> {
   return r.data;
 }
 
+// Vincula (ou remove, url=null) o link da issue de dev (Jira/GitHub/ClickUp/
+// Trello) — o backend move o chamado pra waiting_internal quando vincula.
+export async function setLinkedIssue(
+  id: string,
+  url: string | null,
+): Promise<Pick<Conversation, 'linkedIssueUrl'> & { status: string }> {
+  const r = await api.patch(`/conversations/${id}/linked-issue`, { url });
+  return r.data;
+}
+
 // Suporte: resolver (fecha) ou reabrir o chamado.
 export async function setConversationResolved(
   id: string,

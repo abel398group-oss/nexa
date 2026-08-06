@@ -363,3 +363,69 @@ describe('ConversationsService — F12 addMessage com isInternal', () => {
     expect(deps.waha.sendText).toHaveBeenCalled();
   });
 });
+
+// ─── F13: link de issue de dev move o chamado pra waiting_internal ───────────
+
+describe('ConversationsService — F13 setLinkedIssue', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('vincula URL em chamado aberto: grava o link E move status pra waiting_internal', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ ...existingConv, status: 'open' });
+
+    const r = await svc.setLinkedIssue('t1', 'conv-1', 'https://jira.example.com/BUG-123');
+
+    const updateCall = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(updateCall.data.linkedIssueUrl).toBe('https://jira.example.com/BUG-123');
+    expect(updateCall.data.status).toBe('waiting_internal');
+    expect(deps.prisma.conversationStageHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ reason: 'issue_dev_vinculada', toStatus: 'waiting_internal' }) }),
+    );
+    expect(r.status).toBe('waiting_internal');
+  });
+
+  it('vincula URL em chamado FECHADO: grava o link mas NÃO ressuscita o status', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ ...existingConv, status: 'closed' });
+
+    const r = await svc.setLinkedIssue('t1', 'conv-1', 'https://github.com/org/repo/issues/42');
+
+    const updateCall = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(updateCall.data.linkedIssueUrl).toBe('https://github.com/org/repo/issues/42');
+    expect(updateCall.data.status).toBeUndefined();
+    expect(deps.prisma.conversationStageHistory.create).not.toHaveBeenCalled();
+    expect(r.status).toBe('closed');
+  });
+
+  it('já está waiting_internal: não gera transição/histórico duplicado', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ ...existingConv, status: 'waiting_internal' });
+
+    await svc.setLinkedIssue('t1', 'conv-1', 'https://trello.com/c/abc123');
+
+    const updateCall = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(updateCall.data.status).toBeUndefined();
+    expect(deps.prisma.conversationStageHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('remove o link (url=null): limpa o campo, NÃO mexe no status', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ ...existingConv, status: 'waiting_internal' });
+
+    const r = await svc.setLinkedIssue('t1', 'conv-1', null);
+
+    const updateCall = deps.prisma.aiConversation.update.mock.calls[0][0];
+    expect(updateCall.data.linkedIssueUrl).toBeNull();
+    expect(updateCall.data.status).toBeUndefined();
+    expect(r.status).toBe('waiting_internal');
+  });
+
+  it('URL inválida (sem http/https): rejeita antes de gravar', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({ ...existingConv, status: 'open' });
+
+    await expect(svc.setLinkedIssue('t1', 'conv-1', 'javascript:alert(1)')).rejects.toThrow();
+    expect(deps.prisma.aiConversation.update).not.toHaveBeenCalled();
+  });
+});

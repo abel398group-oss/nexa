@@ -11,6 +11,7 @@ export {
   assignSeller,
   assignAnalyst,
   listAnalystsMini,
+  setLinkedIssue,
   setConversationResolved,
   archiveConversation,
   deleteConversation,

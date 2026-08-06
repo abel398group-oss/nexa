@@ -23,6 +23,8 @@ export interface Conversation {
   /** F12: dono humano do chamado de SUPORTE — não confundir com assignedSeller (comercial). */
   assignedAnalyst?: { id: string; name: string | null } | null;
   assignedAnalystId?: string | null;
+  /** F13: link da issue de dev (Jira/GitHub/ClickUp/Trello) vinculada manualmente ao chamado. */
+  linkedIssueUrl?: string | null;
 }
 
 // Mensagem de uma conversa (timeline do Inbox).

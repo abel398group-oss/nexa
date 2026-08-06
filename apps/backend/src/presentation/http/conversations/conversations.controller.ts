@@ -101,6 +101,17 @@ export class ConversationsController {
     return this.conversations.assignAnalyst(tenantId, id, dto.userId ?? null);
   }
 
+  // F13: vincula (ou remove, url=null) o link da issue de dev (Jira/GitHub/
+  // ClickUp/Trello) — move o chamado pra waiting_internal quando vincula.
+  @Patch(':id/linked-issue')
+  setLinkedIssue(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: { url: string | null },
+  ) {
+    return this.conversations.setLinkedIssue(tenantId, id, dto.url?.trim() || null);
+  }
+
   // Suporte: resolver (fecha com outcome=resolved) ou reabrir o chamado.
   // Frontend chama PATCH /conversations/:id/resolve com { resolved: boolean }.
   @Patch(':id/resolve')

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
@@ -255,6 +255,60 @@ export class ConversationsService {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
+  }
+
+  // F13: vincula (ou remove, url=null) o link de uma issue externa de dev
+  // (Jira/GitHub/ClickUp/Trello) a este chamado. Sem integração ativa — é o
+  // suporte colando o link manualmente depois de abrir a issue na ferramenta
+  // do time de engenharia.
+  //
+  // Vincular uma issue É, por definição, "aguardando ação interna de
+  // engenharia" — por isso também move o status pra waiting_internal, a
+  // menos que o chamado já esteja fechado/opt-out (não ressuscita um chamado
+  // encerrado só porque alguém colou um link nele depois). Remover o link
+  // (url=null) NÃO reverte o status — fica a critério do analista usar os
+  // controles normais de resolver/reabrir.
+  async setLinkedIssue(tenantId: string, id: string, url: string | null) {
+    const conv = await this.findOne(tenantId, id);
+    if (url && !/^https?:\/\/\S+$/.test(url)) {
+      throw new BadRequestException('Link da issue precisa ser uma URL http(s) válida');
+    }
+
+    const willMoveToWaitingInternal =
+      !!url && !['closed', 'opt_out'].includes(conv.status as string) && conv.status !== 'waiting_internal';
+
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.aiConversation.update({
+        where: { id },
+        data: {
+          linkedIssueUrl: url,
+          ...(willMoveToWaitingInternal ? { status: 'waiting_internal' as any } : {}),
+        },
+      }),
+      ...(willMoveToWaitingInternal
+        ? [
+            this.prisma.conversationStageHistory.create({
+              data: {
+                conversationId: id,
+                fromStatus: conv.status as string,
+                toStatus: 'waiting_internal',
+                fromOutcome: conv.outcome ?? null,
+                toOutcome: conv.outcome ?? null,
+                reason: 'issue_dev_vinculada',
+                changedAt: now,
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    this.events.emit('conversation.updated', { tenantId, conversationId: id });
+    return {
+      id,
+      linkedIssueUrl: url,
+      status: willMoveToWaitingInternal ? 'waiting_internal' : conv.status,
+    };
   }
 
   // Suporte: marca o chamado como resolvido (fecha) ou reabre. Grava histórico.

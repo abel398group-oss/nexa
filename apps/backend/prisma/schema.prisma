@@ -248,6 +248,11 @@ model AiConversation {
   assignedAnalystId   String?   @map("assigned_analyst_id")
   assignedAnalyst     User?     @relation(fields: [assignedAnalystId], references: [id])
   assignedAnalystAt   DateTime? @map("assigned_analyst_at")
+  // F13 (2026-08-06, Ciclo 2 — ponte com Dev/N3): link da issue externa
+  // (Jira/GitHub/ClickUp/Trello) que este chamado depende pra ser resolvido.
+  // Sem integração ativa — é o suporte colando o link manualmente. Ver
+  // docs/reviews/2026-08-06-auditoria-operacao-time-suporte.md, item 6.
+  linkedIssueUrl      String?   @map("linked_issue_url")
   lastActivityAt   DateTime? @map("last_activity_at") // atualizado a cada msg — base da regra de 7 dias
   outcome          String?   @map("outcome") // won | lost | no_response | opt_out | resolved
   outcomeAt        DateTime? @map("outcome_at")
