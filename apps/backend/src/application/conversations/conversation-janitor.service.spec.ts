@@ -208,10 +208,20 @@ describe('ConversationJanitorService — N4 dedup persistente (slaAlertedAt)', (
   let svc: ConversationJanitorService;
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000 - 1000);
 
+  // CI fix (2026-08-06): este bloco usava Date.now() real, sem travar o relógio
+  // como os demais blocos do arquivo. O SLA conta só HORÁRIO ÚTIL (support-hours.ts)
+  // — dependendo da hora real em que a suíte roda, "10 horas atrás" pode cair
+  // inteiro fora do expediente, e businessHoursBetween() nunca bate os 4h de
+  // SLA de prioridade "alta" → notifications.create nunca é chamado. Teste
+  // instável (flaky), não bug de aplicação. Mesmo padrão de trava dos blocos
+  // acima (QUARTA_17H_BRT).
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(QUARTA_17H_BRT);
     deps = makeDeps();
     svc = makeService(deps);
   });
+  afterEach(() => vi.useRealTimers());
 
   it('nao re-alerta ticket com slaAlertedAt < 24h (dedup DB)', async () => {
     // O banco já filtra via slaAlertedAt na query — simula retorno vazio (filtrado pelo where)
