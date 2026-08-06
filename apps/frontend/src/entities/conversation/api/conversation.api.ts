@@ -1,7 +1,7 @@
 // Funções puras de acesso à API de conversas (FSD — sem React).
 // Única camada que conhece os endpoints `/conversations`.
 import { api } from '@/shared/lib/api';
-import type { Conversation, Message, ConversationListResult } from '../types/conversation.types';
+import type { Conversation, Message, ConversationListResult, AnalystMini } from '../types/conversation.types';
 
 // Lista as conversas do tenant. Aceita um AbortSignal (cancela ao desmontar).
 export async function listConversations(signal?: AbortSignal): Promise<ConversationListResult> {
@@ -14,11 +14,12 @@ export async function getConversationMessages(id: string): Promise<Message[]> {
   return r.data;
 }
 
-export async function sendMessage(id: string, content: string): Promise<void> {
+export async function sendMessage(id: string, content: string, isInternal = false): Promise<void> {
   await api.post(`/conversations/${id}/messages`, {
     direction: 'outbound',
     content,
     metadata: { senderType: 'human' },
+    isInternal,
   });
 }
 
@@ -45,6 +46,22 @@ export async function assignSeller(
   sellerId: string | null,
 ): Promise<Pick<Conversation, 'assignedSeller' | 'assignedSellerId'>> {
   const r = await api.patch(`/conversations/${id}/assign`, { sellerId });
+  return r.data;
+}
+
+// Suporte: (re)atribuir o chamado a um analista humano (ou desatribuir com null).
+// Não confundir com assignSeller acima — aquele é o lado comercial.
+export async function assignAnalyst(
+  id: string,
+  userId: string | null,
+): Promise<Pick<Conversation, 'assignedAnalyst' | 'assignedAnalystId'>> {
+  const r = await api.patch(`/conversations/${id}/assign-analyst`, { userId });
+  return r.data;
+}
+
+// Lista enxuta de analistas do tenant, pro seletor de atribuição do Inbox.
+export async function listAnalystsMini(): Promise<AnalystMini[]> {
+  const r = await api.get('/conversations/analysts');
   return r.data;
 }
 

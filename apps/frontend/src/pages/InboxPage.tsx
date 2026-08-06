@@ -23,6 +23,8 @@ import {
   returnConversationToAi,
   setConversationOutcome,
   assignSeller as reassignSeller,
+  assignAnalyst as reassignAnalyst,
+  listAnalystsMini,
   setConversationResolved,
   archiveConversation,
   deleteConversation,
@@ -124,6 +126,10 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [sellerFilter, setSellerFilter] = useState(''); // '' = todos · '__none__' = sem vendedor
+  // F12: fila de suporte por dono do chamado — só usada quando scope === 'support'.
+  const [queueFilter, setQueueFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
+  // F12: composer em modo "nota interna" — nunca sai pro cliente.
+  const [isInternalMode, setIsInternalMode] = useState(false);
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -241,6 +247,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     queryKey: ['sellers-mini'],
     queryFn: listSellersMini,
   });
+  // F12: analistas do tenant (pra "Assumir chamado" / reatribuir no suporte)
+  const { data: analysts = [] } = useQuery({
+    queryKey: ['analysts-mini'],
+    queryFn: listAnalystsMini,
+    enabled: scope === 'support',
+  });
   // follow-ups automáticos (read-only) pra indicar no header da conversa
   const { data: followups = [] } = useQuery({
     queryKey: ['followups'],
@@ -345,6 +357,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     .filter((c) =>
       !sellerFilter || (sellerFilter === '__none__' ? !c.assignedSellerId : c.assignedSellerId === sellerFilter),
     )
+    // F12: fila de suporte — 'mine' = meus chamados, 'unassigned' = fila geral sem dono.
+    .filter((c) => {
+      if (scope !== 'support' || queueFilter === 'all') return true;
+      if (queueFilter === 'unassigned') return !c.assignedAnalystId;
+      return c.assignedAnalystId === user?.id;
+    })
     .sort((a, b) => {
       // escalated sempre no topo
       if (a.status === 'escalated' && b.status !== 'escalated') return -1;
@@ -381,6 +399,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setActive(c);
     setTmsLookup(null);
     setShowTimeline(false);
+    setIsInternalMode(false); // F12: nunca herda o modo nota-interna da conversa anterior
     // histórico unificado: junta as mensagens de todas as conversas do contato, em ordem
     Promise.all(
       g.convs.map((cv) => getConversationMessages(cv.id)),
@@ -397,10 +416,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   async function send() {
     if (!active || !text.trim()) return;
-    await sendMessage(active.id, text);
+    await sendMessage(active.id, text, isInternalMode);
     // ADR 035: a primeira resposta humana ativa o takeover no backend — reflete
     // aqui sem esperar o próximo fetch (badge "Você no comando" aparece na hora).
-    if (!active.humanTakeoverAt) {
+    // F12: nota interna não é resposta ao cliente — não ativa takeover.
+    if (!isInternalMode && !active.humanTakeoverAt) {
       const takenAt = new Date().toISOString();
       setActive((a) => (a ? { ...a, humanTakeoverAt: takenAt } : a));
       setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, humanTakeoverAt: takenAt } : c)));
@@ -433,6 +453,17 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     const assignedSellerId = r?.assignedSellerId ?? null;
     setActive((a) => (a ? { ...a, assignedSeller, assignedSellerId } : a));
     setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedSeller, assignedSellerId } : c)));
+  }
+
+  // F12: assume (userId = eu) ou reatribui (userId = outro analista) o chamado
+  // de suporte; userId=null devolve pra fila geral sem dono.
+  async function assignAnalyst(userId: string | null) {
+    if (!active) return;
+    const r = await reassignAnalyst(active.id, userId);
+    const assignedAnalyst = r?.assignedAnalyst ?? null;
+    const assignedAnalystId = r?.assignedAnalystId ?? null;
+    setActive((a) => (a ? { ...a, assignedAnalyst, assignedAnalystId } : a));
+    setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedAnalyst, assignedAnalystId } : c)));
   }
 
   /**
@@ -549,6 +580,29 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
             onChange={setActiveFilter}
             counts={statusCounts}
           />
+        )}
+
+        {/* F12: fila de suporte — Fila Geral / Meus Chamados / Todos (só suporte) */}
+        {scope === 'support' && (
+          <div className="flex flex-wrap gap-1 border-b px-3 py-2" style={{ borderColor: 'var(--border)' }}>
+            {([
+              ['all', 'Todos'],
+              ['unassigned', 'Fila Geral (sem dono)'],
+              ['mine', 'Meus Chamados'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setQueueFilter(key)}
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  queueFilter === key
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-base-200 text-base-content/60 hover:bg-base-300 hover:text-base-content'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         )}
 
         {/* filtro por vendedor (só vendas) */}
@@ -689,6 +743,16 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                         {c.assignedSeller && (
                           <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700">
                             {c.assignedSeller.name}
+                          </span>
+                        )}
+                        {/* F12: trava de colisão visual — quem está com este chamado, direto na lista */}
+                        {scope === 'support' && c.assignedAnalystId && (
+                          <span
+                            title="Quem está atendendo este chamado"
+                            className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60"
+                          >
+                            <Icon name="users" className="h-3 w-3" />
+                            {c.assignedAnalystId === user?.id ? 'Você' : (c.assignedAnalyst?.name ?? 'Analista')}
                           </span>
                         )}
                         {c.campaign && (
@@ -887,6 +951,38 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                   </>
                 )}
 
+                {/* F12: dono do chamado — "Assumir" quando sem dono + trava de colisão visual */}
+                {scope === 'support' && (
+                  <>
+                    {active.assignedAnalystId ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] font-medium text-base-content/70"
+                        title="Quem está atendendo este chamado"
+                      >
+                        <Icon name="users" className="h-3 w-3" />
+                        {active.assignedAnalystId === user?.id ? 'Você' : (active.assignedAnalyst?.name ?? 'Analista')}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => assignAnalyst(user?.id ?? null)}
+                        className="rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700"
+                        title="Assumir este chamado"
+                      >
+                        <span className="inline-flex items-center gap-1"><Icon name="check" className="h-3.5 w-3.5" /> Assumir chamado</span>
+                      </button>
+                    )}
+                    <Select
+                      value={active.assignedAnalystId ?? ''}
+                      onChange={(e) => assignAnalyst(e.target.value || null)}
+                      className="!h-8 !w-auto text-xs"
+                      title="Reatribuir a outro analista"
+                    >
+                      <option value="">Sem dono</option>
+                      {analysts.map((a) => <option key={a.id} value={a.id}>{a.name ?? a.id}</option>)}
+                    </Select>
+                  </>
+                )}
+
                 {/* suporte: resolver / reabrir o chamado */}
                 {scope === 'support' && (
                   <>
@@ -983,25 +1079,27 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                         )}
                         <div className={`flex flex-col ${m.direction === 'outbound' ? 'items-end' : 'items-start'}`}>
                           <div className={`max-w-md rounded-2xl px-4 py-2 text-sm ${
-                            m.direction === 'outbound'
-                              ? 'rounded-tr-sm bg-brand-500 text-white'
-                              : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
+                            m.isInternal
+                              ? 'rounded-tr-sm border border-amber-300 bg-amber-50 text-amber-900'
+                              : m.direction === 'outbound'
+                                ? 'rounded-tr-sm bg-brand-500 text-white'
+                                : 'rounded-tl-sm border border-base-200 bg-[var(--surface)] text-base-content shadow-sm'
                           }`}>
                             {(m.metadata as any)?.audioUrl && (
                               <audio controls src={(m.metadata as any).audioUrl} className="mb-1 h-10 w-[320px] max-w-full rounded-lg" />
                             )}
                             <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                              m.direction === 'outbound' ? 'text-white/60' : 'text-base-content/40'
+                              m.isInternal ? 'text-amber-700/70' : m.direction === 'outbound' ? 'text-white/60' : 'text-base-content/40'
                             }`}>
                               <span>{fmtMsgTime(m.createdAt)}</span>
-                              {m.direction === 'outbound' && <Recibo ack={m.ack} />}
+                              {!m.isInternal && m.direction === 'outbound' && <Recibo ack={m.ack} />}
                             </div>
                           </div>
-                          {/* badge IA vs Humano — exibido abaixo de toda mensagem outbound */}
+                          {/* badge IA vs Humano vs Nota interna — exibido abaixo de toda mensagem outbound */}
                           {m.direction === 'outbound' && (
                             <span className="mt-0.5 text-[10px] text-base-content/35 select-none">
-                              {(m.metadata as any)?.senderType === 'human' ? '👤 Você' : '✨ Lia'}
+                              {m.isInternal ? '🔒 Nota interna — só a equipe vê' : (m.metadata as any)?.senderType === 'human' ? '👤 Você' : '✨ Lia'}
                             </span>
                           )}
                         </div>
@@ -1025,25 +1123,60 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
             {/* input */}
             <div className="border-t border-base-200 bg-[var(--surface)] p-3">
               {liaInfo && <div className="mb-2 inline-flex items-center gap-1 px-2 text-xs text-brand-600"><Icon name="bot" className="h-3.5 w-3.5" /> {liaInfo}</div>}
+              {/* F12: toggle Responder Cliente vs Nota Interna — só no suporte */}
+              {scope === 'support' && (
+                <div className="mb-2 flex gap-1">
+                  <button
+                    onClick={() => setIsInternalMode(false)}
+                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                      !isInternalMode ? 'bg-brand-600 text-white' : 'bg-base-200 text-base-content/60 hover:bg-base-300'
+                    }`}
+                  >
+                    Responder Cliente
+                  </button>
+                  <button
+                    onClick={() => setIsInternalMode(true)}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                      isInternalMode ? 'bg-amber-500 text-white' : 'bg-base-200 text-base-content/60 hover:bg-base-300'
+                    }`}
+                    title="Visível só pra equipe — nunca vai pro cliente"
+                  >
+                    🔒 Nota Interna (Privado)
+                  </button>
+                </div>
+              )}
               <div className="flex gap-2">
-                <button
-                  onClick={suggest}
-                  disabled={liaBusy}
-                  title="Sugerir resposta com a Lia"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500 disabled:opacity-50"
-                >
-                  {liaBusy ? '...' : <><Icon name="bot" className="h-4 w-4" /> Lia</>}
-                </button>
+                {!isInternalMode && (
+                  <button
+                    onClick={suggest}
+                    disabled={liaBusy}
+                    title="Sugerir resposta com a Lia"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-500 disabled:opacity-50"
+                  >
+                    {liaBusy ? '...' : <><Icon name="bot" className="h-4 w-4" /> Lia</>}
+                  </button>
+                )}
                 <input
-                  className="flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
-                  style={{ borderColor: 'var(--border-input)', background: 'var(--surface-input)', color: 'var(--text-primary)' }}
-                  placeholder="Digite uma mensagem..."
+                  className={`flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:ring-2 ${
+                    isInternalMode ? 'focus:ring-amber-500/30 focus:border-amber-500' : 'focus:ring-brand-500/30 focus:border-brand-500'
+                  }`}
+                  style={
+                    isInternalMode
+                      ? { borderColor: '#fcd34d', background: '#fffbeb', color: 'var(--text-primary)' }
+                      : { borderColor: 'var(--border-input)', background: 'var(--surface-input)', color: 'var(--text-primary)' }
+                  }
+                  placeholder={isInternalMode ? 'Nota interna — só a equipe vê...' : 'Digite uma mensagem...'}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && send()}
                 />
-                <button onClick={send} className="rounded-full bg-brand-600 px-5 py-2 text-sm text-white hover:bg-brand-700">
-                  Enviar
+                <button
+                  onClick={send}
+                  className={`rounded-full px-5 py-2 text-sm text-white ${
+                    isInternalMode ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700'
+                  }`}
+                >
+                  {isInternalMode ? 'Salvar nota' : 'Enviar'}
                 </button>
               </div>
             </div>

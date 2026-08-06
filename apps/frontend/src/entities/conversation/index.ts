@@ -1,6 +1,6 @@
 // Barrel público da entity "conversation" (FSD).
 // Importe SEMPRE por aqui: `@/entities/conversation`. Nunca alcance o interior.
-export type { Conversation, Message, ConversationListResult } from './types/conversation.types';
+export type { Conversation, Message, ConversationListResult, AnalystMini } from './types/conversation.types';
 
 export {
   listConversations,
@@ -9,6 +9,8 @@ export {
   returnConversationToAi,
   setConversationOutcome,
   assignSeller,
+  assignAnalyst,
+  listAnalystsMini,
   setConversationResolved,
   archiveConversation,
   deleteConversation,

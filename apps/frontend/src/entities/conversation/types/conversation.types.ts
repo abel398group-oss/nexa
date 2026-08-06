@@ -20,6 +20,9 @@ export interface Conversation {
   campaign?: { id: string; name: string } | null;
   /** ADR 035: humano assumiu — Lia em modo rascunho até devolver/fechar. */
   humanTakeoverAt?: string | null;
+  /** F12: dono humano do chamado de SUPORTE — não confundir com assignedSeller (comercial). */
+  assignedAnalyst?: { id: string; name: string | null } | null;
+  assignedAnalystId?: string | null;
 }
 
 // Mensagem de uma conversa (timeline do Inbox).
@@ -30,6 +33,14 @@ export interface Message {
   createdAt: string;
   ack?: number;
   metadata?: Record<string, unknown> | null;
+  /** F12: nota interna — visível só pra equipe, nunca chega ao cliente. */
+  isInternal?: boolean;
+}
+
+/** F12: analista pro seletor de atribuição (GET /conversations/analysts). */
+export interface AnalystMini {
+  id: string;
+  name: string | null;
 }
 
 export interface ConversationListResult {
