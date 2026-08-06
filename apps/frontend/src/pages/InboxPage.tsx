@@ -587,7 +587,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     if (!active?.contact?.id) return;
     const clean = value.trim() || undefined;
     try {
-      const updated = await updateContact(active.contact.id, { phone: active.phone, [field]: clean });
+      const updated = await updateContact(active.contact.id, { [field]: clean });
       setActive((a) => (a && a.contact ? { ...a, contact: { ...a.contact, [field]: updated[field] ?? null } } : a));
       setConvs((cs) => cs.map((c) => (c.contact?.id === active.contact?.id ? { ...c, contact: { ...c.contact!, [field]: updated[field] ?? null } } : c)));
     } catch {

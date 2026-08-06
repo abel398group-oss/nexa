@@ -60,8 +60,12 @@ export async function createContact(input: ContactInput): Promise<Contact> {
   return r.data;
 }
 
-export async function updateContact(id: string, input: ContactInput): Promise<Contact> {
-  const r = await api.patch(`/contacts/${id}`, normalize(input));
+// Bug pré-existente corrigido (2026-08-06, F16): sempre mandava `phone` no PATCH,
+// mas UpdateContactDto nunca aceitou esse campo (ValidationPipe global usa
+// forbidNonWhitelisted) — toda edição de contato existente vinha 400. `phone` é
+// imutável após criado; update() nunca deveria tê-lo enviado.
+export async function updateContact(id: string, input: Partial<Omit<ContactInput, 'phone'>>): Promise<Contact> {
+  const r = await api.patch(`/contacts/${id}`, normalizeUpdate(input));
   return r.data;
 }
 
@@ -128,6 +132,16 @@ export async function getContactTickets(id: string): Promise<ContactTicket[]> {
 function normalize(input: ContactInput): ContactInput {
   return {
     phone: input.phone.trim(),
+    name: input.name || undefined,
+    company: input.company || undefined,
+    email: input.email || undefined,
+    accountOwner: input.accountOwner || undefined,
+  };
+}
+
+// Igual à normalize(), mas SEM phone — UpdateContactDto não aceita esse campo.
+function normalizeUpdate(input: Partial<Omit<ContactInput, 'phone'>>): Partial<Omit<ContactInput, 'phone'>> {
+  return {
     name: input.name || undefined,
     company: input.company || undefined,
     email: input.email || undefined,
