@@ -273,3 +273,46 @@ describe('SupportAgentService — F10 propagação de page', () => {
     );
   });
 });
+
+// ─── F10: resumo executivo (EscalationAgent.summary) na notificação + ticket ──
+describe('SupportAgentService — F10 resumo executivo de escalonamento', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: SupportAgentService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({
+      resolvedAt: null, autoCloseAt: null, status: 'open', outcome: null, csatToken: null, csatScore: null,
+    });
+  });
+
+  it('usa o summary do EscalationAgent como corpo da notificação e grava no ticket', async () => {
+    const summary = '[Problema Relatado] X\n[Ações Tentadas] Y\n[Causa do Transbordo] Z';
+    deps.escalation.decide.mockReturnValue({ escalate: true, reason: 'unresolved_no_kb_match', message: '', summary });
+
+    await svc.ask('t1', { question: 'nao consigo emitir CT-e', conversationId: 'c1' });
+
+    expect(deps.notifications.create).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ type: 'escalation', body: summary }),
+    );
+    expect(deps.prisma.aiConversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'c1' }, data: expect.objectContaining({ escalationSummary: summary }) }),
+    );
+  });
+
+  it('sem summary (fallback): corpo da notificação volta ao formato categoria/prioridade/motivo', async () => {
+    deps.escalation.decide.mockReturnValue({ escalate: true, reason: 'priority_critical', message: '', summary: null });
+
+    await svc.ask('t1', { question: 'sistema parado', conversationId: 'c1' });
+
+    expect(deps.notifications.create).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ body: expect.stringContaining('Motivo: priority_critical') }),
+    );
+    const escalationSummaryUpdates = deps.prisma.aiConversation.update.mock.calls
+      .filter((c: any[]) => c[0]?.data && 'escalationSummary' in c[0].data);
+    expect(escalationSummaryUpdates).toHaveLength(0);
+  });
+});

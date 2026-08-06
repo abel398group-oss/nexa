@@ -152,6 +152,7 @@ export class SupportAgentService {
 
     // ── 4. ESCALONAMENTO ────────────────────────────────────────────────────
     const escalationDecision = this.escalation.decide({
+      message: input.question,
       category: classification.category,
       priority: classification.priority,
       diagnostic: diag,
@@ -172,9 +173,17 @@ export class SupportAgentService {
       await this.notifications.create(tenantId, {
         type: 'escalation',
         title: '🔴 Escalonamento — atendimento humano necessário',
-        body: `Categoria: ${classification.category} · Prioridade: ${classification.priority} · Motivo: ${escalationDecision.reason ?? 'não especificado'}`,
+        body: escalationDecision.summary
+          ?? `Categoria: ${classification.category} · Prioridade: ${classification.priority} · Motivo: ${escalationDecision.reason ?? 'não especificado'}`,
         link,
       });
+      // Persiste o resumo no ticket para o card do Inbox (não depende da notificação
+      // ainda existir/não ter sido descartada — a fonte de verdade é a conversa).
+      if (input.conversationId && escalationDecision.summary) {
+        await this.prisma.aiConversation
+          .update({ where: { id: input.conversationId }, data: { escalationSummary: escalationDecision.summary } as any })
+          .catch((e: any) => this.logger.warn(`Falha ao gravar escalationSummary: ${e?.message}`));
+      }
     }
 
     // N2: Se IA resolveu → agenda autoCloseAt (+48h) e substitui draft pela pergunta de confirmação.

@@ -927,6 +927,18 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               </div>
             </div>
 
+            {/* F10: resumo executivo do transbordo — [Problema]/[Ações Tentadas]/[Causa] */}
+            {scope === 'support' && active.status === 'escalated' && active.escalationSummary && (
+              <div className="border-b border-base-200 bg-amber-50 px-4 py-2.5">
+                <div className="flex items-start gap-2">
+                  <Icon name="knowledge" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                  <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-amber-900">
+                    {active.escalationSummary}
+                  </pre>
+                </div>
+              </div>
+            )}
+
             {/* tags livres do contato (mostrar + adicionar/remover) */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-base-200 bg-[var(--surface)] px-4 py-2">
               <span className="text-[11px] text-base-content/40">Tags:</span>

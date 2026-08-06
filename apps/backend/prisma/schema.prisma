@@ -261,6 +261,11 @@ model AiConversation {
   subject          String?   @map("subject")       // N3: assunto digitado pelo cliente (separado do rootCause da IA)
   slaAlertedAt     DateTime? @map("sla_alerted_at") // N4: timestamp do último alerta SLA (dedup persistente, substitui Map em memória)
   humanTakeoverAt  DateTime? @map("human_takeover_at") // ADR 035: humano assumiu — Lia em modo rascunho (limpo no fechamento/devolução)
+  // F10 (2026-08-06): resumo executivo de 3 linhas gerado pelo EscalationAgent
+  // no momento do transbordo — [Problema Relatado] / [Ações Tentadas] /
+  // [Causa do Transbordo]. Gravado só quando escala (nulo em ticket resolvido
+  // pela IA). Consumido pela notificação de escalonamento e pelo card do Inbox.
+  escalationSummary String?  @map("escalation_summary")
 
   // F9 (sync de ticket com o TMS): estado de entrega do resumo pro endpoint
   // deles (POST /api/nexa/tickets, HMAC). Sem tabela de delivery separada —
