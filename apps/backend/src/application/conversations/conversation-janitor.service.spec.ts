@@ -20,12 +20,17 @@ function makeDeps() {
 
   const waha = { sendText: vi.fn().mockResolvedValue(undefined) } as any;
   const notifications = { create: vi.fn().mockResolvedValue({}) } as any;
+  const ticketSync = { markPending: vi.fn().mockResolvedValue(undefined) } as any;
 
-  return { prisma, waha, notifications };
+  return { prisma, waha, notifications, ticketSync };
 }
 
 function makeService(deps: ReturnType<typeof makeDeps>) {
-  return new ConversationJanitorService(deps.prisma, deps.waha, deps.notifications, { acquire: async () => async () => {} } as any);
+  return new ConversationJanitorService(
+    deps.prisma, deps.waha, deps.notifications,
+    { acquire: async () => async () => {} } as any,
+    deps.ticketSync,
+  );
 }
 
 // Expõe o método privado para teste (cast para any)

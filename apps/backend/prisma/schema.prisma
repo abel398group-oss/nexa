@@ -262,6 +262,14 @@ model AiConversation {
   slaAlertedAt     DateTime? @map("sla_alerted_at") // N4: timestamp do último alerta SLA (dedup persistente, substitui Map em memória)
   humanTakeoverAt  DateTime? @map("human_takeover_at") // ADR 035: humano assumiu — Lia em modo rascunho (limpo no fechamento/devolução)
 
+  // F9 (sync de ticket com o TMS): estado de entrega do resumo pro endpoint
+  // deles (POST /api/nexa/tickets, HMAC). Sem tabela de delivery separada —
+  // cada ticket tem um destino só. Ver TicketSyncService.
+  ticketSyncStatus      String?   @map("ticket_sync_status")      // pending | delivered | failed
+  ticketSyncAttempts    Int       @default(0) @map("ticket_sync_attempts")
+  ticketSyncNextRetryAt DateTime? @map("ticket_sync_next_retry_at")
+  ticketSyncError       String?   @map("ticket_sync_error")
+
   messages      AiMessage[]
   actions       AiAction[]
   stageHistory  ConversationStageHistory[]
@@ -273,6 +281,7 @@ model AiConversation {
   @@index([contactId])
   @@index([tenantId, externalId])
   @@index([status, lastActivityAt])
+  @@index([ticketSyncStatus, ticketSyncNextRetryAt])
   @@map("ai_conversations")
 }
 

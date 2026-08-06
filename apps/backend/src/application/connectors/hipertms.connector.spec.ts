@@ -347,3 +347,95 @@ describe('HiperTmsConnector — cache e disjuntor', () => {
     expect(fora).toEqual([]);
   });
 });
+
+// ─── F9: syncTicket() — primeiro método de ESCRITA do conector ───────────────
+describe('HiperTmsConnector — syncTicket() (F9)', () => {
+  let connector: HiperTmsConnector;
+  const origFetch = global.fetch;
+
+  beforeEach(() => {
+    connector = makeConnector();
+    process.env.TMS_BASE_URL = 'http://tms-host';
+    process.env.NEXA_TICKET_WEBHOOK_SECRET = 'segredo-de-teste';
+  });
+
+  afterEach(() => {
+    global.fetch = origFetch;
+    delete process.env.TMS_BASE_URL;
+    delete process.env.NEXA_TICKET_WEBHOOK_SECRET;
+  });
+
+  it('sem TMS_BASE_URL configurado: falha sem tentar rede', async () => {
+    delete process.env.TMS_BASE_URL;
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as any;
+
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sem NEXA_TICKET_WEBHOOK_SECRET: falha sem tentar rede', async () => {
+    delete process.env.NEXA_TICKET_WEBHOOK_SECRET;
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as any;
+
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('assina o CORPO BRUTO enviado — mesmos bytes no hash e na requisição', async () => {
+    let corpoEnviado = '';
+    let headerRecebido = '';
+    global.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
+      corpoEnviado = init.body;
+      headerRecebido = init.headers['X-Nexa-Signature'];
+      return Promise.resolve({ ok: true, status: 200 } as any);
+    }) as any;
+
+    const payload = { ticketNumber: 47, category: 'cte' };
+    await connector.syncTicket(payload);
+
+    const { createHmac } = await import('crypto');
+    const esperado = `sha256=${createHmac('sha256', 'segredo-de-teste').update(corpoEnviado).digest('hex')}`;
+    expect(headerRecebido).toBe(esperado);
+    expect(JSON.parse(corpoEnviado)).toEqual(payload);
+  });
+
+  it('chama POST /nexa/tickets com Content-Type json', async () => {
+    let urlChamada = '';
+    let metodo = '';
+    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+      urlChamada = url; metodo = init.method;
+      return Promise.resolve({ ok: true, status: 200 } as any);
+    }) as any;
+
+    await connector.syncTicket({ ticketNumber: 1 });
+
+    expect(urlChamada).toBe('http://tms-host/nexa/tickets');
+    expect(metodo).toBe('POST');
+  });
+
+  it('2xx: ok=true com o status HTTP', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 } as any);
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+    expect(r).toEqual({ ok: true, status: 200 });
+  });
+
+  it('4xx/5xx: ok=false com status e erro — não lança', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400 } as any);
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(400);
+  });
+
+  it('rede falha (timeout/DNS): ok=false com a mensagem do erro, não lança', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('timeout'));
+    const r = await connector.syncTicket({ ticketNumber: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('timeout');
+  });
+});

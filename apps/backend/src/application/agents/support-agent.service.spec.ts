@@ -28,8 +28,9 @@ function makeDeps() {
   const resolution = { resolve: vi.fn().mockResolvedValue({ draft: 'resp', usedKnowledge: [], allowedFacts: '', confidence: 'high', resolved: false }) } as any;
   const escalation = { decide: vi.fn().mockResolvedValue({ escalate: false, reason: '' }) } as any;
   const intelligence = { analyze: vi.fn().mockResolvedValue({}) } as any;
+  const ticketSync = { markPending: vi.fn().mockResolvedValue(undefined) } as any;
 
-  return { prisma, notifications, conversations, ai, classifier, diagnostic, resolution, escalation, intelligence };
+  return { prisma, notifications, conversations, ai, classifier, diagnostic, resolution, escalation, intelligence, ticketSync };
 }
 
 function makeService(deps: ReturnType<typeof makeDeps>) {
@@ -43,6 +44,7 @@ function makeService(deps: ReturnType<typeof makeDeps>) {
     deps.intelligence,
     deps.prisma,
     deps.notifications,
+    deps.ticketSync,
   );
 }
 

@@ -31,6 +31,7 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { businessHoursBetween } from './support-hours';
+import { TicketSyncService } from '@/application/connectors/ticket-sync.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
 // Suporte: ticket sem resposta do cliente após N horas → fecha com no_response (ADR 015 D5)
@@ -85,6 +86,7 @@ export class ConversationJanitorService {
     private readonly waha: WahaClientService,
     private readonly notifications: NotificationsService,
     private readonly lock: RedisLockService,
+    private readonly ticketSync: TicketSyncService,
   ) {}
 
   // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
@@ -319,7 +321,7 @@ export class ConversationJanitorService {
         status: { notIn: ['closed', 'opt_out'] as any },
         autoCloseAt: { lte: now },
       } as any,
-      select: { id: true, status: true, phone: true },
+      select: { id: true, status: true, phone: true, ticketNumber: true },
     });
 
     if (!resolved.length) return;
@@ -357,6 +359,11 @@ export class ConversationJanitorService {
       resolved.map((c: any) => c.phone),
       'Seu chamado foi resolvido. Se precisar de mais ajuda, é só nos chamar novamente. 😊',
     );
+    // F9: fechou → TMS fica sabendo. Só quem já tem ticketNumber — senão fica
+    // 'pending' para sempre (syncOne descarta silenciosamente sem ticketNumber).
+    await Promise.all(
+      resolved.filter((c: any) => c.ticketNumber !== null).map((c: any) => this.ticketSync.markPending(c.id)),
+    );
   }
 
   // Branch de suporte: fecha tickets com clienteStage ativo que ficaram abertos sem
@@ -375,7 +382,7 @@ export class ConversationJanitorService {
         lastActivityAt: { lt: cutoff },
         resolvedAt: null,                // não fechar tickets que já foram resolvidos (usam autoCloseAt)
       } as any,
-      select: { id: true, status: true, phone: true }, // status real para fromStatus no histórico (BUG-004 fix)
+      select: { id: true, status: true, phone: true, ticketNumber: true }, // status real para fromStatus no histórico (BUG-004 fix)
     });
 
     if (!candidates.length) return;
@@ -406,6 +413,10 @@ export class ConversationJanitorService {
     this.notifyClose(
       candidates.map((c: any) => c.phone),
       `Fechamos seu chamado pois não recebemos resposta em ${SUPPORT_INACTIVITY_HOURS}h. Se ainda precisar de ajuda, é só nos chamar. 🙏`,
+    );
+    // F9: mesmo achado do branch "resolved" acima — só sincroniza quem já tem ticketNumber.
+    await Promise.all(
+      candidates.filter((c: any) => c.ticketNumber !== null).map((c: any) => this.ticketSync.markPending(c.id)),
     );
   }
 

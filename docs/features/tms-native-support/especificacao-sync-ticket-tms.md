@@ -1,6 +1,7 @@
 # Especificação — Sincronizar histórico de ticket com o TMS
 
-**Data:** 2026-08-05 · **Status:** Proposto, aguardando o time do TMS
+**Data:** 2026-08-05 · **Status:** Implementado dos dois lados — Nexa (este
+doc) e TMS (endpoint receptor, ver seção "Do lado do TMS" abaixo).
 **Decisão de produto (Abel, 2026-08-05):** o suporte é atendido **dentro do Nexa**
 — o time humano não muda de ferramenta. O TMS recebe só o **histórico** do
 ticket, para o cliente conseguir consultar dentro do próprio TMS.
@@ -116,12 +117,50 @@ caso de falha do lado TMS.
   a Lia soubesse reagir a uma resposta que não veio pelo canal dela).
 - Não pedimos o histórico completo de mensagens — só o resumo do ticket.
 
+## Do lado do TMS (implementado)
+
+O time do TMS foi com a opção A (webhook) — exatamente como recomendado aqui.
+
+- **Endpoint:** `POST https://www.hipertms.com.br/api/nexa/tickets`
+- **Assinatura:** `X-Nexa-Signature: sha256=<hmac-sha256 hex do corpo bruto>`,
+  fail-closed (503 se o segredo não estiver configurado do lado deles).
+- **Persistência:** tabela própria, upsert por `(tenantId, ticketNumber)` —
+  reentrega (ex.: CSAT que chega depois do fechamento) atualiza em vez de duplicar.
+- **Exibição:** aba "Histórico" no `SupportDrawer` do TMS, com fallback: continua
+  disponível mesmo quando o Nexa está fora do ar (não depende de sessão viva do
+  portal, diferente das outras abas do drawer).
+- **`externalId` confirmado:** é o **usuário (pessoa)** logado no TMS, nunca o
+  tenant — combina com `handoff.service.ts:47` do lado Nexa.
+
+## Do lado do Nexa (implementado)
+
+- `HiperTmsConnector.syncTicket()` — primeiro método de **escrita** do
+  conector (tudo antes disso era leitura). HMAC sobre o corpo bruto, nunca
+  reserializa o payload depois de calcular o hash.
+- `TicketSyncService` — retry durável com o MESMO padrão do `WebhookService`
+  existente (5 tentativas, backoff `10s/30s/2min/10min/30min`), mas sem
+  reaproveitar a tabela `WebhookDelivery`: aquela exige uma
+  `WebhookSubscription` (FK obrigatória) — um conceito de integração que o
+  TENANT configura. Esta é uma integração FIXA Nexa↔TMS, sempre o mesmo
+  destino e segredo. Reaproveitar exigiria uma subscription "de sistema" fake
+  só pra satisfazer a FK, misturando os dois conceitos. Em vez disso, o estado
+  vive direto em `AiConversation` (`ticketSyncStatus/Attempts/NextRetryAt/Error`)
+  — cada ticket tem um destino só, não precisa de tabela de delivery separada.
+- **Gatilhos:** `ticketNumber` atribuído (`support-agent.service.ts`) e os três
+  fechamentos de ticket de suporte (confirmação do cliente, resolvido 48h,
+  sem resposta do cliente) — **não** o fechamento de lead comercial
+  (`closeInactiveLeads`), que é outro fluxo.
+- Variável `NEXA_TICKET_WEBHOOK_SECRET` — separada do `TMS_SERVICE_TOKEN`
+  de propósito (sentido inverso da integração; um vazamento não compromete o
+  outro).
+
 ## Próximos passos
 
-1. Time do TMS decide: webhook (A) ou polling (B), e confirma se aceita HMAC.
-2. Time do TMS define o endpoint / formato de resposta esperado.
-3. Nexa implementa o lado de envio (`HiperTmsConnector` ganha o primeiro método
-   de escrita — hoje só tem leitura) uma vez que o contrato estiver fechado.
+1. Combinar o segredo compartilhado entre os dois lados (gerar com
+   `openssl rand -hex 32`, colocar em `NEXA_TICKET_WEBHOOK_SECRET` nos dois
+   `.env` de produção — nunca por chat).
+2. Validar ponta a ponta em produção: fechar um ticket de teste, confirmar que
+   aparece na aba Histórico do TMS.
 
 ## Relacionados
 

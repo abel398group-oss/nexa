@@ -153,7 +153,7 @@ que a própria KB da Lia já informava ao cliente).
 
 | Item | Por quê |
 |---|---|
-| Ticket vive só no Nexa, nada é enviado ao TMS | **Decisão de produto**, não bug. O time de suporte trabalha no Nexa. Se a intenção for o chamado aparecer no TMS, é projeto novo — não existe `createTicket` no conector. |
+| ~~Ticket vive só no Nexa, nada é enviado ao TMS~~ | **Fechado em 2026-08-05.** Decisão do Abel: suporte continua atendido no Nexa; o TMS recebe o histórico via webhook (`TicketSyncService`). Ver `docs/features/tms-native-support/especificacao-sync-ticket-tms.md`. |
 | Sem limite de tentativas próprio do suporte | A única trava de loop é a de vendas (`MAX_AI_QUESTIONS`), que exige 3 mensagens seguidas terminando em "?" e usa `leadScore` — que no suporte não significa nada. |
 | `ticketNumber` gerado e nunca exibido ao cliente | Cosmético. |
 | Formulário do portal grava `categoria: 'outro'` e `prioridade: 'normal'` | Valores que não existem nos enums do classificador. Não quebra nada hoje (o SLA aceita `normal` como alias), mas é vocabulário divergente — mesma classe de problema do S-01. |

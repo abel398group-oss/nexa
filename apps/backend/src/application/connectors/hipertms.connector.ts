@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { createHmac } from 'crypto';
 import { Connector, Plan, PaymentRequestResult, KnowledgeItem, TmsCustomer, DocumentStatus, RejectionInfo, ContractStatus } from './connector.interface';
 import { MANUAIS_KB } from './hipertms-manuais.data';
 import { SUPORTE_KB } from './hipertms-suporte-kb.data';
@@ -101,6 +102,44 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
    */
   isDegraded(): boolean {
     return this.resilience.stats().circuitOpen;
+  }
+
+  /**
+   * Envia o resumo de um ticket de suporte pro TMS — primeiro método de
+   * ESCRITA deste conector (tudo antes disso era leitura). Ver
+   * docs/features/tms-native-support/especificacao-sync-ticket-tms.md.
+   *
+   * Passa longe do cache/disjuntor de leitura de propósito: escrita nunca é
+   * cacheada (o disjuntor existe para poupar o TMS de leitura repetida, não
+   * para decidir se um evento que aconteceu uma vez deve ser reenviado).
+   * Quem decide retry é o `TicketSyncService` — este método só faz UMA
+   * tentativa e relata o resultado.
+   *
+   * HMAC calculado sobre os MESMOS bytes que saem no corpo — nunca
+   * reserializar o objeto depois, porque `JSON.stringify` não garante bytes
+   * idênticos em duas chamadas (ordem de chave não é 100% estável entre
+   * runtimes) e o TMS recalcula o hash sobre o corpo bruto recebido.
+   */
+  async syncTicket(payload: Record<string, unknown>): Promise<{ ok: boolean; status?: number; error?: string }> {
+    const secret = process.env.NEXA_TICKET_WEBHOOK_SECRET;
+    if (!this.baseUrl || !secret) {
+      return { ok: false, error: 'TMS_BASE_URL ou NEXA_TICKET_WEBHOOK_SECRET não configurados' };
+    }
+    const body = JSON.stringify(payload);
+    const sig = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+
+    try {
+      const res = await fetch(`${this.baseUrl}/nexa/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Nexa-Signature': sig },
+        body,
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) return { ok: true, status: res.status };
+      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'erro desconhecido' };
+    }
   }
 
   // Base URL da API do TMS — suporta TMS_BASE_URL (canônico) e TMS_API_BASE_URL (legado).

@@ -9,6 +9,7 @@ import { EscalationAgentService } from './escalation-agent.service';
 import { TicketIntelligenceService } from './ticket-intelligence.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { TicketSyncService } from '@/application/connectors/ticket-sync.service';
 
 const MODEL = AI_MODEL;
 
@@ -43,6 +44,7 @@ export class SupportAgentService {
     private readonly intelligence: TicketIntelligenceService,
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly ticketSync: TicketSyncService,
   ) {}
 
   async ask(
@@ -297,6 +299,8 @@ export class SupportAgentService {
       data: { ticketNumber: next } as any,
     });
     this.logger.log(`C2: ticketNumber=${next} conv=${conversationId}`);
+    // F9: nasceu o ticket → TMS fica sabendo. Nunca lança (ver markPending).
+    await this.ticketSync.markPending(conversationId);
   }
 
   // Detecta saudações e mensagens de small talk para curto-circuitar o pipeline.
@@ -358,6 +362,9 @@ export class SupportAgentService {
         await this.prisma.conversationStageHistory.create({
           data: { conversationId, fromStatus: 'open', toStatus: 'closed', toOutcome: 'resolved', reason: 'confirmado_cliente' },
         });
+        // F9: fechou → TMS fica sabendo (fora do try teria efeito colateral se
+        // o fechamento falhasse; dentro, só sincroniza o que de fato fechou).
+        await this.ticketSync.markPending(conversationId);
       } catch (e: any) {
         this.logger.warn(`N2: fechamento confirmado falhou: ${e?.message}`);
       }
