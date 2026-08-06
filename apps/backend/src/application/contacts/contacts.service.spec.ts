@@ -18,6 +18,9 @@ function makePrisma() {
     campaignTarget: {
       findMany: vi.fn(),
     },
+    aiConversation: {
+      findMany: vi.fn(),
+    },
   } as unknown as PrismaService & any;
 }
 
@@ -193,6 +196,40 @@ describe('ContactsService', () => {
     it('propaga NotFound se o contato nao existe no tenant', async () => {
       prisma.contact.findFirst.mockResolvedValue(null);
       await expect(svc.campaignsForContact('t1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // F16: unificação Contatos+Inbox — histórico de chamados no painel do Inbox.
+  describe('ticketsForContact', () => {
+    it('busca por tenant + contactId, exclui arquivados e ordena por atividade recente', async () => {
+      prisma.contact.findFirst.mockResolvedValue({ id: 'c1' });
+      prisma.aiConversation.findMany.mockResolvedValue([
+        { id: 'conv1', ticketNumber: 7, status: 'open', ticketCategory: 'cte', ticketPriority: 'high', createdAt: new Date('2026-08-01'), lastActivityAt: new Date('2026-08-05') },
+      ]);
+      const out = await svc.ticketsForContact('t1', 'c1');
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({ id: 'conv1', ticketNumber: 7, status: 'open' });
+      const call = prisma.aiConversation.findMany.mock.calls[0][0];
+      expect(call.where).toMatchObject({ tenantId: 't1', contactId: 'c1' });
+      expect(call.where.OR).toEqual([{ outcome: null }, { outcome: { not: 'archived' } }]);
+    });
+
+    it('propaga NotFound se o contato nao existe no tenant', async () => {
+      prisma.contact.findFirst.mockResolvedValue(null);
+      await expect(svc.ticketsForContact('t1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.aiConversation.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('grava accountOwner (dono da conta) junto dos demais campos editáveis', async () => {
+      prisma.contact.findFirst.mockResolvedValue({ id: 'c1' });
+      prisma.contact.update.mockResolvedValue({ id: 'c1', accountOwner: 'Fulano' });
+      await svc.update('t1', 'c1', { accountOwner: 'Fulano' } as any);
+      expect(prisma.contact.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { accountOwner: 'Fulano' },
+      });
     });
   });
 });

@@ -134,6 +134,28 @@ export class ContactsService {
     }));
   }
 
+  // F16: histórico de chamados (suporte/vendas) deste contato — alimenta o painel
+  // do Inbox. Exclui arquivados: mesma regra do GET /conversations padrão, senão
+  // um clique no histórico levaria a um ticket que não existe na lista principal.
+  async ticketsForContact(tenantId: string, id: string) {
+    await this.findOne(tenantId, id); // valida que é do tenant
+    const convs = await this.prisma.aiConversation.findMany({
+      where: { tenantId, contactId: id, OR: [{ outcome: null }, { outcome: { not: 'archived' } }] },
+      select: {
+        id: true,
+        ticketNumber: true,
+        status: true,
+        ticketCategory: true,
+        ticketPriority: true,
+        createdAt: true,
+        lastActivityAt: true,
+      },
+      orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
+      take: 20,
+    });
+    return convs;
+  }
+
   async create(tenantId: string, dto: CreateContactDto) {
     const phone = normalizePhone(dto.phone) || dto.phone; // garante formato canônico
     // upsert por (tenantId, phone) — não duplica

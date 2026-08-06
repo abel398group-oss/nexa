@@ -12,7 +12,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
 import { displayPhone } from '@/shared/lib/phone';
-import { bulkTagContacts } from '@/entities/contact';
+import { bulkTagContacts, getContactTickets, updateContact, type ContactTicket } from '@/entities/contact';
 import { listSellersMini } from '@/entities/seller';
 import {
   type Conversation,
@@ -149,6 +149,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // F13: edição inline do link da issue de dev vinculada ao chamado.
   const [editingIssue, setEditingIssue] = useState(false);
   const [issueUrlInput, setIssueUrlInput] = useState('');
+  // F16: edição inline de empresa/dono da conta + histórico de chamados do contato.
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [companyInput, setCompanyInput] = useState('');
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerInput, setOwnerInput] = useState('');
+  const [contactTickets, setContactTickets] = useState<ContactTicket[]>([]);
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -461,6 +467,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     setShowTimeline(false);
     setIsInternalMode(false); // F12: nunca herda o modo nota-interna da conversa anterior
     setEditingIssue(false); // F13: idem pro editor de issue de dev
+    setEditingCompany(false); // F16: idem pros editores de empresa/dono da conta
+    setEditingOwner(false);
+    setContactTickets([]);
     // histórico unificado: junta as mensagens de todas as conversas do contato, em ordem
     Promise.all(
       g.convs.map((cv) => getConversationMessages(cv.id)),
@@ -473,6 +482,33 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     api.get(`/connectors/lookup?phone=${encodeURIComponent(c.phone)}`)
       .then((r) => setTmsLookup(r.data))
       .catch(() => setTmsLookup({ found: false, customer: null }));
+    // F16: histórico de chamados deste contato — painel do Inbox.
+    if (c.contact?.id) {
+      getContactTickets(c.contact.id).then(setContactTickets).catch(() => setContactTickets([]));
+    }
+  }
+
+  // F16: abre um chamado do histórico do contato no meio da tela. O item pode não
+  // estar na página atual de `convs` (lista principal carrega só as mais recentes)
+  // — nesse caso rebusca a lista completa uma vez antes de desistir.
+  async function openTicketById(ticketId: string) {
+    const found = convs.find((c) => c.id === ticketId);
+    if (found) {
+      openGroup({ rep: found, convs: [{ id: found.id }] });
+      return;
+    }
+    try {
+      const r = await listConversations();
+      setConvs(r.items);
+      const refetched = r.items.find((c) => c.id === ticketId);
+      if (refetched) {
+        openGroup({ rep: refetched, convs: [{ id: refetched.id }] });
+      } else {
+        toast.error('Chamado não encontrado na lista atual.');
+      }
+    } catch {
+      toast.error('Erro ao abrir o chamado.');
+    }
   }
 
   async function send() {
@@ -541,6 +577,21 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       setIssueUrlInput('');
     } catch {
       toast.error('Link inválido — precisa ser uma URL http(s).');
+    }
+  }
+
+  // F16: edita empresa/dono da conta direto no painel — sem sair do atendimento
+  // nem passar pela tela /contacts. `contact.id` sempre existe aqui porque o
+  // bloco só é renderizado quando `active.contact` está presente.
+  async function saveContactField(field: 'company' | 'accountOwner', value: string) {
+    if (!active?.contact?.id) return;
+    const clean = value.trim() || undefined;
+    try {
+      const updated = await updateContact(active.contact.id, { phone: active.phone, [field]: clean });
+      setActive((a) => (a && a.contact ? { ...a, contact: { ...a.contact, [field]: updated[field] ?? null } } : a));
+      setConvs((cs) => cs.map((c) => (c.contact?.id === active.contact?.id ? { ...c, contact: { ...c.contact!, [field]: updated[field] ?? null } } : c)));
+    } catch {
+      toast.error('Erro ao salvar — tente de novo.');
     }
   }
 
@@ -1362,24 +1413,16 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 <div className="truncate text-[11px] text-base-content/50">{displayPhone(active.phone)}</div>
               </div>
             </div>
-            {active.contact?.company && (
-              <div className="flex items-center gap-1.5 text-xs text-base-content/70">
-                <Icon name="building" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
-                <span className="truncate">{active.contact.company}</span>
-              </div>
-            )}
             {tmsLookup?.customer?.email && (
               <div className="flex items-center gap-1.5 text-xs text-base-content/70">
                 <Icon name="mail" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
                 <span className="truncate">{tmsLookup.customer.email}</span>
               </div>
             )}
-            {/* CNPJ ainda não vem no token do widget (pendente do lado do TMS —
-                ver docs/features/tms-native-support/especificacao-contexto-
-                cliente-e-reenvio-fatura.md). Mostrado como placeholder honesto
-                em vez de simplesmente omitir — deixa visível que o dado existe
-                como conceito, só falta a integração. */}
-            <div className="flex items-center gap-1.5 text-xs text-base-content/35" title="Pendente: o token do widget ainda não envia CNPJ (pedido já feito ao time do TMS)">
+            {/* CNPJ ainda não vem no token do widget (gap do lado do TMS, não
+                documentado formalmente — mostrado como placeholder honesto em
+                vez de omitir: deixa visível que o dado existe como conceito). */}
+            <div className="flex items-center gap-1.5 text-xs text-base-content/35" title="O token do widget do TMS ainda não envia CNPJ">
               <Icon name="building" className="h-3.5 w-3.5 shrink-0" />
               CNPJ — não disponível ainda
             </div>
@@ -1399,6 +1442,104 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               )}
             </div>
           </div>
+
+          {/* F16: Sobre este contato — edição inline, sem sair do atendimento
+              (substitui a necessidade de ir em /contatos pra editar empresa/dono). */}
+          <div className="space-y-2.5 border-b border-base-200 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+              Sobre este contato
+            </div>
+
+            {/* Empresa */}
+            <div>
+              <div className="mb-0.5 text-[10px] uppercase tracking-wide text-base-content/40">Empresa</div>
+              {editingCompany ? (
+                <div className="flex gap-1.5">
+                  <input
+                    autoFocus
+                    value={companyInput}
+                    onChange={(e) => setCompanyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveContactField('company', companyInput).then(() => setEditingCompany(false));
+                      if (e.key === 'Escape') setEditingCompany(false);
+                    }}
+                    className="w-full rounded-full border border-dashed border-base-300 bg-transparent px-2.5 py-1 text-xs text-base-content outline-none focus:border-brand-500"
+                  />
+                  <button
+                    onClick={() => saveContactField('company', companyInput).then(() => setEditingCompany(false))}
+                    className="shrink-0 rounded-full bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-brand-700"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setCompanyInput(active.contact?.company ?? ''); setEditingCompany(true); }}
+                  className="group/edit flex w-full items-center justify-between gap-1.5 rounded-lg px-1.5 py-1 text-left text-xs text-base-content hover:bg-base-100"
+                >
+                  <span className="truncate">{active.contact?.company || <span className="text-base-content/35">Adicionar empresa</span>}</span>
+                  <Icon name="edit" className="h-3 w-3 shrink-0 text-base-content/0 group-hover/edit:text-base-content/40" />
+                </button>
+              )}
+            </div>
+
+            {/* Dono da conta — manual, não vem do TMS */}
+            <div>
+              <div className="mb-0.5 text-[10px] uppercase tracking-wide text-base-content/40">Dono da conta</div>
+              {editingOwner ? (
+                <div className="flex gap-1.5">
+                  <input
+                    autoFocus
+                    value={ownerInput}
+                    onChange={(e) => setOwnerInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveContactField('accountOwner', ownerInput).then(() => setEditingOwner(false));
+                      if (e.key === 'Escape') setEditingOwner(false);
+                    }}
+                    className="w-full rounded-full border border-dashed border-base-300 bg-transparent px-2.5 py-1 text-xs text-base-content outline-none focus:border-brand-500"
+                  />
+                  <button
+                    onClick={() => saveContactField('accountOwner', ownerInput).then(() => setEditingOwner(false))}
+                    className="shrink-0 rounded-full bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-brand-700"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setOwnerInput(active.contact?.accountOwner ?? ''); setEditingOwner(true); }}
+                  className="group/edit flex w-full items-center justify-between gap-1.5 rounded-lg px-1.5 py-1 text-left text-xs text-base-content hover:bg-base-100"
+                >
+                  <span className="truncate">{active.contact?.accountOwner || <span className="text-base-content/35">Adicionar dono da conta</span>}</span>
+                  <Icon name="edit" className="h-3 w-3 shrink-0 text-base-content/0 group-hover/edit:text-base-content/40" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* F16: Histórico de chamados deste contato — clicável, abre no meio da tela. */}
+          {contactTickets.length > 0 && (
+            <div className="border-b border-base-200 p-4">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+                Histórico de chamados
+              </div>
+              <div className="space-y-1">
+                {contactTickets.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => openTicketById(t.id)}
+                    disabled={t.id === active.id}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left text-xs hover:bg-base-100 disabled:bg-base-100 disabled:cursor-default"
+                  >
+                    <span className="truncate text-base-content/70">
+                      {t.ticketNumber ? `#${t.ticketNumber}` : '—'} {t.ticketCategory ? `· ${t.ticketCategory}` : ''}
+                    </span>
+                    <ConversationStatusBadge status={t.status} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Resumo da IA — F10 */}
           {active.status === 'escalated' && active.escalationSummary && (

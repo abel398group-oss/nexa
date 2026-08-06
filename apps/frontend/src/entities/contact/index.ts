@@ -7,6 +7,7 @@ export type {
   ContactListParams,
   ContactListResult,
   ContactCampaign,
+  ContactTicket,
   TagCount,
   BannedContact,
 } from './types/contact.types';
@@ -27,6 +28,7 @@ export {
   bulkUnblockContacts,
   importContacts,
   getContactCampaigns,
+  getContactTickets,
   listBannedContacts,
   unbanContact,
 } from './api/contact.api';

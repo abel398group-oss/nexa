@@ -8,6 +8,7 @@ import type {
   ContactListParams,
   ContactListResult,
   ContactCampaign,
+  ContactTicket,
   ImportContactInput,
   TagCount,
   BannedContact,
@@ -117,6 +118,12 @@ export async function getContactCampaigns(id: string): Promise<ContactCampaign[]
   return r.data;
 }
 
+// F16: histórico de chamados (suporte/vendas) — painel do Inbox.
+export async function getContactTickets(id: string): Promise<ContactTicket[]> {
+  const r = await api.get(`/contacts/${id}/tickets`);
+  return r.data;
+}
+
 // trim do telefone e campos vazios → undefined (não envia string vazia)
 function normalize(input: ContactInput): ContactInput {
   return {
@@ -124,5 +131,6 @@ function normalize(input: ContactInput): ContactInput {
     name: input.name || undefined,
     company: input.company || undefined,
     email: input.email || undefined,
+    accountOwner: input.accountOwner || undefined,
   };
 }

@@ -16,7 +16,7 @@ export interface Conversation {
   rootCause?: string | null;
   /** F10: resumo de 3 linhas ([Problema Relatado]/[Ações Tentadas]/[Causa do Transbordo]) gerado no momento da escalação. */
   escalationSummary?: string | null;
-  contact?: { id?: string; name?: string | null; nameSource?: string | null; company?: string | null; tags?: string[] } | null;
+  contact?: { id?: string; name?: string | null; nameSource?: string | null; company?: string | null; tags?: string[]; accountOwner?: string | null } | null;
   campaign?: { id: string; name: string } | null;
   /** ADR 035: humano assumiu — Lia em modo rascunho até devolver/fechar. */
   humanTakeoverAt?: string | null;

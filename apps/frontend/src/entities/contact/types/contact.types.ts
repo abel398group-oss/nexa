@@ -10,6 +10,8 @@ export interface Contact {
   source?: string;
   tags?: string[];
   notes?: string | null;
+  // F16: dono da conta no CRM interno — manual, não vem do TMS.
+  accountOwner?: string | null;
   createdAt: string;
 }
 
@@ -20,6 +22,18 @@ export interface ContactInput {
   company?: string;
   email?: string;
   notes?: string;
+  accountOwner?: string;
+}
+
+// F16: item do histórico de chamados de um contato (painel do Inbox).
+export interface ContactTicket {
+  id: string;
+  ticketNumber: number | null;
+  status: string;
+  ticketCategory: string | null;
+  ticketPriority: string | null;
+  createdAt: string;
+  lastActivityAt: string | null;
 }
 
 // Linha de importação em lote (CSV já parseado).

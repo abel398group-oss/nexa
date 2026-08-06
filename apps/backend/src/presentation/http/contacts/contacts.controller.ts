@@ -90,6 +90,12 @@ export class ContactsController {
     return this.contacts.campaignsForContact(tenantId, id);
   }
 
+  // F16: histórico de chamados (suporte/vendas) — painel do Inbox
+  @Get(':id/tickets')
+  tickets(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.contacts.ticketsForContact(tenantId, id);
+  }
+
   @Post()
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateContactDto) {
     return this.contacts.create(tenantId, dto);

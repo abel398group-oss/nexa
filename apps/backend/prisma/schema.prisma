@@ -178,6 +178,10 @@ model Contact {
   leadStatus        String?  @map("lead_status") // new / cold / warm / hot
   interestScore     Int      @default(0) @map("interest_score")
   externalContactId String?  @map("external_contact_id") // ref no produto/TMS
+  // F16 (2026-08-06, unificação Contatos+Inbox): dono da conta no CRM interno —
+  // campo manual, não vem do TMS (não existe fonte automática pra isso hoje).
+  // Editável direto no painel do Inbox, sem precisar da tela /contacts.
+  accountOwner      String?  @map("account_owner")
   tags              String[]
   notes             String?
   optOutAt          DateTime? @map("opt_out_at")
@@ -295,6 +299,7 @@ model AiConversation {
   followUps     AiConversation[] @relation("FollowUp")
 
   @@index([tenantId])
+  @@index([tenantId, contactId]) // F16: histórico de chamados por contato (painel do Inbox)
   @@index([correlationId])
   @@index([contactId])
   @@index([tenantId, externalId])

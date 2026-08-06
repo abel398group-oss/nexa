@@ -10,6 +10,7 @@ export class CreateContactDto {
   @IsOptional() @IsString() source?: string;
   @IsOptional() @IsArray() tags?: string[];
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() accountOwner?: string;
 }
 
 export class UpdateContactDto {
@@ -20,4 +21,5 @@ export class UpdateContactDto {
   @IsOptional() @IsString() leadStatus?: string;
   @IsOptional() @IsArray() tags?: string[];
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() accountOwner?: string;
 }

@@ -36,7 +36,10 @@ const NAV_GROUPS: NavGroup[] = [
     // Primeiro item de propósito: é a tela onde o vendedor TRABALHA (F7 — RevOps).
     { to: '/fila',           label: 'Minha fila',        ic: 'zap',       perm: 'opportunities' },
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
-    { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
+    // F16: tirado do menu — o perfil do contato (empresa/dono da conta/histórico)
+    // agora vive fixo no painel do Inbox. A tela continua em /contacts (import
+    // CSV, tags, bloqueio em massa não têm equivalente lá ainda), só não é mais
+    // o caminho do dia a dia.
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
     { to: '/campaigns',      label: 'Disparo',           ic: 'campaigns', perm: 'campaigns' },
     { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
@@ -507,7 +510,6 @@ export function Layout() {
           {[
             { to: '/inbox', label: 'Inbox', ic: 'inbox' as IconName },
             { to: '/campaigns', label: 'Disparo', ic: 'campaigns' as IconName },
-            { to: '/contacts', label: 'Contatos', ic: 'contacts' as IconName },
           ].map((s) => (
             <NavLink
               key={s.to}
