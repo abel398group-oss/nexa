@@ -3481,4 +3481,88 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Dica: entradas por XML de NF-e já criam a movimentação automaticamente — evite lançar a mesma entrada manualmente depois, para não duplicar o saldo.',
     tags: ['cadastro produto', 'codigo produto duplicado', 'movimentacao estoque', 'tipo de movimentacao', 'saldo estoque', 'ajuste estoque'],
   },
+
+  // ══════════════════════════════════════════════════════════
+  // INTEGRAÇÕES E API
+  // F11 (auditoria KB 2026-08-06): categoria 'integracoes'/'api' do
+  // classificador não tinha NENHUM artigo — a Lia só conseguia escalar.
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Como gerar e renovar o token de API do HiperTMS',
+    content:
+      'O token de API é gerado em Administração → Integrações → API.\n' +
+      '1. Acesse a tela, clique em "Gerar novo token".\n' +
+      '2. O token só é exibido uma vez no momento da criação — copie e guarde em local seguro (não é possível recuperá-lo depois, só gerar um novo).\n' +
+      '3. Gerar um novo token invalida o anterior automaticamente — qualquer integração usando o token antigo passa a receber 401 até ser atualizada com o novo.\n' +
+      '4. Use o token no header: Authorization: Bearer <token>.\n' +
+      'Se o cliente relatar que "a integração parou do nada", a causa mais comum é alguém ter gerado um token novo (derrubando o antigo) sem avisar quem mantém a integração.',
+    tags: ['token api', 'gerar token', 'renovar token', 'authorization bearer', 'api key', 'integracao parou'],
+  },
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Erros 401/403 na integração — causas mais comuns',
+    content:
+      'Erro 401 (não autenticado):\n' +
+      '• Token ausente ou mal formatado no header Authorization.\n' +
+      '• Token antigo, invalidado por uma renovação (ver artigo "Como gerar e renovar o token de API").\n' +
+      '• Token de ambiente errado (gerado em sandbox sendo usado contra produção, ou vice-versa).\n' +
+      'Erro 403 (autenticado mas sem permissão):\n' +
+      '• O usuário dono do token não tem permissão para o recurso/rota específica que está sendo chamada.\n' +
+      '• Tentativa de acessar dado de outro tenant/empresa — a API sempre escopa pelo tenant do token, nunca aceita tenantId vindo do corpo da requisição.\n' +
+      'Em ambos os casos: peça o código exato do erro e, se possível, o corpo da resposta — "não funciona" sem o código não dá pra diagnosticar.',
+    tags: ['erro 401', 'erro 403', 'nao autorizado', 'permissao api', 'token invalido', 'forbidden'],
+  },
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Checklist de diagnóstico para webhook que não recebe eventos',
+    content:
+      'Quando o cliente diz "configurei o webhook mas não chega nada", verifique nesta ordem:\n' +
+      '1. A URL de destino está correta e publicamente acessível (não é localhost nem está atrás de firewall bloqueando o HiperTMS)?\n' +
+      '2. O endpoint de destino responde com status 2xx? Se responder erro (4xx/5xx) ou demorar demais, o HiperTMS pode descartar a entrega após as tentativas de retry.\n' +
+      '3. O evento específico esperado está na lista de eventos assinados na configuração do webhook? Um webhook só recebe os eventos que foram marcados na assinatura.\n' +
+      '4. Teste manual: peça para o cliente disparar a ação que deveria gerar o evento (ex.: emitir um CT-e) e conferir se aparece ALGUM log de tentativa de entrega no painel de integrações.\n' +
+      '5. Se nada aparece nem como tentativa: o problema é do lado do HiperTMS (escalar). Se aparece tentativa com erro: o problema é do endpoint de destino do cliente.',
+    tags: ['webhook nao recebe', 'webhook parado', 'checklist webhook', 'eventos webhook', 'retry webhook'],
+  },
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Rate limit da API — o que fazer quando bate no limite',
+    content:
+      'A API tem limite de requisições por período (rate limit). Ao ultrapassar, o sistema responde com status 429.\n' +
+      'O que verificar:\n' +
+      '• A integração está fazendo polling muito frequente (ex.: consultando status a cada poucos segundos) em vez de usar webhook para ser avisada quando algo muda?\n' +
+      '• Há retry automático sem backoff — uma falha temporária gerando uma rajada de novas tentativas que soma ao limite?\n' +
+      'Orientação: preferir webhook a polling sempre que possível; se precisar de polling, aumentar o intervalo; implementar backoff exponencial nos retries.\n' +
+      'Não é possível aumentar o limite "só para um cliente" via suporte de primeiro nível — se o limite padrão for insuficiente para o caso de uso, escalar para avaliação.',
+    tags: ['rate limit', 'erro 429', 'limite de requisicoes', 'polling', 'backoff'],
+  },
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Diferença entre ambiente sandbox e produção na integração',
+    content:
+      'O HiperTMS mantém ambientes separados para testes (sandbox/homologação) e uso real (produção):\n' +
+      '• Cada ambiente tem token de API próprio — um token de sandbox não funciona em produção e vice-versa.\n' +
+      '• Dados criados em sandbox NÃO aparecem em produção (são bases totalmente separadas) — isso é o comportamento correto, não um bug.\n' +
+      '• Confusão comum: cliente testa em sandbox, tudo funciona, mas ao trocar para o token de produção "some tudo" — porque é outra base de dados, não porque perdeu os dados.\n' +
+      'Antes de investigar qualquer discrepância de dados na integração, primeiro confirme com o cliente qual ambiente (token) está sendo usado.',
+    tags: ['sandbox', 'homologacao', 'producao', 'ambiente errado', 'dados sumiram integracao'],
+  },
+  {
+    topic: 'integracoes-api',
+    category: 'suporte',
+    title: 'Payload do webhook chegou com campo errado ou faltando',
+    content:
+      'Quando o cliente reporta que o payload recebido no webhook não bate com o esperado:\n' +
+      '1. Peça o payload EXATO recebido (JSON completo, não a descrição de memória do cliente) — muitos casos de "campo faltando" são na verdade o cliente lendo um campo com nome diferente do documentado.\n' +
+      '2. Confirme qual TIPO de evento gerou aquele payload — payloads são diferentes por tipo de evento (ex.: CT-e emitido tem campos diferentes de fatura paga).\n' +
+      '3. Se o payload realmente estiver incompleto ou malformado (JSON inválido, campo obrigatório ausente conforme a documentação do evento): é caso de escalonamento — não é algo que o suporte de primeiro nível corrige.\n' +
+      'Nunca tente adivinhar o formato do payload sem o JSON real em mãos — o risco de orientar errado é alto.',
+    tags: ['payload webhook', 'campo faltando', 'json invalido', 'formato webhook', 'evento errado'],
+  },
 ];

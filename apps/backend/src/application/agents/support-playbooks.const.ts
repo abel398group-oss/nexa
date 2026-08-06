@@ -138,6 +138,55 @@ export const SUPPORT_PLAYBOOKS: Record<string, SupportPlaybook> = {
     ],
     escalate: ['conta hackeada', 'acesso não autorizado', 'segurança'],
   },
+
+  // ── Cadastro ─────────────────────────────────────────────────────────────────
+  // F11 (auditoria KB 2026-08-06): antes caía no genérico de treinamento
+  // ("não busque dado real do TMS"), mesmo a KB já tendo artigos específicos
+  // de cadastro (CNPJ duplicado, importação de terceiros). Playbook próprio
+  // direciona pra esses artigos em vez do fallback conceitual.
+  cadastro: {
+    name: 'cadastro-registros',
+    steps: [
+      '1. Identificar o que está sendo cadastrado: empresa/cliente, terceiro (fornecedor/parceiro), veículo, motorista ou usuário.',
+      '2. CNPJ duplicado: causa = "cnpj_ja_cadastrado", orientar buscar o cadastro existente (o sistema não permite duplicidade de CNPJ) em vez de tentar recriar.',
+      '3. Erro na importação em lote de terceiros: causa = "importacao_formato_invalido", orientar conferir o formato da planilha/CSV contra o modelo esperado pelo sistema.',
+      '4. Campo obrigatório vazio impedindo salvar: identificar qual campo pelo texto do erro e orientar preenchê-lo — não adivinhar qual é sem a mensagem de erro exata.',
+      '5. Se o dado já existe mas não aparece na busca: pode ser filtro de status (inativo) escondendo o registro — orientar limpar filtros antes de concluir que não existe.',
+    ],
+    escalate: ['duplicidade não resolvida', 'dado sumiu', 'cadastro corrompido'],
+  },
+
+  // ── Integrações (ERP, parceiros, webhooks) ──────────────────────────────────
+  // F11: categoria existia no classificador sem NENHUM playbook nem artigo de
+  // KB — a Lia só conseguia escalar, nunca diagnosticar. Playbook estruturado
+  // pra pelo menos separar autenticação/payload/disponibilidade antes de
+  // escalar, mesmo sem leitura em tempo real disponível ainda no connector.
+  integracoes: {
+    name: 'integracao-diagnostico',
+    steps: [
+      '1. Classificar o sintoma em um dos três baldes: (a) autenticação (401/403, token inválido/expirado), (b) payload/dado (webhook chegou mas com campo errado/faltando), (c) disponibilidade (webhook não chega, timeout).',
+      '2. Autenticação: causa = "token_invalido_ou_expirado", orientar gerar/renovar o token de API em Administração → Integrações → API.',
+      '3. Payload/dado: pedir o payload exato recebido (ou o erro retornado) — não adivinhar o formato esperado sem a mensagem de erro.',
+      '4. Disponibilidade (webhook não chega): causa = "webhook_sem_eventos", orientar conferir se a URL de destino está correta e respondendo 2xx, e se o evento esperado está na lista de eventos assinados.',
+      '5. Sem dado concreto (código de erro, payload, horário da falha): needsMoreInfo=true, pedir esses três itens antes de diagnosticar.',
+      '6. Não há leitura em tempo real do status da integração disponível hoje — não afirmar que "está tudo certo do lado do TMS" sem confirmação; quando faltar certeza, confidence=low.',
+    ],
+    escalate: ['perda de dado', 'cobrança duplicada', 'produção afetada', 'cliente final impactado'],
+  },
+
+  // ── API (uso direto, fora do fluxo de integração de parceiro) ───────────────
+  api: {
+    name: 'api-uso',
+    steps: [
+      '1. Identificar se a dúvida é sobre AUTENTICAÇÃO (como gerar/usar token), LIMITE (rate limit) ou AMBIENTE (sandbox vs produção).',
+      '2. Autenticação: orientar gerar o token em Administração → Integrações → API e enviá-lo no header Authorization.',
+      '3. Erro 401/403: causa = "token_invalido_ou_expirado" — mesma orientação do playbook de integrações.',
+      '4. Erro 429 ou menção a "limite"/"rate limit": causa = "rate_limit_atingido", orientar reduzir a frequência de chamadas e revisar se há retry sem backoff no lado do cliente.',
+      '5. Confusão entre sandbox e produção (dado de teste não aparece em produção ou vice-versa): causa = "ambiente_trocado", orientar confirmar qual ambiente está sendo usado nas credenciais.',
+      '6. Erro HTTP não coberto acima (500, timeout): needsMoreInfo=true, pedir o código de status e o corpo da resposta de erro.',
+    ],
+    escalate: ['produção afetada', 'chave vazada', 'acesso não autorizado'],
+  },
 };
 
 /**
@@ -149,7 +198,6 @@ const CATEGORY_ALIASES: Record<string, string> = {
   frete:        'precificacao',   // CaseClassifier: frete → Playbook: precificacao
   usuarios:     'acesso',         // CaseClassifier: usuarios → Playbook: acesso
   erro_sistema: 'bug',            // CaseClassifier: erro_sistema → Playbook: bug
-  cadastro:     'treinamento',    // CaseClassifier: cadastro → sem playbook específico, usa treinamento
 };
 
 /** Retorna o playbook para a categoria (com alias automático), ou undefined se não houver. */
