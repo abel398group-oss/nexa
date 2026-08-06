@@ -3565,4 +3565,51 @@ export const SUPORTE_KB: KnowledgeItem[] = [
       'Nunca tente adivinhar o formato do payload sem o JSON real em mãos — o risco de orientar errado é alto.',
     tags: ['payload webhook', 'campo faltando', 'json invalido', 'formato webhook', 'evento errado'],
   },
+
+  // ══════════════════════════════════════════════════════════
+  // ERRO GENÉRICO POR CATEGORIA
+  // F11 (auditoria KB 2026-08-06, item 6.6): só existia 1 artigo genérico
+  // (faq-geral, sistema lento/erro) — nada equivalente pra frota/financeiro/
+  // cadastro, então um problema vago nessas categorias caía sem nenhuma
+  // orientação de que dado coletar antes de escalar.
+  // ══════════════════════════════════════════════════════════
+  {
+    topic: 'frota-problemas',
+    category: 'suporte',
+    title: 'Erro genérico em Frota — o que coletar antes de escalar',
+    content:
+      'Quando o problema relatado em Frota não se encaixa em nenhum caso conhecido (veículo indisponível, CNH vencida, abastecimento sem conta), colete antes de escalar:\n' +
+      '1. Qual veículo, motorista ou viagem especificamente — placa, nome do motorista ou número da viagem, não "um veículo".\n' +
+      '2. Em qual tela exata o problema aparece (Frota → Veículos, → Motoristas, → Manutenções, → Abastecimentos).\n' +
+      '3. A mensagem de erro exata, se houver — texto completo, não resumo do cliente.\n' +
+      '4. O que o cliente esperava que acontecesse vs. o que aconteceu.\n' +
+      'Sem esses 4 itens, não escale — peça-os primeiro. Escalar sem eles só devolve a pergunta pro cliente depois, atrasando a resolução.',
+    tags: ['erro generico frota', 'problema frota', 'o que coletar', 'antes de escalar', 'frota nao identificado'],
+  },
+  {
+    topic: 'financeiro-problemas',
+    category: 'suporte',
+    title: 'Erro genérico em Financeiro — o que coletar antes de escalar',
+    content:
+      'Quando o problema relatado em Financeiro não se encaixa em nenhum caso conhecido (conta não criada, abastecimento sem conta, fatura não gerada), colete antes de escalar:\n' +
+      '1. Qual conta, fatura ou lançamento especificamente — número ou referência, não "uma conta".\n' +
+      '2. Em qual tela exata (Financeiro → Contas a Pagar/Receber, → Faturas, → Relatórios).\n' +
+      '3. Valor e data envolvidos, se aplicável — ajuda a localizar o lançamento certo.\n' +
+      '4. A mensagem de erro exata, se houver.\n' +
+      'Tema financeiro é sensível — nunca afirme "está errado" ou "não deveria cobrar" sem ter certeza pela fonte de dados. Na dúvida, colete os dados acima e escale — não arrisque um palpite em assunto de dinheiro.',
+    tags: ['erro generico financeiro', 'problema financeiro', 'o que coletar', 'antes de escalar', 'financeiro nao identificado'],
+  },
+  {
+    topic: 'cadastros-problemas',
+    category: 'suporte',
+    title: 'Erro genérico em Cadastro — o que coletar antes de escalar',
+    content:
+      'Quando o problema relatado em Cadastro não se encaixa em nenhum caso conhecido (CNPJ duplicado, erro de importação), colete antes de escalar:\n' +
+      '1. O que está sendo cadastrado — empresa/cliente, terceiro (fornecedor/parceiro), veículo, motorista ou usuário.\n' +
+      '2. A mensagem de erro exata ao tentar salvar, se houver.\n' +
+      '3. Se é um cadastro novo ou uma edição de um já existente.\n' +
+      '4. Se o dado "sumiu": verificar primeiro se não é filtro de status (inativo) escondendo o registro, antes de escalar como perdido.\n' +
+      'Sem a mensagem de erro exata (item 2), não dá pra saber qual campo está causando o problema — peça-a antes de tentar adivinhar.',
+    tags: ['erro generico cadastro', 'problema cadastro', 'o que coletar', 'antes de escalar', 'cadastro nao identificado'],
+  },
 ];
