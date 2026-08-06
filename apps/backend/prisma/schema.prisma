@@ -385,6 +385,7 @@ model AiKnowledgeBase {
 
   @@index([tenantId])
   @@index([category])
+  @@index([tenantId, productCode]) // busca separada por produto (F8)
   @@map("ai_knowledge_base")
 }
 
@@ -579,6 +580,9 @@ model Campaign {
   tenantId  String    @map("tenant_id")
   name      String
   channel   String    @default("whatsapp") @map("channel") // whatsapp | email
+  // F8 (parceiros multi-produto): de qual produto esta campanha fala. O lead
+  // herda na conversa e a busca de KB filtra por ele. NULL = produto principal.
+  productCode String? @map("product_code")
   template  String // texto; suporta {{nome}} e {{saudacao}}
   subject   String?   // assunto do e-mail (obrigatório para channel=email)
   status    String    @default("draft") // draft | running | paused | done

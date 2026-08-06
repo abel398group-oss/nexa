@@ -21,8 +21,20 @@ export class KnowledgeService {
     private readonly embeddings: EmbeddingsService,
   ) {}
 
+  /**
+   * Limpa o cache de busca do tenant — TODAS as chaves dele.
+   *
+   * Desde que a busca passou a separar por produto (2026-08-05) existem várias
+   * chaves por tenant (`t1`, `t1:hipertms`, `t1:pneus`). Apagar só `t1` deixaria
+   * as demais servindo conteúdo velho por até 30s depois de editar um artigo —
+   * e, pior, de forma invisível: só o produto errado ficaria desatualizado.
+   */
   private invalidateCache(tenantId: string) {
-    this.retrieveCache.delete(tenantId);
+    for (const chave of this.retrieveCache.keys()) {
+      if (chave === tenantId || chave.startsWith(`${tenantId}:`)) {
+        this.retrieveCache.delete(chave);
+      }
+    }
   }
 
   async findAll(tenantId: string, q: PaginationQueryDto, category?: string): Promise<Paginated<any>> {
@@ -51,20 +63,46 @@ export class KnowledgeService {
   // 1ª opção: busca SEMÂNTICA (pgvector + embeddings e5-small) — entende sinônimo/paráfrase.
   // Fallback: scoring TEXTUAL (título>tags>tópico>conteúdo) se embeddings indisponível
   // ou se ainda não há vetores indexados (rodar reindex após a migração).
-  async retrieve(tenantId: string, query: string, topN = 3, opts?: { excludeCategories?: string[] }) {
+  /**
+   * Busca os artigos mais relevantes para a pergunta.
+   *
+   * `productCode` separa o conhecimento por PRODUTO (2026-08-05). Sem ele, um
+   * lead que veio da campanha de pneus perguntava "quanto custa?" e a Lia
+   * respondia sobre CT-e — a base é uma só e ela buscava tudo junto. Artigo sem
+   * produto (`product_code IS NULL`) é tratado como GENÉRICO e entra em
+   * qualquer produto: serve para o que vale para a casa toda (horário de
+   * atendimento, política de cancelamento).
+   *
+   * Sem `productCode` o comportamento é o de antes: busca em tudo.
+   */
+  async retrieve(
+    tenantId: string,
+    query: string,
+    topN = 3,
+    opts?: { excludeCategories?: string[]; productCode?: string },
+  ) {
     const ex = opts?.excludeCategories ?? [];
+    const produto = opts?.productCode;
     // ── BUSCA SEMÂNTICA ──────────────────────────────────────────────────────
     if (this.embeddings.enabled && query?.trim()) {
       try {
         const vec = await this.embeddings.embed(query, 'query');
         if (vec) {
           const lit = EmbeddingsService.toVectorLiteral(vec);
-          const exClause = ex.length ? ' AND NOT (category = ANY($4::text[]))' : '';
-          const params: any[] = ex.length ? [lit, tenantId, topN, ex] : [lit, tenantId, topN];
+          const params: any[] = [lit, tenantId, topN];
+          let filtros = '';
+          if (ex.length) {
+            params.push(ex);
+            filtros += ` AND NOT (category = ANY($${params.length}::text[]))`;
+          }
+          if (produto) {
+            params.push(produto);
+            filtros += ` AND (product_code = $${params.length} OR product_code IS NULL)`;
+          }
           const rows = (await this.prisma.$queryRawUnsafe(
             `SELECT id, title, content, category, topic, 1 - (embedding <=> $1::vector) AS score
                FROM ai_knowledge_base
-              WHERE tenant_id = $2 AND embedding IS NOT NULL${exClause}
+              WHERE tenant_id = $2 AND embedding IS NOT NULL${filtros}
               ORDER BY embedding <=> $1::vector
               LIMIT $3`,
             ...params,
@@ -87,19 +125,27 @@ export class KnowledgeService {
     }
 
     // ── FALLBACK TEXTUAL ─────────────────────────────────────────────────────
-    // Cache em memória 30s por tenantId — evita recarregar toda a base a cada mensagem.
+    // Cache em memória 30s — evita recarregar toda a base a cada mensagem.
+    //
+    // A chave inclui o produto, e o filtro vai no BANCO (não depois): com
+    // `take: 100` e a base do TMS sendo muito maior que a do parceiro, filtrar
+    // em memória deixaria os artigos do parceiro de fora do corte — a Lia de
+    // pneus ficaria sem conhecimento nenhum e nem saberia por quê.
     const now = Date.now();
-    const cached = this.retrieveCache.get(tenantId);
+    const cacheKey = produto ? `${tenantId}:${produto}` : tenantId;
+    const cached = this.retrieveCache.get(cacheKey);
     let all: any[];
     if (cached && cached.expiresAt > now) {
       all = cached.items;
     } else {
       all = await this.prisma.aiKnowledgeBase.findMany({
-        where: { tenantId },
+        where: produto
+          ? { tenantId, OR: [{ productCode: produto }, { productCode: null }] }
+          : { tenantId },
         take: 100,
         orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
       });
-      this.retrieveCache.set(tenantId, { items: all, expiresAt: now + this.CACHE_TTL_MS });
+      this.retrieveCache.set(cacheKey, { items: all, expiresAt: now + this.CACHE_TTL_MS });
     }
     const terms = query
       .toLowerCase()

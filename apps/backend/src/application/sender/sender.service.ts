@@ -996,7 +996,16 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           orderBy: { startedAt: 'desc' },
         });
         if (!conv) {
-          conv = await this.conversations.create(campaign.tenantId, { contactId: contact.id, phone: target.phone, sourceChannel: 'whatsapp' });
+          // F8: o lead herda o PRODUTO da campanha que o trouxe. É o que faz a
+          // Lia buscar conhecimento de pneus para quem veio da lista de pneus,
+          // em vez de responder sobre CT-e (a base é uma só, separada por
+          // product_code — ver knowledge.service.ts:retrieve).
+          conv = await this.conversations.create(campaign.tenantId, {
+            contactId: contact.id,
+            phone: target.phone,
+            sourceChannel: 'whatsapp',
+            productCode: (campaign as any).productCode ?? undefined,
+          });
         } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
           // reabre; se vinha de opt-out, limpa o outcome (voltou a ficar ativa).
           // won/lost são preservados (não mexe).

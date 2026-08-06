@@ -64,7 +64,9 @@ export class SalesAgentService {
   ): Promise<SalesReply> {
     const productCode = input.productCode ?? 'hipertms';
     const [kb, plans, cfg] = await Promise.all([
-      this.knowledge.retrieve(tenantId, input.question, 2, { excludeCategories: ['suporte'] }),
+      // F8: a busca é separada por produto — lead de pneus não recebe artigo do
+      // TMS. Artigo sem produto conta como genérico e entra em qualquer um.
+      this.knowledge.retrieve(tenantId, input.question, 2, { excludeCategories: ['suporte'], productCode }),
       this.connectors.getPlans(productCode).catch(() => []),
       this.playbook.get(tenantId),
     ]);

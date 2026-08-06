@@ -178,9 +178,17 @@ export class ConversationAgentService {
     if (input.conversationId) {
       const convId = input.conversationId;
       const convForGuard = await this.prisma.aiConversation
-        .findUnique({ where: { id: convId }, select: { phone: true } })
+        .findUnique({ where: { id: convId }, select: { phone: true, productCode: true } })
         .catch(() => null);
       ownPhone = convForGuard?.phone ?? null;
+
+      // F8: o produto fica gravado na conversa quando o lead entra pela campanha
+      // (sender.service.ts). Quando ele RESPONDE, quem chama o handle() não sabe
+      // disso — sem esta releitura a separação de conhecimento por produto
+      // valeria só para a primeira mensagem e depois silenciosamente sumia.
+      if (!input.productCode && convForGuard?.productCode) {
+        input = { ...input, productCode: convForGuard.productCode };
+      }
 
       if (ownPhone && (await this.abuseGuard.isBanned(tenantId, ownPhone))) {
         this.logger.warn(`Mensagem ignorada — número banido por abuso repetido (tenant=${tenantId} phone=${ownPhone})`);

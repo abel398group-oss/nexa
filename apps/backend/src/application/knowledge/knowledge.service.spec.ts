@@ -88,3 +88,77 @@ describe('KnowledgeService.getEmbeddingsStatus', () => {
     expect(result.knowledgeBase.indexedPct).toBe(0);
   });
 });
+
+// ─── F8: separação de conhecimento por produto (2026-08-05) ──────────────────
+// A base é uma só. Sem o filtro, um lead vindo da campanha de pneus perguntava
+// "quanto custa?" e a Lia respondia sobre CT-e.
+
+function mockPrismaRetrieve(rows: any[]) {
+  return {
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    aiKnowledgeBase: { findMany: vi.fn().mockResolvedValue(rows) },
+  } as any;
+}
+const embeddingsOff = { enabled: false } as any;
+
+describe('KnowledgeService.retrieve — separação por produto', () => {
+  const artigo = (over: any = {}) => ({
+    id: 'k1', title: 'Preço do plano', content: 'custa muito barato mesmo',
+    category: 'comercial', topic: 'planos', tags: [], productCode: null, ...over,
+  });
+
+  it('sem productCode: busca em tudo (comportamento anterior preservado)', async () => {
+    const prisma = mockPrismaRetrieve([artigo()]);
+    const svc = new KnowledgeService(prisma, {} as any, embeddingsOff);
+
+    await svc.retrieve('t1', 'quanto custa o plano', 3);
+
+    expect(prisma.aiKnowledgeBase.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1' });
+  });
+
+  it('com productCode: filtra NO BANCO pelo produto + genéricos', async () => {
+    const prisma = mockPrismaRetrieve([artigo()]);
+    const svc = new KnowledgeService(prisma, {} as any, embeddingsOff);
+
+    await svc.retrieve('t1', 'quanto custa o pneu', 3, { productCode: 'pneus' });
+
+    expect(prisma.aiKnowledgeBase.findMany.mock.calls[0][0].where).toEqual({
+      tenantId: 't1',
+      OR: [{ productCode: 'pneus' }, { productCode: null }],
+    });
+  });
+
+  // O filtro precisa ir no BANCO: com `take: 100` e a base do TMS muito maior
+  // que a do parceiro, filtrar depois deixaria os artigos do parceiro fora do corte.
+  it('o corte de 100 é aplicado JÁ filtrado, não antes', async () => {
+    const prisma = mockPrismaRetrieve([artigo()]);
+    const svc = new KnowledgeService(prisma, {} as any, embeddingsOff);
+
+    await svc.retrieve('t1', 'pneu', 3, { productCode: 'pneus' });
+
+    const chamada = prisma.aiKnowledgeBase.findMany.mock.calls[0][0];
+    expect(chamada.take).toBe(100);
+    expect(chamada.where.OR).toBeDefined();
+  });
+
+  it('produtos diferentes não compartilham cache', async () => {
+    const prisma = mockPrismaRetrieve([artigo()]);
+    const svc = new KnowledgeService(prisma, {} as any, embeddingsOff);
+
+    await svc.retrieve('t1', 'quanto custa', 3, { productCode: 'hipertms' });
+    await svc.retrieve('t1', 'quanto custa', 3, { productCode: 'pneus' });
+
+    // duas leituras distintas — a segunda NÃO pode reaproveitar o cache da primeira
+    expect(prisma.aiKnowledgeBase.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('mesmo produto reaproveita o cache', async () => {
+    const prisma = mockPrismaRetrieve([artigo()]);
+    const svc = new KnowledgeService(prisma, {} as any, embeddingsOff);
+
+    await svc.retrieve('t1', 'quanto custa', 3, { productCode: 'pneus' });
+    await svc.retrieve('t1', 'outra pergunta qualquer', 3, { productCode: 'pneus' });
+
+    expect(prisma.aiKnowledgeBase.findMany).toHaveBeenCalledTimes(1);
+  });
+});
