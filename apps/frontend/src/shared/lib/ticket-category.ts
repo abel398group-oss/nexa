@@ -43,13 +43,15 @@ export interface PriorityConfig {
   color: string;
   textColor: string;
   ringColor: string;
+  /** Cor da borda esquerda do card de ticket na fila (indicador de gravidade). */
+  borderColor: string;
 }
 
 export const PRIORITY_CONFIG: Record<TicketPriority, PriorityConfig> = {
-  critical: { label: 'Crítica', color: 'bg-red-600',    textColor: 'text-white',      ringColor: 'ring-red-600' },
-  high:     { label: 'Alta',    color: 'bg-orange-100', textColor: 'text-orange-800', ringColor: 'ring-orange-400' },
-  medium:   { label: 'Média',   color: 'bg-yellow-100', textColor: 'text-yellow-800', ringColor: 'ring-yellow-400' },
-  low:      { label: 'Baixa',   color: 'bg-green-100',  textColor: 'text-green-800',  ringColor: 'ring-green-400' },
+  critical: { label: 'Crítica', color: 'bg-red-600',    textColor: 'text-white',      ringColor: 'ring-red-600',    borderColor: 'border-l-red-600' },
+  high:     { label: 'Alta',    color: 'bg-orange-100', textColor: 'text-orange-800', ringColor: 'ring-orange-400', borderColor: 'border-l-orange-400' },
+  medium:   { label: 'Média',   color: 'bg-yellow-100', textColor: 'text-yellow-800', ringColor: 'ring-yellow-400', borderColor: 'border-l-yellow-400' },
+  low:      { label: 'Baixa',   color: 'bg-green-100',  textColor: 'text-green-800',  ringColor: 'ring-green-400',  borderColor: 'border-l-green-400' },
 };
 
 export function getCategoryConfig(cat?: string | null): CategoryConfig | null {

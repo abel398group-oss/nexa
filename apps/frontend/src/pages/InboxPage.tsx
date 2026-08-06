@@ -38,6 +38,7 @@ import { ConversationTimeline } from '@/components/conversation/ConversationTime
 import { isWaitingInternalStale } from '@/shared/lib/conversation-status';
 import { isSupportTicket } from '@/shared/lib/conversation';
 import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
+import { getPriorityConfig } from '@/shared/lib/ticket-category';
 
 function ChannelBadge({ sourceChannel }: { sourceChannel?: string | null }) {
   if (sourceChannel === 'email') {
@@ -107,6 +108,20 @@ function fmtMsgTime(iso: string): string {
   } catch {
     return '';
   }
+}
+
+// Tempo decorrido desde lastActivityAt, compacto (ex: "4 min", "2h", "3d") —
+// pro cronômetro de SLA no card do ticket na fila.
+function fmtElapsed(iso?: string | null): string {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return '—';
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
 }
 
 function Recibo({ ack }: { ack?: number }) {
@@ -398,6 +413,47 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     );
   }, [filtered, searchQuery]);
 
+  // Dashboard operacional — mostrado quando nenhum chamado está aberto.
+  // Independente de activeFilter/queueFilter de propósito: é visão geral da
+  // fila inteira, não do que o analista filtrou no momento.
+  const supportDashboard = useMemo(() => {
+    if (scope !== 'support') return null;
+    const tickets = convs.filter(isSupportTicket).filter((c) => c.status !== 'closed' && c.status !== 'opt_out');
+    return {
+      escaladosSemDono: tickets.filter((c) => c.status === 'escalated' && !c.assignedAnalystId),
+      emAtendimento: tickets.filter((c) => !!c.assignedAnalystId),
+      // "Aguardando Dev" aqui é waiting_internal de forma geral — a categoria não
+      // é exclusiva de engenharia (pode ser qualquer ação interna), mas é a
+      // aproximação mais próxima disponível hoje sem um status dedicado.
+      aguardandoDev: tickets.filter((c) => c.status === 'waiting_internal'),
+      semDonoMaisAntigos: tickets
+        .filter((c) => !c.assignedAnalystId)
+        .sort((a, b) => {
+          const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+          const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+          return ta - tb; // mais antigo primeiro
+        })
+        .slice(0, 8),
+    };
+  }, [convs, scope]);
+
+  // Assume o chamado E já abre — usado pela lista "Assumir" do dashboard,
+  // onde não existe `active` ainda (nenhuma conversa selecionada).
+  async function quickAssumeAndOpen(c: Conversation) {
+    try {
+      const r = await reassignAnalyst(c.id, user?.id ?? null);
+      const updated: Conversation = {
+        ...c,
+        assignedAnalyst: r?.assignedAnalyst ?? null,
+        assignedAnalystId: r?.assignedAnalystId ?? null,
+      };
+      setConvs((cs) => cs.map((x) => (x.id === c.id ? updated : x)));
+      openGroup({ rep: updated, convs: [{ id: c.id }] });
+    } catch {
+      toast.error('Erro ao assumir chamado.');
+    }
+  }
+
   function openGroup(g: { rep: Conversation; convs: { id: string }[] }) {
     const c = g.rep;
     setActive(c);
@@ -674,16 +730,27 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
             const stale = c.status === 'waiting_internal' && isWaitingInternalStale(c.lastActivityAt);
             const isSelected = selectedIds.has(c.id);
             const hasSelection = selectedIds.size > 0;
+            // Card de ticket: borda de gravidade — escalada sempre vence (é o
+            // sinal mais forte), senão a prioridade do ticket (crítica=vermelho
+            // até baixa=verde), senão neutro (sem categoria/vendas).
+            const priCfg = scope === 'support' ? getPriorityConfig(c.ticketPriority) : null;
+            const severityBorder = c.status === 'escalated'
+              ? 'border-l-orange-500'
+              : priCfg?.borderColor ?? 'border-l-transparent';
             return (
               <div
                 key={g.key}
                 className={[
-                  'group/item relative border-b transition-colors',
+                  'group/item relative border-b border-l-4 transition-colors',
                   active?.id === c.id ? 'bg-base-200' : 'hover:bg-base-100',
-                  c.status === 'escalated' ? 'border-l-2 border-l-orange-400' : '',
+                  severityBorder,
                   isSelected ? 'bg-base-200' : '',
                 ].join(' ')}
-                style={{ borderColor: 'var(--border)' }}
+                // Só a borda de BAIXO usa a cor neutra do tema — a borda ESQUERDA
+                // (gravidade) precisa ficar livre pra classe Tailwind colorir,
+                // senão `borderColor` no style vence por especificidade e apaga
+                // a cor de severidade.
+                style={{ borderBottomColor: 'var(--border)' }}
               >
                 {/* Checkbox — visível no hover ou quando há seleção ativa */}
                 <div
@@ -750,6 +817,15 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         <ConversationStatusBadge status={c.status} lastActivityAt={c.lastActivityAt} />
+                        {/* Cronômetro de SLA — quanto tempo o chamado está parado */}
+                        {scope === 'support' && c.status !== 'closed' && c.status !== 'opt_out' && (
+                          <span
+                            title="Tempo desde a última atividade"
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${stale || c.status === 'escalated' ? 'text-red-500' : 'text-base-content/40'}`}
+                          >
+                            ⏱️ {fmtElapsed(c.lastActivityAt)}
+                          </span>
+                        )}
                         {g.convs.length > 1 && (
                           <span title={`${g.convs.length} conversas com este contato`} className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60">
                             <Icon name="inbox" className="h-3 w-3" /> {g.convs.length}
@@ -767,15 +843,25 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                             {c.assignedSeller.name}
                           </span>
                         )}
-                        {/* F12: trava de colisão visual — quem está com este chamado, direto na lista */}
-                        {scope === 'support' && c.assignedAnalystId && (
-                          <span
-                            title="Quem está atendendo este chamado"
-                            className="inline-flex items-center gap-0.5 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60"
-                          >
-                            <Icon name="users" className="h-3 w-3" />
-                            {c.assignedAnalystId === user?.id ? 'Você' : (c.assignedAnalyst?.name ?? 'Analista')}
-                          </span>
+                        {/* F12: trava de colisão visual — quem está com este chamado, direto na lista.
+                            Pinado à direita da linha (ml-auto) pra ler como "canto do card". */}
+                        {scope === 'support' && c.status !== 'closed' && c.status !== 'opt_out' && (
+                          c.assignedAnalystId ? (
+                            <span
+                              title="Quem está atendendo este chamado"
+                              className="ml-auto inline-flex items-center gap-0.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                            >
+                              <Icon name="users" className="h-3 w-3" />
+                              {c.assignedAnalystId === user?.id ? 'Você' : (c.assignedAnalyst?.name ?? 'Analista')}
+                            </span>
+                          ) : (
+                            <span
+                              title="Ninguém assumiu este chamado ainda"
+                              className="ml-auto inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                            >
+                              Sem Dono
+                            </span>
+                          )
                         )}
                         {/* F13: chamado com issue de dev vinculada — bate o olho na lista */}
                         {scope === 'support' && c.linkedIssueUrl && (
@@ -815,9 +901,74 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       {/* ── Thread ────────────────────────────────────────────────────── */}
       <main className="flex flex-1 flex-col bg-base-100 min-w-0">
         {!active ? (
-          <div className="flex flex-1 items-center justify-center text-base-content/40">
-            Selecione uma conversa
-          </div>
+          scope === 'support' && supportDashboard ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mx-auto max-w-3xl">
+                <h2 className="mb-1 text-lg font-bold text-base-content">Central de Operações — Suporte</h2>
+                <p className="mb-5 text-xs text-base-content/50">
+                  Selecione um chamado na fila ao lado, ou assuma um dos mais urgentes abaixo.
+                </p>
+
+                <div className="mb-6 grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/20 dark:bg-red-500/10">
+                    <div className="text-2xl font-bold text-red-600">{supportDashboard.escaladosSemDono.length}</div>
+                    <div className="mt-0.5 text-xs font-medium text-red-700 dark:text-red-400">🔴 Escalados sem Dono</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+                    <div className="text-2xl font-bold text-amber-600">{supportDashboard.emAtendimento.length}</div>
+                    <div className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">🟡 Em Atendimento</div>
+                  </div>
+                  <div
+                    className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10"
+                    title='"Aguardando Interno" é qualquer ação da equipe (não só dev) — HiperTMS não distingue isso ainda'
+                  >
+                    <div className="text-2xl font-bold text-violet-600">{supportDashboard.aguardandoDev.length}</div>
+                    <div className="mt-0.5 text-xs font-medium text-violet-700 dark:text-violet-400">🟣 Aguardando Interno/Dev</div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-base-200">
+                  <div className="border-b border-base-200 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+                    Chamados sem dono — mais antigos primeiro
+                  </div>
+                  {supportDashboard.semDonoMaisAntigos.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-base-content/40">
+                      Nenhum chamado sem dono agora — fila geral limpa. 🎉
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-base-200">
+                      {supportDashboard.semDonoMaisAntigos.map((c) => (
+                        <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-base-content">
+                              {c.contact?.name || displayPhone(c.phone)}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] text-base-content/50">
+                              {c.contact?.company && <span className="truncate">{c.contact.company}</span>}
+                              <span>⏱️ {fmtElapsed(c.lastActivityAt)}</span>
+                            </div>
+                          </div>
+                          {(c.ticketCategory || c.ticketPriority) && (
+                            <TicketCategoryBadge category={c.ticketCategory} priority={c.ticketPriority} compact />
+                          )}
+                          <button
+                            onClick={() => quickAssumeAndOpen(c)}
+                            className="shrink-0 rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700"
+                          >
+                            Assumir
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-base-content/40">
+              Selecione uma conversa
+            </div>
+          )
         ) : (
           <>
             {/* header da conversa */}
@@ -982,37 +1133,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                   </>
                 )}
 
-                {/* F12: dono do chamado — "Assumir" quando sem dono + trava de colisão visual */}
-                {scope === 'support' && (
-                  <>
-                    {active.assignedAnalystId ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] font-medium text-base-content/70"
-                        title="Quem está atendendo este chamado"
-                      >
-                        <Icon name="users" className="h-3 w-3" />
-                        {active.assignedAnalystId === user?.id ? 'Você' : (active.assignedAnalyst?.name ?? 'Analista')}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => assignAnalyst(user?.id ?? null)}
-                        className="rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700"
-                        title="Assumir este chamado"
-                      >
-                        <span className="inline-flex items-center gap-1"><Icon name="check" className="h-3.5 w-3.5" /> Assumir chamado</span>
-                      </button>
-                    )}
-                    <Select
-                      value={active.assignedAnalystId ?? ''}
-                      onChange={(e) => assignAnalyst(e.target.value || null)}
-                      className="!h-8 !w-auto text-xs"
-                      title="Reatribuir a outro analista"
-                    >
-                      <option value="">Sem dono</option>
-                      {analysts.map((a) => <option key={a.id} value={a.id}>{a.name ?? a.id}</option>)}
-                    </Select>
-                  </>
-                )}
+                {/* F14: dono do chamado, resumo da IA e link de dev saíram do header
+                    e viraram o Painel do Cliente & TMS (coluna da direita) — o
+                    header ficava lotado e essa informação é mais útil como
+                    contexto persistente ao lado do chat, não misturada com o
+                    resto dos badges. Ver <aside> logo após </main>. */}
 
                 {/* suporte: resolver / reabrir o chamado */}
                 {scope === 'support' && (
@@ -1053,82 +1178,6 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 )}
               </div>
             </div>
-
-            {/* F10: resumo executivo do transbordo — [Problema]/[Ações Tentadas]/[Causa] */}
-            {scope === 'support' && active.status === 'escalated' && active.escalationSummary && (
-              <div className="border-b border-base-200 bg-amber-50 px-4 py-2.5">
-                <div className="flex items-start gap-2">
-                  <Icon name="knowledge" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                  <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-amber-900">
-                    {active.escalationSummary}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {/* F13: link de issue de dev (Jira/GitHub/ClickUp/Trello) — ponte manual com N3 */}
-            {scope === 'support' && (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-base-200 bg-[var(--surface)] px-4 py-2">
-                <span className="text-[11px] text-base-content/40 shrink-0">Issue de Dev:</span>
-                {editingIssue ? (
-                  <>
-                    <input
-                      autoFocus
-                      value={issueUrlInput}
-                      onChange={(e) => setIssueUrlInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && saveLinkedIssue(issueUrlInput.trim() || null)}
-                      placeholder="https://jira.../BUG-123, github.com/.../issues/42..."
-                      className="min-w-[280px] flex-1 rounded-full border border-dashed border-base-300 bg-transparent px-2.5 py-0.5 text-[11px] text-base-content outline-none placeholder:text-base-content/40 focus:border-brand-500"
-                    />
-                    <button
-                      onClick={() => saveLinkedIssue(issueUrlInput.trim() || null)}
-                      className="rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-medium text-white hover:bg-brand-700"
-                    >
-                      Salvar
-                    </button>
-                    <button
-                      onClick={() => { setEditingIssue(false); setIssueUrlInput(''); }}
-                      className="text-[11px] text-base-content/50 hover:text-base-content"
-                    >
-                      Cancelar
-                    </button>
-                  </>
-                ) : active.linkedIssueUrl ? (
-                  <>
-                    <a
-                      href={active.linkedIssueUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex max-w-[320px] items-center gap-1 truncate rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-500/15 dark:text-violet-300"
-                      title={active.linkedIssueUrl}
-                    >
-                      🔗 <span className="truncate">{active.linkedIssueUrl}</span>
-                    </a>
-                    <button
-                      onClick={() => { setIssueUrlInput(active.linkedIssueUrl ?? ''); setEditingIssue(true); }}
-                      className="text-base-content/40 hover:text-base-content"
-                      title="Editar link"
-                    >
-                      <Icon name="edit" className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => saveLinkedIssue(null)}
-                      className="text-base-content/40 hover:text-red-500"
-                      title="Remover vínculo"
-                    >
-                      <Icon name="close" className="h-3 w-3" />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => { setIssueUrlInput(''); setEditingIssue(true); }}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-base-300 px-2.5 py-0.5 text-[11px] text-base-content/50 hover:border-brand-500 hover:text-brand-600"
-                  >
-                    <Icon name="plus" className="h-3 w-3" /> Vincular issue
-                  </button>
-                )}
-              </div>
-            )}
 
             {/* tags livres do contato (mostrar + adicionar/remover) */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-base-200 bg-[var(--surface)] px-4 py-2">
@@ -1278,6 +1327,188 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
           </>
         )}
       </main>
+
+      {/* ── F14: Painel do Cliente & TMS (coluna da direita, só suporte) ──
+          Reúne o que era espalhado no header (dono do chamado), no corpo do
+          chat (resumo da IA, link de dev) num painel de contexto persistente
+          — o analista não perde essa informação rolando a conversa pra cima. */}
+      {scope === 'support' && active && (
+        <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-base-200 bg-[var(--surface)]">
+          <div className="border-b border-base-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+            Painel do Cliente &amp; TMS
+          </div>
+
+          {/* Card do Cliente */}
+          <div className="space-y-2 border-b border-base-200 p-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
+                {(active.contact?.name
+                  ? active.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
+                  : displayPhone(active.phone).slice(0, 2)
+                ).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-base-content">
+                  {active.contact?.name || displayPhone(active.phone)}
+                </div>
+                <div className="truncate text-[11px] text-base-content/50">{displayPhone(active.phone)}</div>
+              </div>
+            </div>
+            {active.contact?.company && (
+              <div className="flex items-center gap-1.5 text-xs text-base-content/70">
+                <Icon name="building" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
+                <span className="truncate">{active.contact.company}</span>
+              </div>
+            )}
+            {tmsLookup?.customer?.email && (
+              <div className="flex items-center gap-1.5 text-xs text-base-content/70">
+                <Icon name="mail" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
+                <span className="truncate">{tmsLookup.customer.email}</span>
+              </div>
+            )}
+            {/* CNPJ ainda não vem no token do widget (pendente do lado do TMS —
+                ver docs/features/tms-native-support/especificacao-contexto-
+                cliente-e-reenvio-fatura.md). Mostrado como placeholder honesto
+                em vez de simplesmente omitir — deixa visível que o dado existe
+                como conceito, só falta a integração. */}
+            <div className="flex items-center gap-1.5 text-xs text-base-content/35" title="Pendente: o token do widget ainda não envia CNPJ (pedido já feito ao time do TMS)">
+              <Icon name="building" className="h-3.5 w-3.5 shrink-0" />
+              CNPJ — não disponível ainda
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {tmsLookup === null && (
+                <span className="rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/40">verificando TMS…</span>
+              )}
+              {tmsLookup?.found && tmsLookup.customer && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  Cliente ativo{tmsLookup.customer.plan ? ` · ${tmsLookup.customer.plan}` : ''}
+                </span>
+              )}
+              {tmsLookup !== null && !tmsLookup.found && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/50">
+                  Prospect
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Resumo da IA — F10 */}
+          {active.status === 'escalated' && active.escalationSummary && (
+            <div className="border-b border-base-200 bg-amber-50 p-4 dark:bg-amber-500/10">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                <Icon name="knowledge" className="h-3.5 w-3.5" /> Resumo da IA
+              </div>
+              <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+                {active.escalationSummary}
+              </pre>
+            </div>
+          )}
+
+          {/* Card de Engenharia / Dev — F13 */}
+          <div className="border-b border-base-200 p-4">
+            <div className="mb-2 flex items-center justify-between gap-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+                <Icon name="bot" className="h-3.5 w-3.5" /> Engenharia / Dev
+              </span>
+              {active.status === 'waiting_internal' && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                  Aguardando Interno
+                </span>
+              )}
+            </div>
+            {editingIssue ? (
+              <div className="space-y-1.5">
+                <input
+                  autoFocus
+                  value={issueUrlInput}
+                  onChange={(e) => setIssueUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveLinkedIssue(issueUrlInput.trim() || null)}
+                  placeholder="https://jira.../BUG-123..."
+                  className="w-full rounded-full border border-dashed border-base-300 bg-transparent px-2.5 py-1 text-[11px] text-base-content outline-none placeholder:text-base-content/40 focus:border-brand-500"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => saveLinkedIssue(issueUrlInput.trim() || null)}
+                    className="flex-1 rounded-full bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-brand-700"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    onClick={() => { setEditingIssue(false); setIssueUrlInput(''); }}
+                    className="rounded-full border border-base-300 px-2.5 py-1 text-[11px] text-base-content/60 hover:bg-base-100"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : active.linkedIssueUrl ? (
+              <div className="space-y-1.5">
+                <a
+                  href={active.linkedIssueUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 truncate rounded-lg bg-violet-100 px-2.5 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-500/15 dark:text-violet-300"
+                  title={active.linkedIssueUrl}
+                >
+                  🔗 <span className="truncate">{active.linkedIssueUrl}</span>
+                </a>
+                <div className="flex gap-2 text-[11px]">
+                  <button
+                    onClick={() => { setIssueUrlInput(active.linkedIssueUrl ?? ''); setEditingIssue(true); }}
+                    className="flex items-center gap-1 text-base-content/50 hover:text-base-content"
+                  >
+                    <Icon name="edit" className="h-3 w-3" /> Editar
+                  </button>
+                  <button
+                    onClick={() => saveLinkedIssue(null)}
+                    className="flex items-center gap-1 text-base-content/50 hover:text-red-500"
+                  >
+                    <Icon name="close" className="h-3 w-3" /> Remover
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setIssueUrlInput(''); setEditingIssue(true); }}
+                className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-base-300 py-2 text-[11px] text-base-content/50 hover:border-brand-500 hover:text-brand-600"
+              >
+                <Icon name="plus" className="h-3.5 w-3.5" /> Vincular issue (Jira/GitHub/ClickUp)
+              </button>
+            )}
+          </div>
+
+          {/* Ações Rápidas */}
+          <div className="space-y-2 p-4">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+              Ações Rápidas
+            </div>
+            {active.assignedAnalystId ? (
+              <div className="flex items-center gap-1.5 rounded-lg bg-base-200 px-3 py-2 text-xs font-medium text-base-content/70">
+                <Icon name="users" className="h-3.5 w-3.5 shrink-0" />
+                {active.assignedAnalystId === user?.id
+                  ? 'Você está com este chamado'
+                  : `Com ${active.assignedAnalyst?.name ?? 'outro analista'}`}
+              </div>
+            ) : (
+              <button
+                onClick={() => assignAnalyst(user?.id ?? null)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                <Icon name="check" className="h-4 w-4" /> Assumir Chamado
+              </button>
+            )}
+            <Select
+              value={active.assignedAnalystId ?? ''}
+              onChange={(e) => assignAnalyst(e.target.value || null)}
+              className="!h-9 w-full text-xs"
+              title="Transferir para outro analista"
+            >
+              <option value="">Sem dono</option>
+              {analysts.map((a) => <option key={a.id} value={a.id}>{a.name ?? a.id}</option>)}
+            </Select>
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
