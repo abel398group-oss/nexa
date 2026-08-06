@@ -158,6 +158,7 @@ que a própria KB da Lia já informava ao cliente).
 | `ticketNumber` gerado e nunca exibido ao cliente | Cosmético. |
 | Formulário do portal grava `categoria: 'outro'` e `prioridade: 'normal'` | Valores que não existem nos enums do classificador. Não quebra nada hoje (o SLA aceita `normal` como alias), mas é vocabulário divergente — mesma classe de problema do S-01. |
 | Feriados no cálculo de horário útil | Ver S-06. |
+| Escalação de ticket avisa só e-mail + sino, sem WhatsApp | Time hoje (2026-08-06) são 3 pessoas (Abel, Uelder, Mateus) fazendo vendas E suporte — já cadastrados como `Seller`. Ideia: reaproveitar o mesmo aviso de WhatsApp que já existe pro lead quente (`Seller.outOfOffice`, ADR 034) também na escalação de suporte, em vez de criar um conceito novo de "atendente de suporte". Não é feature nova — é ligar um fio que já existe num caminho que não o usa hoje. Adiado por decisão do Abel: documentar agora, implementar quando fizer sentido. |
 
 ## Nota de método
 
