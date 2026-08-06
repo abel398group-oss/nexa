@@ -243,7 +243,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async createCampaign(
     tenantId: string,
     dto: {
-      name: string; template: string; type?: string;
+      name: string; template: string; type?: string; productCode?: string;
       phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
       link?: string; sendLinkOnFirst?: boolean;
       mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
@@ -259,6 +259,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           tenantId,
           name: dto.name,
           type: 'status',
+          productCode: dto.productCode || null,
           template: dto.template,
           mediaUrl: dto.mediaUrl || null,
           mediaName: dto.mediaName || null,
@@ -437,6 +438,9 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         tenantId,
         name: dto.name,
         type: campaignType,
+        // F8: o lead herda este produto na conversa (ver tickLocked) e a Lia
+        // busca só o conhecimento dele. Vazio = produto principal.
+        productCode: dto.productCode || null,
         template: dto.template,
         link: dto.link || null,
         // 2026-07-29: mesma semântica do e-mail (email-campaign-sender:299-303).

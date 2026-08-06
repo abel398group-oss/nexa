@@ -123,6 +123,7 @@ export class EmailCampaignSenderService {
       name: string;
       subject: string;
       template: string;
+      productCode?: string; // F8: de qual produto/parceiro esta campanha fala
       emails?: { email: string; name?: string }[]; // lista manual
       fromContacts?: boolean;                        // usa contatos com e-mail cadastrado
       link?: string;
@@ -209,6 +210,7 @@ export class EmailCampaignSenderService {
         tenantId,
         name: dto.name,
         channel: 'email',
+        productCode: dto.productCode || null,
         subject: dto.subject,
         template: dto.template,
         link: dto.link?.trim() || null,

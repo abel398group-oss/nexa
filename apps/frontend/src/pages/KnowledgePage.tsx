@@ -28,6 +28,9 @@ export function KnowledgePage() {
   const [newTitle, setNewTitle] = useState(() => searchParams.get('title') ?? '');
   const [newCategory, setNewCategory] = useState(() => searchParams.get('category') ?? 'suporte');
   const [newTopic, setNewTopic] = useState('suporte-cliente');
+  // F8: produto/parceiro a que o artigo pertence. Vazio = genérico, aparece
+  // para todos os produtos (ex.: horário de atendimento).
+  const [newProduct, setNewProduct] = useState('');
   const [newContent, setNewContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -56,6 +59,14 @@ export function KnowledgePage() {
       api
         .get('/knowledge', { params: { limit: PAGE, offset: page * PAGE, search: debouncedSearch || undefined, category: category || undefined } })
         .then((r) => r.data as { items: KB[]; total: number }),
+  });
+
+  // F8: produtos que já têm conhecimento — alimenta a sugestão do campo.
+  // Digitar livremente convida ao erro silencioso: um typo não casa com nada e
+  // a Lia atende sem conhecimento, sem nada parecer errado.
+  const { data: productCodes = [] } = useQuery({
+    queryKey: ['knowledge-product-codes'],
+    queryFn: () => api.get('/knowledge/product-codes').then((r) => r.data as { productCode: string; artigos: number }[]),
   });
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -150,7 +161,9 @@ export function KnowledgePage() {
         content: newContent.trim(),
         category: newCategory || 'suporte',
         topic: newTopic || 'suporte-cliente',
-        productCode: 'hipertms',
+        // F8: era 'hipertms' fixo — todo artigo novo caía no produto principal,
+        // mesmo sendo de um parceiro. Vazio = genérico (vale para todos).
+        productCode: newProduct.trim() || undefined,
         tags: [],
       });
       toast.success('Artigo criado! A Lia já pode usar este conhecimento após o próximo reindex.');
@@ -289,6 +302,28 @@ export function KnowledgePage() {
                   <label className="mb-1 block text-xs font-medium text-base-content/60">Tópico</label>
                   <Input value={newTopic} onChange={(e) => setNewTopic(e.target.value)} placeholder="suporte-cliente" />
                 </div>
+              </div>
+              {/* F8: separa o conhecimento por produto/parceiro */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-base-content/60">
+                  Produto / parceiro <span className="font-normal text-base-content/40">(opcional)</span>
+                </label>
+                <Input
+                  list="kb-product-codes"
+                  value={newProduct}
+                  onChange={(e) => setNewProduct(e.target.value)}
+                  placeholder="Deixe vazio para valer em todos os produtos"
+                />
+                <datalist id="kb-product-codes">
+                  {productCodes.map((p) => <option key={p.productCode} value={p.productCode} />)}
+                </datalist>
+                <p className="mt-1 text-xs text-base-content/40">
+                  A Lia só usa este artigo em conversas do produto escolhido. Vazio = vale para todos
+                  (ex.: horário de atendimento).
+                  {productCodes.length > 0 && (
+                    <> Em uso: {productCodes.map((p) => `${p.productCode} (${p.artigos})`).join(' · ')}.</>
+                  )}
+                </p>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-base-content/60">Conteúdo (o que a Lia vai ler)</label>

@@ -30,6 +30,12 @@ export class KnowledgeController {
     return this.knowledge.findAll(tenantId, q, category);
   }
 
+  // F8: produtos que já têm conhecimento (sugestão nos formulários). Antes de :id.
+  @Get('product-codes')
+  productCodes(@CurrentTenant() tenantId: string) {
+    return this.knowledge.listProductCodes(tenantId);
+  }
+
   // exclusão em lote (definir ANTES de :id)
   @Post('bulk-delete')
   bulkDelete(@CurrentTenant() tenantId: string, @Body() body: BulkDeleteDto) {

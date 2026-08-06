@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useLocation, Link } from 'react-router-dom';
+import { api } from '@/shared/lib/api';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
 import {
@@ -149,6 +150,16 @@ export function CampaignsPage() {
 
   // WhatsApp fields
   const [name, setName] = useState('');
+  // F8: produto/parceiro da campanha. O lead herda na conversa e a Lia busca só
+  // o conhecimento desse produto. Vazio = produto principal.
+  const [productCode, setProductCode] = useState('');
+  // Produtos que já têm conhecimento — sugestão + aviso de produto sem base.
+  const [productCodes, setProductCodes] = useState<{ productCode: string; artigos: number }[]>([]);
+  useEffect(() => {
+    api.get('/knowledge/product-codes')
+      .then((r) => setProductCodes(r.data ?? []))
+      .catch(() => setProductCodes([])); // sugestão é conveniência, não pode quebrar a tela
+  }, []);
   const [template, setTemplate] = useState('{{saudacao}}, {{nome}}! Aqui é a Lia do HiperTMS. Posso te apresentar nosso sistema de gestão de fretes?');
   // WhatsApp: default "todos os contatos". Email: default lista manual (fromContacts=false)
   // pois normalmente não há e-mails cadastrados nos contatos ainda
@@ -327,6 +338,7 @@ export function CampaignsPage() {
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
     setManualSort('az'); setManualSnapshot(null);
+    setProductCode('');
     setFormErrors({});
   }
 
@@ -809,6 +821,7 @@ export function CampaignsPage() {
       setBusy(true);
       try {
         const payload: any = { name: name.trim(), template: template.trim(), type: 'status' };
+        if (productCode.trim()) payload.productCode = productCode.trim();
         if (statusMediaUrl.trim()) payload.mediaUrl = statusMediaUrl.trim();
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
         await createWhatsappCampaign(payload);
@@ -848,6 +861,7 @@ export function CampaignsPage() {
           subject: emailSubject.trim(),
           template: emailTemplate.trim(),
         };
+        if (productCode.trim()) payload.productCode = productCode.trim();
         if (fromContacts) payload.fromContacts = true;
         else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).map((e) => ({ email: e }));
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
@@ -856,6 +870,7 @@ export function CampaignsPage() {
         r = await createEmailCampaign(payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
+        if (productCode.trim()) payload.productCode = productCode.trim();
         if (audience === 'todos') {
           payload.fromContacts = true;
         } else if (audience === 'tag') {
@@ -1514,6 +1529,37 @@ export function CampaignsPage() {
               <label className="mb-1 block text-xs font-medium text-base-content/60">Nome da campanha</label>
               <input className="input w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Promoção Julho" required />
               {formErrors.name && <p className="mt-1 text-xs text-red-500">{formErrors.name}</p>}
+            </div>
+
+            {/* F8: produto/parceiro — define QUAL conhecimento a Lia usa com quem responder */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-base-content/60">
+                Produto / parceiro <span className="font-normal text-base-content/40">(opcional)</span>
+              </label>
+              <input
+                className="input w-full"
+                list="campaign-product-codes"
+                value={productCode}
+                onChange={(e) => setProductCode(e.target.value)}
+                placeholder="Deixe vazio para o produto principal"
+              />
+              <datalist id="campaign-product-codes">
+                {productCodes.map((p) => <option key={p.productCode} value={p.productCode} />)}
+              </datalist>
+              {productCode.trim() && !productCodes.some((p) => p.productCode === productCode.trim()) ? (
+                <p className="mt-1 text-xs text-amber-500">
+                  Ainda não há conhecimento cadastrado para "{productCode.trim()}". A Lia vai responder
+                  esses leads só com o conhecimento genérico — cadastre artigos deste produto em Base de
+                  Conhecimento antes de disparar.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-base-content/40">
+                  Quem responder esta campanha recebe respostas com o conhecimento deste produto.
+                  {productCodes.length > 0 && (
+                    <> Disponíveis: {productCodes.map((p) => p.productCode).join(' · ')}.</>
+                  )}
+                </p>
+              )}
             </div>
 
             {/* ── WA Status: form simplificado ─────────────────────────────── */}

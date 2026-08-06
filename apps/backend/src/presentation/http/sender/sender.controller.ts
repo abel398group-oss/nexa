@@ -19,6 +19,9 @@ class CreateCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(3) template!: string;
   @IsOptional() @IsString() type?: string; // "message" (padrão) | "status" (ADR-026)
+  // F8: de qual produto/parceiro esta campanha fala. O lead herda na conversa e
+  // a Lia busca só o conhecimento desse produto. Vazio = produto principal.
+  @IsOptional() @IsString() productCode?: string;
   @IsOptional() @IsArray() phones?: { phone: string; name?: string }[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
   @IsOptional() @IsString() link?: string;
@@ -83,6 +86,9 @@ class CreateEmailCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(1) subject!: string;
   @IsString() @MinLength(1) template!: string;
+  // F8: mesmo campo da campanha de WhatsApp — sem ele aqui, o
+  // `forbidNonWhitelisted` global derrubaria a criação com 400.
+  @IsOptional() @IsString() productCode?: string;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => EmailTargetDto) emails?: EmailTargetDto[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
   @IsOptional() @IsString() link?: string;

@@ -37,6 +37,25 @@ export class KnowledgeService {
     }
   }
 
+  /**
+   * Produtos que já têm conhecimento cadastrado, com quantos artigos cada um.
+   *
+   * Alimenta a sugestão nos formulários (campanha e artigo) — digitar o produto
+   * livremente é o caminho para o erro silencioso: um `pneuss` com typo não
+   * casa com nada e a Lia atende sem conhecimento nenhum, sem nada parecer
+   * errado. Ver `retrieve()`.
+   */
+  async listProductCodes(tenantId: string): Promise<{ productCode: string; artigos: number }[]> {
+    const rows = await this.prisma.aiKnowledgeBase.groupBy({
+      by: ['productCode'],
+      where: { tenantId, productCode: { not: null } },
+      _count: { _all: true },
+    });
+    return rows
+      .map((r: any) => ({ productCode: r.productCode as string, artigos: r._count._all as number }))
+      .sort((a, b) => b.artigos - a.artigos);
+  }
+
   async findAll(tenantId: string, q: PaginationQueryDto, category?: string): Promise<Paginated<any>> {
     const where: any = { tenantId };
     if (q.search) {
