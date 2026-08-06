@@ -768,9 +768,17 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                   />
                 </div>
 
-                <button
+                {/* F14 fix: era <button>, mas continha os botões de Arquivar/Excluir
+                    dentro — <button> dentro de <button> é HTML inválido
+                    (validateDOMNesting warning) e o navegador reestrutura o DOM
+                    por baixo dos panos de um jeito imprevisível. div com role
+                    de botão + teclado preserva a acessibilidade sem aninhar. */}
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openGroup(g)}
-                  className="block w-full py-3 pr-2 text-left text-sm"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGroup(g); } }}
+                  className="block w-full cursor-pointer py-3 pr-2 text-left text-sm"
                   style={{ paddingLeft: hasSelection || isSelected ? '1.75rem' : '1rem' }}
                 >
                   <div className="flex gap-3">
@@ -887,7 +895,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                       </div>
                     </div>
                   </div>
-                </button>
+                </div>
               </div>
             );
           })}
