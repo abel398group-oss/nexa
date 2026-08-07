@@ -50,4 +50,10 @@ export interface AnalystMini {
 export interface ConversationListResult {
   items: Conversation[];
   total?: number;
+  /**
+   * Etapa 2B: contagem por status para os chips de filtro, vinda do servidor.
+   * Calculada IGNORANDO o filtro de status (senão o chip selecionado mostraria
+   * o total e os demais zero), mas respeitando escopo, fila e busca.
+   */
+  statusCounts?: Record<string, number>;
 }

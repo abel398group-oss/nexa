@@ -3,9 +3,52 @@
 import { api } from '@/shared/lib/api';
 import type { Conversation, Message, ConversationListResult, AnalystMini } from '../types/conversation.types';
 
-// Lista as conversas do tenant. Aceita um AbortSignal (cancela ao desmontar).
-export async function listConversations(signal?: AbortSignal): Promise<ConversationListResult> {
-  const r = await api.get('/conversations', { signal });
+// Etapa 2B: filtros da lista agora são do SERVIDOR. Antes isto buscava as 50
+// conversas mais recentes (vendas + suporte misturadas) e o Inbox filtrava o
+// que tinha em mãos — um pico de vendas empurrava chamado de suporte pra fora
+// da página e ele sumia da fila sem ninguém perceber.
+export interface ListConversationsParams {
+  scope?: 'support' | 'sales';
+  queue?: 'all' | 'mine' | 'unassigned' | 'waiting_internal';
+  status?: string;
+  sellerId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listConversations(
+  params: ListConversationsParams = {},
+  signal?: AbortSignal,
+): Promise<ConversationListResult> {
+  const r = await api.get('/conversations', {
+    signal,
+    params: {
+      scope: params.scope || undefined,
+      // 'all' é o default do backend — não precisa viajar na query.
+      queue: params.queue && params.queue !== 'all' ? params.queue : undefined,
+      status: params.status && params.status !== 'all' ? params.status : undefined,
+      sellerId: params.sellerId || undefined,
+      search: params.search?.trim() || undefined,
+      limit: params.limit ?? 50,
+      offset: params.offset || undefined,
+    },
+  });
+  return r.data;
+}
+
+/** Etapa 2B: contagens do painel operacional — do banco inteiro, não da página. */
+export interface SupportStats {
+  escaladosSemDono: number;
+  emAtendimento: number;
+  aguardandoDev: number;
+  semDono: number;
+  meus: number;
+  maisAntigosSemDono: Conversation[];
+}
+
+export async function getSupportStats(signal?: AbortSignal): Promise<SupportStats> {
+  const r = await api.get('/conversations/stats', { signal });
   return r.data;
 }
 

@@ -17,7 +17,9 @@ import { listSellersMini } from '@/entities/seller';
 import {
   type Conversation,
   type Message,
+  type SupportStats,
   listConversations,
+  getSupportStats,
   getConversationMessages,
   sendMessage,
   updateInternalNote,
@@ -38,7 +40,6 @@ import { ConversationOutcomeBadge } from '@/components/conversation/Conversation
 import { ConversationStatusFilter } from '@/components/conversation/ConversationStatusFilter';
 import { ConversationTimeline } from '@/components/conversation/ConversationTimeline';
 import { isWaitingInternalStale } from '@/shared/lib/conversation-status';
-import { isSupportTicket } from '@/shared/lib/conversation';
 import { TicketCategoryBadge } from '@/components/conversation/TicketCategoryBadge';
 import { getPriorityConfig } from '@/shared/lib/ticket-category';
 
@@ -168,6 +169,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [liaInfo, setLiaInfo] = useState('');
   const [tmsLookup, setTmsLookup] = useState<TmsLookup | null>(null);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  // Etapa 2B: total do servidor (a lista em si é uma página).
+  const [totalConvs, setTotalConvs] = useState(0);
+  const [stats, setStats] = useState<SupportStats | null>(null);
+  // 2B: contagem dos chips vem do servidor — ver ConversationListResult.
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [convsError, setConvsError] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -301,11 +307,43 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // permite reentrar na sala CERTA depois de uma reconexão.
   const activeIdRef = useRef<string | null>(null);
 
+  // Etapa 2B: a busca vai pro servidor, então não pode disparar a cada tecla.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  /**
+   * Etapa 2B: filtros que o SERVIDOR aplica. Antes tudo isto era feito no
+   * cliente sobre as 50 conversas já carregadas — o que significava filtrar
+   * sobre uma amostra e chamar de fila.
+   */
+  const listParams = useMemo(
+    () => ({
+      scope,
+      queue: scope === 'support' ? queueFilter : undefined,
+      status: activeFilter,
+      sellerId: scope === 'sales' ? sellerFilter || undefined : undefined,
+      search: debouncedSearch,
+      limit: 50,
+    }),
+    [scope, queueFilter, activeFilter, sellerFilter, debouncedSearch],
+  );
+  // Ref pro handler do socket, que é registrado uma vez só e não enxerga o
+  // estado atual dos filtros (mesmo motivo do activeIdRef).
+  const listParamsRef = useRef(listParams);
+  useEffect(() => { listParamsRef.current = listParams; }, [listParams]);
+
   function reloadConvs(signal?: AbortSignal) {
     setLoadingConvs(true);
     setConvsError(null);
-    listConversations(signal)
-      .then((r) => { setConvs(r.items); })
+    listConversations(listParamsRef.current, signal)
+      .then((r) => {
+        setConvs(r.items);
+        setTotalConvs(r.total ?? r.items.length);
+        setStatusCounts(r.statusCounts ?? {});
+      })
       .catch((e) => {
         if (e?.code === 'ERR_CANCELED') return;
         const msg = e?.response?.data?.message ?? e?.message ?? 'Erro ao carregar conversas';
@@ -315,12 +353,31 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       .finally(() => setLoadingConvs(false));
   }
 
+  // Rebusca sempre que um filtro muda — é o servidor que filtra agora.
   useEffect(() => {
     const controller = new AbortController();
+    listParamsRef.current = listParams;
     reloadConvs(controller.signal);
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [listParams]);
+
+  // Etapa 2B: contagens do painel vêm do banco inteiro, não da página.
+  // Sem isto os 3 cards contariam só o que coube na lista — número errado
+  // com cara de número certo, que é pior do que não mostrar nada.
+  function reloadStats(signal?: AbortSignal) {
+    if (scope !== 'support') return;
+    getSupportStats(signal)
+      .then(setStats)
+      .catch((e) => { if (e?.code !== 'ERR_CANCELED') console.error('[InboxPage] stats falhou:', e?.message); });
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    reloadStats(controller.signal);
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
 
   // Item 1.2: mantém o ref da conversa aberta em dia pro handler de reconexão.
   useEffect(() => {
@@ -410,39 +467,37 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convs.length, searchParams]);
 
-  // contagem por status para os filtros
-  const statusCounts = convs.reduce((acc, c) => {
-    acc[c.status] = (acc[c.status] ?? 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // 2B: usado para distinguir "não achei nada com este filtro" de "não há
+  // conversa nenhuma" — os dois viram lista vazia depois que a filtragem saiu
+  // do cliente.
+  const hasActiveFilter =
+    activeFilter !== 'all' ||
+    (scope === 'support' && queueFilter !== 'all') ||
+    !!sellerFilter ||
+    !!debouncedSearch.trim();
 
-  // conversas filtradas + ordenação: escalated primeiro, depois por lastActivityAt
-  const filtered = convs
-    // vendas: exclui tickets de suporte · suporte: só tickets
-    .filter((c) => (scope === 'support' ? isSupportTicket(c) : !isSupportTicket(c)))
-    .filter((c) => activeFilter === 'all' || c.status === activeFilter)
-    .filter((c) =>
-      !sellerFilter || (sellerFilter === '__none__' ? !c.assignedSellerId : c.assignedSellerId === sellerFilter),
-    )
-    // F12: fila de suporte — 'mine' = meus chamados, 'unassigned' = fila geral sem dono.
-    .filter((c) => {
-      if (scope !== 'support' || queueFilter === 'all') return true;
-      if (queueFilter === 'unassigned') return !c.assignedAnalystId;
-      return c.assignedAnalystId === user?.id;
-    })
-    .sort((a, b) => {
-      // escalated sempre no topo
-      if (a.status === 'escalated' && b.status !== 'escalated') return -1;
-      if (b.status === 'escalated' && a.status !== 'escalated') return 1;
-      // depois por atividade mais recente
-      const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
-      const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
-      return tb - ta;
-    });
+  // Etapa 2B: escopo, status, fila, vendedor e busca agora vêm filtrados do
+  // servidor (ver listParams). Aqui sobra só a ordenação de exibição, aplicada
+  // sobre a página recebida: o backend ordena por atividade, e este sort põe
+  // os escalados no topo — algo que o Prisma não expressa sem SQL cru.
+  //
+  // Limitação conhecida e deliberada: "escalado primeiro" vale DENTRO da
+  // página. Com mais de 50 chamados, um escalado muito parado pode cair na
+  // página seguinte. Quem cobre esse caso é o card "Escalados sem Dono", que
+  // conta o banco inteiro.
+  const filtered = [...convs].sort((a, b) => {
+    if (a.status === 'escalated' && b.status !== 'escalated') return -1;
+    if (b.status === 'escalated' && a.status !== 'escalated') return 1;
+    const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+    const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+    return tb - ta;
+  });
 
   // Agrupa por contato (estilo WhatsApp): 1 card por pessoa, a conversa mais
   // recente como representante. `filtered` já vem ordenado (mais recente 1º), então
   // a 1ª ocorrência de cada contato é o representante. Mantém as conversas por baixo.
+  // O agrupamento é por página — duas conversas do mesmo contato em páginas
+  // diferentes viram dois cards. Aceitável enquanto a paginação for de 50.
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; rep: Conversation; convs: Conversation[] }>();
     for (const c of filtered) {
@@ -451,39 +506,25 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       if (g) g.convs.push(c);
       else map.set(key, { key, rep: c, convs: [c] });
     }
-    const all = Array.from(map.values());
-    if (!searchQuery.trim()) return all;
-    const q = searchQuery.toLowerCase();
-    return all.filter(({ rep: c }) =>
-      c.contact?.name?.toLowerCase().includes(q) ||
-      c.contact?.company?.toLowerCase().includes(q) ||
-      c.phone.includes(q),
-    );
-  }, [filtered, searchQuery]);
+    return Array.from(map.values());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convs]);
 
-  // Dashboard operacional — mostrado quando nenhum chamado está aberto.
-  // Independente de activeFilter/queueFilter de propósito: é visão geral da
-  // fila inteira, não do que o analista filtrou no momento.
+  // Dashboard operacional — números do SERVIDOR (GET /conversations/stats),
+  // não da página carregada. Antes eram contados sobre `convs`, então mudavam
+  // conforme o filtro do analista e não conforme a fila real.
   const supportDashboard = useMemo(() => {
-    if (scope !== 'support') return null;
-    const tickets = convs.filter(isSupportTicket).filter((c) => c.status !== 'closed' && c.status !== 'opt_out');
+    if (scope !== 'support' || !stats) return null;
     return {
-      escaladosSemDono: tickets.filter((c) => c.status === 'escalated' && !c.assignedAnalystId),
-      emAtendimento: tickets.filter((c) => !!c.assignedAnalystId),
-      // "Aguardando Dev" aqui é waiting_internal de forma geral — a categoria não
-      // é exclusiva de engenharia (pode ser qualquer ação interna), mas é a
-      // aproximação mais próxima disponível hoje sem um status dedicado.
-      aguardandoDev: tickets.filter((c) => c.status === 'waiting_internal'),
-      semDonoMaisAntigos: tickets
-        .filter((c) => !c.assignedAnalystId)
-        .sort((a, b) => {
-          const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
-          const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
-          return ta - tb; // mais antigo primeiro
-        })
-        .slice(0, 8),
+      escaladosSemDono: stats.escaladosSemDono,
+      emAtendimento: stats.emAtendimento,
+      // "Aguardando Dev" é waiting_internal de forma geral — a categoria não é
+      // exclusiva de engenharia, mas é a aproximação mais próxima sem um
+      // status dedicado.
+      aguardandoDev: stats.aguardandoDev,
+      semDonoMaisAntigos: stats.maisAntigosSemDono,
     };
-  }, [convs, scope]);
+  }, [stats, scope]);
 
   // Assume o chamado E já abre — usado pela lista "Assumir" do dashboard,
   // onde não existe `active` ainda (nenhuma conversa selecionada).
@@ -866,14 +907,28 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               </button>
             </div>
           )}
+          {/* 2B: com a filtragem no servidor, lista vazia COM filtro ativo e
+              lista vazia SEM filtro são estados diferentes — antes dava pra
+              distinguir comparando `filtered` com `convs`, que agora são a
+              mesma coisa. Sem esta distinção, filtrar e não achar nada exibiria
+              "as conversas aparecem aqui quando um lead mandar mensagem". */}
           {!loadingConvs && !convsError && convs.length === 0 && (
-            <div className="p-3">
-              <EmptyState icon={<Icon name="inbox" className="h-9 w-9" />} title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
-            </div>
+            hasActiveFilter ? (
+              <div className="p-4 text-center text-xs text-base-content/40">
+                Nenhuma conversa com este filtro.
+              </div>
+            ) : (
+              <div className="p-3">
+                <EmptyState icon={<Icon name="inbox" className="h-9 w-9" />} title="Nenhuma conversa" description="As conversas do WhatsApp aparecem aqui assim que um lead mandar mensagem." />
+              </div>
+            )
           )}
-          {!loadingConvs && filtered.length === 0 && convs.length > 0 && (
-            <div className="p-4 text-center text-xs text-base-content/40">
-              Nenhuma conversa com este filtro.
+          {/* Avisa que a fila é maior que a página. O bug de origem do 2B era
+              justamente cortar em 50 sem dizer nada — o analista não tinha como
+              saber que existia chamado além do que estava vendo. */}
+          {!loadingConvs && totalConvs > convs.length && (
+            <div className="border-t border-base-200 px-3 py-2 text-center text-[11px] text-base-content/40">
+              Mostrando {convs.length} de {totalConvs} — refine a busca ou o filtro para ver o resto.
             </div>
           )}
           {!loadingConvs && groups.map((g) => {
@@ -1070,18 +1125,18 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
                 <div className="mb-6 grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/20 dark:bg-red-500/10">
-                    <div className="text-2xl font-bold text-red-600">{supportDashboard.escaladosSemDono.length}</div>
+                    <div className="text-2xl font-bold text-red-600">{supportDashboard.escaladosSemDono}</div>
                     <div className="mt-0.5 text-xs font-medium text-red-700 dark:text-red-400">🔴 Escalados sem Dono</div>
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
-                    <div className="text-2xl font-bold text-amber-600">{supportDashboard.emAtendimento.length}</div>
+                    <div className="text-2xl font-bold text-amber-600">{supportDashboard.emAtendimento}</div>
                     <div className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">🟡 Em Atendimento</div>
                   </div>
                   <div
                     className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10"
                     title='"Aguardando Interno" é qualquer ação da equipe (não só dev) — HiperTMS não distingue isso ainda'
                   >
-                    <div className="text-2xl font-bold text-violet-600">{supportDashboard.aguardandoDev.length}</div>
+                    <div className="text-2xl font-bold text-violet-600">{supportDashboard.aguardandoDev}</div>
                     <div className="mt-0.5 text-xs font-medium text-violet-700 dark:text-violet-400">🟣 Aguardando Interno/Dev</div>
                   </div>
                 </div>
