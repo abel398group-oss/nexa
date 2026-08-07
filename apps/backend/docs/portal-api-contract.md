@@ -71,11 +71,14 @@ Authorization: Bearer <TMS_SERVICE_TOKEN>
 Content-Type: application/json
 
 {
-  "externalId": "usr_12345",
-  "tenantId":   "tenant_abc",
-  "name":       "João Silva",
-  "page":       "/fretes/45678",
-  "errorCode":  "FRETE_ATRASADO"
+  "externalId":  "usr_12345",
+  "tenantId":    "tenant_abc",
+  "name":        "João Silva",
+  "companyName": "Transportes Hipervias LTDA",
+  "cnpj":        "12345678000199",
+  "page":        "/fretes/45678",
+  "errorCode":   "FRETE_ATRASADO",
+  "isManager":   false
 }
 ```
 
@@ -84,8 +87,24 @@ Content-Type: application/json
 | `externalId` | string | ✅ | ID do usuário no TMS (identidade segura, nunca alterável pelo cliente). |
 | `tenantId` | string | ✅ | ID do tenant no Nexa. |
 | `name` | string | — | Nome do usuário logado no TMS (prefill do portal). |
+| `companyName` | string | — | Razão social da empresa do usuário. A Lia usa para não perguntar ao cliente algo que o sistema já sabe. |
+| `cnpj` | string | — | CNPJ da empresa. Só contexto — a Lia **nunca** pede nem confirma CNPJ com o cliente (LGPD/anti-fraude). |
 | `page` | string | — | Página/contexto onde o suporte foi aberto (para triagem da Lia). |
 | `errorCode` | string | — | Código de erro exibido ao cliente (para triagem da Lia). |
+| `isManager` | boolean | — | `true` = gestor; habilita a aba "Chamados da empresa" (`GET /portal/tickets?scope=company`). |
+
+> ⚠️ **Campo novo neste payload exige mudança no Nexa ANTES do deploy do TMS.**
+> O Nexa roda `ValidationPipe({ forbidNonWhitelisted: true })` global: qualquer
+> propriedade não declarada no `CreateHandoffDto` faz a request inteira falhar com
+> `400 { "message": ["property X should not exist"] }`. A validação roda **antes**
+> da autenticação, então a chamada nem chega ao service.
+>
+> Isso já derrubou a abertura de chamado do widget duas vezes: `isManager`
+> (09/07/2026) e `companyName` + `cnpj` (07/08/2026). Nas duas, o TMS converteu o
+> 400 em erro genérico e a causa real levou dias para aparecer.
+>
+> **Ordem obrigatória de deploy: receptor (Nexa) primeiro, emissor (TMS) depois.**
+> Ver `REGRAS-SQUAD.md`, REGRA 1.
 
 **Response `201`**
 

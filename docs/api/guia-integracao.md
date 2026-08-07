@@ -50,26 +50,41 @@ O HiperTMS usa este mecanismo para o botão "Falar com a Lia" (ADR 022).
 ```bash
 POST /api/handoff/token
 Content-Type: application/json
-X-Service-Token: <TOKEN>
-X-Tenant-Id: <TENANT_ID>
+Authorization: Bearer <TMS_SERVICE_TOKEN>
 
 {
-  "externalId": "cliente-123",      // ID do cliente no TMS
-  "name": "João Silva",             // nome do usuário logado no TMS
-  "page": "fiscal/cte",             // tela de origem (para contexto da Lia)
-  "errorCode": "CT-0120"            // código de erro visível (opcional)
+  "externalId":  "cliente-123",              // ID do cliente no TMS — OBRIGATÓRIO
+  "tenantId":    "tenant-abc",               // tenant no TMS — OBRIGATÓRIO
+  "name":        "João Silva",               // nome do usuário logado no TMS
+  "companyName": "Transportes Hipervias LTDA", // razão social (contexto da Lia)
+  "cnpj":        "12345678000199",           // CNPJ (só contexto — nunca perguntado ao cliente)
+  "page":        "fiscal/cte",               // tela de origem (para contexto da Lia)
+  "errorCode":   "CT-0120",                  // código de erro visível
+  "isManager":   false                       // true = gestor (vê chamados da empresa)
 }
 ```
+
+`externalId` aceita o alias `userId` (é o campo que o TMS envia hoje). Todos os
+demais, exceto `tenantId`, são opcionais.
 
 ### Resposta
 
 ```json
 {
   "token": "abc12345",
-  "whatsappUrl": "https://wa.me/5511999999999?text=NEXA%3Aabc12345",
-  "expiresAt": "2026-06-19T15:30:00Z"
+  "expiresIn": 300
 }
 ```
+
+`expiresIn` vem em **segundos** (300 = 5 min no handoff, 900 = 15 min no web chat).
+O Nexa não monta a URL do WhatsApp — quem monta é o TMS, com
+`https://wa.me/<numero>?text=NEXA:<token>`.
+
+> ⚠️ **O corpo é validado com `forbidNonWhitelisted`.** Qualquer campo não
+> declarado no `CreateHandoffDto` derruba a request inteira com
+> `400 { "message": ["property X should not exist"] }`, antes mesmo da
+> autenticação. Campo novo no payload exige mudança no Nexa **antes** do deploy do
+> TMS. Já derrubou o suporte duas vezes — ver `REGRAS-SQUAD.md`, REGRA 1.
 
 ---
 
