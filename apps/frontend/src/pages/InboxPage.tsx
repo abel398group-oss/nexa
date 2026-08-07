@@ -152,6 +152,8 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // Etapa 2A: edição inline de nota interna já gravada.
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  // Envio em andamento — trava o botão e o Enter contra reenvio duplicado.
+  const [sending, setSending] = useState(false);
   // F13: edição inline do link da issue de dev vinculada ao chamado.
   const [editingIssue, setEditingIssue] = useState(false);
   const [issueUrlInput, setIssueUrlInput] = useState('');
@@ -600,17 +602,39 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   async function send() {
     if (!active || !text.trim()) return;
-    await sendMessage(active.id, text, isInternalMode);
-    // ADR 035: a primeira resposta humana ativa o takeover no backend — reflete
-    // aqui sem esperar o próximo fetch (badge "Você no comando" aparece na hora).
-    // F12: nota interna não é resposta ao cliente — não ativa takeover.
-    if (!isInternalMode && !active.humanTakeoverAt) {
-      const takenAt = new Date().toISOString();
-      setActive((a) => (a ? { ...a, humanTakeoverAt: takenAt } : a));
-      setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, humanTakeoverAt: takenAt } : c)));
+    // Trava contra clique/Enter repetido: em rede lenta o analista clica de
+    // novo achando que não pegou, e o cliente recebe a mesma resposta duas
+    // vezes. Diferente de um cadastro duplicado, isso o cliente VÊ.
+    if (sending) return;
+    setSending(true);
+    try {
+      await sendMessage(active.id, text, isInternalMode);
+      // ADR 035: a primeira resposta humana ativa o takeover no backend — reflete
+      // aqui sem esperar o próximo fetch (badge "Você no comando" aparece na hora).
+      // F12: nota interna não é resposta ao cliente — não ativa takeover.
+      if (!isInternalMode && !active.humanTakeoverAt) {
+        const takenAt = new Date().toISOString();
+        setActive((a) => (a ? { ...a, humanTakeoverAt: takenAt } : a));
+        setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, humanTakeoverAt: takenAt } : c)));
+      }
+      // Só limpa o campo depois do envio confirmado.
+      setText('');
+      setLiaInfo('');
+    } catch (e: any) {
+      // Antes daqui não havia try/catch: a promise rejeitava no console e a
+      // tela não mostrava NADA. O analista clicava em Enviar, nada acontecia, e
+      // ele ficava sem saber se o cliente tinha recebido — o pior desfecho
+      // possível pra um canal de atendimento. Mesmo padrão de assignAnalyst,
+      // saveNoteEdit e saveContactField, que já tratavam erro assim.
+      const m = e?.response?.data?.message;
+      toast.error(
+        Array.isArray(m) ? m.join(', ') : m || 'Não foi possível enviar. A mensagem continua no campo — tente de novo.',
+      );
+      // `text` NÃO é limpo de propósito: o que foi escrito não pode se perder
+      // por causa de uma falha de rede.
+    } finally {
+      setSending(false);
     }
-    setText('');
-    setLiaInfo('');
   }
 
   /**
@@ -1581,11 +1605,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                 />
                 <button
                   onClick={send}
-                  className={`rounded-full px-5 py-2 text-sm text-white ${
+                  disabled={sending}
+                  className={`rounded-full px-5 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60 ${
                     isInternalMode ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700'
                   }`}
                 >
-                  {isInternalMode ? 'Salvar nota' : 'Enviar'}
+                  {sending ? 'Enviando...' : isInternalMode ? 'Salvar nota' : 'Enviar'}
                 </button>
               </div>
             </div>

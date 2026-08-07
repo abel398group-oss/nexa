@@ -93,34 +93,72 @@ test.describe('📶 Queda e volta de rede', () => {
 /**
  * 🌩️ Falha no envio de mensagem.
  *
- * MARCADO COMO `fixme` DE PROPÓSITO — não é teste instável, é lacuna real do
- * app, já registrada na auditoria (item 2.4): `send()` no InboxPage não tem
- * try/catch. Se o envio falhar, a promise rejeita no console e a tela não
- * mostra NADA: o analista clica em Enviar, não acontece nada visível, e ele não
- * sabe se a mensagem foi ou não.
- *
- * O teste fica aqui, escrito e correto, descrevendo o comportamento ESPERADO.
- * Vira verde sozinho no dia em que `send()` ganhar um try/catch com toast —
- * o mesmo padrão que `assignAnalyst`, `saveNoteEdit` e `saveContactField` já
- * usam no mesmo arquivo. Apagar o teste esconderia a lacuna; deixá-lo vermelho
- * quebraria a suíte inteira e ninguém olharia mais para ela.
+ * Este teste nasceu `fixme`, documentando a lacuna da auditoria (item 2.4):
+ * `send()` não tinha try/catch, então um envio que falhava rejeitava no console
+ * e a tela não mostrava NADA — o analista clicava em Enviar, nada acontecia, e
+ * ele ficava sem saber se o cliente recebeu. Corrigido; o teste agora vale.
  */
-test.fixme('envio de mensagem que falha deveria avisar o analista', async ({ page }) => {
-  await abrir(page, '/support');
+test.describe('🌩️ Envio de mensagem com a integração fora', () => {
+  test('503 no envio avisa o analista e preserva o texto digitado', async ({ page }) => {
+    await abrir(page, '/support');
 
-  const card = page.locator('[role="button"]').first();
-  await card.click();
+    const card = page.locator('[role="button"]').first();
+    test.skip(!(await card.isVisible().catch(() => false)), 'Nenhum chamado de suporte na fila.');
+    await card.click();
 
-  await page.route('**/api/conversations/*/messages', (route) =>
-    route.request().method() === 'POST'
-      ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"WAHA fora"}' })
-      : route.continue(),
-  );
+    const campo = page.locator('input[placeholder*="mensagem" i]');
+    await campo.waitFor({ state: 'visible', timeout: 15_000 });
 
-  const campo = page.locator('input[placeholder*="mensagem" i]');
-  await campo.fill('teste de falha de envio');
-  await page.getByRole('button', { name: 'Enviar', exact: true }).click();
+    await page.route('**/api/conversations/*/messages', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"WAHA fora do ar"}' })
+        : route.continue(),
+    );
 
-  // ESPERADO (hoje não acontece): aviso visível de que o envio falhou.
-  await expect(page.getByText(/erro|falh|não foi possível/i).first()).toBeVisible({ timeout: 10_000 });
+    const texto = 'teste de falha de envio — nao deve sumir';
+    await campo.fill(texto);
+    await page.getByRole('button', { name: 'Enviar', exact: true }).click();
+
+    // 1. O analista precisa SABER que falhou.
+    await expect(
+      page.getByText(/WAHA fora do ar|não foi possível enviar/i).first(),
+      'falha no envio tem que aparecer na tela',
+    ).toBeVisible({ timeout: 15_000 });
+
+    // 2. E o que ele escreveu não pode se perder por causa disso.
+    await expect(campo, 'o texto digitado sumiu depois da falha').toHaveValue(texto);
+  });
+
+  test('envio lento não deixa mandar a mesma mensagem duas vezes', async ({ page }) => {
+    await abrir(page, '/support');
+    const card = page.locator('[role="button"]').first();
+    test.skip(!(await card.isVisible().catch(() => false)), 'Nenhum chamado de suporte na fila.');
+    await card.click();
+
+    const campo = page.locator('input[placeholder*="mensagem" i]');
+    await campo.waitFor({ state: 'visible', timeout: 15_000 });
+
+    // Segura o POST: janela pra tentar o segundo clique.
+    let posts = 0;
+    await page.route('**/api/conversations/*/messages', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      posts++;
+      await new Promise((r) => setTimeout(r, 2500));
+      // Falha no fim: o objetivo é contar POSTs, não gravar mensagem de teste
+      // numa conversa real.
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"fim do teste"}' });
+    });
+
+    await campo.fill('teste de clique duplo');
+    const botao = page.getByRole('button', { name: /Enviar/ });
+    await botao.click();
+
+    // O botão avisa que está em andamento e recusa novo clique.
+    await expect(page.getByRole('button', { name: 'Enviando...' })).toBeVisible({ timeout: 5_000 });
+    await page.getByRole('button', { name: 'Enviando...' }).click({ force: true }).catch(() => undefined);
+    await page.keyboard.press('Enter').catch(() => undefined);
+
+    await page.waitForTimeout(4000);
+    expect(posts, `houve ${posts} envios — o cliente receberia a mesma resposta repetida`).toBe(1);
+  });
 });
