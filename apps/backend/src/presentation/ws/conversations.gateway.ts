@@ -123,8 +123,14 @@ export class ConversationsGateway
       const match = /(?:^|;\s*)access_token=([^;]+)/.exec(cookies);
       if (match) {
         try {
-          const payload = this.jwt.verify(match[1]) as { sub: string; tenantId: string };
+          const payload = this.jwt.verify(match[1]) as { sub: string; tenantId: string | null };
           (socket.data as any).tenantId = payload.tenantId;
+          // Cookie válido = socket do time (Inbox), não do widget do cliente.
+          // Flag separada de propósito: o platform admin tem tenantId NULL, e
+          // usar `tenantId` como prova de "é do time" excluía justamente ele da
+          // sala de staff — nota interna nunca chegava na tela dele em tempo
+          // real. Autenticação e escopo de tenant são perguntas diferentes.
+          (socket.data as any).isStaff = true;
         } catch {
           // Token inválido/expirado: socket conecta sem tenantId; join será rejeitado
           this.logger.warn(`inbox: cookie JWT inválido — socket ${socket.id} sem tenantId`);
@@ -199,12 +205,16 @@ export class ConversationsGateway
     }
 
     client.join(`conv:${data.conversationId}`);
-    // F12: só quem entra por AQUI (inbox do operador, com tenantId no socket)
+    // F12: só quem entra por AQUI (inbox do operador, autenticado por cookie)
     // também entra na sala "staff" — o widget do cliente (handleConnection,
     // canal web_chat/portal) nunca chama 'join' e nunca ganha esta sala. É o
     // que garante que handleMessageCreated() consiga separar nota interna de
     // mensagem pro cliente: a sala staff nunca tem um socket de cliente dentro.
-    if (tenantId) client.join(`staff:conv:${data.conversationId}`);
+    //
+    // Usa `isStaff`, não `tenantId`: o platform admin tem tenantId null e ficava
+    // de fora da própria sala de staff — nota interna, e depois os eventos de
+    // editar/excluir, nunca chegavam em tempo real na tela dele.
+    if ((client.data as any)?.isStaff) client.join(`staff:conv:${data.conversationId}`);
     return { joined: data.conversationId };
   }
 

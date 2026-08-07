@@ -32,7 +32,7 @@ describe('ConversationsGateway — F12 onJoin: sala staff só pra operador valid
     const deps = makeDeps();
     deps.conversations.findOne.mockResolvedValue({ id: 'conv-1' });
     const { gw } = makeGateway(deps);
-    const client = makeSocket({ tenantId: 't1' });
+    const client = makeSocket({ tenantId: 't1', isStaff: true });
 
     await gw.onJoin({ conversationId: 'conv-1' }, client);
 
@@ -40,10 +40,25 @@ describe('ConversationsGateway — F12 onJoin: sala staff só pra operador valid
     expect(client.join).toHaveBeenCalledWith('staff:conv:conv-1');
   });
 
-  it('socket sem tenantId (join legado/sem cookie válido): entra só em conv:<id>, NUNCA na sala staff', async () => {
+  // Regressão encontrada em teste ao vivo (2026-08-07): a entrada na sala staff
+  // dependia de `tenantId`, e platform admin tem tenantId NULL — ele operava o
+  // Inbox sem NUNCA receber nota interna em tempo real (nem os eventos de
+  // editar/excluir). Autenticado é uma pergunta; de qual tenant é outra.
+  it('platform admin (tenantId null, cookie válido): TAMBÉM entra na sala staff', async () => {
     const deps = makeDeps();
     const { gw } = makeGateway(deps);
-    const client = makeSocket({}); // sem tenantId
+    const client = makeSocket({ tenantId: null, isStaff: true });
+
+    await gw.onJoin({ conversationId: 'conv-1' }, client);
+
+    expect(client.join).toHaveBeenCalledWith('conv:conv-1');
+    expect(client.join).toHaveBeenCalledWith('staff:conv:conv-1');
+  });
+
+  it('socket sem cookie válido (widget do cliente/legado): só conv:<id>, NUNCA a sala staff', async () => {
+    const deps = makeDeps();
+    const { gw } = makeGateway(deps);
+    const client = makeSocket({}); // sem isStaff — não passou pela validação do cookie
 
     await gw.onJoin({ conversationId: 'conv-1' }, client);
 
@@ -55,7 +70,7 @@ describe('ConversationsGateway — F12 onJoin: sala staff só pra operador valid
     const deps = makeDeps();
     deps.conversations.findOne.mockResolvedValue(null); // não pertence ao tenant
     const { gw } = makeGateway(deps);
-    const client = makeSocket({ tenantId: 't1' });
+    const client = makeSocket({ tenantId: 't1', isStaff: true });
 
     const r = await gw.onJoin({ conversationId: 'conv-alheio' }, client);
 
