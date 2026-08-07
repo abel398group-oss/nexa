@@ -65,6 +65,14 @@ export class SetOutcomeDto {
   outcome?: 'won' | 'lost' | null;
 }
 
+/** Etapa 2A: novo texto de uma nota interna já gravada. */
+export class UpdateInternalNoteDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(10000)
+  content!: string;
+}
+
 export class AddMessageDto {
   @IsIn(['inbound', 'outbound'])
   direction!: 'inbound' | 'outbound';

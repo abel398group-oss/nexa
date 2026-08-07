@@ -10,6 +10,7 @@ import {
   SetLinkedIssueDto,
   SetOutcomeDto,
   SetResolvedDto,
+  UpdateInternalNoteDto,
 } from '@/application/conversations/dto/conversations.dto';
 
 class BulkActionDto {
@@ -74,9 +75,38 @@ export class ConversationsController {
     return this.conversations.listAnalysts(tenantId);
   }
 
+  // Etapa 2A: editar/excluir NOTA INTERNA. Declaradas antes das rotas `:id/...`
+  // por clareza — `/conversations/messages/<id>` não colide com `:id/...`, mas
+  // deixar junto evita que alguém introduza um curinga depois e quebre isto.
+  @Patch('messages/:messageId')
+  updateInternalNote(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Param('messageId') messageId: string,
+    @Body() dto: UpdateInternalNoteDto,
+  ) {
+    return this.conversations.updateInternalNote(tenantId, messageId, dto.content, {
+      userId: user?.userId,
+      role: user?.role,
+    });
+  }
+
+  @Delete('messages/:messageId')
+  deleteInternalNote(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.conversations.deleteInternalNote(tenantId, messageId, {
+      userId: user?.userId,
+      role: user?.role,
+    });
+  }
+
   @Get(':id')
-  findOne(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.findOne(tenantId, id);
+  findOne(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Param('id') id: string) {
+    // Etapa 2A: mesmo escopo de carteira da listagem — ver findOneScoped.
+    return this.conversations.findOneScoped(tenantId, id, sellerScope(user));
   }
 
   @Get(':id/messages')
@@ -85,16 +115,18 @@ export class ConversationsController {
     @CurrentUser() user: any,
     @Param('id') id: string,
   ) {
-    // F12 + item 1.1: rota do Inbox. Nota interna só para quem opera suporte —
-    // `vendedor` recebe o mesmo histórico que o cliente veria (ver SUPPORT_ROLES).
+    // F12 + item 1.1: nota interna só para quem opera suporte — `vendedor`
+    // recebe o mesmo histórico que o cliente veria (ver SUPPORT_ROLES).
+    // Etapa 2A: e só da própria carteira — antes bastava saber o id.
     return this.conversations.getMessages(tenantId, id, {
       includeInternal: canReadInternalNotes(user),
+      sellerId: sellerScope(user),
     });
   }
 
   @Get(':id/timeline')
-  timeline(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.conversations.getTimeline(tenantId, id);
+  timeline(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Param('id') id: string) {
+    return this.conversations.getTimeline(tenantId, id, sellerScope(user));
   }
 
   @Post()
@@ -184,6 +216,7 @@ export class ConversationsController {
   @Post(':id/messages')
   addMessage(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() dto: AddMessageDto,
   ) {
@@ -191,7 +224,13 @@ export class ConversationsController {
     // reply and activates the per-conversation takeover (Lia goes draft-only).
     // F12: internal notes never activate takeover — that's handled by the
     // isInternal guard inside addMessage(), not here.
-    return this.conversations.addMessage(tenantId, id, { ...dto, byHuman: dto.direction === 'outbound' });
+    // Etapa 2A: authorUserId vem do JWT, nunca do body — é o que sustenta a
+    // regra de quem pode editar a nota depois. O DTO nem aceita esse campo.
+    return this.conversations.addMessage(tenantId, id, {
+      ...dto,
+      byHuman: dto.direction === 'outbound',
+      authorUserId: user?.userId ?? null,
+    });
   }
 
   // ADR 035: "Devolver pra Lia" — releases the takeover; Lia resumes auto-attendance.

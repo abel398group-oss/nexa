@@ -355,6 +355,12 @@ model AiMessage {
   // histórico existente. Ver ConversationsService.addMessage/getMessages e
   // ConversationsGateway.handleMessageCreated pros pontos que filtram isto.
   isInternal       Boolean          @default(false) @map("is_internal")
+  // Etapa 2A (2026-08-07): autor humano da mensagem, gravado SEMPRE a partir do
+  // JWT no servidor — nunca do body. É a base da regra "só o autor edita a
+  // própria nota interna"; usar `metadata.authorUserId` não serviria, porque
+  // metadata vem do cliente e seria forjável. Nullable: notas anteriores a esta
+  // migration ficam sem autor e só admin pode editá-las.
+  authorUserId     String?          @map("author_user_id")
 
   @@index([conversationId])
   @@index([correlationId])

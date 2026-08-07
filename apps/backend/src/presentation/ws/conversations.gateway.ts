@@ -271,6 +271,31 @@ export class ConversationsGateway
     return { joined: `tenant:${effectiveTenantId}` };
   }
 
+  // ── Etapa 2A: nota interna editada/removida → só a sala de staff ────────────
+  // Ambos os eventos nascem exclusivamente de updateInternalNote/deleteInternalNote,
+  // que só operam sobre isInternal=true — por isso vão direto pra staff:conv:<id>,
+  // nunca pra conv:<id> (onde o widget do cliente está conectado).
+  //
+  // Sem isto, um segundo analista com a mesma conversa aberta continuaria vendo
+  // a nota antiga na tela — e no caso da exclusão (motivada por dado sensível
+  // colado por engano) o dado seguiria à vista dele até recarregar, que é
+  // justamente o cenário que a exclusão existe pra resolver.
+  // Nome próprio de propósito: `message.updated` JÁ EXISTE neste gateway e é o
+  // recibo (ack) do WhatsApp — reusá-lo faria o handler de ack disparar com
+  // payload incompatível e emitir um `message:ack` lixo para conv:<id>, que é
+  // a sala onde o widget do CLIENTE está conectado.
+  @OnEvent('internal_note.updated')
+  handleInternalNoteUpdated(payload: { conversationId: string; message: unknown }) {
+    this.server.to(`staff:conv:${payload.conversationId}`).emit('message:updated', payload.message);
+  }
+
+  @OnEvent('internal_note.deleted')
+  handleInternalNoteDeleted(payload: { conversationId: string; messageId: string }) {
+    this.server
+      .to(`staff:conv:${payload.conversationId}`)
+      .emit('message:deleted', { id: payload.messageId });
+  }
+
   // ── Evento interno: nova mensagem criada → empurra para a sala ───────────────
   @OnEvent('message.created')
   handleMessageCreated(payload: { conversationId: string; message: unknown }) {

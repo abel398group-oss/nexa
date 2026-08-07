@@ -1,10 +1,18 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { AuditService } from '@/shared/audit/audit.service';
 
 @Injectable()
 export class ConversationsService {
@@ -14,6 +22,7 @@ export class ConversationsService {
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
     private readonly waha: WahaClientService,
+    private readonly audit: AuditService,
   ) {}
 
   // Inbox: lista conversas do tenant
@@ -93,6 +102,28 @@ export class ConversationsService {
 
   async findOne(tenantId: string, id: string) {
     const conv = await this.prisma.aiConversation.findFirst({ where: { id, tenantId } });
+    if (!conv) throw new NotFoundException('Conversa não encontrada');
+    return conv;
+  }
+
+  /**
+   * Etapa 2A: findOne com o MESMO escopo de carteira que a listagem aplica.
+   *
+   * `findAll` já restringe o vendedor a `assignedSellerId = <dele>`, mas as
+   * rotas de leitura por id (mensagens, timeline, detalhe) só validavam o
+   * tenant — então saber o id era suficiente para um vendedor ler a conversa
+   * de qualquer colega. Devolve 404 (e não 403) de propósito: para quem não
+   * tem escopo, a conversa simplesmente não existe — não confirma o id.
+   *
+   * Continua existindo separado de `findOne` porque os chamadores INTERNOS
+   * (addMessage, assignAnalyst, setLinkedIssue…) não devem herdar escopo de
+   * vendedor: eles têm autorização própria e rodam também fora de request HTTP.
+   */
+  async findOneScoped(tenantId: string, id: string, sellerId?: string) {
+    if (!sellerId) return this.findOne(tenantId, id);
+    const conv = await this.prisma.aiConversation.findFirst({
+      where: { id, tenantId, assignedSellerId: sellerId },
+    });
     if (!conv) throw new NotFoundException('Conversa não encontrada');
     return conv;
   }
@@ -461,17 +492,112 @@ export class ConversationsService {
   // F12: includeInternal=false por padrão de propósito — todo caminho que
   // alimenta o cliente (widget/portal) ou o prompt da IA precisa do default
   // seguro. Só a rota HTTP do Inbox (analista logado) passa includeInternal:true.
-  async getMessages(tenantId: string, id: string, opts: { includeInternal?: boolean } = {}) {
-    await this.findOne(tenantId, id);
+  async getMessages(
+    tenantId: string,
+    id: string,
+    opts: { includeInternal?: boolean; sellerId?: string } = {},
+  ) {
+    // Etapa 2A: escopo de carteira também aqui — antes bastava o id.
+    await this.findOneScoped(tenantId, id, opts.sellerId);
     return this.prisma.aiMessage.findMany({
       where: { conversationId: id, ...(opts.includeInternal ? {} : { isInternal: false }) },
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  // Histórico de mudanças de status/outcome (para a timeline da conversa)
-  async getTimeline(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
+  /**
+   * Etapa 2A (item 2.3) — editar/excluir NOTA INTERNA.
+   *
+   * Só nota interna: mensagem que já saiu para o cliente (WhatsApp/portal/widget)
+   * não pode ser reescrita nem apagada aqui. O cliente já leu; reescrever o
+   * histórico do lado de cá criaria uma versão da conversa que não bate com a
+   * que ele tem na mão — pior que o problema que se quer resolver.
+   *
+   * Autorização: autor da nota, ou `admin`. Um `operacional` NÃO edita a nota de
+   * outro analista — foi a leitura que fiz de "apenas o autor ou admin", já que
+   * a alternativa ("autor OU qualquer admin/operacional") não restringiria nada:
+   * só admin e operacional enxergam nota interna, então a cláusula do autor
+   * viraria letra morta. Se a intenção era o time inteiro poder editar tudo,
+   * é trocar `role === 'admin'` por `SUPPORT_ROLES.includes(role)` aqui.
+   *
+   * Notas anteriores à migration não têm autor (null) — nesse caso só admin.
+   */
+  private async findEditableInternalNote(
+    tenantId: string,
+    messageId: string,
+    actor: { userId?: string; role?: string },
+  ) {
+    const msg = await this.prisma.aiMessage.findFirst({ where: { id: messageId, tenantId } });
+    if (!msg) throw new NotFoundException('Mensagem não encontrada');
+    if (!(msg as any).isInternal) {
+      throw new ForbiddenException('Só nota interna pode ser editada ou removida.');
+    }
+    const authorUserId = (msg as any).authorUserId as string | null;
+    const isAuthor = !!authorUserId && authorUserId === actor.userId;
+    if (!isAuthor && actor.role !== 'admin') {
+      throw new ForbiddenException('Só o autor da nota (ou um admin) pode alterá-la.');
+    }
+    return msg;
+  }
+
+  async updateInternalNote(
+    tenantId: string,
+    messageId: string,
+    content: string,
+    actor: { userId?: string; role?: string },
+  ) {
+    const msg = await this.findEditableInternalNote(tenantId, messageId, actor);
+    const updated = await this.prisma.aiMessage.update({
+      where: { id: messageId },
+      data: { content },
+    });
+    await this.audit.log({
+      action: 'internal_note.updated',
+      userId: actor.userId ?? null,
+      tenantId,
+      resource: `ai_message:${messageId}`,
+      // Guarda o texto anterior: a edição some com ele, e sem isso não há como
+      // reconstruir o que foi dito se a alteração for contestada depois.
+      metadata: { conversationId: msg.conversationId, previousContent: msg.content },
+    });
+    // NÃO usar 'message.updated': esse evento já é o recibo (ack) do WhatsApp
+    // e tem outro payload — ver ConversationsGateway.handleMessageUpdated.
+    this.events.emit('internal_note.updated', {
+      conversationId: msg.conversationId,
+      message: updated,
+    });
+    return updated;
+  }
+
+  async deleteInternalNote(
+    tenantId: string,
+    messageId: string,
+    actor: { userId?: string; role?: string },
+  ) {
+    const msg = await this.findEditableInternalNote(tenantId, messageId, actor);
+    // Exclusão é DEFINITIVA de propósito: o caso de uso declarado é apagar dado
+    // sensível colado por engano (LGPD). Um soft delete deixaria o dado no banco
+    // e não resolveria nada. O conteúdo fica no audit log, que é restrito.
+    await this.prisma.aiMessage.delete({ where: { id: messageId } });
+    await this.audit.log({
+      action: 'internal_note.deleted',
+      userId: actor.userId ?? null,
+      tenantId,
+      resource: `ai_message:${messageId}`,
+      metadata: { conversationId: msg.conversationId, deletedContent: msg.content },
+    });
+    this.events.emit('internal_note.deleted', {
+      conversationId: msg.conversationId,
+      messageId,
+    });
+    return { id: messageId, deleted: true };
+  }
+
+  // Histórico de mudanças de status/outcome (para a timeline da conversa).
+  // Etapa 2A: mesmo escopo de carteira das mensagens — a timeline revela o
+  // andamento do lead de outro vendedor, então tinha exatamente o mesmo furo.
+  async getTimeline(tenantId: string, id: string, sellerId?: string) {
+    await this.findOneScoped(tenantId, id, sellerId);
     return this.prisma.conversationStageHistory.findMany({
       where: { conversationId: id },
       orderBy: { changedAt: 'asc' },
@@ -562,6 +688,11 @@ export class ConversationsService {
       /** ADR 035: true only on the human inbox route — first human outbound activates takeover. */
       byHuman?: boolean;
       /**
+       * Etapa 2A: quem escreveu, resolvido do JWT no controller — NUNCA do body.
+       * Base da regra "só o autor edita a própria nota interna".
+       */
+      authorUserId?: string | null;
+      /**
        * F12: nota interna — visível só pra equipe de suporte no Inbox, NUNCA
        * despachada ao cliente. Quando true: não ativa o takeover ADR 035 (não
        * é uma resposta ao cliente) e NUNCA passa pelo envio WAHA, mesmo em
@@ -611,6 +742,7 @@ export class ConversationsService {
         tokensOut: dto.tokensOut,
         estimatedCostUsd: dto.estimatedCostUsd,
         isInternal: dto.isInternal ?? false,
+        authorUserId: dto.authorUserId ?? null,
       } as any,
     });
     // atualiza timestamp de última atividade (base da regra de auto-fechamento em 7 dias)

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 
 // ─── C1: setResolved gera csatToken no fechamento manual ─────────────────────
@@ -11,7 +12,13 @@ function makeDeps() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       create: vi.fn(),
     },
-    aiMessage: { create: vi.fn().mockResolvedValue({ id: 'msg-1' }), findMany: vi.fn().mockResolvedValue([]) },
+    aiMessage: {
+      create: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
     conversationStageHistory: { create: vi.fn().mockResolvedValue({}) },
     user: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn().mockImplementation((ops: any[]) => Promise.all(ops)),
@@ -19,12 +26,13 @@ function makeDeps() {
 
   const events = { emit: vi.fn() } as any;
   const waha = { sendText: vi.fn().mockResolvedValue({ sent: true }) } as any;
+  const audit = { log: vi.fn().mockResolvedValue(undefined) } as any;
 
-  return { prisma, events, waha };
+  return { prisma, events, waha, audit };
 }
 
 function makeService(deps: ReturnType<typeof makeDeps>) {
-  return new ConversationsService(deps.prisma, deps.events, deps.waha);
+  return new ConversationsService(deps.prisma, deps.events, deps.waha, deps.audit);
 }
 
 const existingConv = {
@@ -528,5 +536,169 @@ describe('ConversationsService — F13 setLinkedIssue', () => {
 
     await expect(svc.setLinkedIssue('t1', 'conv-1', 'javascript:alert(1)')).rejects.toThrow();
     expect(deps.prisma.aiConversation.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Etapa 2A: escopo de carteira nas leituras por id ────────────────────────
+// findAll já restringia o vendedor, mas ler por id (mensagens/timeline/detalhe)
+// só validava o tenant — saber o id bastava pra ler a conversa de um colega.
+describe('ConversationsService — 2A findOneScoped (escopo de vendedor)', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('sem sellerId (admin/operacional): não filtra por carteira', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(existingConv);
+
+    await svc.findOneScoped('t1', 'conv-1');
+
+    const where = deps.prisma.aiConversation.findFirst.mock.calls[0][0].where;
+    expect(where).toEqual({ id: 'conv-1', tenantId: 't1' });
+    expect(where.assignedSellerId).toBeUndefined();
+  });
+
+  it('com sellerId (vendedor): exige a conversa na carteira dele', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(existingConv);
+
+    await svc.findOneScoped('t1', 'conv-1', 'seller-9');
+
+    expect(deps.prisma.aiConversation.findFirst.mock.calls[0][0].where).toEqual({
+      id: 'conv-1',
+      tenantId: 't1',
+      assignedSellerId: 'seller-9',
+    });
+  });
+
+  it('conversa fora da carteira: 404 (não confirma que o id existe)', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(null);
+
+    await expect(svc.findOneScoped('t1', 'conv-de-outro', 'seller-9')).rejects.toThrow(NotFoundException);
+  });
+
+  it('getMessages repassa o escopo — não devolve mensagem fora da carteira', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(null);
+
+    await expect(
+      svc.getMessages('t1', 'conv-de-outro', { includeInternal: false, sellerId: 'seller-9' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(deps.prisma.aiMessage.findMany).not.toHaveBeenCalled();
+  });
+
+  it('getTimeline repassa o escopo', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(null);
+
+    await expect(svc.getTimeline('t1', 'conv-de-outro', 'seller-9')).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ─── Etapa 2A (item 2.3): editar/excluir nota interna ────────────────────────
+describe('ConversationsService — 2A nota interna: editar e excluir', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  const nota = {
+    id: 'msg-1',
+    tenantId: 't1',
+    conversationId: 'conv-1',
+    content: 'texto original',
+    isInternal: true,
+    authorUserId: 'user-autor',
+  };
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('autor edita a própria nota: grava e audita guardando o texto anterior', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(nota);
+    deps.prisma.aiMessage.update.mockResolvedValue({ ...nota, content: 'texto novo' });
+
+    const r = await svc.updateInternalNote('t1', 'msg-1', 'texto novo', {
+      userId: 'user-autor',
+      role: 'operacional',
+    });
+
+    expect(r.content).toBe('texto novo');
+    // sem o texto anterior no audit não há como reconstruir o que foi dito
+    expect(deps.audit.log.mock.calls[0][0].metadata.previousContent).toBe('texto original');
+  });
+
+  it('outro operacional NÃO edita nota alheia', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(nota);
+
+    await expect(
+      svc.updateInternalNote('t1', 'msg-1', 'x', { userId: 'user-outro', role: 'operacional' }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(deps.prisma.aiMessage.update).not.toHaveBeenCalled();
+  });
+
+  it('admin edita nota de qualquer um', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(nota);
+    deps.prisma.aiMessage.update.mockResolvedValue({ ...nota, content: 'corrigido' });
+
+    await svc.updateInternalNote('t1', 'msg-1', 'corrigido', { userId: 'admin-1', role: 'admin' });
+
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalled();
+  });
+
+  it('mensagem JÁ ENVIADA ao cliente não pode ser editada nem apagada', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue({ ...nota, isInternal: false });
+
+    await expect(
+      svc.updateInternalNote('t1', 'msg-1', 'x', { userId: 'user-autor', role: 'admin' }),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      svc.deleteInternalNote('t1', 'msg-1', { userId: 'user-autor', role: 'admin' }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(deps.prisma.aiMessage.delete).not.toHaveBeenCalled();
+  });
+
+  it('nota antiga sem autor (pré-migration): só admin mexe', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue({ ...nota, authorUserId: null });
+
+    await expect(
+      svc.updateInternalNote('t1', 'msg-1', 'x', { userId: 'user-autor', role: 'operacional' }),
+    ).rejects.toThrow(ForbiddenException);
+
+    deps.prisma.aiMessage.update.mockResolvedValue({ ...nota, content: 'x' });
+    await svc.updateInternalNote('t1', 'msg-1', 'x', { userId: 'admin-1', role: 'admin' });
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalled();
+  });
+
+  it('mensagem de outro tenant: 404, não vaza existência', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(null);
+
+    await expect(
+      svc.deleteInternalNote('t1', 'msg-de-outro-tenant', { userId: 'admin-1', role: 'admin' }),
+    ).rejects.toThrow(NotFoundException);
+    // o escopo do tenant precisa estar no WHERE, não só numa checagem depois
+    expect(deps.prisma.aiMessage.findFirst.mock.calls[0][0].where).toMatchObject({ tenantId: 't1' });
+  });
+
+  it('exclusão é definitiva e guarda o conteúdo no audit (LGPD)', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(nota);
+
+    const r = await svc.deleteInternalNote('t1', 'msg-1', { userId: 'user-autor', role: 'operacional' });
+
+    expect(r).toEqual({ id: 'msg-1', deleted: true });
+    expect(deps.prisma.aiMessage.delete).toHaveBeenCalledWith({ where: { id: 'msg-1' } });
+    expect(deps.audit.log.mock.calls[0][0].metadata.deletedContent).toBe('texto original');
+  });
+
+  it('emite evento PRÓPRIO, nunca message.updated (que é o ack do WhatsApp)', async () => {
+    deps.prisma.aiMessage.findFirst.mockResolvedValue(nota);
+    deps.prisma.aiMessage.update.mockResolvedValue({ ...nota, content: 'novo' });
+
+    await svc.updateInternalNote('t1', 'msg-1', 'novo', { userId: 'user-autor', role: 'admin' });
+
+    const eventos = deps.events.emit.mock.calls.map((c: any[]) => c[0]);
+    expect(eventos).toContain('internal_note.updated');
+    // reusar 'message.updated' faria o handler de ack emitir lixo pra sala do CLIENTE
+    expect(eventos).not.toContain('message.updated');
   });
 });
