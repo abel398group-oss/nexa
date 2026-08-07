@@ -8,7 +8,7 @@ Sentry.init({
 });
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger as NestLogger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { Logger } from 'nestjs-pino';
@@ -30,7 +30,34 @@ async function bootstrap() {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());
   // whitelist+forbidNonWhitelisted = proteção contra mass-assignment
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
+  //
+  // REGRA 3 (REGRAS-SQUAD.md): a rejeição SEMPRE loga o motivo.
+  //
+  // Duas vezes um campo novo do TMS derrubou uma integração inteira com 400
+  // (`isManager` em 09/07/2026, `companyName`+`cnpj` em 07/08/2026). Nas duas, o
+  // 400 saiu mudo daqui: o TMS converte falha downstream em erro genérico, e do
+  // lado do Nexa o log só dizia `statusCode: 400`. A causa levava dias para ser
+  // encontrada por falta de UMA linha de log.
+  //
+  // Loga apenas as mensagens de constraint (nomes de propriedade e regra violada),
+  // NUNCA os valores enviados — payload de integração carrega dado pessoal (LGPD).
+  const validationLogger = new NestLogger('ValidationPipe');
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        // Mesmo shape do factory padrão do Nest: { message: string[], error, statusCode }.
+        // Mudar isso quebraria o parsing de erro do TMS e do frontend.
+        const detalhes = errors.flatMap((e) =>
+          Object.values(e.constraints ?? {}).length ? Object.values(e.constraints ?? {}) : [e.property],
+        );
+        validationLogger.warn(`payload rejeitado: ${detalhes.join(' | ')}`);
+        return new BadRequestException(detalhes);
+      },
+    }),
+  );
   app.setGlobalPrefix('api'); // todas as rotas sob /api
   // CORS restrito: permite apenas origens explícitas definidas em CORS_ORIGINS (dev + produção)
   const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',');

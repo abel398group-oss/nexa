@@ -843,6 +843,11 @@ model HandoffToken {
   name       String?   @map("user_name")   // nome do usuário LOGADO no TMS (identidade segura — vem do token, nunca do WhatsApp)
   page       String?                       // página de origem (ex: "fiscal/cte")
   errorCode  String?   @map("error_code")  // código de erro visível na tela, se houver
+  // Empresa do usuário no TMS. O TMS já enviava os dois desde 2026-08-06
+  // (lia-support.service.ts) e o Nexa os descartava — o DTO nem os declarava, e o
+  // ValidationPipe global (forbidNonWhitelisted) derrubava TODO handoff com 400.
+  companyName String?  @map("company_name")
+  cnpj        String?
   isManager  Boolean   @default(false) @map("is_manager") // gestor pode ver chamados de toda a empresa
   usedAt     DateTime? @map("used_at")     // null = ainda não usado
   expiresAt  DateTime  @map("expires_at")  // TTL 5 minutos

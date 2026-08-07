@@ -14,6 +14,12 @@ class CreateHandoffDto {
   // Sem este campo no DTO, o ValidationPipe global (forbidNonWhitelisted)
   // rejeitava TODO handoff com 400 — quebrando o widget de suporte.
   @IsOptional() @IsBoolean() isManager?: boolean;
+  // Empresa do usuário logado no TMS. Mesma armadilha do isManager, de novo
+  // (2026-08-07): o TMS passou a enviar companyName + cnpj em 2026-08-06 a pedido
+  // do Nexa, o DTO não foi atualizado, e TODO handoff voltou a ser 400 —
+  // derrubando a abertura de chamado no widget. Ver REGRAS-SQUAD.md, REGRA 1.
+  @IsOptional() @IsString() companyName?: string;
+  @IsOptional() @IsString() cnpj?: string;
 }
 
 // POST /api/handoff/token — gerado pelo TMS (server-to-server)
@@ -38,6 +44,8 @@ export class HandoffController {
       page: body.page,
       errorCode: body.errorCode,
       isManager: body.isManager,
+      companyName: body.companyName,
+      cnpj: body.cnpj,
       serviceToken,
     });
     return result;

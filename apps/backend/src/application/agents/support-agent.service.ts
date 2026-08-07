@@ -161,7 +161,9 @@ export class SupportAgentService {
       priority: classification.priority,
       diagnostic: diag,
       history,
-      tmsCustomer: input.tmsCustomer ? { name: input.tmsCustomer.name, page: input.tmsCustomer.page } : null,
+      tmsCustomer: input.tmsCustomer
+        ? { name: input.tmsCustomer.name, page: input.tmsCustomer.page, company: input.tmsCustomer.tenantName }
+        : null,
       knowledge: await kbPromise,
     });
 

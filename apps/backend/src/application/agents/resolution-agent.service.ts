@@ -64,7 +64,7 @@ export class ResolutionAgentService {
     priority: TicketPriority;
     diagnostic: DiagnosticResult;
     history: string;
-    tmsCustomer: { name: string; page?: string | null } | null;
+    tmsCustomer: { name: string; page?: string | null; company?: string | null } | null;
     /** KB já recuperada por `prefetchKnowledge()`. Ausente → busca aqui mesmo. */
     knowledge?: KnowledgeHit[];
   }): Promise<ResolutionResult> {
@@ -103,8 +103,13 @@ export class ResolutionAgentService {
     const cfg = await this.playbook.get(input.tenantId).catch(() => null);
     const supportTone = cfg?.supportPersona?.trim() ? `${cfg.supportPersona.trim()}\n` : '';
 
+    // Empresa vinda do token de handoff (TMS autenticado). Sem isto, a Lia atendia
+    // sem saber para quem o cliente trabalha e podia acabar perguntando — dado que o
+    // sistema já tem, e que NUNCA deve ser perguntado (LGPD/anti-fraude).
+    const empresaCtx = input.tmsCustomer?.company ? `, da empresa ${input.tmsCustomer.company}` : '';
+
     const system = `Você é a Lia, assistente de SUPORTE do HiperTMS.
-${supportTone}Você está atendendo ${customerName}, que já é cliente ativo.
+${supportTone}Você está atendendo ${customerName}${empresaCtx}, que já é cliente ativo.
 NÃO tente vender. Foco ÚNICO: resolver o problema do cliente.${pageCtx}
 
 REGRAS CRÍTICAS:

@@ -12,7 +12,7 @@ import { SupportAgentService } from './support-agent.service';
 import { SupervisorAgentService, SupervisorVerdict } from './supervisor-agent.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
-import { HandoffService } from '@/application/handoff/handoff.service';
+import { HandoffService, type HandoffContext } from '@/application/handoff/handoff.service';
 import { OpportunitiesService } from '@/application/opportunities/opportunities.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
@@ -677,7 +677,7 @@ export class ConversationAgentService {
     route: RouteDecision,
   ): Promise<{
     route: RouteDecision;
-    handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null;
+    handoffContext: HandoffContext | null;
     tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
     hasPanel: boolean;
     agentMessage: string;
@@ -686,7 +686,7 @@ export class ConversationAgentService {
     const hasPanel = VIA_PANEL_MARKER.test(input.message);
     // Modalidade B: HANDOFF:token → resolve contexto rico e vai direto para suporte
     const handoffMatch = input.message.match(HANDOFF_TOKEN_RE);
-    let handoffContext: { externalId: string; tenantId: string; name?: string | null; page?: string | null; errorCode?: string | null } | null = null;
+    let handoffContext: HandoffContext | null = null;
     // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
     let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
 
@@ -696,7 +696,16 @@ export class ConversationAgentService {
         route = { ...route, agent: 'support' };
         // identidade segura: o nome vem do token (TMS autenticado), então a Lia já sabe quem é
         if (handoffContext.name) {
-          tmsCustomer = { externalId: handoffContext.externalId, name: handoffContext.name, isAdmin: false, page: handoffContext.page ?? null };
+          tmsCustomer = {
+            externalId: handoffContext.externalId,
+            name: handoffContext.name,
+            isAdmin: false,
+            page: handoffContext.page ?? null,
+            // Empresa vinda do token do TMS: a Lia sabe para quem o cliente trabalha
+            // sem precisar perguntar (perguntar dado que o sistema já tem irrita e,
+            // no caso de CNPJ, é vetor de fraude — ver regras de LGPD nos prompts).
+            tenantName: handoffContext.companyName ?? undefined,
+          };
         }
         this.logger.log(`HANDOFF token resolvido: ext=${handoffContext.externalId} nome=${handoffContext.name ?? '-'} page=${handoffContext.page ?? '-'}`);
       } else {

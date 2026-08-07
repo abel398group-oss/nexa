@@ -49,6 +49,10 @@ export interface CreateHandoffInput {
   page?: string;
   errorCode?: string;
   isManager?: boolean; // true = gestor (pode ver chamados da empresa)
+  // Empresa do usuário no TMS — evita que a Lia/atendente pergunte ao cliente algo
+  // que o sistema já sabe. Enviados pelo TMS desde 2026-08-06.
+  companyName?: string;
+  cnpj?: string;
   serviceToken?: string;
   /** TTL em ms. Default: 5 min (portal). Web chat usa TOKEN_TTL_MS_WEBCHAT (15 min). */
   ttlMs?: number;
@@ -61,6 +65,8 @@ export interface HandoffContext {
   page?: string | null;
   errorCode?: string | null;
   isManager: boolean;
+  companyName?: string | null;
+  cnpj?: string | null;
 }
 
 @Injectable()
@@ -95,6 +101,8 @@ export class HandoffService {
         page: input.page ?? null,
         errorCode: input.errorCode ?? null,
         isManager: input.isManager ?? false,
+        companyName: input.companyName ?? null,
+        cnpj: input.cnpj ?? null,
         expiresAt,
       },
     });
@@ -130,6 +138,8 @@ export class HandoffService {
       page: record.page,
       errorCode: record.errorCode,
       isManager: record.isManager,
+      companyName: record.companyName,
+      cnpj: record.cnpj,
     };
   }
 }
