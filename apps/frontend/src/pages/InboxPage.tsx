@@ -290,6 +290,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const threadRef = useRef<HTMLDivElement | null>(null);
   // Ref sempre atualizado com o tenantId efetivo — usado dentro dos handlers do socket.
   const inboxTenantRef = useRef<string | null | undefined>(null);
+  // Item 1.2: mesma ideia pra conversa aberta. O handler de 'connect' é
+  // registrado uma única vez (efeito com deps []), então ler `active` de dentro
+  // dele pegaria sempre o valor da primeira renderização — o ref é o que
+  // permite reentrar na sala CERTA depois de uma reconexão.
+  const activeIdRef = useRef<string | null>(null);
 
   function reloadConvs(signal?: AbortSignal) {
     setLoadingConvs(true);
@@ -311,6 +316,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Item 1.2: mantém o ref da conversa aberta em dia pro handler de reconexão.
+  useEffect(() => {
+    activeIdRef.current = active?.id ?? null;
+  }, [active?.id]);
 
   // Mantém o ref sincronizado e emite join_inbox se o socket já estiver conectado.
   useEffect(() => {
@@ -340,6 +350,23 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     s.on('connect', () => {
       const tenantId = inboxTenantRef.current;
       if (tenantId) s.emit('join_inbox', { tenantId });
+      // Item 1.2 (auditoria 2026-08-06): reentra também na sala da conversa
+      // aberta. Sem isto, qualquer reconexão (queda de rede, notebook suspenso,
+      // redeploy do backend) deixava o analista com o chamado na tela mas FORA
+      // de conv:<id> e staff:conv:<id> — a lista lateral voltava a atualizar,
+      // dando a impressão de que estava tudo certo, enquanto as mensagens
+      // daquela conversa (inclusive notas internas) simplesmente paravam de
+      // chegar. Falha silenciosa, que é o pior tipo.
+      const conversationId = activeIdRef.current;
+      if (conversationId) {
+        s.emit('join', { conversationId });
+        // O socket ficou fora da sala durante a queda: rebusca o histórico pra
+        // recuperar o que foi dito nesse intervalo, senão a conversa fica com
+        // um buraco silencioso no meio.
+        getConversationMessages(conversationId)
+          .then(setMessages)
+          .catch(() => undefined);
+      }
     });
     return () => { s.close(); socketRef.current = null; };
   }, []);
@@ -447,7 +474,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   // onde não existe `active` ainda (nenhuma conversa selecionada).
   async function quickAssumeAndOpen(c: Conversation) {
     try {
-      const r = await reassignAnalyst(c.id, user?.id ?? null);
+      // Item 1.4: esta lista só mostra chamado SEM dono — é exatamente essa
+      // premissa que vai como precondição pro backend.
+      const r = await reassignAnalyst(c.id, user?.id ?? null, { expectedAnalystId: null });
       const updated: Conversation = {
         ...c,
         assignedAnalyst: r?.assignedAnalyst ?? null,
@@ -455,8 +484,10 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       };
       setConvs((cs) => cs.map((x) => (x.id === c.id ? updated : x)));
       openGroup({ rep: updated, convs: [{ id: c.id }] });
-    } catch {
-      toast.error('Erro ao assumir chamado.');
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao assumir chamado.');
+      reloadConvs(); // outro analista chegou antes — atualiza a fila
     }
   }
 
@@ -554,13 +585,24 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
 
   // F12: assume (userId = eu) ou reatribui (userId = outro analista) o chamado
   // de suporte; userId=null devolve pra fila geral sem dono.
-  async function assignAnalyst(userId: string | null) {
+  // `opts.expectedAnalystId` liga a trava de concorrência (item 1.4): quem
+  // ASSUME manda o dono que a tela está mostrando; quem TRANSFERE pelo seletor
+  // omite (é ação deliberada em cima do dono atual, já visível na tela).
+  async function assignAnalyst(userId: string | null, opts: { expectedAnalystId?: string | null } = {}) {
     if (!active) return;
-    const r = await reassignAnalyst(active.id, userId);
-    const assignedAnalyst = r?.assignedAnalyst ?? null;
-    const assignedAnalystId = r?.assignedAnalystId ?? null;
-    setActive((a) => (a ? { ...a, assignedAnalyst, assignedAnalystId } : a));
-    setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedAnalyst, assignedAnalystId } : c)));
+    try {
+      const r = await reassignAnalyst(active.id, userId, opts);
+      const assignedAnalyst = r?.assignedAnalyst ?? null;
+      const assignedAnalystId = r?.assignedAnalystId ?? null;
+      setActive((a) => (a ? { ...a, assignedAnalyst, assignedAnalystId } : a));
+      setConvs((cs) => cs.map((c) => (c.id === active.id ? { ...c, assignedAnalyst, assignedAnalystId } : c)));
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao atribuir o chamado.');
+      // 409 (alguém assumiu antes) ou qualquer outra falha: o servidor é a
+      // verdade. Resincroniza para a tela parar de mostrar um dono que não é o real.
+      reloadConvs();
+    }
   }
 
   // F13: vincula/remove o link da issue de dev — vincular move o chamado pra
@@ -1640,7 +1682,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               </div>
             ) : (
               <button
-                onClick={() => assignAnalyst(user?.id ?? null)}
+                // Item 1.4: este botão só existe quando a tela vê o chamado sem
+                // dono — é essa premissa que vira precondição no backend.
+                onClick={() => assignAnalyst(user?.id ?? null, { expectedAnalystId: null })}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
               >
                 <Icon name="check" className="h-4 w-4" /> Assumir Chamado

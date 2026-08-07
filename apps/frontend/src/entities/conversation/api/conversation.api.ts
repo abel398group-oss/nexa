@@ -51,11 +51,19 @@ export async function assignSeller(
 
 // Suporte: (re)atribuir o chamado a um analista humano (ou desatribuir com null).
 // Não confundir com assignSeller acima — aquele é o lado comercial.
+// `expectedAnalystId` liga a trava de concorrência do backend: mande o dono que
+// a TELA está mostrando (null = "está na fila geral"). Se o banco discordar, vem
+// 409 com o nome de quem assumiu antes, em vez de sobrescrever em silêncio.
+// Omita em transferência deliberada pelo seletor.
 export async function assignAnalyst(
   id: string,
   userId: string | null,
+  opts: { expectedAnalystId?: string | null } = {},
 ): Promise<Pick<Conversation, 'assignedAnalyst' | 'assignedAnalystId'>> {
-  const r = await api.patch(`/conversations/${id}/assign-analyst`, { userId });
+  const r = await api.patch(`/conversations/${id}/assign-analyst`, {
+    userId,
+    ...(opts.expectedAnalystId !== undefined ? { expectedAnalystId: opts.expectedAnalystId } : {}),
+  });
   return r.data;
 }
 
