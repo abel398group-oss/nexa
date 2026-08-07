@@ -8,6 +8,7 @@ function makeDeps() {
     aiConversation: {
       findFirst: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       create: vi.fn(),
     },
     aiMessage: { create: vi.fn().mockResolvedValue({ id: 'msg-1' }), findMany: vi.fn().mockResolvedValue([]) },
@@ -257,6 +258,106 @@ describe('ConversationsService — F12 assignAnalyst', () => {
 
     await expect(svc.assignAnalyst('t1', 'conv-1', 'user-outro-tenant')).rejects.toThrow();
     expect(deps.prisma.aiConversation.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Item 1.4: trava de concorrência no "Assumir Chamado" ────────────────────
+// Antes era update cego: dois analistas clicando junto recebiam 200 os dois e o
+// último gravado vencia em silêncio. Agora quem assume manda `expectedAnalystId`
+// e a gravação é condicional.
+describe('ConversationsService — 1.4 assignAnalyst com trava de concorrência', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(existingConv);
+    deps.prisma.user.findFirst.mockResolvedValue({ id: 'user-1' });
+  });
+
+  it('assumir chamado livre: grava condicionalmente (updateMany), não update cego', async () => {
+    deps.prisma.aiConversation.updateMany.mockResolvedValue({ count: 1 });
+    deps.prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(existingConv) // findOne (validação de tenant)
+      .mockResolvedValueOnce({ assignedAnalystId: 'user-1', assignedAnalyst: { id: 'user-1', name: 'Ana' } });
+
+    const r = await svc.assignAnalyst('t1', 'conv-1', 'user-1', { expectedAnalystId: null });
+
+    const call = deps.prisma.aiConversation.updateMany.mock.calls[0][0];
+    // a precondição precisa estar no WHERE — é ela que torna a operação atômica
+    expect(call.where).toMatchObject({ id: 'conv-1', tenantId: 't1', assignedAnalystId: null });
+    expect(call.data.assignedAnalystId).toBe('user-1');
+    expect(deps.prisma.aiConversation.update).not.toHaveBeenCalled();
+    expect(r.assignedAnalyst).toEqual({ id: 'user-1', name: 'Ana' });
+  });
+
+  it('corrida perdida (0 linhas casadas): lança conflito com o nome do dono real', async () => {
+    deps.prisma.aiConversation.updateMany.mockResolvedValue({ count: 0 });
+    deps.prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(existingConv)
+      .mockResolvedValueOnce({ assignedAnalyst: { id: 'user-2', name: 'Bruno' } });
+
+    await expect(
+      svc.assignAnalyst('t1', 'conv-1', 'user-1', { expectedAnalystId: null }),
+    ).rejects.toThrow(/Bruno/);
+  });
+
+  it('corrida perdida sem nome do dono: mensagem genérica, não quebra', async () => {
+    deps.prisma.aiConversation.updateMany.mockResolvedValue({ count: 0 });
+    deps.prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(existingConv)
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      svc.assignAnalyst('t1', 'conv-1', 'user-1', { expectedAnalystId: null }),
+    ).rejects.toThrow(/outro analista/);
+  });
+
+  it('transferência deliberada (sem expectedAnalystId): segue no update direto', async () => {
+    deps.prisma.aiConversation.update.mockResolvedValue({
+      assignedAnalystId: 'user-1',
+      assignedAnalyst: { id: 'user-1', name: 'Ana' },
+    });
+
+    await svc.assignAnalyst('t1', 'conv-1', 'user-1');
+
+    expect(deps.prisma.aiConversation.update).toHaveBeenCalled();
+    expect(deps.prisma.aiConversation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('roubar chamado de outro analista: precondição com o dono esperado, não null', async () => {
+    deps.prisma.aiConversation.updateMany.mockResolvedValue({ count: 1 });
+    deps.prisma.aiConversation.findFirst
+      .mockResolvedValueOnce(existingConv)
+      .mockResolvedValueOnce({ assignedAnalystId: 'user-1', assignedAnalyst: { id: 'user-1', name: 'Ana' } });
+
+    await svc.assignAnalyst('t1', 'conv-1', 'user-1', { expectedAnalystId: 'user-2' });
+
+    expect(deps.prisma.aiConversation.updateMany.mock.calls[0][0].where).toMatchObject({
+      assignedAnalystId: 'user-2',
+    });
+  });
+});
+
+// ─── Item 2.1: platform admin (tenantId null) elegível no seletor ────────────
+describe('ConversationsService — 2.1 listAnalysts inclui platform admin', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('busca usuários do tenant E da plataforma — mesmo critério do assignAnalyst', async () => {
+    await svc.listAnalysts('t1');
+
+    const where = deps.prisma.user.findMany.mock.calls[0][0].where;
+    expect(where.isActive).toBe(true);
+    // Sem o `tenantId: null` no OR, um platform admin que assume um chamado fica
+    // fora da lista e o <Select> do painel renderiza "Sem dono" mentindo.
+    expect(where.OR).toEqual([{ tenantId: 't1' }, { tenantId: null }]);
   });
 });
 

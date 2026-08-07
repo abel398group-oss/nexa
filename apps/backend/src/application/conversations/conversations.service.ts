@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { v4 as uuidv4 } from 'uuid';
@@ -225,7 +225,12 @@ export class ConversationsService {
   // F12: atribui/reatribui um chamado de SUPORTE a um analista humano (userId
   // null = devolve pra fila geral). Não confundir com assign() acima, que é
   // o vendedor do lado comercial.
-  async assignAnalyst(tenantId: string, id: string, userId: string | null) {
+  async assignAnalyst(
+    tenantId: string,
+    id: string,
+    userId: string | null,
+    opts: { expectedAnalystId?: string | null } = {},
+  ) {
     await this.findOne(tenantId, id); // valida escopo do tenant
     if (userId) {
       // Aceita usuário do tenant OU admin da plataforma (tenantId null) — mesmo
@@ -236,6 +241,52 @@ export class ConversationsService {
       });
       if (!analyst) throw new NotFoundException('Analista não encontrado');
     }
+
+    // Item 1.4 (auditoria 2026-08-06): trava de concorrência no "Assumir".
+    //
+    // Antes isto era um update cego: dois analistas clicando no mesmo segundo
+    // recebiam 200 os dois, os dois viam "Você está com este chamado", e o
+    // último gravado vencia em silêncio — o primeiro só descobria ao recarregar.
+    //
+    // Com `expectedAnalystId` presente a gravação vira condicional: o updateMany
+    // só casa a linha se o dono no banco ainda for o esperado (null = "estava na
+    // fila geral"). Zero linhas casadas = alguém chegou antes → 409 com o nome
+    // de quem ficou, em vez de sobrescrever.
+    //
+    // Sem `expectedAnalystId` (transferência deliberada pelo seletor, ou
+    // devolver pra fila) o caminho segue o de sempre — quem transfere está
+    // olhando pro dono atual na tela e quer mesmo trocar.
+    if (opts.expectedAnalystId !== undefined) {
+      const claimed = await this.prisma.aiConversation.updateMany({
+        where: { id, tenantId, assignedAnalystId: opts.expectedAnalystId },
+        data: { assignedAnalystId: userId, assignedAnalystAt: userId ? new Date() : null },
+      });
+
+      if (claimed.count === 0) {
+        const current = await this.prisma.aiConversation.findFirst({
+          where: { id, tenantId },
+          select: { assignedAnalyst: { select: { id: true, name: true } } },
+        });
+        const owner = current?.assignedAnalyst?.name ?? 'outro analista';
+        this.logger.warn(`assignAnalyst: corrida no chamado ${id} — já estava com ${owner}`);
+        throw new ConflictException(`Chamado já assumido por ${owner}.`);
+      }
+
+      const fresh = await this.prisma.aiConversation.findFirst({
+        where: { id },
+        select: {
+          assignedAnalystId: true,
+          assignedAnalyst: { select: { id: true, name: true } },
+        },
+      });
+      this.events.emit('conversation.updated', { tenantId, conversationId: id });
+      return {
+        id,
+        assignedAnalystId: fresh?.assignedAnalystId ?? null,
+        assignedAnalyst: fresh?.assignedAnalyst ?? null,
+      };
+    }
+
     const updated = await this.prisma.aiConversation.update({
       where: { id },
       data: { assignedAnalystId: userId, assignedAnalystAt: userId ? new Date() : null },
@@ -249,9 +300,17 @@ export class ConversationsService {
   // Deliberadamente fora do UsersController (@RequirePerm('users'), admin-only
   // de gestão de conta) — qualquer operador autenticado do Inbox precisa poder
   // ver a quem atribuir um chamado, sem precisar de permissão de administrar usuários.
+  //
+  // Item 2.1 (auditoria 2026-08-06): inclui admin da plataforma (tenantId null).
+  // O filtro era só `{ tenantId }`, mas assignAnalyst SEMPRE aceitou `tenantId:
+  // null` — então um platform admin que assumia um chamado ficava fora da lista,
+  // o <Select> do painel não achava opção com aquele value e o browser caía na
+  // primeira ("Sem dono"). A tela passava a se contradizer: dizia "Você está com
+  // este chamado" logo acima de um seletor marcado como sem dono. Os dois lados
+  // agora usam exatamente o mesmo critério de elegibilidade.
   async listAnalysts(tenantId: string) {
     return this.prisma.user.findMany({
-      where: { tenantId, isActive: true },
+      where: { isActive: true, OR: [{ tenantId }, { tenantId: null }] },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });

@@ -4,6 +4,13 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
+import {
+  AddMessageDto,
+  AssignAnalystDto,
+  SetLinkedIssueDto,
+  SetOutcomeDto,
+  SetResolvedDto,
+} from '@/application/conversations/dto/conversations.dto';
 
 class BulkActionDto {
   @IsIn(['archive', 'delete']) action!: 'archive' | 'delete';
@@ -13,6 +20,27 @@ class BulkActionDto {
 // se for vendedor, restringe à carteira dele (assignedSellerId); admin/gestor veem tudo
 function sellerScope(user: any): string | undefined {
   return user?.role === 'vendedor' ? user.sellerId ?? '__none__' : undefined;
+}
+
+/**
+ * Papéis que operam o suporte e, por isso, podem LER nota interna.
+ *
+ * Auditoria 2026-08-06 (item 1.1): antes a rota de mensagens devolvia
+ * `includeInternal: true` para qualquer usuário autenticado do tenant. Como
+ * `vendedor` recebe a permissão `inbox` de fábrica (sellers.service.ts), nem
+ * `@RequirePerm('inbox')` separaria — a fronteira real aqui é de PAPEL, não de
+ * permissão: nota interna é artefato de suporte, e o lado comercial não tem o
+ * que fazer com o diagnóstico técnico de um chamado.
+ *
+ * Allowlist de propósito (fail-closed): um papel novo criado no futuro entra
+ * SEM acesso a nota interna até alguém liberar aqui conscientemente. O inverso
+ * (denylist) daria acesso por esquecimento, que é justamente como este furo
+ * apareceu.
+ */
+const SUPPORT_ROLES = ['admin', 'operacional'];
+
+function canReadInternalNotes(user: any): boolean {
+  return SUPPORT_ROLES.includes(user?.role);
 }
 
 @UseGuards(JwtAuthGuard)
@@ -52,9 +80,16 @@ export class ConversationsController {
   }
 
   @Get(':id/messages')
-  messages(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    // F12: rota do Inbox (analista autenticado) — único chamador que vê nota interna.
-    return this.conversations.getMessages(tenantId, id, { includeInternal: true });
+  messages(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+  ) {
+    // F12 + item 1.1: rota do Inbox. Nota interna só para quem opera suporte —
+    // `vendedor` recebe o mesmo histórico que o cliente veria (ver SUPPORT_ROLES).
+    return this.conversations.getMessages(tenantId, id, {
+      includeInternal: canReadInternalNotes(user),
+    });
   }
 
   @Get(':id/timeline')
@@ -74,9 +109,9 @@ export class ConversationsController {
   setOutcome(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { outcome: 'won' | 'lost' | null },
+    @Body() dto: SetOutcomeDto,
   ) {
-    return this.conversations.setOutcome(tenantId, id, dto.outcome);
+    return this.conversations.setOutcome(tenantId, id, dto.outcome ?? null);
   }
 
   @Patch(':id/assign')
@@ -96,9 +131,13 @@ export class ConversationsController {
   assignAnalyst(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { userId: string | null },
+    @Body() dto: AssignAnalystDto,
   ) {
-    return this.conversations.assignAnalyst(tenantId, id, dto.userId ?? null);
+    // Item 1.4: `expectedAnalystId` ausente = transferência deliberada (grava
+    // direto). Presente = "Assumir", e aí a gravação vira condicional no service.
+    return this.conversations.assignAnalyst(tenantId, id, dto.userId ?? null, {
+      expectedAnalystId: dto.expectedAnalystId,
+    });
   }
 
   // F13: vincula (ou remove, url=null) o link da issue de dev (Jira/GitHub/
@@ -107,7 +146,7 @@ export class ConversationsController {
   setLinkedIssue(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { url: string | null },
+    @Body() dto: SetLinkedIssueDto,
   ) {
     return this.conversations.setLinkedIssue(tenantId, id, dto.url?.trim() || null);
   }
@@ -118,7 +157,7 @@ export class ConversationsController {
   resolve(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { resolved: boolean },
+    @Body() dto: SetResolvedDto,
   ) {
     return this.conversations.setResolved(tenantId, id, dto.resolved);
   }
@@ -146,14 +185,7 @@ export class ConversationsController {
   addMessage(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: {
-      direction: 'inbound' | 'outbound';
-      content: string;
-      intent?: string;
-      metadata?: Record<string, unknown>;
-      /** F12: nota interna — nunca sai pro cliente. Ver ConversationsService.addMessage. */
-      isInternal?: boolean;
-    },
+    @Body() dto: AddMessageDto,
   ) {
     // ADR 035: this route is the human inbox — an outbound here is a human
     // reply and activates the per-conversation takeover (Lia goes draft-only).
