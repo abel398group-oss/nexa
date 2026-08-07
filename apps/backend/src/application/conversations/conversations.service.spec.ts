@@ -8,10 +8,15 @@ function makeDeps() {
   const prisma = {
     aiConversation: {
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+      groupBy: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       create: vi.fn(),
     },
+    contact: { findMany: vi.fn().mockResolvedValue([]) },
+    campaign: { findMany: vi.fn().mockResolvedValue([]) },
     aiMessage: {
       create: vi.fn().mockResolvedValue({ id: 'msg-1' }),
       findMany: vi.fn().mockResolvedValue([]),
@@ -700,5 +705,146 @@ describe('ConversationsService — 2A nota interna: editar e excluir', () => {
     expect(eventos).toContain('internal_note.updated');
     // reusar 'message.updated' faria o handler de ack emitir lixo pra sala do CLIENTE
     expect(eventos).not.toContain('message.updated');
+  });
+});
+
+// ─── Etapa 2B: filtros e ordenação server-side ───────────────────────────────
+// O bug de origem: a lista devolvia as 50 mais recentes por startedAt, com
+// vendas e suporte misturados, e o cliente filtrava o que tinha em mãos.
+describe('ConversationsService — 2B findAll: escopo, fila e ordenação', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+  const q = { limit: 50, offset: 0 } as any;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+    deps.prisma.aiConversation.count.mockResolvedValue(0);
+    deps.prisma.aiConversation.groupBy.mockResolvedValue([]);
+  });
+
+  const whereDe = () => deps.prisma.aiConversation.findMany.mock.calls[0][0].where;
+
+  it('ordena por ATIVIDADE com nulls por último, não por criação', async () => {
+    await svc.findAll('t1', q);
+
+    const orderBy = deps.prisma.aiConversation.findMany.mock.calls[0][0].orderBy;
+    // nulls:'last' é essencial — em DESC o Postgres joga NULL pro topo e uma
+    // conversa sem atividade nenhuma encabeçaria a fila.
+    expect(orderBy[0]).toEqual({ lastActivityAt: { sort: 'desc', nulls: 'last' } });
+    expect(orderBy[1]).toEqual({ startedAt: 'desc' });
+  });
+
+  it('scope=support: filtra pelas condições de ticket de suporte', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { scope: 'support' });
+
+    const grupoEscopo = whereDe().AND.find((c: any) => Array.isArray(c.OR) && c.OR.some((o: any) => o.ticketCategory));
+    expect(grupoEscopo).toBeDefined();
+    expect(grupoEscopo.OR).toEqual(
+      expect.arrayContaining([{ ticketCategory: { not: null } }, { status: 'escalated' }]),
+    );
+  });
+
+  it('scope=sales: é a NEGAÇÃO exata do mesmo conjunto (sem buraco nem sobreposição)', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { scope: 'sales' });
+
+    const grupoEscopo = whereDe().AND.find((c: any) => c.NOT);
+    expect(grupoEscopo.NOT.OR).toEqual(
+      expect.arrayContaining([{ ticketCategory: { not: null } }, { status: 'escalated' }]),
+    );
+  });
+
+  it('queue=waiting_internal força o status, ignorando o filtro de status', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { onlyWaitingInternal: true, status: 'open' });
+    expect(whereDe().status).toBe('waiting_internal');
+  });
+
+  it('escopo de vendedor VENCE o filtro de vendedor pedido na query', async () => {
+    // sellerId (escopo de segurança) = 'seller-dele'; filterSellerId = tentativa
+    // de olhar a carteira de outro. O escopo não pode ceder.
+    await svc.findAll('t1', q, 'seller-dele', undefined, { filterSellerId: 'seller-de-outro' });
+    expect(whereDe().assignedSellerId).toBe('seller-dele');
+  });
+
+  it('sem escopo de vendedor, o filtro da query é aplicado', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { filterSellerId: 'seller-x' });
+    expect(whereDe().assignedSellerId).toBe('seller-x');
+  });
+
+  it("filtro '__none__' vira busca por sem vendedor atribuído", async () => {
+    await svc.findAll('t1', q, undefined, undefined, { filterSellerId: '__none__' });
+    expect(whereDe().assignedSellerId).toBeNull();
+  });
+
+  it('busca também acha por nome/empresa do contato, não só por telefone', async () => {
+    deps.prisma.contact.findMany.mockResolvedValue([{ phone: '5511999' }]);
+
+    await svc.findAll('t1', { ...q, search: 'Transportadora' });
+
+    const contatoQuery = deps.prisma.contact.findMany.mock.calls[0][0].where;
+    expect(contatoQuery.OR).toEqual([
+      { name: { contains: 'Transportadora', mode: 'insensitive' } },
+      { company: { contains: 'Transportadora', mode: 'insensitive' } },
+    ]);
+    const grupoBusca = whereDe().AND.find((c: any) => c.OR?.some((o: any) => o.phone));
+    expect(grupoBusca.OR).toEqual(
+      expect.arrayContaining([{ phone: { contains: 'Transportadora' } }, { phone: { in: ['5511999'] } }]),
+    );
+  });
+
+  it('statusCounts ignora o filtro de status — senão o chip selecionado zeraria os outros', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { status: 'closed' });
+
+    const whereContagem = deps.prisma.aiConversation.groupBy.mock.calls[0][0].where;
+    expect(whereContagem.status).toBeUndefined();
+    // mas o escopo de tenant continua valendo na contagem
+    expect(whereContagem.tenantId).toBe('t1');
+  });
+
+  it('conversa arquivada continua fora da listagem', async () => {
+    await svc.findAll('t1', q);
+    const grupoArquivada = whereDe().AND.find((c: any) =>
+      c.OR?.some((o: any) => o.outcome === null),
+    );
+    expect(grupoArquivada.OR).toEqual([{ outcome: null }, { outcome: { not: 'archived' } }]);
+  });
+});
+
+describe('ConversationsService — 2B supportStats', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.count.mockResolvedValue(3);
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+  });
+
+  it('conta o banco inteiro, não a página — e exclui chamado encerrado', async () => {
+    const r = await svc.supportStats('t1', 'user-1');
+
+    expect(r.escaladosSemDono).toBe(3);
+    const where = deps.prisma.aiConversation.count.mock.calls[0][0].where;
+    expect(where.status).toBeDefined(); // escalated
+    // fechado/opt-out não é fila
+    const base = deps.prisma.aiConversation.count.mock.calls[1][0].where;
+    expect(base.status).toEqual({ notIn: ['closed', 'opt_out'] });
+  });
+
+  it('lista "mais antigos sem dono" ordena ASC — o oposto da lista principal', async () => {
+    await svc.supportStats('t1');
+
+    const call = deps.prisma.aiConversation.findMany.mock.calls[0][0];
+    // ASC com nulls first: sem atividade = mais antigo de todos
+    expect(call.orderBy[0]).toEqual({ lastActivityAt: { sort: 'asc', nulls: 'first' } });
+    expect(call.where.assignedAnalystId).toBeNull();
+    expect(call.take).toBe(8);
+  });
+
+  it('sem userId: "meus chamados" é 0 sem consultar o banco à toa', async () => {
+    const r = await svc.supportStats('t1');
+    expect(r.meus).toBe(0);
   });
 });

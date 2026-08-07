@@ -7,6 +7,7 @@ import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import {
   AddMessageDto,
   AssignAnalystDto,
+  ListConversationsQueryDto,
   SetLinkedIssueDto,
   SetOutcomeDto,
   SetResolvedDto,
@@ -51,21 +52,33 @@ export class ConversationsController {
 
   constructor(private readonly conversations: ConversationsService) {}
 
+  // 2B: todos os filtros da lista vêm num DTO único — o ValidationPipe global
+  // valida o objeto de query inteiro, então parâmetro fora do DTO vira 400.
   @Get()
   async findAll(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: any,
-    @Query() q: PaginationQueryDto,
-    // F12: fila do Inbox de suporte — 'mine' | 'unassigned' | 'all' (default).
-    @Query('queue') queue?: string,
+    @Query() q: ListConversationsQueryDto,
   ) {
     const assignedAnalystId =
-      queue === 'mine' ? user?.userId
-      : queue === 'unassigned' ? null
+      q.queue === 'mine' ? user?.userId
+      : q.queue === 'unassigned' ? null
       : undefined;
-    const result = await this.conversations.findAll(tenantId, q, sellerScope(user), assignedAnalystId);
-    this.logger.log(`[list] tenantId=${tenantId} role=${user?.role} total=${result.total} items=${result.items.length}`);
+    const result = await this.conversations.findAll(tenantId, q, sellerScope(user), assignedAnalystId, {
+      scope: q.scope,
+      status: q.status,
+      onlyWaitingInternal: q.queue === 'waiting_internal',
+      filterSellerId: q.sellerId,
+    });
+    this.logger.log(`[list] tenantId=${tenantId} role=${user?.role} scope=${q.scope ?? '-'} queue=${q.queue ?? 'all'} total=${result.total} items=${result.items.length}`);
     return result;
+  }
+
+  // 2B: contagens do painel operacional. Antes de 'analysts' e de ':id' —
+  // senão o Nest casa "stats" como um :id.
+  @Get('stats')
+  supportStats(@CurrentTenant() tenantId: string, @CurrentUser() user: any) {
+    return this.conversations.supportStats(tenantId, user?.userId);
   }
 
   // F12: lista analistas do tenant pro seletor de atribuição — antes de :id

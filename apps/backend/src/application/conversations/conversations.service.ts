@@ -25,6 +25,60 @@ export class ConversationsService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Etapa 2B (item 2.2): quais conversas são "ticket de SUPORTE".
+   *
+   * Espelha `isSupportTicket` do frontend (shared/lib/conversation.ts). A
+   * heurística nasceu lá como fonte da verdade, mas com a lista paginada no
+   * servidor ela PRECISA existir aqui — filtrar no cliente sobre uma página já
+   * cortada era justamente o bug: um pico de conversas de venda empurrava os
+   * chamados de suporte pra fora das 50 primeiras e eles sumiam da tela.
+   *
+   * As duas cópias têm que andar juntas. Mudou uma condição aqui, mude lá.
+   */
+  private static readonly SUPPORT_MATCH = [
+    { ticketCategory: { not: null } },
+    { customerStage: 'cliente_ativo' },
+    { status: 'escalated' },
+    { sourceChannel: { in: ['portal', 'web_chat'] } },
+  ];
+
+  private scopeFilter(scope?: 'support' | 'sales') {
+    if (scope === 'support') return { OR: ConversationsService.SUPPORT_MATCH };
+    if (scope === 'sales') return { NOT: { OR: ConversationsService.SUPPORT_MATCH } };
+    return null;
+  }
+
+  /**
+   * Busca por telefone, nome ou empresa do contato. Contact não tem relation
+   * Prisma com AiConversation (só `contactId` solto), então resolve em duas
+   * etapas: acha os contatos que casam e filtra as conversas pelos telefones
+   * deles. Antes a busca só olhava telefone — procurar pelo nome do cliente,
+   * que é o reflexo natural de quem atende, não achava nada.
+   */
+  private async searchFilter(tenantId: string, term?: string) {
+    const t = term?.trim();
+    if (!t) return null;
+    const contatos = await this.prisma.contact.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { name: { contains: t, mode: 'insensitive' } },
+          { company: { contains: t, mode: 'insensitive' } },
+        ],
+      },
+      select: { phone: true },
+      take: 500,
+    });
+    const phones = contatos.map((c) => c.phone);
+    return {
+      OR: [
+        { phone: { contains: t } },
+        ...(phones.length ? [{ phone: { in: phones } }] : []),
+      ],
+    };
+  }
+
   // Inbox: lista conversas do tenant
   // F12: assignedAnalystId !== undefined filtra por dono do chamado —
   // string = só daquele analista, null = só fila sem dono (não confundir
@@ -34,19 +88,61 @@ export class ConversationsService {
     q: PaginationQueryDto,
     sellerId?: string,
     assignedAnalystId?: string | null,
-  ): Promise<Paginated<any>> {
+    opts: {
+      scope?: 'support' | 'sales';
+      status?: string;
+      /** waiting_internal via ?queue= — atalho pro card "Aguardando Dev". */
+      onlyWaitingInternal?: boolean;
+      /** Filtro de vendedor pedido pelo USUÁRIO (≠ sellerId, que é escopo de segurança). */
+      filterSellerId?: string;
+    } = {},
+  ): Promise<Paginated<any> & { statusCounts: Record<string, number> }> {
     // Exclui conversas arquivadas da listagem padrão.
     // OR necessário: `outcome != 'archived'` em SQL exclui rows com NULL (three-valued logic).
-    const where: any = { tenantId, OR: [{ outcome: null }, { outcome: { not: 'archived' } }] };
-    if (sellerId) where.assignedSellerId = sellerId; // carteira do vendedor
+    // AND explícito: são vários grupos OR independentes (arquivada, escopo,
+    // busca) — deixá-los soltos no mesmo objeto faria um sobrescrever o outro.
+    const and: any[] = [{ OR: [{ outcome: null }, { outcome: { not: 'archived' } }] }];
+
+    const scope = this.scopeFilter(opts.scope);
+    if (scope) and.push(scope);
+
+    const search = await this.searchFilter(tenantId, q.search);
+    if (search) and.push(search);
+
+    const where: any = { tenantId, AND: and };
+
+    // Escopo de segurança vem primeiro e não é negociável: um vendedor não
+    // escapa da própria carteira nem mandando ?sellerId= de outro.
+    if (sellerId) where.assignedSellerId = sellerId;
+    else if (opts.filterSellerId) {
+      where.assignedSellerId = opts.filterSellerId === '__none__' ? null : opts.filterSellerId;
+    }
+
     if (assignedAnalystId !== undefined) where.assignedAnalystId = assignedAnalystId;
-    if (q.search) where.phone = { contains: q.search };
-    const [items, total] = await Promise.all([
+
+    // Contagem por status para os chips de filtro: precisa ignorar o próprio
+    // filtro de status, senão o chip selecionado mostraria o total e todos os
+    // outros zero. Com a filtragem no cliente isso saía de graça; no servidor
+    // é uma query à parte.
+    const whereSemStatus = { ...where };
+
+    if (opts.onlyWaitingInternal) where.status = 'waiting_internal' as any;
+    else if (opts.status) where.status = opts.status as any;
+
+    const [items, total, porStatus] = await Promise.all([
       this.prisma.aiConversation.findMany({
         where,
         take: q.limit,
         skip: q.offset,
-        orderBy: { startedAt: 'desc' },
+        // Ordena por ATIVIDADE, não por criação. Com `startedAt` um chamado
+        // antigo que o cliente acabou de reabrir ficava lá atrás e podia nem
+        // entrar na página — sumia da fila sem ninguém perceber.
+        // nulls:'last' é essencial: em DESC o Postgres joga NULL pro topo, e
+        // conversa que nunca teve atividade encabeçaria a lista.
+        orderBy: [
+          { lastActivityAt: { sort: 'desc', nulls: 'last' } },
+          { startedAt: 'desc' },
+        ],
         include: {
           assignedSeller: { select: { name: true } },
           assignedAnalyst: { select: { id: true, name: true } },
@@ -96,8 +192,92 @@ export class ConversationsService {
         }));
       }),
       this.prisma.aiConversation.count({ where }),
+      this.prisma.aiConversation.groupBy({
+        by: ['status'],
+        where: whereSemStatus,
+        _count: { _all: true },
+      }),
     ]);
-    return { items, total };
+
+    const statusCounts = Object.fromEntries(
+      porStatus.map((g: any) => [g.status, g._count._all as number]),
+    ) as Record<string, number>;
+
+    return { items, total, statusCounts };
+  }
+
+  /**
+   * Etapa 2B: contagens do painel operacional do Inbox de Suporte.
+   *
+   * Existe porque os 3 cards eram calculados no cliente sobre as conversas já
+   * carregadas — ou seja, sobre uma página. Com a lista paginada isso vira
+   * número errado com cara de número certo, que é pior que não mostrar nada.
+   * Aqui a contagem é do banco inteiro, independente de página ou filtro.
+   *
+   * Mesma base do dashboard antigo: só ticket de suporte, e chamado encerrado
+   * (closed/opt_out) não conta como fila.
+   */
+  async supportStats(tenantId: string, userId?: string) {
+    const base: any = {
+      tenantId,
+      AND: [
+        { OR: [{ outcome: null }, { outcome: { not: 'archived' } }] },
+        { OR: ConversationsService.SUPPORT_MATCH },
+      ],
+      status: { notIn: ['closed', 'opt_out'] as any },
+    };
+
+    const [escaladosSemDono, emAtendimento, aguardandoDev, semDono, meus, maisAntigosSemDono] =
+      await Promise.all([
+        this.prisma.aiConversation.count({
+          where: { ...base, status: 'escalated' as any, assignedAnalystId: null },
+        }),
+        this.prisma.aiConversation.count({ where: { ...base, assignedAnalystId: { not: null } } }),
+        this.prisma.aiConversation.count({ where: { ...base, status: 'waiting_internal' as any } }),
+        this.prisma.aiConversation.count({ where: { ...base, assignedAnalystId: null } }),
+        userId
+          ? this.prisma.aiConversation.count({ where: { ...base, assignedAnalystId: userId } })
+          : Promise.resolve(0),
+        // "Mais antigos sem dono" precisa de ordenação ASC — o oposto da lista.
+        // Por isso não dá pra tirar da página carregada: são justamente os que
+        // ficaram pra trás. nulls:'first' aqui porque sem atividade = mais antigo.
+        this.prisma.aiConversation.findMany({
+          where: { ...base, assignedAnalystId: null },
+          orderBy: [{ lastActivityAt: { sort: 'asc', nulls: 'first' } }, { startedAt: 'asc' }],
+          take: 8,
+          select: {
+            id: true,
+            phone: true,
+            status: true,
+            ticketCategory: true,
+            ticketPriority: true,
+            lastActivityAt: true,
+            startedAt: true,
+          },
+        }),
+      ]);
+
+    // Enriquece só os 8 da lista com o nome do contato (mesma via da listagem).
+    const phones = [...new Set(maisAntigosSemDono.map((c) => c.phone))];
+    const contatos = phones.length
+      ? await this.prisma.contact.findMany({
+          where: { tenantId, phone: { in: phones } },
+          select: { id: true, phone: true, name: true, company: true },
+        })
+      : [];
+    const porTelefone = new Map(contatos.map((c) => [c.phone, c]));
+
+    return {
+      escaladosSemDono,
+      emAtendimento,
+      aguardandoDev,
+      semDono,
+      meus,
+      maisAntigosSemDono: maisAntigosSemDono.map((c) => ({
+        ...c,
+        contact: porTelefone.get(c.phone) ?? null,
+      })),
+    };
   }
 
   async findOne(tenantId: string, id: string) {

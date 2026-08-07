@@ -7,6 +7,39 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
+
+/**
+ * Etapa 2B: query da listagem do Inbox.
+ *
+ * Precisa existir porque o ValidationPipe global valida o objeto de query
+ * INTEIRO contra o DTO e usa `forbidNonWhitelisted` — qualquer parâmetro não
+ * declarado aqui vira 400, mesmo que o controller o receba num `@Query('x')`
+ * separado. Foi assim que o `?queue=` nasceu quebrado: existia no controller,
+ * nunca foi chamado pelo frontend, e por isso ninguém percebeu que respondia
+ * "property queue should not exist".
+ */
+export class ListConversationsQueryDto extends PaginationQueryDto {
+  /** 'support' = só ticket de suporte · 'sales' = só conversa comercial. */
+  @IsOptional()
+  @IsIn(['support', 'sales'])
+  scope?: 'support' | 'sales';
+
+  /** Fila do Inbox de suporte. Omitido = todos. */
+  @IsOptional()
+  @IsIn(['all', 'mine', 'unassigned', 'waiting_internal'])
+  queue?: 'all' | 'mine' | 'unassigned' | 'waiting_internal';
+
+  /** Status da conversa (open, escalated, closed…). */
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  /** Filtro por vendedor. '__none__' = sem vendedor atribuído. */
+  @IsOptional()
+  @IsString()
+  sellerId?: string;
+}
 
 /**
  * DTOs das rotas de conversa (auditoria 2026-08-06, item 1.3).
