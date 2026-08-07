@@ -205,28 +205,25 @@ export class EmailService {
       conversationId: conv.id,
     });
 
-    // 7) Envia resposta por e-mail
-    // O ConversationAgentService salva a mensagem outbound no banco;
-    // aqui enviamos fisicamente o e-mail (o autoSent=true já gravou no histórico).
-    const draft = agentResult.draft;
-    if (draft) {
-      await this.emailReply.send({
-        to: n.fromAddress,
-        subject: n.subject,
-        body: draft,
-        tenantId,
-        contactId: contact.id,
-        leadScore: agentResult.route?.leadScore,
-        inReplyToSubject: n.subject,
-      });
-    }
-
+    // 7) O envio físico NÃO acontece aqui.
+    //
+    // Até 2026-08-07 este ponto chamava o SMTP diretamente, e isso tinha dois
+    // defeitos. O primeiro: enviava `agentResult.draft` mesmo quando a Lia NÃO
+    // auto-enviou (supervisora reprovou, takeover humano, kill switch) — o lead
+    // recebia um e-mail que não existia na thread do Inbox. O segundo, e mais
+    // grave, é que ele mascarava o buraco do canal: quem respondia pelo Inbox não
+    // passava por aqui, caía na rota do WhatsApp em `addMessage()` e a resposta
+    // nunca saía.
+    //
+    // Agora existe um caminho único: `addMessage()` decide o despacho por canal e
+    // emite 'conversation.outbound.email' → EmailOutboundListener → SMTP. Vale
+    // igual para a resposta da Lia e para a resposta escrita por uma pessoa.
     return {
       ok: true,
       email: n.fromAddress,
       conversationId: conv.id,
       agent: agentResult.route?.agent,
-      replied: !!draft,
+      replied: agentResult.autoSent === true,
     };
   }
 }

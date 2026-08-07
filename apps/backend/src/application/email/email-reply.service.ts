@@ -17,6 +17,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailOptOutService } from './email-optout.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
+import { renderEmailHtml } from './email-template';
 
 const SIGNATURE = 'Lia · Assistente HiperTMS | hipertms.com.br';
 
@@ -117,15 +118,28 @@ export class EmailReplyService {
 
     // Convite WhatsApp para leads qualificados (score ≥ 40 — ADR 021 D6)
     const waLink = process.env.WHATSAPP_INVITE_LINK ?? 'https://wa.me/5511994327713';
-    const waInvite =
-      opts.leadScore !== undefined && opts.leadScore >= 40
-        ? `\n\nPara agilizar seu atendimento, você também pode nos chamar no WhatsApp: ${waLink}`
-        : '';
+    const waQualificado = opts.leadScore !== undefined && opts.leadScore >= 40;
+    const waInvite = waQualificado
+      ? `\n\nPara agilizar seu atendimento, você também pode nos chamar no WhatsApp: ${waLink}`
+      : '';
 
+    const corpoLimpo = stripMarkdown(opts.body);
+
+    // Alternativa em texto puro (multipart) — para cliente sem HTML e para o score
+    // de spam: e-mail só-HTML pontua pior nos filtros.
     const bodyText =
-      `${stripMarkdown(opts.body)}${waInvite}\n\n` +
+      `${corpoLimpo}${waInvite}\n\n` +
       `--\n${SIGNATURE}\n\n` +
-      `Para não receber mais mensagens: ${optOutUrl}`;
+      `Cancelar e-mails: ${optOutUrl}`;
+
+    // Versão HTML com a identidade da marca. O descadastro vai em 11px cinza no
+    // rodapé externo, clicável — antes era uma URL crua de ~90 caracteres em
+    // corpo normal, que competia visualmente com a própria mensagem.
+    const bodyHtml = renderEmailHtml({
+      body: corpoLimpo,
+      optOutUrl,
+      whatsappUrl: waQualificado ? waLink : undefined,
+    });
 
     const subject =
       opts.inReplyToSubject
@@ -154,7 +168,15 @@ export class EmailReplyService {
         to: opts.to,
         subject,
         text: bodyText,
+        html: bodyHtml,
         replyTo: config.replyTo,
+        // Descadastro também no cabeçalho: Gmail e Outlook mostram um botão nativo
+        // "Cancelar inscrição" no topo quando ele existe, e a presença do header
+        // melhora a reputação de envio. Complementa o link do rodapé, não substitui.
+        headers: {
+          'List-Unsubscribe': `<${optOutUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
       });
 
       this.logger.log(`E-mail enviado via SMTP para ${opts.to} (tenant=${opts.tenantId})`);

@@ -933,11 +933,35 @@ export class ConversationsService {
     // notifica o inbox do tenant (lista de conversas na sidebar)
     this.events.emit('conversation.updated', { tenantId, conversationId: conv.id });
 
-    // saída → entrega no WhatsApp via WAHA.
-    // web_chat e portal: resposta já vai pelo WebSocket (message.created); WAHA não é chamado.
-    // F12: nota interna NUNCA sai pro WhatsApp, mesmo em conversa desse canal —
-    // regra de segurança crítica, não é só uma otimização de rota.
-    if (!dto.isInternal && dto.direction === 'outbound' && (conv.sourceChannel as string) !== 'web_chat' && (conv.sourceChannel as string) !== 'portal') {
+    // ── Despacho por canal ────────────────────────────────────────────────────
+    // web_chat e portal: a resposta já vai pelo WebSocket (message.created).
+    // email: sai por SMTP — ver bloco abaixo.
+    // whatsapp (e qualquer outro): WAHA.
+    // F12: nota interna NUNCA é despachada, em canal nenhum — regra de segurança
+    // crítica, não é só otimização de rota.
+    const canal = conv.sourceChannel as string;
+    const despachavel = !dto.isInternal && dto.direction === 'outbound';
+
+    // E-MAIL — 2026-08-07: este canal não tinha ramo nenhum aqui e caía no `else`
+    // do WhatsApp, ou seja, o WAHA era chamado com `conv.phone` = "email:fulano@…".
+    // O envio falhava, virava um warn no log e a resposta NUNCA chegava ao lead.
+    // A resposta automática da Lia funcionava só porque o EmailService dispara o
+    // SMTP por fora (email.service.ts, passo 7) — quem respondia pelo inbox
+    // escrevia no vazio.
+    //
+    // O envio real acontece no listener do EmailModule (email-outbound.listener.ts):
+    // ConversationsModule não pode importar EmailModule (EmailModule já importa
+    // este), então o desacoplamento é por evento — mesmo padrão do web_chat.
+    if (despachavel && canal === 'email') {
+      this.events.emit('conversation.outbound.email', {
+        tenantId,
+        conversationId: conv.id,
+        messageId: message.id,
+      });
+      return message;
+    }
+
+    if (despachavel && canal !== 'web_chat' && canal !== 'portal') {
       const r = await this.waha.sendText(conv.phone, dto.content);
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);

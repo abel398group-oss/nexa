@@ -6,6 +6,7 @@ import { EmailImapService } from './email-imap.service';
 import { EmailChannelService } from './email-channel.service';
 import { EmailCampaignSenderService } from './email-campaign-sender.service';
 import { SupportEscalationListener } from './support-escalation.listener';
+import { EmailOutboundListener } from './email-outbound.listener';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
@@ -26,6 +27,7 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     EmailChannelService,
     EmailCampaignSenderService,
     SupportEscalationListener, // P2: e-mail ao suporte no evento 'support.escalated'
+    EmailOutboundListener,     // entrega SMTP das mensagens de saída do canal e-mail
   ],
   exports: [EmailReplyService, EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
 })

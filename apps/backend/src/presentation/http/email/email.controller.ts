@@ -106,10 +106,24 @@ export class EmailController {
   }
 
   // ── Opt-out — POST (efetiva o descadastro) ──────────────────────────────────
+  //
+  // O token vem do BODY (formulário da página de confirmação) ou da QUERY STRING
+  // (one-click do provedor — RFC 8058). Gmail e Outlook mostram um botão nativo
+  // "Cancelar inscrição" quando o e-mail traz o header `List-Unsubscribe`, e ao
+  // clicar fazem POST na URL com o corpo fixo `List-Unsubscribe=One-Click` — sem
+  // token nenhum no body. Ler só do body fazia esse fluxo devolver 400.
+  //
+  // Isso NÃO reabre o risco de prefetch que motivou a página GET em dois passos:
+  // prefetch de link é GET, nunca POST, e o POST one-click é uma ação deliberada
+  // do usuário no cliente de e-mail.
   @Post('email/optout')
   @HttpCode(200)
-  async optOutConfirm(@Body() body: { token?: string }, @Res() res: Response) {
-    const token = body?.token;
+  async optOutConfirm(
+    @Body() body: { token?: string },
+    @Query('token') queryToken: string,
+    @Res() res: Response,
+  ) {
+    const token = body?.token ?? queryToken;
     if (!token) {
       return res.status(400).send(this.renderPage('Erro', 'Token não fornecido.'));
     }

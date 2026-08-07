@@ -848,3 +848,70 @@ describe('ConversationsService — 2B supportStats', () => {
     expect(r.meus).toBe(0);
   });
 });
+
+// ─── Canal e-mail: despacho por SMTP, nunca WAHA ─────────────────────────────
+// 2026-08-07: o canal `email` não tinha ramo de despacho em addMessage() e caía na
+// rota do WhatsApp — o WAHA era chamado com phone="email:fulano@…", falhava, e a
+// resposta escrita no Inbox nunca chegava ao lead.
+describe('ConversationsService — despacho do canal e-mail', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  const convEmail = {
+    ...existingConv,
+    sourceChannel: 'email',
+    phone: 'email:lead@empresa.com',
+    correlationId: 'corr-1',
+    humanTakeoverAt: null,
+  };
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findFirst.mockResolvedValue(convEmail);
+  });
+
+  it('resposta em conversa de e-mail NÃO vai para o WAHA', async () => {
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound',
+      content: 'Claro, posso te mandar uma demonstração.',
+      byHuman: true,
+    });
+
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
+  });
+
+  it('resposta em conversa de e-mail emite o evento de entrega SMTP', async () => {
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound',
+      content: 'Claro, posso te mandar uma demonstração.',
+      byHuman: true,
+    });
+
+    expect(deps.events.emit).toHaveBeenCalledWith('conversation.outbound.email', {
+      tenantId: 't1',
+      conversationId: 'conv-1',
+      messageId: 'msg-1',
+    });
+  });
+
+  it('nota interna em conversa de e-mail NÃO dispara envio (regra crítica F12)', async () => {
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound',
+      content: 'nota confidencial pro time',
+      byHuman: true,
+      isInternal: true,
+    });
+
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
+    const eventos = deps.events.emit.mock.calls.map((c: any[]) => c[0]);
+    expect(eventos).not.toContain('conversation.outbound.email');
+  });
+
+  it('mensagem recebida não dispara envio', async () => {
+    await svc.addMessage('t1', 'conv-1', { direction: 'inbound', content: 'oi' });
+
+    const eventos = deps.events.emit.mock.calls.map((c: any[]) => c[0]);
+    expect(eventos).not.toContain('conversation.outbound.email');
+  });
+});
