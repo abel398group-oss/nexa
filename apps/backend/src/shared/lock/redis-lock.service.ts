@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
 import { randomUUID } from 'crypto';
 
 /**
@@ -44,7 +45,7 @@ export class RedisLockService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const url = process.env.REDIS_URL;
     if (url) {
-      this.redis = new Redis(url, { lazyConnect: true });
+      this.redis = createRedisClient(url, 'lock');
     } else {
       this.logger.warn('REDIS_URL not set — distributed locks disabled (single-instance mode)');
     }

@@ -170,7 +170,7 @@ export class ConversationAgentService {
   // Pipeline completo: classifica → roteia → responde → SUPERVISIONA → (auto-envia se autorizado).
   async handle(
     tenantId: string,
-    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null }; sector?: string },
   ): Promise<HandleResult> {
     const _t0 = Date.now(); // MON-009: início da medição
 
@@ -489,7 +489,7 @@ export class ConversationAgentService {
   // Devolve a rota (possivelmente ajustada) + o rascunho final e seus metadados.
   private async generateResponse(
     tenantId: string,
-    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
+    input: { message: string; conversationId?: string; productCode?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null }; sector?: string },
     route: RouteDecision,
     ctx: {
       agentMessage: string;
@@ -625,7 +625,12 @@ export class ConversationAgentService {
           break;
         }
         // Passa conversationId para que o SupportAgent recupere o histórico da conversa
-        const r = await this.support.ask(tenantId, { question: agentMessage, conversationId: input.conversationId, tmsCustomer });
+        const r = await this.support.ask(tenantId, {
+          question: agentMessage,
+          conversationId: input.conversationId,
+          tmsCustomer,
+          sector: input.sector,
+        });
         draft = r.draft;
         usedKnowledge = r.usedKnowledge;
         confidence = r.confidence;

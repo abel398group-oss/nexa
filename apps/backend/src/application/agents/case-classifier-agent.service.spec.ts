@@ -177,3 +177,66 @@ describe('CaseClassifierAgentService', () => {
     expect(result.requiresHuman).toBe(false);
   });
 });
+
+// ─── Setor do widget + critério de requiresHuman ─────────────────────────────
+// Contexto (incidente do CT-e 519, 2026-08-07): "Meu CT-e foi rejeitado, código
+// 519. O que eu faço?" foi classificado como treinamento/baixa e o modelo marcou
+// requiresHuman=true por conta própria — o campo estava no template do JSON sem
+// nenhum critério que dissesse quando usá-lo. Enquanto isso, o widget do TMS
+// obrigava o cliente a escolher um setor e o Nexa descartava o dado.
+describe('CaseClassifierAgentService — setor do widget', () => {
+  it('leva o setor escolhido ao prompt como INDÍCIO, não como verdade', async () => {
+    const ai = mockAi(json({ category: 'fiscal' }));
+    const svc = new CaseClassifierAgentService(ai);
+
+    await svc.classify('não consigo emitir', '', 'Fiscal');
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).toContain('INDÍCIO');
+    expect(system).toContain('"Fiscal"');
+    expect(system).toContain('fiscal');
+    // Precisa dizer explicitamente que a mensagem vence — senão o setor
+    // sequestra a classificação de quem clicou em qualquer coisa para poder enviar.
+    expect(system).toMatch(/a mensagem vence/i);
+  });
+
+  it('mapeia Logística → frete e Sistema → erro_sistema', async () => {
+    for (const [setor, esperado] of [['Logística', 'frete'], ['Sistema', 'erro_sistema']] as const) {
+      const ai = mockAi(json({}));
+      await new CaseClassifierAgentService(ai).classify('oi', '', setor);
+      expect(ai.complete.mock.calls[0][0]).toContain(`"${esperado}"`);
+    }
+  });
+
+  it('"Outro" não vira dica nenhuma (não carrega informação)', async () => {
+    const ai = mockAi(json({}));
+    await new CaseClassifierAgentService(ai).classify('oi', '', 'Outro');
+
+    expect(ai.complete.mock.calls[0][0]).not.toContain('INDÍCIO');
+  });
+
+  it('sem setor o prompt segue igual ao de antes', async () => {
+    const ai = mockAi(json({}));
+    await new CaseClassifierAgentService(ai).classify('oi');
+
+    expect(ai.complete.mock.calls[0][0]).not.toContain('INDÍCIO');
+  });
+
+  it('o prompt define QUANDO marcar requiresHuman e manda errar para false', async () => {
+    const ai = mockAi(json({}));
+    await new CaseClassifierAgentService(ai).classify('oi');
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).toContain('requiresHuman — quando marcar true');
+    expect(system).toMatch(/Na dúvida, false/);
+  });
+
+  it('rejeição de CT-e não pode cair em treinamento por causa do "o que eu faço?"', async () => {
+    const ai = mockAi(json({}));
+    await new CaseClassifierAgentService(ai).classify('Meu CT-e foi rejeitado, código 519. O que eu faço?');
+
+    const system = ai.complete.mock.calls[0][0] as string;
+    expect(system).toMatch(/Rejeição de CT-e.*→ cte/s);
+    expect(system).toMatch(/o que eu faço/i);
+  });
+});

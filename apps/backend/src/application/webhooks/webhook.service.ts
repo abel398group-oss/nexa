@@ -23,6 +23,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { Interval } from '@nestjs/schedule';
 import { createHmac } from 'crypto';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
@@ -45,7 +46,7 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     const url = process.env.REDIS_URL;
     if (url) {
-      this.redis = new Redis(url, { lazyConnect: true });
+      this.redis = createRedisClient(url, 'webhooks');
     }
   }
 
@@ -135,11 +136,23 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
    *  Lock Redis garante que apenas uma instância processe por vez (evita entrega duplicada). */
   @Interval(60_000)
   async retryPending(): Promise<void> {
-    // Acquire distributed lock — só uma instância roda por vez
+    // Acquire distributed lock — só uma instância roda por vez.
+    //
+    // O try/catch não é decoração: este método é um @Interval, e uma rejeição do
+    // Redis aqui não tem quem a capture — vira unhandled rejection e derruba o
+    // processo inteiro. Com o Redis fora, o certo é rodar mesmo assim (fail-open,
+    // mesma política do RedisLockService): uma réplica processando duas vezes é
+    // menos grave que o backend morrer.
+    let temLock = true;
     if (this.redis) {
-      const locked = await this.redis.set(RETRY_LOCK_KEY, '1', 'EX', RETRY_LOCK_TTL_S, 'NX');
-      if (!locked) return; // outra instância já está processando
+      try {
+        temLock = (await this.redis.set(RETRY_LOCK_KEY, '1', 'EX', RETRY_LOCK_TTL_S, 'NX')) === 'OK';
+      } catch (err: any) {
+        this.logger.warn(`Redis indisponível ao pegar o lock de retry — rodando sem lock: ${err?.message}`);
+        temLock = true;
+      }
     }
+    if (!temLock) return; // outra instância já está processando
 
     try {
       const now = new Date();
@@ -159,7 +172,15 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } finally {
-      if (this.redis) await this.redis.del(RETRY_LOCK_KEY);
+      // Idem: soltar o lock não pode ser o que mata o processo. O TTL cobre a
+      // falha — a chave expira sozinha em RETRY_LOCK_TTL_S.
+      if (this.redis) {
+        await this.redis
+          .del(RETRY_LOCK_KEY)
+          .catch((err: any) =>
+            this.logger.warn(`Falha ao soltar o lock de retry (expira em ${RETRY_LOCK_TTL_S}s): ${err?.message}`),
+          );
+      }
     }
   }
 }

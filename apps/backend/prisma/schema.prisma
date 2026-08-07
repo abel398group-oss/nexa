@@ -771,6 +771,15 @@ model EmailChannel {
   // Controle
   isActive     Boolean  @default(true) @map("is_active")
   lastPollAt   DateTime? @map("last_poll_at")
+  // Marca d'água do polling IMAP: maior UID já processado nesta caixa.
+  // Antes o poller se guiava pela flag UNSEEN, então abrir a caixa no webmail
+  // marcava a mensagem como lida e o Nexa NUNCA mais a via — perda permanente,
+  // não atraso. O UID não depende de quem leu o quê.
+  lastSeenUid  Int?     @map("last_seen_uid")
+  // UIDVALIDITY da caixa quando a marca d'água foi gravada. Se o servidor mudar
+  // esse número, os UIDs antigos deixam de valer (RFC 3501 §2.3.1.1) e a marca
+  // precisa ser descartada em vez de pular mensagens.
+  uidValidity  Int?     @map("uid_validity")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

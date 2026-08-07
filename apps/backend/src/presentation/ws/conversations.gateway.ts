@@ -32,6 +32,7 @@ import { OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
 import { HandoffService } from '@/application/handoff/handoff.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 
@@ -96,20 +97,41 @@ export class ConversationsGateway
   afterInit(server: Server) {
     // Redis adapter: garante que eventos de socket.io sejam compartilhados entre
     // réplicas do backend. Sem isso, room.emit() só alcança sockets no mesmo processo.
-    // Fail-open: se REDIS_URL não estiver configurado, roda sem adapter (single-instance).
+    // Fail-open: sem REDIS_URL (ou com o Redis fora), roda single-instance.
     const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
+    if (!redisUrl) {
+      this.logger.log('WebSocket /ws inicializado (single-instance — REDIS_URL ausente)');
+      return;
+    }
+    // Conecta ANTES de entregar os clientes ao adapter.
+    //
+    // `createAdapter()` dispara SUBSCRIBE no ato, e a promise desse comando é
+    // interna à biblioteca — ninguém a captura. Com o Redis fora, os dois clientes
+    // rejeitavam com MaxRetriesPerRequestError e o par virava duas
+    // unhandledRejection a cada tentativa de reconexão. Era essa a origem do laço
+    // que derrubava o backend no boot sem Redis (07/08/2026).
+    //
+    // Conectando antes, a falha vira um erro capturável aqui e o adapter
+    // simplesmente não é instalado — degradação explícita em vez de crash.
+    void (async () => {
+      const pub = createRedisClient(redisUrl, 'ws-pub');
+      const sub = createRedisClient(redisUrl, 'ws-sub');
       try {
-        this.redisPub = new Redis(redisUrl, { lazyConnect: true });
-        this.redisSub = this.redisPub.duplicate();
-        server.adapter(createAdapter(this.redisPub, this.redisSub));
+        await Promise.all([pub.connect(), sub.connect()]);
+        this.redisPub = pub;
+        this.redisSub = sub;
+        server.adapter(createAdapter(pub, sub));
         this.logger.log('WebSocket /ws: Redis adapter configurado');
       } catch (e: any) {
-        this.logger.warn(`WebSocket /ws: Redis adapter falhou — rodando single-instance (${e?.message})`);
+        this.logger.warn(
+          `WebSocket /ws: Redis inacessível — rodando single-instance, eventos NÃO são ` +
+          `compartilhados entre réplicas (${e?.message})`,
+        );
+        // Desconecta o par para não deixar dois clientes tentando reconectar à toa.
+        pub.disconnect();
+        sub.disconnect();
       }
-    } else {
-      this.logger.log('WebSocket /ws inicializado (single-instance — REDIS_URL ausente)');
-    }
+    })();
   }
 
   // ── Conexão: valida token web_chat ou extrai tenantId do cookie para inbox Nexa ──
@@ -251,6 +273,11 @@ export class ConversationsGateway
       name: d.name,
       page: d.page,
       message: text,
+      // O widget do TMS OBRIGA o cliente a escolher um setor antes de enviar
+      // (Fiscal/Frota/Financeiro/Logística/Sistema/Outro). O campo era declarado
+      // aqui e descartado logo em seguida — impunha fricção ao cliente por um dado
+      // que ia para o lixo. Agora chega ao classificador como indício.
+      sector: typeof data?.category === 'string' ? data.category : undefined,
     });
 
     return { ok: true };

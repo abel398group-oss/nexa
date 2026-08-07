@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
@@ -44,7 +45,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     const url = process.env.REDIS_URL;
     if (url) {
-      this.redis = new Redis(url, { lazyConnect: true });
+      this.redis = createRedisClient(url, 'sender');
       this.logger.log('Sender: estado anti-ban via Redis (multi-instância)');
     } else {
       this.logger.warn('Sender: REDIS_URL ausente — estado anti-ban em memória (single-instance)');

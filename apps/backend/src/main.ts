@@ -18,6 +18,31 @@ import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { validateEnv } from './shared/config/validate-env';
 
+/**
+ * Rejeição de promise sem `catch` NÃO pode derrubar o servidor.
+ *
+ * O default do Node (>=15) para `unhandledRejection` é `throw`, ou seja, o
+ * processo morre. Um backend multi-tenant caindo inteiro por causa de uma
+ * promise solta em código de infraestrutura é troca ruim: derruba WhatsApp,
+ * e-mail, widget e crons de todos os tenants de uma vez.
+ *
+ * Foi exatamente o que aconteceu com o Redis fora do ar (07/08/2026): o ioredis
+ * rejeita os comandos pendentes com MaxRetriesPerRequestError, e uma dessas
+ * rejeições — vinda de dentro do adapter do socket.io, não do nosso código —
+ * matava o processo a cada tentativa de reconexão, num laço.
+ *
+ * Aqui a rejeição vira log + Sentry, com a stack completa. Não é varrer para
+ * baixo do tapete: fica registrada com o motivo (REGRA 3) e some do caminho
+ * crítico. `uncaughtException` continua com o comportamento padrão — esse SIM
+ * indica estado corrompido e deve derrubar o processo.
+ */
+process.on('unhandledRejection', (reason: unknown) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  Sentry.captureException(err);
+  // console direto: isto pode disparar antes de o logger do Nest existir.
+  console.error(`[unhandledRejection] ${err.message}\n${err.stack ?? '(sem stack)'}`);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   // Segurança: barra o boot em produção se algum segredo crítico estiver fraco/ausente/placeholder.

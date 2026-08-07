@@ -1,6 +1,10 @@
 import { Controller, Get, HttpException, HttpStatus, OnModuleDestroy } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
+
+// Teto do ping ao Redis no /health — ver redisOk().
+const HEALTH_REDIS_TIMEOUT_MS = 2_000;
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
@@ -19,7 +23,7 @@ export class HealthController implements OnModuleDestroy {
     private readonly anthropic: AnthropicService,
   ) {
     const url = process.env.REDIS_URL;
-    this.redis = url ? new Redis(url, { lazyConnect: true }) : null;
+    this.redis = url ? createRedisClient(url, 'health') : null;
   }
 
   async onModuleDestroy() {
@@ -38,7 +42,12 @@ export class HealthController implements OnModuleDestroy {
   private async redisOk(): Promise<boolean> {
     if (!this.redis) return true; // Redis não configurado — não bloqueia
     try {
-      await this.redis.ping();
+      // Teto de 2s. Um /health que PENDURA é pior que um que responde "degraded":
+      // o monitor externo marca timeout do mesmo jeito, e ainda segura um worker.
+      await Promise.race([
+        this.redis.ping(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), HEALTH_REDIS_TIMEOUT_MS)),
+      ]);
       return true;
     } catch {
       return false;

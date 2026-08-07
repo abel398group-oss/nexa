@@ -36,13 +36,45 @@ const KNOWN_CATEGORIES: TicketCategory[] = [
   'frota', 'usuarios', 'integracoes', 'api', 'erro_sistema', 'treinamento',
 ];
 
+/**
+ * Setor que o cliente escolhe no widget do TMS → vocabulário canônico daqui.
+ *
+ * O widget obriga a escolha antes de enviar a mensagem, então este é um sinal
+ * HUMANO — vale mais que o palpite do modelo, mas não substitui a mensagem: quem
+ * clica em "Outro" e descreve uma rejeição de CT-e está falando de CT-e.
+ * "Outro" não vira dica nenhuma de propósito.
+ */
+const SETOR_DO_WIDGET: Record<string, TicketCategory> = {
+  fiscal: 'fiscal',
+  frota: 'frota',
+  financeiro: 'financeiro',
+  logistica: 'frete',
+  sistema: 'erro_sistema',
+};
+
+function dicaDeSetor(sector?: string): string {
+  if (!sector) return '';
+  const norm = sector.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  const categoria = SETOR_DO_WIDGET[norm];
+  if (!categoria) return '';
+  return (
+    `\n\nINDÍCIO — o cliente escolheu o setor "${sector}" no widget, o que costuma corresponder a ` +
+    `"${categoria}". Use isso para desempatar quando a mensagem for ambígua. NÃO use contra a mensagem: ` +
+    'se ela descreve claramente outro assunto, a mensagem vence.'
+  );
+}
+
 @Injectable()
 export class CaseClassifierAgentService {
   private readonly logger = new Logger('CaseClassifierAgent');
 
   constructor(private readonly ai: AnthropicService) {}
 
-  async classify(message: string, history: string = ''): Promise<ClassificationResult> {
+  async classify(
+    message: string,
+    history: string = '',
+    sector?: string,
+  ): Promise<ClassificationResult> {
     const system = `Você é um classificador de chamados de suporte do HiperTMS (sistema TMS para transportadoras).
 
 Categorias disponíveis:
@@ -65,12 +97,30 @@ DESAMBIGUAÇÃO — use estas regras quando a mensagem misturar domínios:
 - Diária ou adiantamento de motorista → frota (não financeiro)
 - Fatura de cliente ou prestador de serviço → financeiro
 - Contrato comercial de frete → frete (não financeiro)
+- Rejeição de CT-e, com ou sem código SEFAZ → cte (NÃO treinamento, mesmo que a
+  pergunta termine em "o que eu faço?"). Rejeição é problema concreto num documento
+  emitido, não dúvida de como usar o sistema.
+- Rejeição de MDF-e → mdfe. Dúvida sobre regra tributária/CFOP sem documento
+  rejeitado → fiscal.
+- "treinamento" é só para quem quer APRENDER a fazer algo que ainda não tentou.
+  Se existe erro, rejeição ou algo que parou de funcionar, a categoria é a do
+  problema — a forma da frase não muda isso.
 
 Prioridade:
 - critical: operação parada (não emite CT-e/MDF-e em produção)
 - high: bloqueio parcial, tema financeiro/fiscal
 - medium: dúvida operacional sem bloqueio
 - low: treinamento, "como faço"
+
+requiresHuman — quando marcar true:
+- SOMENTE quando o caso exige uma ação que só uma pessoa pode executar: estorno,
+  cancelamento de contrato, negociação de valores, pedido jurídico, ou acesso a
+  dado que a IA não pode consultar.
+- NÃO marque true só porque o assunto parece técnico, sensível ou importante. Ter
+  solução documentada não é motivo para chamar humano.
+- Na dúvida, false. O backend tem regras próprias de escalonamento e vai escalar
+  sozinho quando for o caso — marcar true aqui por precaução tira do cliente uma
+  resposta que a IA já teria.
 
 Responda APENAS com JSON válido (sem markdown):
 {
@@ -81,7 +131,7 @@ Responda APENAS com JSON válido (sem markdown):
   "reasoning": "<motivo curto>"
 }
 
-Regra de segurança: se category for "fiscal" ou "financeiro" E confidence for "low" → requiresHuman = true.`;
+Regra de segurança: se category for "fiscal" ou "financeiro" E confidence for "low" → requiresHuman = true.${dicaDeSetor(sector)}`;
 
     const userMsg = history
       ? `Histórico recente:\n${history}\n\nMensagem atual: ${message}`

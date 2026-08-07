@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
+import { createRedisClient } from '@/shared/redis/redis.factory';
 import { ProactiveDetectorService } from './proactive-detector.service';
 import { ProactiveExecutorService } from './proactive-executor.service';
 
@@ -32,7 +33,7 @@ export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const url = process.env.REDIS_URL;
     if (url) {
-      this.redis = new Redis(url, { lazyConnect: true });
+      this.redis = createRedisClient(url, 'proactive-engine');
     } else {
       this.logger.warn('[proactive-engine] REDIS_URL not set — distributed lock disabled');
     }
@@ -56,7 +57,11 @@ export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
       ProactiveEngineCron.lastRunAt = new Date();
       this.logger.log('[proactive-engine] cycle complete');
     } finally {
-      await this.redis?.del(LOCK_KEY);
+      // Same reason as acquireLock: a rejection inside a @Cron's finally is
+      // unhandled and kills the process. The lock TTL releases it anyway.
+      await this.redis
+        ?.del(LOCK_KEY)
+        .catch((err: any) => this.logger.warn(`[proactive-engine] failed to release lock (expires by TTL): ${err?.message}`));
     }
   }
 
@@ -79,7 +84,15 @@ export class ProactiveEngineCron implements OnModuleInit, OnModuleDestroy {
 
   private async acquireLock(key: string, ttlS: number): Promise<boolean> {
     if (!this.redis) return true; // no Redis → allow (single-instance mode)
-    const result = await this.redis.set(key, '1', 'EX', ttlS, 'NX');
-    return result === 'OK';
+    try {
+      const result = await this.redis.set(key, '1', 'EX', ttlS, 'NX');
+      return result === 'OK';
+    } catch (err: any) {
+      // Called from @Cron/@Interval handlers — an unhandled rejection here takes
+      // the whole process down. Redis being unreachable is the same situation as
+      // Redis not being configured, and that case already runs: fail open, log why.
+      this.logger.warn(`[proactive-engine] Redis unreachable acquiring ${key} — running without lock: ${err?.message}`);
+      return true;
+    }
   }
 }

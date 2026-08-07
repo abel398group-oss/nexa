@@ -61,6 +61,12 @@ export class SupportAgentService {
       question: string;
       conversationId?: string;
       tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string; page?: string | null } | null;
+      /**
+       * Setor escolhido pelo cliente no seletor do widget do TMS
+       * (Fiscal/Frota/Financeiro/Logística/Sistema/Outro). É INDÍCIO, não verdade:
+       * entra como dica no classificador e nunca substitui o que a mensagem diz.
+       */
+      sector?: string;
     },
   ): Promise<AgentReply> {
 
@@ -131,7 +137,7 @@ export class SupportAgentService {
     const kbPromise = this.resolution.prefetchKnowledge(tenantId, input.question);
 
     // ── 1. CLASSIFICAÇÃO ────────────────────────────────────────────────────
-    const classification = await this.classifier.classify(input.question, history);
+    const classification = await this.classifier.classify(input.question, history, input.sector);
     this.logger.debug(`[Support] classificação: ${classification.category}/${classification.priority}`);
 
     // ── 2. DIAGNÓSTICO ──────────────────────────────────────────────────────

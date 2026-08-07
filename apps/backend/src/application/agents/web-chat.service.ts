@@ -27,6 +27,8 @@ export interface WebChatInboundEvent {
   // só não chegava até aqui. Ver conversations.gateway.ts (WebChatSocketData).
   page: string | null;
   message: string;
+  /** Setor escolhido pelo cliente no widget (Fiscal/Frota/…). Indício, não verdade. */
+  sector?: string;
 }
 
 @Injectable()
@@ -47,6 +49,7 @@ export class WebChatService {
         // portalIdentity → pipeline sabe que é cliente autenticado → rota suporte direto
         // identidade vem do token (TMS autenticado), nunca do que o cliente digitou (LGPD)
         portalIdentity: { externalId: event.externalId, name: event.name, page: event.page },
+        sector: event.sector,
       });
       // REGRA 3: o `blockedReason` só era logado no caminho do WhatsApp
       // (whatsapp.service.ts). No web chat ele era descartado — quando a Lia trocava a
