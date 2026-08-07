@@ -10,6 +10,7 @@ import { TicketIntelligenceService } from './ticket-intelligence.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TicketSyncService } from '@/application/connectors/ticket-sync.service';
+import { SUPPORT_SCRIPTS } from './support-scripts.const';
 
 const MODEL = AI_MODEL;
 
@@ -28,6 +29,13 @@ export interface AgentReply {
   ticketPriority?: string;
   rootCause?: string | null;
   resolved?: boolean;
+  /**
+   * O draft é um literal do catálogo (`support-scripts.const.ts`) — texto que nós
+   * escrevemos, sem nada gerado pela IA. O ConversationAgent usa isso para pular a
+   * Supervisora (auditar um literal nosso não protege de nada e custa ~2s por
+   * mensagem). A flag é CONFERIDA contra o catálogo antes de valer.
+   */
+  scripted?: boolean;
 }
 
 @Injectable()
@@ -82,10 +90,8 @@ export class SupportAgentService {
             this.logger.warn(`C1 CSAT-WA update falhou: ${e?.message}`);
           }
           const draft =
-            score >= 4
-              ? 'Obrigado pela avaliação! Fico feliz que tenha ficado satisfeito. 😊'
-              : 'Obrigado pelo feedback! Vamos trabalhar para melhorar. Se precisar de mais ajuda, pode nos contatar novamente.';
-          return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, true);
+            score >= 4 ? SUPPORT_SCRIPTS.csatAgradecimentoBom : SUPPORT_SCRIPTS.csatAgradecimentoRuim;
+          return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, true, { scripted: true });
         }
       }
 
@@ -108,13 +114,21 @@ export class SupportAgentService {
     // ── 0. SMALL TALK — curto-circuita o pipeline p/ saudações ─────────────
     if (this.isSmallTalk(input.question)) {
       await this.persistTicketFields(input.conversationId, 'treinamento', 'low', null);
+      // Cumprimentar de novo numa conversa em andamento soa robótico. O corte de
+      // saudação do ConversationAgent não roda em texto roteirizado (quebraria a
+      // conferência do catálogo), então a escolha é feita aqui.
       return this.buildReply(
-        'Olá! 👋 Estou aqui para ajudar com dúvidas sobre o HiperTMS. O que você precisa?',
+        history ? SUPPORT_SCRIPTS.saudacaoRepetida : SUPPORT_SCRIPTS.saudacao,
         [], '', 'high', false,
         { category: 'treinamento', priority: 'low' },
-        null, true,
+        null, true, { scripted: true },
       );
     }
+
+    // A busca de KB depende só da mensagem — não da categoria nem do diagnóstico.
+    // Disparada aqui, o embedding + a query pgvector correm em paralelo com as duas
+    // chamadas de IA seguintes em vez de entrarem em série depois delas.
+    const kbPromise = this.resolution.prefetchKnowledge(tenantId, input.question);
 
     // ── 1. CLASSIFICAÇÃO ────────────────────────────────────────────────────
     const classification = await this.classifier.classify(input.question, history);
@@ -148,6 +162,7 @@ export class SupportAgentService {
       diagnostic: diag,
       history,
       tmsCustomer: input.tmsCustomer ? { name: input.tmsCustomer.name, page: input.tmsCustomer.page } : null,
+      knowledge: await kbPromise,
     });
 
     // ── 4. ESCALONAMENTO ────────────────────────────────────────────────────
@@ -160,11 +175,30 @@ export class SupportAgentService {
       requiresHumanFromClassifier: classification.requiresHuman,
     });
 
-    // Se escalate=true mas message='' (ex.: unresolved_no_kb_match), usa o draft do ResolutionAgent
-    // que já explica ao cliente que vai encaminhar para um especialista.
-    let draft = escalationDecision.escalate && escalationDecision.message
-      ? escalationDecision.message
-      : resol.draft;
+    // Escalar NÃO pode apagar a resposta.
+    //
+    // Incidente do CT-e 519 (2026-08-07): o diagnóstico achou o código na tabela do
+    // connector, a Resolução montou a orientação a partir do artigo de KB e marcou
+    // resolved=true — e a matriz escalou assim mesmo (o classificador pediu humano).
+    // Como o aviso de transbordo SUBSTITUÍA o draft, a orientação foi parar só no
+    // resumo do chamado: visível para o atendente, nunca para quem perguntou. O
+    // cliente ouviu "não consegui identificar a solução" com a solução pronta.
+    //
+    // Agora, caso resolvido que escala mesmo assim entrega a solução E o aviso.
+    // Quando NÃO houve resolução, o draft do ResolutionAgent já diz que vai
+    // encaminhar — e escalationDecision.message vem vazio ('unresolved_no_kb_match').
+    let draft: string;
+    let scripted = false;
+    if (escalationDecision.escalate && escalationDecision.message) {
+      if (resol.resolved && resol.draft.trim()) {
+        draft = `${resol.draft}\n\n${escalationDecision.message}`;
+      } else {
+        draft = escalationDecision.message;
+        scripted = true; // literal do catálogo, sem texto gerado junto
+      }
+    } else {
+      draft = resol.draft;
+    }
     const needsHuman = escalationDecision.escalate;
 
     // Notifica a equipe quando há escalonamento (ADR 015 D6 + docs/features/escalation-notifications)
@@ -186,14 +220,23 @@ export class SupportAgentService {
       }
     }
 
-    // N2: Se IA resolveu → agenda autoCloseAt (+48h) e substitui draft pela pergunta de confirmação.
-    // O fechamento real só ocorre quando o cliente confirmar (ou o janitor fechar por silêncio).
+    // N2: Se IA resolveu → agenda autoCloseAt (+48h) e ACRESCENTA a pergunta de
+    // confirmação ao final da resposta. O fechamento real só ocorre quando o cliente
+    // confirmar (ou o janitor fechar por silêncio).
+    //
+    // 2026-08-07: este bloco SUBSTITUÍA o draft pela pergunta — o cliente recebia
+    // "Fico feliz em ter ajudado! Isso resolveu seu problema?" sem nunca ter recebido
+    // a solução. O N2 (docs/features/support-portal/plano-implementacao-suporte-2026-07.md)
+    // pede que a Lia *pergunte* ao marcar resolvido, não que ela troque a resposta pela
+    // pergunta. Mesmo defeito do caminho de escalação logo acima.
     if (!needsHuman && resol.resolved) {
       await this.markResolved(input.conversationId);
-      // Substitui o draft pelo "Isso resolveu?" — o payload de resolução real vai no autoCloseAt
-      draft =
-        'Fico feliz em ter ajudado! Isso resolveu seu problema?\n' +
-        'Responda "sim" para encerrar ou "não" se precisar de mais ajuda.';
+      if (draft.trim()) {
+        draft = `${draft}\n\n${SUPPORT_SCRIPTS.confirmaResolucao}`;
+      } else {
+        draft = SUPPORT_SCRIPTS.confirmaResolucao;
+        scripted = true; // só o literal do catálogo — não há texto gerado junto
+      }
       // Dispara análise de inteligência em background
       if (input.conversationId) {
         const conv = await this.prisma.aiConversation
@@ -227,6 +270,7 @@ export class SupportAgentService {
       classification,
       diag.rootCause ?? null,
       resol.resolved,
+      { scripted },
     );
   }
 
@@ -241,6 +285,7 @@ export class SupportAgentService {
     classification: { category: string; priority: string },
     rootCause: string | null,
     resolved: boolean,
+    opts: { scripted?: boolean } = {},
   ): AgentReply {
     return {
       draft,
@@ -255,6 +300,7 @@ export class SupportAgentService {
       ticketPriority: classification.priority,
       rootCause,
       resolved,
+      scripted: opts.scripted === true,
     };
   }
 
@@ -377,11 +423,10 @@ export class SupportAgentService {
       } catch (e: any) {
         this.logger.warn(`N2: fechamento confirmado falhou: ${e?.message}`);
       }
-      const draft =
-        'Ótimo! Chamado encerrado com sucesso. 😊\n' +
-        'Se quiser, avalie o atendimento de 1 a 5 respondendo com o número (1 = ruim, 5 = excelente). ' +
-        'Sua opinião nos ajuda a melhorar!';
-      return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, true);
+      return this.buildReply(
+        SUPPORT_SCRIPTS.chamadoEncerrado, [], '', 'high', false,
+        { category: 'suporte', priority: 'low' }, null, true, { scripted: true },
+      );
     }
 
     if (sentiment === 'negative') {
@@ -403,15 +448,17 @@ export class SupportAgentService {
       } catch (e: any) {
         this.logger.warn(`N2: reescalonamento falhou: ${e?.message}`);
       }
-      const draft =
-        'Entendido, me desculpe pelo transtorno. Estou encaminhando para um especialista que vai te ajudar com mais detalhes. ' +
-        'Em breve alguém entrará em contato!';
-      return this.buildReply(draft, [], '', 'high', true, { category: 'suporte', priority: 'high' }, null, false);
+      return this.buildReply(
+        SUPPORT_SCRIPTS.naoResolvido, [], '', 'high', true,
+        { category: 'suporte', priority: 'high' }, null, false, { scripted: true },
+      );
     }
 
     // Neutro/silêncio: mantém o autoCloseAt atual, responde gentilmente
-    const draft = 'Fique à vontade para me avisar se precisar de algo mais. Caso não haja resposta, o chamado será encerrado automaticamente em breve.';
-    return this.buildReply(draft, [], '', 'high', false, { category: 'suporte', priority: 'low' }, null, false);
+    return this.buildReply(
+      SUPPORT_SCRIPTS.aguardandoRetorno, [], '', 'high', false,
+      { category: 'suporte', priority: 'low' }, null, false, { scripted: true },
+    );
   }
 
   // Classifica mensagem curta como positiva, negativa ou neutra para o fluxo CSAT.

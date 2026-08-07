@@ -18,6 +18,7 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
 import { isWithinSupportHours, nextOpeningLabel, supportHoursLabel } from '@/application/conversations/support-hours';
+import { isSupportScript } from './support-scripts.const';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -65,6 +66,10 @@ function isKnownScript(draft: string): boolean {
 
   const fixos: string[] = [SCRIPTS.optOut, SCRIPTS.handoffHuman, SCRIPTS.supportSemCadastro];
   if (fixos.includes(draft)) return true;
+
+  // Catálogo do suporte (saudação, CSAT, avisos de transbordo) — mesma regra:
+  // literal nosso não precisa de auditoria. Ver support-scripts.const.ts.
+  if (isSupportScript(draft)) return true;
 
   for (const saudacao of ['Bom dia', 'Boa tarde', 'Boa noite']) {
     if (draft === SCRIPTS.clarify(saudacao)) return true;
@@ -216,11 +221,19 @@ export class ConversationAgentService {
       }
     }
 
-    let route = await this.router.route(input.message);
-    const msgs = input.conversationId ? await this.conversations.getMessages(tenantId, input.conversationId) : [];
-
-    // Contexto de conversas anteriores do mesmo número (mantém memória entre sessões).
-    const priorHistory = await this.loadPriorHistory(tenantId, input.conversationId);
+    // As três leituras são independentes entre si: o roteador só olha o texto da
+    // mensagem, e as duas consultas de histórico só olham o banco. Em série, a
+    // chamada de IA do roteador somava com dois round-trips ao Postgres (que é o
+    // gerenciado da DO — caro de latência); em paralelo o custo vira o do mais lento.
+    const [routeDecision, msgs, priorHistory] = await Promise.all([
+      this.router.route(input.message),
+      input.conversationId
+        ? this.conversations.getMessages(tenantId, input.conversationId)
+        : Promise.resolve([] as any[]),
+      // Contexto de conversas anteriores do mesmo número (mantém memória entre sessões).
+      this.loadPriorHistory(tenantId, input.conversationId),
+    ]);
+    let route = routeDecision;
 
     // Resolve a identidade do remetente (handoff token / marcador de painel / portal /
     // lookup no TMS), podendo forçar rota 'support', e limpa a mensagem dos marcadores (A3).
@@ -250,6 +263,12 @@ export class ConversationAgentService {
     route = resp.route;
     const { draft, suggestedAction, usedKnowledge, confidence, allowedFacts, scripted, usage } = resp;
     let needsHuman = resp.needsHuman;
+    // Escalação decidida pelo PRÓPRIO agente (matriz do SupportAgent) — nesse caso o
+    // rascunho já anuncia o transbordo ao cliente. Distinto de `needsHuman` virar true
+    // mais abaixo por decisão do orquestrador, quando o texto enviado é a resposta
+    // técnica e não avisa nada. A diferença decide se o aviso de escalação é duplicado
+    // ou é a única chance de o cliente saber que alguém vai assumir.
+    const escalacaoDecididaPeloAgente = resp.needsHuman;
 
     // SUPERVISORA: audita rascunhos gerados por IA (gate de qualidade/segurança — ADR 012).
     let supervisor: SupervisorVerdict | null = null;
@@ -275,6 +294,8 @@ export class ConversationAgentService {
     // - needsHuman NÃO bloqueia: manda a mensagem de handoff E o vendedor é avisado adiante.
     let autoSent = false;
     let blockedReason: string | undefined;
+    // O texto que de fato saiu já diz ao cliente que um atendente vai assumir?
+    let transbordoAnunciadoNoTexto = false;
     // `scripted` só vale se o texto REALMENTE for um dos roteiros do catálogo (a
     // conferência acontece acima, junto com a decisão de auditar). A flag sozinha é
     // uma promessa; conferida contra SCRIPTS, vira afirmação verificável — e um
@@ -336,23 +357,61 @@ export class ConversationAgentService {
         let outbound = draft;
         if (!supervisorOk) {
           outbound = SAFE_FALLBACK;
-          if (route.agent === 'support') needsHuman = true;
+          if (route.agent === 'support') {
+            needsHuman = true;
+            transbordoAnunciadoNoTexto = true; // o aceno seguro do suporte já avisa
+          }
           blockedReason = `rascunho reprovado pela supervisora (enviado aceno seguro): ${supervisor?.issues.join(', ') || 'reprovado'}`;
+          // REGRA 3: caminho que descarta o texto gerado tem que dizer por quê.
+          this.logger.warn(
+            `Aceno seguro no lugar do rascunho conv=${input.conversationId} intent=${route.intent} — ` +
+            `${blockedReason}. Rascunho: ${draft.slice(0, 160)}`,
+          );
+        } else if (confidence !== 'high' && route.agent === 'support') {
+          // Incidente do CT-e 519 (2026-08-07): trocar o rascunho de SUPORTE pelo aceno
+          // seguro fazia a Lia dizer "não consegui identificar a solução" com o
+          // diagnóstico pronto — o cliente via o chamado escalado sem nenhuma
+          // informação, enquanto a orientação (ancorada em KB) ficava só no resumo
+          // interno. `confidence` é auto-declarado pelo modelo em JSON livre; quem
+          // audita alucinação de verdade é a Supervisora, e ela JÁ aprovou este texto.
+          // Então: envia a resposta real E escala em paralelo (needsHuman), em vez de
+          // trocar informação útil por uma frase que é falsa quando há diagnóstico.
+          needsHuman = true;
+          blockedReason = 'confiança baixa no suporte — resposta enviada e caso escalado para humano';
+          this.logger.warn(
+            `Confiança baixa no suporte conv=${input.conversationId} — resposta mantida (aprovada pela ` +
+            'supervisora) e caso escalado para humano',
+          );
         } else if (confidence !== 'high') {
+          // Vendas: o aceno seguro é um convite genérico, não uma afirmação falsa —
+          // trocar o pitch por ele não engana ninguém. Comportamento preservado.
           outbound = SAFE_FALLBACK;
-          if (route.agent === 'support') needsHuman = true;
           blockedReason = 'confiança baixa (enviado aceno seguro)';
-        } else {
-          // Última linha de defesa, DETERMINÍSTICA (ver shared/governance/output-guard.ts).
-          // A Supervisora é outro modelo lendo a mesma mensagem hostil — se o texto
-          // enganou o primeiro, pode enganar o segundo. Estas travas comparam número
-          // com número: preço fora do catálogo (caso Chevrolet), recitação do prompt
-          // interno (OWASP LLM07) e palavrão saindo com a marca. Só roda no caminho
-          // aprovado — nos outros o texto já virou aceno seguro.
+          this.logger.warn(
+            `Aceno seguro no lugar do rascunho conv=${input.conversationId} intent=${route.intent} — ` +
+            `${blockedReason}. Rascunho: ${draft.slice(0, 160)}`,
+          );
+        }
+
+        // Última linha de defesa, DETERMINÍSTICA (ver shared/governance/output-guard.ts).
+        // A Supervisora é outro modelo lendo a mesma mensagem hostil — se o texto
+        // enganou o primeiro, pode enganar o segundo. Estas travas comparam número
+        // com número: preço fora do catálogo (caso Chevrolet), recitação do prompt
+        // interno (OWASP LLM07) e palavrão saindo com a marca.
+        //
+        // Roda sempre que o texto que vai sair é o GERADO — inclusive no caminho novo
+        // de confiança baixa no suporte. Nos demais o texto já é literal nosso (aceno
+        // seguro), e literal nosso não precisa de guard.
+        if (outbound === draft) {
+          // Rascunho do próprio agente de suporte com escalação já decidida por ele:
+          // o texto traz o aviso de transbordo (ver support-agent.service.ts).
+          if (route.agent === 'support' && escalacaoDecididaPeloAgente) transbordoAnunciadoNoTexto = true;
+
           const guard = inspectOutbound(outbound, allowedFacts, { phone: ownPhone, email: ownEmail });
           if (!guard.safe) {
             outbound = SAFE_FALLBACK;
             needsHuman = true; // vale para vendas também: alguém precisa ver o que ela ia dizer
+            if (route.agent === 'support') transbordoAnunciadoNoTexto = true;
             blockedReason = `bloqueado pelo guard de saída (${guard.violations.join(', ')}): ${guard.detail}`;
             this.logger.warn(
               `Guard de saída barrou resposta conv=${input.conversationId} ` +
@@ -366,9 +425,17 @@ export class ConversationAgentService {
             }
           }
         }
-        // humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto
-        const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
-        await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
+
+        // Humanização: pequena pausa antes de enviar (G5) — varia pelo tamanho do texto.
+        //
+        // Só no WhatsApp. Lá a pausa imita o tempo de digitação de uma pessoa e o
+        // cliente não está com a tela aberta esperando. No widget do TMS e no portal
+        // ele ESTÁ olhando o chat, e a pausa é latência percebida pura — 3 a 6 segundos
+        // somados a um pipeline que já faz várias chamadas de IA em série.
+        if (!input.portalIdentity) {
+          const jitter = HUMANIZE_MIN_MS + (outbound.length % Math.max(1, HUMANIZE_MAX_MS - HUMANIZE_MIN_MS));
+          await new Promise((r) => setTimeout(r, Math.min(HUMANIZE_MAX_MS, jitter)));
+        }
         await this.conversations.addMessage(tenantId, input.conversationId, {
           direction: 'outbound',
           content: outbound,
@@ -384,7 +451,13 @@ export class ConversationAgentService {
 
     // Efeitos colaterais pós-resposta: reclamação, opt-out, handoff de lead quente e
     // escalação de suporte. Isolado do fluxo de decisão da resposta (A3).
-    const handoff = await this.applyPostResponseEffects(tenantId, route, input, needsHuman);
+    // Quando a resposta que acabou de sair JÁ avisou o cliente do transbordo (aceno
+    // seguro ou aviso da matriz de escalação), o aviso adiante é uma segunda mensagem
+    // dizendo a mesma coisa — foi o que aconteceu no chamado do CT-e 519. Quando ela
+    // NÃO avisou (caminho de confiança baixa: sai a resposta técnica e o caso escala
+    // por decisão do orquestrador), o aviso é a única forma de o cliente saber.
+    const escalacaoJaAvisada = autoSent && route.agent === 'support' && transbordoAnunciadoNoTexto;
+    const handoff = await this.applyPostResponseEffects(tenantId, route, input, needsHuman, escalacaoJaAvisada);
 
     // MON-009: registra latência ponta a ponta e alerta se p95 acima do threshold.
     const elapsed = Date.now() - _t0;
@@ -559,6 +632,9 @@ export class ConversationAgentService {
         needsHuman = r.needsHuman;
         allowedFacts = r.allowedFacts;
         usage = r.usage;
+        // Saudação/CSAT/aviso de transbordo são literais do catálogo do suporte —
+        // pulam a Supervisora (a flag ainda é conferida por isKnownScript no envio).
+        scripted = r.scripted === true;
         break;
       }
     }
@@ -741,6 +817,8 @@ export class ConversationAgentService {
     route: RouteDecision,
     input: { message: string; conversationId?: string },
     needsHuman: boolean,
+    /** A resposta já enviada ao cliente nesta rodada já anunciou o transbordo. */
+    escalacaoJaAvisada = false,
   ): Promise<HandleResult['handoff']> {
     const conv = input.conversationId
       ? await this.conversations.findOne(tenantId, input.conversationId).catch(() => null)
@@ -854,7 +932,17 @@ export class ConversationAgentService {
       // oficial de suporte) nunca era avisado de que tinha sido escalado.
       // `addMessage` roteia por canal: WebSocket para web_chat/portal, WAHA para
       // WhatsApp — e ainda deixa o aviso registrado na thread.
-      if (conv.phone && !conv.phone.startsWith('email:')) {
+      // Dentro do expediente este aviso repete o que a resposta anterior já disse —
+      // duas mensagens seguidas anunciando o mesmo transbordo. Fora do expediente ele
+      // acrescenta informação que o rascunho não tem (horário e quando o time retoma),
+      // então continua valendo mesmo com a escalação já anunciada.
+      const avisoRedundante = escalacaoJaAvisada && isWithinSupportHours();
+      if (avisoRedundante) {
+        this.logger.log(
+          `Aviso de escalação suprimido (conv=${conv.id}) — a resposta enviada nesta rodada já avisou o cliente`,
+        );
+      }
+      if (conv.phone && !conv.phone.startsWith('email:') && !avisoRedundante) {
         // Fora do expediente, "em breve" pode ser 8 horas ou o fim de semana
         // inteiro. Dizer a verdade custa menos confiança do que a espera em si:
         // o cliente para de atualizar o chat esperando algo que não vem.

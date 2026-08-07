@@ -41,13 +41,24 @@ export class WebChatService {
       `web_chat.inbound: ext=${event.externalId} conv=${event.conversationId.slice(0, 8)} tenant=${event.tenantId}`,
     );
     try {
-      await this.agent.handle(event.tenantId, {
+      const result = await this.agent.handle(event.tenantId, {
         message: event.message,
         conversationId: event.conversationId,
         // portalIdentity → pipeline sabe que é cliente autenticado → rota suporte direto
         // identidade vem do token (TMS autenticado), nunca do que o cliente digitou (LGPD)
         portalIdentity: { externalId: event.externalId, name: event.name, page: event.page },
       });
+      // REGRA 3: o `blockedReason` só era logado no caminho do WhatsApp
+      // (whatsapp.service.ts). No web chat ele era descartado — quando a Lia trocava a
+      // resposta pelo aceno seguro, não sobrava nenhum rastro de qual gate disparou
+      // (supervisora? confiança? guard de saída?). Sem isso, o chamado do CT-e 519 não
+      // era diagnosticável pelos logs.
+      if (result?.blockedReason) {
+        this.logger.warn(
+          `conv=${event.conversationId.slice(0, 8)} autoSent=${result.autoSent} ` +
+          `agente=${result.route.agent} BLOQUEIO="${result.blockedReason}"`,
+        );
+      }
     } catch (err: any) {
       this.logger.error(
         `Erro ao processar web_chat.inbound conv=${event.conversationId.slice(0, 8)}: ${err?.message}`,

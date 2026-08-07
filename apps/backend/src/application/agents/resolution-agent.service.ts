@@ -8,6 +8,15 @@ import { DiagnosticResult } from './diagnostic-agent.service';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
 import { HELP_URLS, HELP_BASE_URL } from '@/application/connectors/hipertms-help-urls.data';
 
+/** Artigo de KB já recuperado — permite buscar a KB fora do caminho crítico. */
+export interface KnowledgeHit {
+  id: string;
+  title: string;
+  content: string;
+  topic?: string | null;
+  score: number;
+}
+
 export interface ResolutionResult {
   draft: string;                     // texto a enviar ao cliente
   resolved: boolean;                 // IA acredita ter resolvido
@@ -27,6 +36,27 @@ export class ResolutionAgentService {
     private readonly playbook: PlaybookService,
   ) {}
 
+  /**
+   * Busca os artigos de KB que o `resolve()` vai usar.
+   *
+   * Exposto separadamente porque a busca depende SÓ da mensagem — não do
+   * diagnóstico. Chamada de dentro do resolve(), ela custava um embedding + uma
+   * query pgvector *depois* de esperar o DiagnosticAgent terminar; disparada em
+   * paralelo pelo SupportAgent, sai do caminho crítico. Nunca lança: falhar aqui
+   * degrada para "sem KB" (o modelo escala), não derruba o atendimento.
+   */
+  async prefetchKnowledge(tenantId: string, message: string): Promise<KnowledgeHit[]> {
+    try {
+      // 4 resultados — suporte precisa de mais contexto que vendas
+      return (await this.knowledge.retrieve(tenantId, message, 4, {
+        excludeCategories: ['comercial'],
+      })) as KnowledgeHit[];
+    } catch (err: any) {
+      this.logger.warn(`Busca de KB falhou (${err?.message}) — resolução seguirá sem artigos`);
+      return [];
+    }
+  }
+
   async resolve(input: {
     tenantId: string;
     message: string;
@@ -35,9 +65,10 @@ export class ResolutionAgentService {
     diagnostic: DiagnosticResult;
     history: string;
     tmsCustomer: { name: string; page?: string | null } | null;
+    /** KB já recuperada por `prefetchKnowledge()`. Ausente → busca aqui mesmo. */
+    knowledge?: KnowledgeHit[];
   }): Promise<ResolutionResult> {
-    // Busca KB com 4 resultados — suporte precisa de mais contexto que vendas
-    const kb = await this.knowledge.retrieve(input.tenantId, input.message, 4, { excludeCategories: ['comercial'] });
+    const kb = input.knowledge ?? (await this.prefetchKnowledge(input.tenantId, input.message));
     const usedKnowledge = kb.map((k: any) => ({ id: k.id, title: k.title, score: k.score }));
     const kbCtx = kb.map((k: any, i: number) => `[KB ${i + 1}: ${k.title}]\n${k.content}`).join('\n\n');
     // kbCtx é repassado para a Supervisora verificar alucinações (allowedFacts)

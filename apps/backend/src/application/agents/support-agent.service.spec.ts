@@ -25,7 +25,11 @@ function makeDeps() {
   const ai = {} as any;
   const classifier = { classify: vi.fn().mockResolvedValue({ category: 'suporte', priority: 'normal', requiresHuman: false }) } as any;
   const diagnostic = { diagnose: vi.fn().mockResolvedValue({ needsMoreInfo: false, questionsToAsk: [], rootCause: null }) } as any;
-  const resolution = { resolve: vi.fn().mockResolvedValue({ draft: 'resp', usedKnowledge: [], allowedFacts: '', confidence: 'high', resolved: false }) } as any;
+  const resolution = {
+    resolve: vi.fn().mockResolvedValue({ draft: 'resp', usedKnowledge: [], allowedFacts: '', confidence: 'high', resolved: false }),
+    // Busca de KB disparada em paralelo com classificação/diagnóstico (fora do caminho crítico).
+    prefetchKnowledge: vi.fn().mockResolvedValue([]),
+  } as any;
   const escalation = { decide: vi.fn().mockResolvedValue({ escalate: false, reason: '' }) } as any;
   const intelligence = { analyze: vi.fn().mockResolvedValue({}) } as any;
   const ticketSync = { markPending: vi.fn().mockResolvedValue(undefined) } as any;
@@ -314,5 +318,103 @@ describe('SupportAgentService — F10 resumo executivo de escalonamento', () => 
     const escalationSummaryUpdates = deps.prisma.aiConversation.update.mock.calls
       .filter((c: any[]) => c[0]?.data && 'escalationSummary' in c[0].data);
     expect(escalationSummaryUpdates).toHaveLength(0);
+  });
+});
+
+// ─── Incidente do CT-e 519 (2026-08-07) ───────────────────────────────────────
+// O pipeline tinha a resposta certa (código na tabela do connector + artigo de KB)
+// e o cliente recebeu só um aviso de transbordo. Dois pontos do fluxo trocavam a
+// solução por um texto genérico; estes testes trancam os dois.
+describe('SupportAgentService — a solução nunca é descartada', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: SupportAgentService;
+
+  const SOLUCAO =
+    'A rejeição 519 é CFOP inválido para a UF. Verifique o endereço do remetente em Cadastros e reemita o CT-e.';
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({
+      resolvedAt: null, autoCloseAt: null, status: 'open', outcome: null, csatToken: null, csatScore: null,
+    });
+    deps.diagnostic.diagnose.mockResolvedValue({
+      needsMoreInfo: false, questionsToAsk: [],
+      rootCause: 'CFOP inválido para a operação',
+      suggestedAction: 'Verificar UF de origem e destino no embarque',
+      confidence: 'high', tmsUnstable: false, diagnosticData: {}, playbook: null,
+    });
+    deps.resolution.resolve.mockResolvedValue({
+      draft: SOLUCAO, usedKnowledge: [], allowedFacts: 'KB 519', confidence: 'high', resolved: true, action: null,
+    });
+  });
+
+  it('caso resolvido que escala mesmo assim entrega a solução E o aviso de transbordo', async () => {
+    // Exatamente o cenário do print: resolvido, mas o classificador pediu humano.
+    deps.escalation.decide.mockReturnValue({
+      escalate: true,
+      reason: 'classifier_requires_human',
+      message: 'Esta solicitação precisa de análise especializada. Estou te conectando com nossa equipe.',
+      summary: '[Problema Relatado] CT-e 519',
+    });
+
+    const r = await svc.ask('t1', { question: 'Meu CT-e foi rejeitado, código 519. O que eu faço?', conversationId: 'c1' });
+
+    expect(r.draft).toContain(SOLUCAO);
+    expect(r.draft).toMatch(/análise especializada/i);
+    expect(r.needsHuman).toBe(true);
+    // texto gerado no meio → NÃO pode pular a Supervisora
+    expect(r.scripted).toBe(false);
+  });
+
+  it('escalação sem resolução continua mandando só o aviso (e pula a Supervisora)', async () => {
+    deps.resolution.resolve.mockResolvedValue({
+      draft: '', usedKnowledge: [], allowedFacts: '', confidence: 'low', resolved: false, action: null,
+    });
+    deps.escalation.decide.mockReturnValue({
+      escalate: true, reason: 'priority_critical',
+      message: 'Identifiquei que sua operação está parada. Estou escalando para atendimento urgente agora.',
+      summary: null,
+    });
+
+    const r = await svc.ask('t1', { question: 'sistema parado', conversationId: 'c1' });
+
+    expect(r.draft).toMatch(/operação está parada/i);
+    expect(r.scripted).toBe(true); // literal do catálogo
+  });
+
+  it('caso resolvido sem escalar ACRESCENTA a pergunta de confirmação — não substitui a resposta', async () => {
+    deps.escalation.decide.mockReturnValue({ escalate: false, reason: 'ia_resolve', message: '', summary: null });
+
+    const r = await svc.ask('t1', { question: 'Meu CT-e foi rejeitado, código 519. O que eu faço?', conversationId: 'c1' });
+
+    expect(r.draft).toContain(SOLUCAO);
+    expect(r.draft).toMatch(/Isso resolveu seu problema\?/);
+    expect(r.needsHuman).toBe(false);
+  });
+
+  it('saudação é roteirizada (pula a Supervisora) e não se repete em conversa em andamento', async () => {
+    const nova = await svc.ask('t1', { question: 'oi', conversationId: 'c1' });
+    expect(nova.scripted).toBe(true);
+    expect(nova.draft).toMatch(/Estou aqui para ajudar/);
+
+    deps.conversations.getMessages.mockResolvedValue([
+      { direction: 'inbound', content: 'oi' },
+      { direction: 'outbound', content: 'Olá!' },
+    ]);
+    const emAndamento = await svc.ask('t1', { question: 'oi', conversationId: 'c1' });
+    expect(emAndamento.scripted).toBe(true);
+    expect(emAndamento.draft).not.toMatch(/Olá/);
+  });
+
+  it('a busca de KB é disparada antes do diagnóstico e repassada ao ResolutionAgent', async () => {
+    const kb = [{ id: 'kb1', title: '519', content: '…', score: 0.9 }];
+    deps.resolution.prefetchKnowledge.mockResolvedValue(kb);
+    deps.escalation.decide.mockReturnValue({ escalate: false, reason: 'ia_resolve', message: '', summary: null });
+
+    await svc.ask('t1', { question: 'CT-e rejeitado 519', conversationId: 'c1' });
+
+    expect(deps.resolution.prefetchKnowledge).toHaveBeenCalledWith('t1', 'CT-e rejeitado 519');
+    expect(deps.resolution.resolve).toHaveBeenCalledWith(expect.objectContaining({ knowledge: kb }));
   });
 });

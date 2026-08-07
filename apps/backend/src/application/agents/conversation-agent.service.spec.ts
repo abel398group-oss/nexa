@@ -18,6 +18,15 @@ import { ConversationAgentService } from './conversation-agent.service';
 import type { RouteDecision } from './router-agent.service';
 import type { SupervisorVerdict } from './supervisor-agent.service';
 
+// Horário de atendimento fixado como ABERTO: o aviso de escalação muda de texto
+// (e agora de existência) conforme o relógio. Sem fixar, os testes de escalação
+// passariam ou falhariam dependendo da hora em que a suíte roda.
+vi.mock('@/application/conversations/support-hours', () => ({
+  isWithinSupportHours: () => true,
+  supportHoursLabel: () => 'de segunda a sexta, das 8h às 18h',
+  nextOpeningLabel: () => 'amanhã de manhã',
+}));
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const okVerdict: SupervisorVerdict = { approved: true, risk: 'low', issues: [], source: 'fallback' };
@@ -628,15 +637,75 @@ describe('ConversationAgentService.handle()', () => {
       expect(sentContent).toMatch(/atendente|equipe/i); // SAFE_FALLBACK_SUPPORT
     });
 
+    // Incidente do CT-e 519: o rascunho de suporte estava ancorado na KB e aprovado
+    // pela Supervisora, mas `confidence: 'low'` (auto-declarado pelo modelo) o trocava
+    // pelo aceno seguro — que afirma "não consegui identificar a solução" justamente
+    // quando a solução existe. A Supervisora é o gate de alucinação; a confiança baixa
+    // agora escala o caso SEM apagar a resposta.
+    it('suporte com confiança baixa: envia o rascunho aprovado e escala em paralelo', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSupport.ask.mockResolvedValue({
+        draft: 'A rejeição 519 é CFOP inválido para a UF — corrija o endereço em Cadastros e reemita.',
+        usedKnowledge: [], allowedFacts: 'KB 519', confidence: 'low', needsHuman: false,
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', {
+        message: 'CT-e rejeitado 519',
+        conversationId: 'conv1',
+        portalIdentity: { externalId: 'ext1', name: 'Empresa ABC' },
+      });
+
+      expect(res.autoSent).toBe(true);
+      const enviado = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(enviado).toMatch(/CFOP inválido/);
+      expect(enviado).not.toMatch(/não consegui identificar/i);
+      expect(res.needsHuman).toBe(true);
+      expect(res.blockedReason).toMatch(/confiança baixa no suporte/i);
+
+      // A resposta enviada é a técnica — ela NÃO avisa que um humano vai assumir.
+      // Aqui o aviso de escalação não é duplicata: é a única forma de o cliente saber.
+      const avisos = mockConversations.addMessage.mock.calls.filter(
+        (c: any) => c[2]?.intent === 'escalation_notice',
+      );
+      expect(avisos).toHaveLength(1);
+    });
+
+    // Vendas mantém o comportamento antigo: lá o aceno seguro é um convite genérico,
+    // não uma afirmação falsa sobre o problema do cliente.
+    it('vendas com confiança baixa continua caindo no aceno seguro', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'Talvez a gente tenha isso, não sei.',
+        suggestedAction: 'none', usedKnowledge: [], allowedFacts: '', confidence: 'low',
+      });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: 'tem app?', conversationId: 'conv1' });
+
+      const enviado = mockConversations.addMessage.mock.calls[0][2].content;
+      expect(enviado).not.toMatch(/Talvez a gente tenha/);
+      expect(res.blockedReason).toMatch(/confiança baixa/i);
+    });
+
     // O aviso de escalação era `waha.sendText(conv.phone, ...)` direto. No
     // widget do TMS o `phone` é o externalId (e no portal, `portal:<id>`) —
     // mandava WhatsApp pra uma string que não é telefone, falhava em silêncio,
     // e o cliente do chat nunca sabia que tinha sido escalado. `addMessage`
     // roteia por canal (WebSocket no web_chat/portal, WAHA no WhatsApp).
     it('avisa a escalação PELA CONVERSA, não por WhatsApp direto', async () => {
-      mockAutonomy.isEnabled.mockReturnValue(true);
+      // Autonomia OFF: nada foi enviado ao cliente nesta rodada, então o aviso de
+      // escalação é a única mensagem que ele recebe — tem que sair, e pela conversa.
+      mockAutonomy.isEnabled.mockReturnValue(false);
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
-      mockSupervisor.review.mockResolvedValue(nokVerdict); // reprovado → needsHuman
+      mockSupport.ask.mockResolvedValue({
+        draft: 'Vou verificar isso com o time.',
+        usedKnowledge: [], allowedFacts: '', confidence: 'high', needsHuman: true,
+      });
       mockConversations.findOne.mockResolvedValue({
         id: 'conv1', phone: 'ext-tms-123', contactId: 'c1', status: 'open',
       });
@@ -655,6 +724,35 @@ describe('ConversationAgentService.handle()', () => {
       expect(avisos[0][2].content).toMatch(/atendente/i);
       // nada de WhatsApp direto para um "telefone" que é o externalId do TMS
       expect(mockWaha.sendText).not.toHaveBeenCalledWith('ext-tms-123', expect.anything());
+    });
+
+    // Incidente do CT-e 519: o cliente recebia o aceno seguro ("vou encaminhar para
+    // um atendente…") e, logo em seguida, "Vou chamar um atendente…" — duas mensagens
+    // dizendo a mesma coisa. Dentro do expediente o segundo aviso não acrescenta nada.
+    it('não repete o aviso de escalação quando a resposta enviada já avisou', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
+      mockSupervisor.review.mockResolvedValue(nokVerdict); // reprovado → aceno seguro + needsHuman
+      mockConversations.findOne.mockResolvedValue({
+        id: 'conv1', phone: 'ext-tms-123', contactId: 'c1', status: 'open',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', {
+        message: 'meu CT-e não emite',
+        conversationId: 'conv1',
+        portalIdentity: { externalId: 'ext-tms-123', name: 'Empresa ABC' },
+      });
+
+      const enviadas = mockConversations.addMessage.mock.calls;
+      // a resposta saiu (aceno seguro, que já anuncia o transbordo)…
+      expect(enviadas.filter((c: any) => c[2]?.intent !== 'escalation_notice')).toHaveLength(1);
+      // …e o aviso duplicado não
+      expect(enviadas.filter((c: any) => c[2]?.intent === 'escalation_notice')).toHaveLength(0);
+      // a conversa continua sendo escalada de verdade
+      expect(mockPrisma.aiConversation.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'escalated' }) }),
+      );
     });
   });
 

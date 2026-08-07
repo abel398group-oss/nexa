@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
 import { DiagnosticResult } from './diagnostic-agent.service';
 import { ResolutionResult } from './resolution-agent.service';
+import { SUPPORT_SCRIPTS } from './support-scripts.const';
 
 export interface EscalationDecision {
   escalate: boolean;
@@ -49,9 +50,7 @@ export class EscalationAgentService {
       return {
         escalate: true,
         reason: 'fiscal_financeiro_low_confidence',
-        message:
-          'Sua solicitação envolve um tema fiscal ou financeiro que precisa de verificação especializada. ' +
-          'Vou te conectar com nossa equipe agora.',
+        message: SUPPORT_SCRIPTS.escalaFiscalFinanceiro,
         summary: this.buildSummary(input, 'fiscal_financeiro_low_confidence'),
       };
     }
@@ -61,8 +60,7 @@ export class EscalationAgentService {
       return {
         escalate: true,
         reason: 'priority_critical',
-        message:
-          'Identifiquei que sua operação está parada. Estou escalando para atendimento urgente agora.',
+        message: SUPPORT_SCRIPTS.escalaCritica,
         summary: this.buildSummary(input, 'priority_critical'),
       };
     }
@@ -89,9 +87,7 @@ export class EscalationAgentService {
       return {
         escalate: true,
         reason: 'high_priority_low_confidence',
-        message:
-          'Não consegui resolver sua questão de alta prioridade automaticamente. ' +
-          'Estou acionando um especialista para te ajudar.',
+        message: SUPPORT_SCRIPTS.escalaAltaPrioridade,
         summary: this.buildSummary(input, 'high_priority_low_confidence'),
       };
     }
@@ -101,7 +97,7 @@ export class EscalationAgentService {
       return {
         escalate: true,
         reason: 'classifier_requires_human',
-        message: 'Esta solicitação precisa de análise especializada. Estou te conectando com nossa equipe.',
+        message: SUPPORT_SCRIPTS.escalaAnaliseEspecializada,
         summary: this.buildSummary(input, 'classifier_requires_human'),
       };
     }
