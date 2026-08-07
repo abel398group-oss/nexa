@@ -6,6 +6,8 @@ export {
   listConversations,
   getConversationMessages,
   sendMessage,
+  updateInternalNote,
+  deleteInternalNote,
   returnConversationToAi,
   setConversationOutcome,
   assignSeller,

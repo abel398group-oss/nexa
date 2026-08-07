@@ -20,6 +20,8 @@ import {
   listConversations,
   getConversationMessages,
   sendMessage,
+  updateInternalNote,
+  deleteInternalNote,
   returnConversationToAi,
   setConversationOutcome,
   assignSeller as reassignSeller,
@@ -146,6 +148,9 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
   const [queueFilter, setQueueFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
   // F12: composer em modo "nota interna" — nunca sai pro cliente.
   const [isInternalMode, setIsInternalMode] = useState(false);
+  // Etapa 2A: edição inline de nota interna já gravada.
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
   // F13: edição inline do link da issue de dev vinculada ao chamado.
   const [editingIssue, setEditingIssue] = useState(false);
   const [issueUrlInput, setIssueUrlInput] = useState('');
@@ -338,6 +343,16 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     s.on('message', (msg: Message) => setMessages((prev) => [...prev, msg]));
     s.on('message:ack', (d: { id: string; ack: number }) =>
       setMessages((prev) => prev.map((m) => (m.id === d.id ? { ...m, ack: d.ack } : m))),
+    );
+    // Etapa 2A: nota interna editada/removida por outro analista. Chega só pela
+    // sala de staff. Sem isto, um colega com a mesma conversa aberta seguiria
+    // vendo a nota antiga — e no caso da exclusão (dado sensível colado por
+    // engano) o dado continuaria na tela dele até recarregar.
+    s.on('message:updated', (msg: Message) =>
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, content: msg.content } : m))),
+    );
+    s.on('message:deleted', (d: { id: string }) =>
+      setMessages((prev) => prev.filter((m) => m.id !== d.id)),
     );
     // Atualiza a lista do inbox quando uma conversa do tenant recebe atividade.
     // Rebusca a lista completa para garantir ordem, dados frescos e novas conversas.
@@ -555,6 +570,49 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     }
     setText('');
     setLiaInfo('');
+  }
+
+  /**
+   * Etapa 2A: quem pode mexer numa nota interna já gravada. Espelha a regra do
+   * backend (autor, ou admin) — aqui é só para não OFERECER um botão que vai
+   * tomar 403; a decisão que vale é a do servidor.
+   */
+  function canEditNote(m: Message): boolean {
+    if (!m.isInternal) return false;
+    return m.authorUserId === user?.id || user?.role === 'admin';
+  }
+
+  async function saveNoteEdit(messageId: string) {
+    const content = noteDraft.trim();
+    if (!content) return;
+    try {
+      const updated = await updateInternalNote(messageId, content);
+      setMessages((ms) => ms.map((m) => (m.id === messageId ? { ...m, content: updated.content } : m)));
+      setEditingNoteId(null);
+      setNoteDraft('');
+    } catch (e: any) {
+      const msg = e?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao editar a nota.');
+    }
+  }
+
+  async function removeNote(messageId: string) {
+    const ok = await confirm({
+      title: 'Excluir nota interna',
+      // Sem meio-termo: o backend apaga a linha de verdade (é o ponto — o caso
+      // de uso é dado sensível colado por engano). O texto fica só no audit log.
+      message: 'A nota é apagada definitivamente. Só o registro de auditoria guarda o conteúdo.',
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await deleteInternalNote(messageId);
+      setMessages((ms) => ms.filter((m) => m.id !== messageId));
+    } catch (e: any) {
+      const msg = e?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao excluir a nota.');
+    }
   }
 
   // ADR 035: "Devolver pra Lia" — libera o takeover; a Lia volta a atender sozinha.
@@ -1333,7 +1391,40 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                             {(m.metadata as any)?.audioUrl && (
                               <audio controls src={(m.metadata as any).audioUrl} className="mb-1 h-10 w-[320px] max-w-full rounded-lg" />
                             )}
-                            <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
+                            {editingNoteId === m.id ? (
+                              // Etapa 2A: edição inline da nota, sem modal — o
+                              // analista não perde a conversa de vista.
+                              <div className="space-y-1.5">
+                                <textarea
+                                  autoFocus
+                                  rows={3}
+                                  value={noteDraft}
+                                  onChange={(e) => setNoteDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Escape') { setEditingNoteId(null); setNoteDraft(''); }
+                                    // Enter quebra linha (nota é texto livre); Ctrl/Cmd+Enter salva.
+                                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveNoteEdit(m.id);
+                                  }}
+                                  className="w-full rounded-lg border border-amber-300 bg-white/70 px-2 py-1 text-sm text-amber-900 outline-none focus:border-amber-500"
+                                />
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={() => saveNoteEdit(m.id)}
+                                    className="rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-600"
+                                  >
+                                    Salvar
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingNoteId(null); setNoteDraft(''); }}
+                                    className="rounded-full border border-amber-300 px-2.5 py-1 text-[11px] text-amber-800 hover:bg-amber-100"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.content}</div>
+                            )}
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
                               m.isInternal ? 'text-amber-700/70' : m.direction === 'outbound' ? 'text-white/60' : 'text-base-content/40'
                             }`}>
@@ -1343,8 +1434,26 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                           </div>
                           {/* badge IA vs Humano vs Nota interna — exibido abaixo de toda mensagem outbound */}
                           {m.direction === 'outbound' && (
-                            <span className="mt-0.5 text-[10px] text-base-content/35 select-none">
+                            <span className="mt-0.5 flex items-center gap-2 text-[10px] text-base-content/35 select-none">
                               {m.isInternal ? '🔒 Nota interna — só a equipe vê' : (m.metadata as any)?.senderType === 'human' ? '👤 Você' : '✨ Lia'}
+                              {/* Etapa 2A: só aparece pra quem o backend vai deixar
+                                  mexer (autor ou admin) — não oferece botão que dá 403. */}
+                              {canEditNote(m) && editingNoteId !== m.id && (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingNoteId(m.id); setNoteDraft(m.content); }}
+                                    className="text-amber-700/60 hover:text-amber-800 hover:underline"
+                                  >
+                                    editar
+                                  </button>
+                                  <button
+                                    onClick={() => removeNote(m.id)}
+                                    className="text-amber-700/60 hover:text-red-600 hover:underline"
+                                  >
+                                    excluir
+                                  </button>
+                                </>
+                              )}
                             </span>
                           )}
                         </div>

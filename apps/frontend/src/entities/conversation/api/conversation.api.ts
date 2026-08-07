@@ -14,6 +14,19 @@ export async function getConversationMessages(id: string): Promise<Message[]> {
   return r.data;
 }
 
+// Etapa 2A: editar/excluir NOTA INTERNA. O backend só aceita mensagem com
+// isInternal=true, e só do autor (ou de um admin) — resposta já enviada ao
+// cliente nunca pode ser reescrita por aqui.
+export async function updateInternalNote(messageId: string, content: string): Promise<Message> {
+  const r = await api.patch(`/conversations/messages/${messageId}`, { content });
+  return r.data;
+}
+
+export async function deleteInternalNote(messageId: string): Promise<{ id: string; deleted: boolean }> {
+  const r = await api.delete(`/conversations/messages/${messageId}`);
+  return r.data;
+}
+
 export async function sendMessage(id: string, content: string, isInternal = false): Promise<void> {
   await api.post(`/conversations/${id}/messages`, {
     direction: 'outbound',

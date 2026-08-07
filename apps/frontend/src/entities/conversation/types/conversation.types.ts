@@ -37,6 +37,8 @@ export interface Message {
   metadata?: Record<string, unknown> | null;
   /** F12: nota interna — visível só pra equipe, nunca chega ao cliente. */
   isInternal?: boolean;
+  /** Etapa 2A: autor humano (do JWT no servidor). Null em mensagens antigas e nas da Lia. */
+  authorUserId?: string | null;
 }
 
 /** F12: analista pro seletor de atribuição (GET /conversations/analysts). */
