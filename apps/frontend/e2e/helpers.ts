@@ -52,3 +52,49 @@ export async function abrir(page: Page, rota: string) {
   await page.goto(rota, { waitUntil: 'commit' });
   await esperarRender(page);
 }
+
+/**
+ * Cabeçalhos para chamar a API direto (limpeza de dados de teste).
+ *
+ * `x-acting-tenant-id`: o usuário da suíte é platform admin (tenantId null) e
+ * sem isto toda rota devolve "Selecione um cliente".
+ *
+ * `x-acting-override`: a quebra de vidro. Ação irreversível em nome de um
+ * cliente é bloqueada de propósito (EffectiveTenantInterceptor) — o que é
+ * correto para uma pessoa clicando na tela, mas impede a suíte de apagar o que
+ * ela mesma criou. Usar aqui é legítimo e deliberado: é limpeza de fixture,
+ * nunca fluxo de produto. Nenhum teste de UI manda este cabeçalho.
+ */
+export function apiHeaders(destrutivo = false): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (ctx.actingTenantId) h['x-acting-tenant-id'] = ctx.actingTenantId;
+  if (destrutivo) h['x-acting-override'] = 'true';
+  return h;
+}
+
+/** Prefixo de tudo que a suíte cria — permite varrer sobras depois. */
+export const MARCA_E2E = 'E2E-AUTO';
+
+/**
+ * Apaga contatos criados pelos testes. Recebe o termo de busca; apaga só o que
+ * casar com a marca, nunca dado de verdade.
+ */
+export async function limparContatos(
+  request: { get: Function; delete: Function },
+  termo: string = MARCA_E2E,
+): Promise<number> {
+  const r = await request.get(`/api/contacts?search=${encodeURIComponent(termo)}&limit=100`, {
+    headers: apiHeaders(),
+  });
+  if (!r.ok()) return 0;
+  const body = await r.json();
+  const alvos = (body.items ?? []).filter(
+    (c: any) => (c.name ?? '').includes(MARCA_E2E) || (c.company ?? '').includes(MARCA_E2E),
+  );
+  let apagados = 0;
+  for (const c of alvos) {
+    const d = await request.delete(`/api/contacts/${c.id}`, { headers: apiHeaders(true) });
+    if (d.ok()) apagados++;
+  }
+  return apagados;
+}

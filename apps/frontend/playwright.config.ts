@@ -51,6 +51,24 @@ export default defineConfig({
   },
 
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // A suíte móvel roda só no projeto abaixo: em 1440px "não tem rolagem
+      // horizontal" é verdade trivial e não provaria nada.
+      testIgnore: /mobile-viewport\.spec\.ts/,
+    },
+    {
+      name: 'mobile',
+      // iPhone 13 traz viewport, touch e user-agent móveis — mas o preset vem
+      // com `defaultBrowserType: 'webkit'`, e só o Chromium está instalado.
+      // Forçar chromium evita baixar outro browser (~200MB) pra um teste de
+      // RESPONSIVIDADE, onde o que importa é a largura, não o motor. Também é
+      // o mais representativo: a maioria do tráfego móvel é Android/Chrome.
+      // Para testar o motor da Apple: `npx playwright install webkit` e remover
+      // o browserName abaixo.
+      use: { ...devices['iPhone 13'], browserName: 'chromium' },
+      testMatch: /mobile-viewport\.spec\.ts/,
+    },
   ],
 });
