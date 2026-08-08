@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
-import { EmailReplyService } from '@/application/email/email-reply.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { normalizePhone } from '@/shared/utils/phone.util';
 
 @Injectable()
@@ -12,7 +12,7 @@ export class SellersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly waha: WahaClientService,
-    private readonly emailReply: EmailReplyService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async list(tenantId: string, search?: string) {
@@ -260,50 +260,40 @@ export class SellersService {
       `Atendimento atribuído a você.\n` +
       this.attendLine(input.conversationId);
     const sent = await this.waha.sendText(seller.phone, msg);
-    await this.avisarPorEmail(seller, kind, { ...input, tenantId });
+    this.anunciarHandoff(seller, kind, input, tenantId);
 
     this.logger.log(`Handoff → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
     return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: sent.sent };
   }
 
   /**
-   * Aviso de handoff também por e-mail, quando o vendedor tem endereço cadastrado.
+   * Anuncia o handoff. Quem sabe mandar e-mail escuta (SellerHandoffListener).
    *
-   * Complementa o WhatsApp, não substitui: um lead quente que chega 22h de sexta
-   * depende hoje de alguém ver a mensagem no celular. E-mail fica na caixa.
+   * Evento e não chamada direta: injetar o serviço de e-mail aqui fechava o ciclo
+   * SellersModule -> EmailModule -> AgentsModule -> SellersModule e o Nest não subia.
+   * O ciclo foi o sintoma; o desenho certo é este — avisar alguém não é
+   * responsabilidade de quem atribui o lead.
    *
-   * Nunca lança. O lead JÁ foi atribuído quando chegamos aqui — deixar uma falha de
-   * SMTP derrubar o handoff trocaria "vendedor não recebeu o aviso" por "o lead não
-   * tem dono", que é estritamente pior.
+   * Não é aguardado de propósito: o lead JÁ está atribuído e o handoff não pode
+   * ficar preso esperando SMTP.
    */
-  private async avisarPorEmail(
-    seller: { id: string; name: string; email?: string | null },
+  private anunciarHandoff(
+    seller: { name: string; email?: string | null },
     kind: 'hot_lead' | 'human_request',
-    input: { conversationId: string; contactPhone: string; summary?: string; leadScore?: number; tenantId?: string },
-  ): Promise<void> {
-    const para = seller.email?.trim();
-    if (!para) return;
-
-    const assunto =
-      kind === 'human_request'
-        ? `Cliente pediu atendimento — ${input.contactPhone}`
-        : `Lead quente atribuído a você — ${input.contactPhone}`;
-
-    // Texto puro e curto: é aviso operacional para o time, não peça de marketing.
-    // Sem link de descadastro de propósito — sendAlertEmail existe para isto.
-    const corpo =
-      `${kind === 'human_request' ? 'O cliente pediu para falar com uma pessoa.' : `Lead quente (score ${input.leadScore ?? '-'}).`}\n\n` +
-      `Contato: ${input.contactPhone}\n` +
-      (input.summary ? `Resumo: ${input.summary}\n` : '') +
-      `\n${this.attendLine(input.conversationId)}\n\n` +
-      'Responder a este e-mail NÃO fala com o cliente — o atendimento é pelo inbox.';
-
-    try {
-      await this.emailReply.sendAlertEmail(para, assunto, corpo, input.tenantId ?? 'default');
-      this.logger.log(`Handoff → ${seller.name}: aviso por e-mail para ${para}`);
-    } catch (e: any) {
-      this.logger.warn(`Handoff → ${seller.name}: falha ao avisar por e-mail (${para}): ${e?.message}`);
-    }
+    input: { conversationId: string; contactPhone: string; summary?: string; leadScore?: number },
+    tenantId: string,
+  ): void {
+    this.events.emit('seller.handoff', {
+      tenantId,
+      sellerName: seller.name,
+      sellerEmail: seller.email ?? null,
+      kind,
+      conversationId: input.conversationId,
+      contactPhone: input.contactPhone,
+      summary: input.summary,
+      leadScore: input.leadScore,
+      attendLine: this.attendLine(input.conversationId),
+    });
   }
 
   /** ADR 034: default true (comportamento pré-ADR) quando o campo ainda não existe no client/banco. */

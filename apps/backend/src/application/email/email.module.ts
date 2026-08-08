@@ -9,6 +9,7 @@ import { SupportEscalationListener } from './support-escalation.listener';
 import { EmailOutboundListener } from './email-outbound.listener';
 import { EmailBounceService } from './email-bounce.service';
 import { CampaignReplyLinker } from './campaign-reply-linker';
+import { SellerHandoffListener } from './seller-handoff.listener';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
@@ -32,6 +33,7 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     EmailOutboundListener,     // entrega SMTP das mensagens de saída do canal e-mail
     EmailBounceService,        // devolução/DSN e resposta automática nunca chegam à Lia
     CampaignReplyLinker,       // liga a resposta ao disparo por Message-ID (troca de endereço)
+    SellerHandoffListener,     // aviso por e-mail do lead atribuído (via evento — sem ciclo de módulo)
   ],
   exports: [EmailReplyService, EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
 })

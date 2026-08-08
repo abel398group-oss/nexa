@@ -32,10 +32,30 @@ interface Normalized {
 
 const RATE_LIMIT_MS = Number(process.env.INBOUND_RATE_LIMIT_MS ?? 12000); // anti-resposta-dupla (G2)
 
+// Agrupamento de mensagens seguidas (2026-08-08). Até aqui, a 2ª e a 3ª mensagem
+// dentro da janela do rate-limit eram GRAVADAS no banco e nunca chegavam à IA: o
+// lead escrevia "oi" / "quero saber o preço" / "tenho 8 caminhões" e a Lia
+// respondia só ao "oi". O conteúdo que qualificava o lead morria no log.
+// Agora elas entram num lote e, quando o lead para de digitar, viram UMA chamada
+// de IA com o texto completo — mesmo custo de antes, sem perder a mensagem.
+const BATCH_QUIET_MS = Number(process.env.INBOUND_BATCH_QUIET_MS ?? 6000);
+// Tetos defensivos: um número em flood não pode crescer o lote sem limite nem
+// montar um prompt gigante.
+const BATCH_MAX_MSGS = 10;
+const BATCH_MAX_CHARS = 4000;
+
+interface PendingBatch {
+  texts: string[];
+  timer: ReturnType<typeof setTimeout>;
+  tenantId: string;
+  conversationId: string;
+}
+
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger('WhatsApp');
   private lastProcessed = new Map<string, number>(); // phone → timestamp
+  private pending = new Map<string, PendingBatch>(); // phone → mensagens aguardando o lote
 
   constructor(
     private readonly prisma: PrismaService,
@@ -470,7 +490,15 @@ export class WhatsappService {
           `autoSent=${agentResult?.autoSent}${agentResult?.blockedReason ? ` BLOQUEIO="${agentResult.blockedReason}"` : ''}`,
       );
     } else if (rateLimited) {
-      this.logger.warn(`Rate-limit: ${n.phone} (msg guardada, SEM resposta da IA — última há <${RATE_LIMIT_MS / 1000}s)`);
+      // G2 + agrupamento: a mensagem NÃO é mais descartada. Entra no lote e a Lia
+      // responde tudo junto quando o lead parar de digitar. Com a autonomia OFF o
+      // comportamento antigo continua (guardar sem responder) — quem escala nesse
+      // caso é o ramo `escalateOnly` abaixo, e ele já rodou na 1ª mensagem.
+      if (this.autonomy.isEnabled('whatsapp')) {
+        this.bufferInbound(n.phone, tenantId, conv.id, n.text);
+      } else {
+        this.logger.warn(`Rate-limit: ${n.phone} (autonomia OFF — msg guardada, SEM resposta da IA)`);
+      }
     } else if (!this.autonomy.isEnabled('whatsapp')) {
       // IA-3 (complemento): a Lia não responde com a autonomia OFF, mas ainda escala leads
       // quentes / pedidos de humano pro vendedor. Marca lastProcessed p/ aplicar o rate-limit.
@@ -491,5 +519,75 @@ export class WhatsappService {
       autoReplied: agentResult?.autoSent ?? false,
       agent: agentResult?.route?.agent,
     };
+  }
+
+  /**
+   * Guarda uma mensagem que chegou dentro da janela do rate-limit e (re)arma o
+   * disparo do lote. Cada mensagem nova adia o disparo em BATCH_QUIET_MS — o
+   * efeito é "espera o lead terminar de digitar".
+   *
+   * A 1ª mensagem NÃO passa por aqui: continua sendo respondida na hora, como
+   * sempre foi. O agrupamento vale só para as seguintes, que hoje se perdiam.
+   */
+  private bufferInbound(phone: string, tenantId: string, conversationId: string, text: string) {
+    const cur = this.pending.get(phone);
+    if (cur) clearTimeout(cur.timer);
+
+    const texts = cur?.texts ?? [];
+    const totalChars = texts.reduce((n, t) => n + t.length, 0);
+    if (texts.length < BATCH_MAX_MSGS && totalChars + text.length <= BATCH_MAX_CHARS) {
+      texts.push(text);
+    } else {
+      // Descarte explícito e logado — nunca silencioso (regra do CLAUDE.md).
+      this.logger.warn(
+        `Agrupamento: teto atingido p/ ${phone} (${texts.length} msgs, ${totalChars} chars) — mensagem fora do lote`,
+      );
+    }
+
+    const timer = setTimeout(() => {
+      this.flushPending(phone).catch((e) =>
+        this.logger.error(`Agrupamento: falha ao processar lote de ${phone} — ${e?.message}`),
+      );
+    }, BATCH_QUIET_MS);
+
+    // conversationId sempre o mais recente: uma reabertura no meio do lote pode
+    // ter trocado a conversa, e responder na antiga deixaria o inbox inconsistente.
+    this.pending.set(phone, { texts, timer, tenantId, conversationId });
+    this.logger.log(
+      `Agrupamento: msg de ${phone} entrou no lote (${texts.length} acumulada(s), disparo em ~${BATCH_QUIET_MS / 1000}s)`,
+    );
+  }
+
+  /**
+   * Dispara o lote como UMA chamada de IA. As mensagens já estão gravadas, então
+   * o histórico do prompt as enxerga individualmente; o texto juntado vai como
+   * "mensagem de agora" para a Lia responder a todas de uma vez.
+   */
+  private async flushPending(phone: string) {
+    const entry = this.pending.get(phone);
+    this.pending.delete(phone);
+    if (!entry || entry.texts.length === 0) return;
+
+    // A autonomia pode ter sido desligada durante a espera — nesse caso a Lia
+    // não responde, mesmo com o lote pronto.
+    if (!this.autonomy.isEnabled('whatsapp')) {
+      this.logger.warn(
+        `Agrupamento: autonomia OFF no disparo de ${phone} — ${entry.texts.length} msg(s) sem resposta`,
+      );
+      return;
+    }
+
+    // Reinicia a janela do rate-limit a partir do disparo (e não da 1ª mensagem),
+    // senão o lote responderia e logo em seguida uma msg nova abriria outro ciclo.
+    this.lastProcessed.set(phone, Date.now());
+    setTimeout(() => this.lastProcessed.delete(phone), RATE_LIMIT_MS + 1000);
+
+    const message = entry.texts.join('\n');
+    const result = await this.agent.handle(entry.tenantId, { message, conversationId: entry.conversationId });
+    this.logger.log(
+      `Agrupamento: ${entry.texts.length} msg(s) de ${phone} respondidas juntas — ` +
+        `agente=${result?.route?.agent} score=${result?.route?.leadScore} autoSent=${result?.autoSent}` +
+        `${result?.blockedReason ? ` BLOQUEIO="${result.blockedReason}"` : ''}`,
+    );
   }
 }

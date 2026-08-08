@@ -39,6 +39,13 @@ export class AnthropicService {
   // Concurrency gate (AI_MAX_CONCURRENCY): in-memory semaphore, no external dep.
   private active = 0;
   private readonly queue: Array<() => void> = [];
+  // Observabilidade da fila (2026-08-08): com muitos leads simultâneos o teto de
+  // concorrência vira o gargalo real de latência, e antes disso não aparecia em
+  // lugar nenhum — "a Lia está lenta" ficava indistinguível de "a Anthropic está
+  // lenta". Cada mensagem do lead consome ~3 slots (roteador + vendedora +
+  // supervisora), então o teto satura bem antes do número de leads sugerir.
+  private peakQueued = 0;
+  private lastQueueWarnAt = 0;
 
   get configured(): boolean {
     const k = process.env.ANTHROPIC_API_KEY;
