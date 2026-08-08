@@ -1186,3 +1186,83 @@ model SupportEmailRoute {
   @@index([tenantId])
   @@map("support_email_routes")
 }
+
+// ── Analytics de audiência do site (FASE 1) ──────────────────────────────────
+//
+// Medição de visitas das páginas PÚBLICAS do site do produto. Mora no Nexa porque
+// lead é domínio dele e é ele que tem canal de WhatsApp para o resumo diário.
+//
+// Quem coleta é o navegador do visitante, no domínio do produto — o Nexa recebe,
+// higieniza e agrega. Volume esperado: milhares de pageviews/mês. Postgres puro
+// resolve; sem fila e sem time-series.
+
+/// Site rastreado. A `key` é PÚBLICA (vai no bundle do frontend do produto) e
+/// serve para IDENTIFICAR, nunca para autenticar: se vazar, o pior cenário é
+/// alguém poluir estatística de visita. Por isso ela não dá acesso a mais nada, e
+/// `domain` é conferido contra o header Origin no ingest.
+model Website {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  /// UUID público usado pelo frontend do produto no POST de pageview.
+  key       String   @unique
+  /// Domínio autorizado, ex. "hipertms.com.br". Confere o Origin da requisição.
+  domain    String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("websites")
+}
+
+/// Um pageview. NUNCA guarda IP cru nem identificador persistente de navegador —
+/// só o `visitorHash`, que é sha256(salt do dia + ip + userAgent). O salt trocando
+/// todo dia é o que faz o hash deixar de ser dado pessoal sob a LGPD e dispensa
+/// banner de consentimento.
+///
+/// LIMITE QUE ISSO IMPÕE, e é de propósito: o hash não atravessa a meia-noite.
+/// "Visitantes únicos" num período de 30 dias é a SOMA dos únicos diários, não
+/// gente distinta — e atribuição de campanha só fecha dentro do mesmo dia. Quem
+/// ler estes dados (ou montar o painel) precisa saber disso.
+model PageView {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  websiteKey     String   @map("website_key")
+  /// Caminho sem query string, ex. "/signup".
+  path           String
+  /// Query já reduzida à allowlist (utm_*, ref, gclid, fbclid). Nunca a original:
+  /// telas como /reset-password?token=… carregam segredo de uso único na URL, e
+  /// gravar isso aqui daria troca de senha a quem tem leitura do painel.
+  query          String?
+  title          String?
+  referrerDomain String?  @map("referrer_domain")
+  utmSource      String?  @map("utm_source")
+  utmMedium      String?  @map("utm_medium")
+  utmCampaign    String?  @map("utm_campaign")
+  utmTerm        String?  @map("utm_term")
+  utmContent     String?  @map("utm_content")
+  /// gclid / fbclid / ref — identificador de clique pago, sem dado pessoal.
+  clickId        String?  @map("click_id")
+  visitorHash    String   @map("visitor_hash")
+  /// Nulo na Fase 1: derivar país exige base GeoIP, e a dependência não foi
+  /// decidida. A coluna existe para não precisar de migration depois.
+  country        String?
+  region         String?
+  browser        String?
+  os             String?
+  /// mobile | tablet | desktop — decide onde investir em layout.
+  device         String?
+  language       String?
+  screen         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  /// Série diária e recortes por período — a query mais quente do painel.
+  @@index([tenantId, createdAt])
+  /// Contagem de visitante único por dia.
+  @@index([tenantId, visitorHash, createdAt])
+  /// Top origens e, na Fase 2, atribuição por campanha.
+  @@index([tenantId, utmCampaign, createdAt])
+  /// Top páginas.
+  @@index([tenantId, path, createdAt])
+  @@map("page_views")
+}

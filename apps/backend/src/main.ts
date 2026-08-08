@@ -51,6 +51,25 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 
   app.useLogger(app.get(Logger));
+
+  // ── IP real do cliente atrás do reverse proxy ───────────────────────────────
+  //
+  // Em produção o backend escuta em 127.0.0.1 e é alcançado pelo reverse proxy do
+  // host (ver docker-compose.production.yml). Sem `trust proxy`, `req.ip` é sempre o
+  // IP do proxy — o mesmo para todo mundo. Consequências reais disso:
+  //
+  //   • o rate limit global "100 req/min por IP" contava TODAS as requisições juntas,
+  //     ou seja, a proteção era muito mais fraca do que aparentava;
+  //   • no analytics do site, `visitorHash` = sha256(salt + ip + userAgent) colapsaria
+  //     todos os visitantes de um mesmo navegador num único "visitante".
+  //
+  // `TRUST_PROXY` controla quantos hops confiar (default 1 = o proxy imediato).
+  // Confiar em X-Forwarded-For SÓ é seguro se o proxy sobrescrever/adicionar o header;
+  // se ele repassar o que o cliente mandou, o IP passa a ser falsificável e o limite
+  // vira decorativo. Por isso é configurável: `TRUST_PROXY=0` desliga em ambiente sem
+  // proxy na frente.
+  const trustProxy = Number(process.env.TRUST_PROXY ?? 1);
+  if (trustProxy > 0) app.set('trust proxy', trustProxy);
   // headers de segurança (E1). CSP off p/ não quebrar o Swagger UI (/api/docs) — mantém HSTS/X-Frame/nosniff
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());

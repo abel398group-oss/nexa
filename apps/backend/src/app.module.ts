@@ -38,6 +38,7 @@ import { HandoffModule } from './application/handoff/handoff.module';
 import { EmailModule } from './application/email/email.module';
 import { ProactiveEngineModule } from './application/proactive-engine/proactive-engine.module';
 import { IntegrationsModule } from './application/integrations/integrations.module';
+import { AnalyticsModule } from './application/analytics/analytics.module';
 import { CorrelationIdMiddleware } from './shared/middleware/correlation-id.middleware';
 import { HealthController } from './presentation/http/health/health.controller';
 
@@ -82,6 +83,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     NotificationsModule,
     HandoffModule,
     EmailModule,
+    AnalyticsModule,
     AdminModule,
     PortalModule,
     OpportunitiesModule,
