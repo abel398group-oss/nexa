@@ -73,6 +73,16 @@ export async function retryFailedTargets(id: string): Promise<{ requeued: number
   return r.data;
 }
 
+/**
+ * Reenvio TOTAL — recoloca na fila TODOS os alvos, inclusive os já enviados.
+ * Ferramenta de teste: o servidor responde 403 quando CAMPAIGN_RESEND_ALL_ENABLED
+ * está desligado (o padrão), então a rota nunca fica exposta em produção por engano.
+ */
+export async function resendAllTargets(id: string): Promise<{ requeued: number; status: string }> {
+  const r = await api.post(`/campaigns/${id}/resend-all`);
+  return r.data;
+}
+
 export async function deleteCampaign(id: string): Promise<void> {
   await api.delete(`/campaigns/${id}`);
 }

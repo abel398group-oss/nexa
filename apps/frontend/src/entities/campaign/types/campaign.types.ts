@@ -65,6 +65,12 @@ export interface SenderSettings {
   waEndHour: number;
   emailStartHour: number;
   emailEndHour: number;
+  /**
+   * O AMBIENTE permite reenvio total de campanha (inclui quem já recebeu).
+   * Somente leitura — não é config de tenant, vem de CAMPAIGN_RESEND_ALL_ENABLED
+   * no servidor. Ferramenta de teste; desligada em produção.
+   */
+  resendAllEnabled?: boolean;
 }
 
 // Mídia hospedada (retorno de /campaigns/upload).

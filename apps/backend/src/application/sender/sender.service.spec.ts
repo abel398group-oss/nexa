@@ -536,6 +536,80 @@ describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
   });
 });
 
+// ── Reenvio TOTAL (ferramenta de teste, 2026-08-08) ─────────────────────────
+// Abel pediu um botão para reenviar a campanha inteira durante os testes de
+// entregabilidade ("depois desativamos"). Dois riscos justificam estes testes:
+//   1. a rota vazar para produção — por isso o interruptor é DESLIGADO por padrão;
+//   2. o requeue cego alcançar quem nunca pode receber. O worker reavalia opt-out
+//      no disparo, mas NÃO reavalia blocklist nem concorrente: sem o filtro, um
+//      clique aqui mandaria e-mail comercial para @bsoft.com.br.
+describe('SenderService.resendAll — reenvio total atrás de interruptor', () => {
+  const makeSvc = (prisma: any) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any,
+      { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
+
+  const makePrisma = (status = 'done') => ({
+    campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status }), update: vi.fn() },
+    campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 5 }) },
+  }) as any;
+
+  afterEach(() => { delete process.env.CAMPAIGN_RESEND_ALL_ENABLED; });
+
+  it('recusa quando o ambiente não liberou (padrão)', async () => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).resendAll('t1', 'c1')).rejects.toThrow(/CAMPAIGN_RESEND_ALL_ENABLED/);
+    // e nada é tocado no banco
+    expect(prisma.campaignTarget.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('NÃO recoloca opt-out, blocklist, concorrente nem cliente TMS', async () => {
+    process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
+    const prisma = makePrisma();
+
+    await makeSvc(prisma).resendAll('t1', 'c1');
+
+    const { where } = prisma.campaignTarget.updateMany.mock.calls[0][0];
+    expect(where.NOT.status).toBe('skipped');
+    expect(where.NOT.error.in).toEqual(
+      expect.arrayContaining(['bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente']),
+    );
+    // ...mas 'ja_enviado' PODE voltar — é justamente o que travava o teste
+    expect(where.NOT.error.in).not.toContain('ja_enviado');
+  });
+
+  it('recoloca os já enviados (é o ponto do botão) e limpa sentAt', async () => {
+    process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
+    const prisma = makePrisma();
+
+    const out = await makeSvc(prisma).resendAll('t1', 'c1');
+
+    expect(out).toMatchObject({ requeued: 5, status: 'running' });
+    const call = prisma.campaignTarget.updateMany.mock.calls[0][0];
+    expect(call.where).toMatchObject({ campaignId: 'c1', tenantId: 't1' });
+    expect(call.where.status).toBeUndefined(); // não filtra por status: 'sent' também volta
+    expect(call.data).toMatchObject({ status: 'queued', error: null, sentAt: null });
+  });
+
+  it('campanha pausada continua pausada (pausa é decisão do operador)', async () => {
+    process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
+    const prisma = makePrisma('paused');
+
+    const out = await makeSvc(prisma).resendAll('t1', 'c1');
+
+    expect(out.status).toBe('paused');
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+
+  it('respeita o tenant (não alcança campanha de outro)', async () => {
+    process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
+    const prisma = makePrisma();
+    prisma.campaign.findFirst = vi.fn().mockResolvedValue(null);
+
+    await expect(makeSvc(prisma).resendAll('t1', 'c1')).rejects.toThrow(/não encontrada/);
+    expect(prisma.campaignTarget.updateMany).not.toHaveBeenCalled();
+  });
+});
+
 // ── DISP-019: reagendamento ─────────────────────────────────────────────────
 describe('SenderService.updateCampaign — reagendar', () => {
   const makeSvc = (prisma: any) =>

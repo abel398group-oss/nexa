@@ -202,6 +202,14 @@ export class SenderController {
     return this.sender.retryFailed(tenantId, id);
   }
 
+  // Reenvio TOTAL — inclui quem já recebeu. Ferramenta de teste, atrás de
+  // CAMPAIGN_RESEND_ALL_ENABLED (desligado por padrão). Ver SenderService.resendAll:
+  // reenviar a mesma mensagem para quem já recebeu queima a reputação do domínio.
+  @Post('campaigns/:id/resend-all')
+  resendAll(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sender.resendAll(tenantId, id);
+  }
+
   @Delete('campaigns/:id/targets/:targetId')
   removeTarget(
     @CurrentTenant() tenantId: string,

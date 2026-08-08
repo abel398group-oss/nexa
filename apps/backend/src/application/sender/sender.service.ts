@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
 import { createRedisClient } from '@/shared/redis/redis.factory';
@@ -712,6 +712,68 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return { requeued: r.count, status: resumed ? 'running' : campaign.status };
   }
 
+  /**
+   * Recoloca na fila os alvos da campanha, INCLUSIVE os já enviados.
+   *
+   * Existe para TESTE, e por isso vive atrás de `CAMPAIGN_RESEND_ALL_ENABLED`,
+   * desligado por padrão. Não é o "desativamos depois" ficando pendente numa lista:
+   * o padrão já é desligado, então produção nasce protegida e ligar é uma escolha
+   * consciente por ambiente.
+   *
+   * O motivo do interruptor: reenviar a MESMA mensagem para quem já recebeu é um dos
+   * sinais mais fortes de spam que existe. Um clique aqui duplica a base inteira e
+   * queima a reputação do domínio — que é o ativo mais caro de reconstruir. Para
+   * falar de novo com a mesma base, o caminho é Clonar a campanha e mudar o texto:
+   * segundo toque com mensagem diferente é cadência, com a mesma é spam.
+   */
+  async resendAll(tenantId: string, id: string) {
+    if ((process.env.CAMPAIGN_RESEND_ALL_ENABLED ?? 'false').toLowerCase() !== 'true') {
+      throw new ForbiddenException(
+        'Reenvio total está desligado neste ambiente (CAMPAIGN_RESEND_ALL_ENABLED).',
+      );
+    }
+
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id, tenantId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    // "Todos" NÃO inclui as exclusões deliberadas. Voltam para a fila os enviados,
+    // os que falharam e os pulados por `ja_enviado` (o dedup entre campanhas, que é
+    // justamente o que atrapalha o teste). Ficam de fora opt-out, blocklist,
+    // concorrente e cliente TMS.
+    //
+    // Isto não é excesso de zelo: o worker reavalia opt-out no disparo, mas NÃO
+    // reavalia blocklist nem concorrente. Requeue cego mandaria e-mail comercial
+    // para @bsoft.com.br — o único destinatário que nunca pode receber.
+    const EXCLUSAO_DELIBERADA = ['bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente'];
+    const r = await this.prisma.campaignTarget.updateMany({
+      where: {
+        campaignId: id,
+        tenantId,
+        NOT: { status: 'skipped', error: { in: EXCLUSAO_DELIBERADA } },
+      },
+      data: { status: 'queued', error: null, sentAt: null },
+    });
+
+    // Só `done` volta a rodar. `paused` é decisão explícita do operador e é
+    // preservada (mesma regra do retryFailed) — a tela avisa para clicar em Iniciar.
+    const resumed = campaign.status === 'done';
+    if (resumed) {
+      await this.prisma.campaign.update({
+        where: { id },
+        data: { status: 'running', startedAt: new Date() },
+      });
+    }
+
+    this.logger.warn(
+      `REENVIO TOTAL: ${r.count} alvo(s) de volta à fila na campanha "${campaign.name}" — ` +
+      'inclui quem já havia recebido. Ver CAMPAIGN_RESEND_ALL_ENABLED.',
+    );
+    return { requeued: r.count, status: resumed ? 'running' : campaign.status };
+  }
+
   async removeTarget(tenantId: string, campaignId: string, targetId: string) {
     // Only allow removal from draft campaigns to avoid inconsistencies mid-send.
     const campaign = await this.prisma.campaign.findFirst({ where: { id: campaignId, tenantId }, select: { status: true } });
@@ -754,6 +816,11 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       waEndHour: s?.waEndHour ?? BUSINESS_END,
       emailStartHour: s?.emailStartHour ?? Number(process.env.SENDER_EMAIL_BUSINESS_START ?? 8),
       emailEndHour: s?.emailEndHour ?? Number(process.env.SENDER_EMAIL_BUSINESS_END ?? 18),
+      // Somente LEITURA, e não é configuração de tenant: diz se o ambiente permite
+      // reenvio total (ver resendAll). Vai junto daqui porque é o objeto que a tela
+      // de Disparo já busca — evita uma rota nova só para um booleano, e a tela pode
+      // esconder um botão que o servidor recusaria de qualquer forma.
+      resendAllEnabled: (process.env.CAMPAIGN_RESEND_ALL_ENABLED ?? 'false').toLowerCase() === 'true',
     };
   }
 

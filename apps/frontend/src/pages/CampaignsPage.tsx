@@ -16,6 +16,7 @@ import {
   startCampaign,
   pauseCampaign,
   retryFailedTargets,
+  resendAllTargets,
   deleteCampaign,
   removeCampaignTarget,
   bulkDeleteCampaigns,
@@ -654,6 +655,46 @@ export function CampaignsPage() {
     }
   }
 
+  /**
+   * Reenvio TOTAL — recoloca na fila TODOS os alvos, inclusive quem já recebeu.
+   *
+   * Ferramenta de TESTE. O botão só aparece quando o ambiente libera
+   * (`settings.resendAllEnabled` ← `CAMPAIGN_RESEND_ALL_ENABLED` no servidor) e o
+   * servidor recusa com 403 quando desligado — desativar depois não exige deploy
+   * de código, só tirar a variável.
+   *
+   * A confirmação diz o número e o custo em vez de só perguntar "tem certeza?":
+   * mandar a MESMA mensagem de novo para quem já recebeu é um dos sinais mais
+   * fortes de spam, e quem clica precisa saber que o preço é a entregabilidade do
+   * domínio — não é uma ação como as outras da tela.
+   */
+  async function resendAll(c: any) {
+    const counts = (c?.counts ?? {}) as Record<string, number>;
+    const total = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
+    const ok = await confirm({
+      title: 'Reenviar para TODOS?',
+      message:
+        `Isto recoloca ${total} destinatário(s) na fila, incluindo quem já recebeu esta campanha. ` +
+        'Repetir a mesma mensagem para a mesma pessoa é um dos sinais mais fortes de spam e derruba ' +
+        'a entrega do domínio inteiro. Para falar de novo com esta base, prefira Clonar e mudar o texto.',
+      confirmLabel: 'Reenviar para todos',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      const r = await resendAllTargets(c.id);
+      toast.success(
+        `${r.requeued} destinatário(s) de volta à fila.` +
+        (r.status === 'paused' ? ' A campanha está pausada — clique em Iniciar para disparar.' : ''),
+      );
+      await load();
+      const d = await getCampaign(c.id);
+      setExpandedDataMap((prev) => (prev[c.id] ? { ...prev, [c.id]: d } : prev));
+    } catch {
+      toast.error('Erro ao reenviar. O reenvio total pode estar desligado neste ambiente.');
+    }
+  }
+
   // Clonar: pré-preenche o form de Nova campanha com nome/mensagem/canal (cria nova).
   function cloneCampaign(c: any) {
     resetForm();
@@ -1195,6 +1236,12 @@ export function CampaignsPage() {
                     {(exData?.counts?.failed ?? 0) > 0 && (
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); void resendFailed(c.id); }}>
                         <Icon name="refresh" className="h-4 w-4" /> Reenviar falhas
+                      </Button>
+                    )}
+                    {/* Reenvio total: só existe quando o ambiente libera (ver resendAll). */}
+                    {settings?.resendAllEnabled && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); void resendAll({ id: c.id, counts: exData?.counts ?? c.counts }); }}>
+                        <Icon name="refresh" className="h-4 w-4" /> Reenviar para todos
                       </Button>
                     )}
                     {/* campo de pesquisa */}
