@@ -36,6 +36,8 @@ import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/com
 // canais, sem duplicar. Import só de estáticos: não entra no grafo de DI.
 import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
+import { dedupSentAtFilter, dedupWindowLabel } from '@/application/sender/campaign-dedup';
+import { normalizarMessageId } from './campaign-reply-linker';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 
 // ── Config anti-spam ────────────────────────────────────────────
@@ -235,10 +237,17 @@ export class EmailCampaignSenderService {
 
     // Dedup ENTRE campanhas (paridade com WhatsApp): quem já recebeu e-mail
     // 'sent' em qualquer campanha anterior do tenant não recebe de novo.
+    // Janela opcional via CAMPAIGN_DEDUP_DAYS — ver campaign-dedup.ts.
+    const janelaDedup = dedupSentAtFilter();
     let alreadySent = new Set<string>();
     if (targets.length) {
       const prior = await this.prisma.campaignTarget.findMany({
-        where: { tenantId, status: 'sent', email: { in: targets.map((t) => t.email) } },
+        where: {
+          tenantId,
+          status: 'sent',
+          email: { in: targets.map((t) => t.email) },
+          ...(janelaDedup ? { sentAt: janelaDedup } : {}),
+        },
         select: { email: true },
         distinct: ['email'],
       });
@@ -246,6 +255,14 @@ export class EmailCampaignSenderService {
     }
     const dupList = targets.filter((t) => alreadySent.has(t.email.toLowerCase()));
     targets = targets.filter((t) => !alreadySent.has(t.email.toLowerCase()));
+    if (dupList.length) {
+      // Este log é a resposta para "criei a campanha e não saiu nada": sem ele, o
+      // operador vê 200 alvos virarem 0 enviados e conclui que o disparo travou.
+      this.logger.log(
+        `Campanha "${dto.name}": ${dupList.length} e-mail(s) já receberam campanha anterior — ` +
+        `pulados (ja_enviado, janela: ${dedupWindowLabel()})`,
+      );
+    }
 
     const skippedRows = [
       ...blockedList.map((t) => ({ status: 'skipped', error: 'bloqueado', t })),
@@ -460,9 +477,20 @@ export class EmailCampaignSenderService {
             this.logger.warn(`Falha ao registrar e-mail da campanha na conversa (${target.email}): ${e?.message}`),
           );
 
+          // O Message-ID vai junto: é o que permite reconhecer a resposta quando o
+          // lead responde de OUTRO endereço (ver CampaignReplyLinker). Sem ele, essa
+          // resposta virava conversa nova e o alvo ficava "sem resposta" para sempre.
+          //
+          // Gravado na forma CANÔNICA (sem `<>`): o nodemailer devolve com os sinais e
+          // o linker compara sem eles. Guardar cru faria o casamento nunca acontecer —
+          // recurso inteiro virando no-op silencioso.
           await this.prisma.campaignTarget.update({
             where: { id: target.id },
-            data: { status: 'sent', sentAt: new Date() },
+            data: {
+              status: 'sent',
+              sentAt: new Date(),
+              messageId: normalizarMessageId(result.messageId),
+            },
           });
           this.sentTodayCount++;
           this.lastSentAt = Date.now();

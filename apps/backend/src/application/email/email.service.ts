@@ -20,6 +20,7 @@ import { stripQuotedReply } from '@/shared/ai/untrusted-input';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { EmailReplyService } from './email-reply.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
+import { CampaignReplyLinker } from './campaign-reply-linker';
 
 // E-mail normalizado extraído do webhook Mailgun
 export interface NormalizedEmail {
@@ -29,6 +30,9 @@ export interface NormalizedEmail {
   bodyText: string;       // texto puro (sem HTML)
   spfOk: boolean;
   dkimOk: boolean;
+  /** Thread RFC 5322 — liga a resposta ao disparo. Ver CampaignReplyLinker. */
+  inReplyTo?: string;
+  references?: string;
 }
 
 // Converte "Nome <email@ex.com>" → "email@ex.com"
@@ -67,6 +71,7 @@ export class EmailService {
     private readonly notifications: NotificationsService,
     private readonly emailReply: EmailReplyService,
     private readonly autonomy: AutonomyService,
+    private readonly replyLinker: CampaignReplyLinker,
   ) {}
 
   /** Normaliza o payload Mailgun (form-encoded) para uma estrutura limpa. */
@@ -89,6 +94,8 @@ export class EmailService {
       bodyText,
       spfOk,
       dkimOk,
+      inReplyTo: body['In-Reply-To'] ?? body['in-reply-to'],
+      references: body['References'] ?? body['references'],
     };
   }
 
@@ -179,11 +186,34 @@ export class EmailService {
       conv = { ...conv, status: 'open' as any, endedAt: null };
     }
 
+    // 3.1) Esta resposta veio de uma campanha? O casamento é por Message-ID, então
+    //      funciona mesmo quando o lead responde de um endereço diferente do que
+    //      recebeu o disparo — caso em que a conversa acima é NOVA e, sem isto, a
+    //      campanha exibiria "0 respostas" para sempre. Ver CampaignReplyLinker
+    //      (inclusive por que a identidade NÃO é fundida).
+    const campanha = await this.replyLinker.link(tenantId, n.fromAddress, {
+      inReplyTo: n.inReplyTo,
+      references: n.references,
+    });
+
     // 4) Grava mensagem inbound
     await this.conversations.addMessage(tenantId, conv.id, {
       direction: 'inbound',
       content: n.bodyText,
-      metadata: { channel: 'email', subject: n.subject, from: n.from },
+      metadata: {
+        channel: 'email',
+        subject: n.subject,
+        from: n.from,
+        // Contexto do disparo: o analista precisa saber o que foi perguntado antes
+        // desta resposta, e quando ela chega de outro endereço não há como deduzir.
+        ...(campanha
+          ? {
+              campaignId: campanha.campaignId,
+              campaignName: campanha.campaignName,
+              ...(campanha.enderecoDiferente ? { respostaDeOutroEndereco: campanha.targetEmail } : {}),
+            }
+          : {}),
+      },
     });
 
     // 5) Autonomia por canal (ADR 012): só responde sozinha se a Lia do E-MAIL

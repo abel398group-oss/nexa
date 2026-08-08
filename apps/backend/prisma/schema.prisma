@@ -684,8 +684,19 @@ model CampaignTarget {
   error      String?
   createdAt  DateTime  @default(now()) @map("created_at")
 
+  // Message-ID SMTP do e-mail que saiu para este alvo (canal email).
+  // Existe para reconhecer a resposta quando o lead responde de OUTRO endereço:
+  // a conversa é indexada pelo remetente, então uma resposta vinda de um endereço
+  // diferente do que recebeu virava conversa nova e a campanha ficava "0 respostas"
+  // para sempre. O In-Reply-To da resposta aponta para cá. Ver CampaignReplyLinker.
+  messageId  String?   @map("message_id")
+  // Quando a resposta a este envio foi reconhecida (por In-Reply-To/References).
+  repliedAt  DateTime? @map("replied_at")
+
   @@index([campaignId])
   @@index([status])
+  // Busca do linker: um lookup por Message-ID a cada e-mail inbound.
+  @@index([tenantId, messageId])
   // DISP-005: query mais quente do worker — próximo alvo de UMA campanha, por
   // status, na ordem de criação. Os dois índices acima resolviam só metade dela.
   @@index([campaignId, status, createdAt])

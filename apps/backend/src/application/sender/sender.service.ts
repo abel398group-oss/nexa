@@ -14,6 +14,7 @@ import { looksLikeCompetitor } from './competitor-names.const';
 import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
 import { spin, spinVariants } from './spintax';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
+import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 
 // Config anti-ban (env com defaults)
@@ -180,14 +181,22 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         COUNT(*) FILTER (WHERE t.status = 'sent')   AS sent,
         COUNT(*) FILTER (WHERE t.status = 'failed') AS failed,
         COUNT(*) FILTER (
-          WHERE t.status = 'sent' AND EXISTS (
-            SELECT 1
-              FROM ai_messages m
-              JOIN ai_conversations c ON c.id = m.conversation_id
-             WHERE c.tenant_id = t.tenant_id
-               AND c.phone = t.phone
-               AND m.direction = 'inbound'
-               AND m.created_at >= t.sent_at
+          WHERE t.status = 'sent' AND (
+            -- resposta na conversa do próprio alvo (caso normal)
+            EXISTS (
+              SELECT 1
+                FROM ai_messages m
+                JOIN ai_conversations c ON c.id = m.conversation_id
+               WHERE c.tenant_id = t.tenant_id
+                 AND c.phone = t.phone
+                 AND m.direction = 'inbound'
+                 AND m.created_at >= t.sent_at
+            )
+            -- ou resposta de e-mail vinda de OUTRO endereço, reconhecida pelo
+            -- Message-ID: a conversa é outra, com outro phone, e o EXISTS acima não
+            -- a vê. Sem esta perna, o freio de engajamento lê uma taxa de resposta
+            -- menor que a real e pode desativar um número saudável.
+            OR t.replied_at IS NOT NULL
           )
         ) AS replied
       FROM campaign_targets t
@@ -372,10 +381,19 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // Quem já tem envio 'sent' em QUALQUER campanha do tenant entra como
     // skipped/ja_enviado (visível no relatório, mesmo padrão do tms_cliente).
     // Só 'sent' bloqueia: failed/skipped/queued não contam como "já recebeu".
+    //
+    // A janela vem de CAMPAIGN_DEDUP_DAYS e por padrão não existe — bloqueio
+    // permanente, como sempre foi. Ver campaign-dedup.ts para o porquê do default.
+    const janelaDedup = dedupSentAtFilter();
     let alreadySent = new Set<string>();
     if (targets.length) {
       const prior = await this.prisma.campaignTarget.findMany({
-        where: { tenantId, status: 'sent', phone: { in: targets.map((t) => t.phone) } },
+        where: {
+          tenantId,
+          status: 'sent',
+          phone: { in: targets.map((t) => t.phone) },
+          ...(janelaDedup ? { sentAt: janelaDedup } : {}),
+        },
         select: { phone: true },
         distinct: ['phone'],
       });
@@ -385,7 +403,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     targets = targets.filter((t) => !alreadySent.has(t.phone));
     const skippedAlreadySent = dupBlocked.length;
     if (skippedAlreadySent > 0) {
-      this.logger.log(`Campanha "${dto.name}": ${skippedAlreadySent} lead(s) já receberam campanha anterior — pulados (ja_enviado)`);
+      // A janela vai no log: "por que 200 alvos viraram 3" é a pergunta que o
+      // operador faz, e sem a regra explícita ele culpa o disparo.
+      this.logger.log(
+        `Campanha "${dto.name}": ${skippedAlreadySent} lead(s) já receberam campanha anterior — ` +
+        `pulados (ja_enviado, janela: ${dedupWindowLabel()})`,
+      );
     }
 
     // ── Filtro TMS: consulta o lote no banco do HiperTMS (read-only) ──────────
@@ -600,14 +623,37 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // `repliedAt` no alvo é a segunda fonte de "respondeu", e cobre o caso que a
+    // primeira não vê: resposta de e-mail vinda de OUTRO endereço. Aí a conversa é
+    // nova, com outro `phone`, e o casamento por telefone acima não acha nada — o
+    // alvo só sabe que foi respondido porque o Message-ID casou na volta
+    // (ver CampaignReplyLinker).
     const enriched = targets.map((t: any) => {
       const e = engByPhone.get(t.phone);
-      return { ...t, ack: e?.ack ?? 0, replied: e?.replied ?? false };
+      const respondeu = (e?.replied ?? false) || !!t.repliedAt;
+      return { ...t, ack: e?.ack ?? 0, replied: respondeu };
     });
 
     // Quem RESPONDEU conta como entregue+lido (responder prova recebimento e
     // leitura) — evita o funil incoerente "3 responderam, 0 entregues" quando o
     // WAHA não manda os recibos de ack.
+    //
+    // O agregado parte de `engByPhone`, que é por conversa. Alvos com `repliedAt` e
+    // sem conversa própria entram como linha extra — senão o painel diria
+    // "0 responderam" com a linha do alvo marcada como respondida, incoerência que o
+    // operador leria como bug do painel.
+    //
+    // Query própria, e não um loop sobre `targets`: `targets` é PAGINADO (DISP-003) e
+    // o agregado não pode depender da página que está aberta.
+    const alvosComResposta = await this.prisma.campaignTarget.findMany({
+      where: { campaignId: id, tenantId, repliedAt: { not: null } },
+      select: { phone: true },
+    });
+    for (const t of alvosComResposta as any[]) {
+      const cur = engByPhone.get(t.phone);
+      if (!cur?.replied) engByPhone.set(t.phone, { ack: cur?.ack ?? 0, replied: true });
+    }
+
     const eng = [...engByPhone.values()];
     const engagement = {
       delivered: eng.filter((e) => e.ack >= 2 || e.replied).length,

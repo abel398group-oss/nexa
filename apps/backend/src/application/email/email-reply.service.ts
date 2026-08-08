@@ -128,7 +128,16 @@ export class EmailReplyService {
     };
   }
 
-  async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string }> {
+  /**
+   * Envia e devolve o Message-ID atribuído pelo SMTP.
+   *
+   * O `messageId` volta porque é a ÚNICA âncora que sobrevive a uma resposta vinda de
+   * outro endereço: o cliente de e-mail do lead copia esse valor no `In-Reply-To`.
+   * Quem dispara campanha guarda no alvo (ver CampaignTarget.messageId) para
+   * reconhecer a resposta depois. É informativo — nunca vem vazio em envio bem
+   * sucedido, mas quem consome trata `undefined` sem quebrar.
+   */
+  async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string; messageId?: string }> {
     const config = await this.resolveConfig(opts.tenantId);
 
     if (!config) {
@@ -198,7 +207,7 @@ export class EmailReplyService {
     });
 
     try {
-      await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: `"${config.fromName}" <${config.fromEmail}>`,
         to: opts.to,
         subject,
@@ -215,7 +224,7 @@ export class EmailReplyService {
       });
 
       this.logger.log(`E-mail enviado via SMTP para ${opts.to} (tenant=${opts.tenantId})`);
-      return { sent: true };
+      return { sent: true, messageId: info?.messageId };
     } catch (err: any) {
       this.logger.error(`Erro SMTP ao enviar para ${opts.to}: ${err?.message}`);
       return { sent: false, reason: `smtp_error: ${err?.message}` };

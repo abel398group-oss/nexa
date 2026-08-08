@@ -258,6 +258,17 @@ export class EmailImapService implements OnModuleInit {
               from: parsed.from?.text ?? fromAddress,
               subject,
               'stripped-text': bodyText,
+              // Thread da RFC 5322 §3.6.4 — é o que liga a resposta ao disparo mesmo
+              // quando ela vem de um endereço diferente do que recebeu a campanha.
+              // Ver CampaignReplyLinker. `references` pode vir como array no mailparser.
+              ...(parsed.inReplyTo ? { 'In-Reply-To': parsed.inReplyTo } : {}),
+              ...(parsed.references
+                ? {
+                    References: Array.isArray(parsed.references)
+                      ? parsed.references.join(' ')
+                      : String(parsed.references),
+                  }
+                : {}),
               // IMAP não tem SPF/DKIM automático — não forçamos fail (deixamos passar)
             };
 
