@@ -78,3 +78,20 @@ export interface CampaignMedia {
   url: string;
   name: string;
 }
+
+/** Contato que receberá a campanha de e-mail (pré-visualização). */
+export interface AudienceContact {
+  id: string;
+  name: string | null;
+  email: string | null;
+  company: string | null;
+  createdAt: string;
+}
+
+export interface EmailAudience {
+  items: AudienceContact[];
+  /** Total que casa com a BUSCA atual. */
+  total: number;
+  /** Total que realmente receberá (ignora a busca). */
+  totalAudiencia: number;
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "guidance": "Reposicione o custo como investimento da operação: o HiperTMS evita multa fiscal, retrabalho e erro de precificação. Mostre que ao precificar pelo custo real (consumo, manutenção, depreciação, margem) o sistema se paga ao evitar poucos fretes mal cotados por mês. Compare com o prejuízo de um CT-e errado.",
+    "objection": "Tá caro"
+  },
+  {
+    "guidance": "Pergunte o que falta no atual; destaque o diferencial (tudo integrado: fiscal + frota + financeiro + precificação por custo real) e que a migração é acompanhada.",
+    "objection": "Já uso outro sistema"
+  },
+  {
+    "guidance": "Não pressione; ofereça um próximo passo técnico de baixo compromisso (uma cotação demonstrando custos e margem de uma rota real) e pergunte qual a principal dúvida que ficou.",
+    "objection": "Vou pensar"
+  },
+  {
+    "guidance": "Tranquilize: é feito para a operação de transportadora; ofereça acompanhamento na implantação.",
+    "objection": "É difícil de usar?"
+  },
+  {
+    "guidance": "Ótimo sinal; ofereça material/uma call com os dois e pergunte o melhor momento.",
+    "objection": "Preciso falar com meu sócio/chefe"
+  }
+]

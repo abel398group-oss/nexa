@@ -7,6 +7,8 @@ export type {
   SenderNumber,
   SenderSettings,
   CampaignMedia,
+  AudienceContact,
+  EmailAudience,
 } from './types/campaign.types';
 
 export {
@@ -19,6 +21,7 @@ export {
   pauseCampaign,
   retryFailedTargets,
   resendAllTargets,
+  getEmailAudience,
   deleteCampaign,
   removeCampaignTarget,
   bulkDeleteCampaigns,

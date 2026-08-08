@@ -68,6 +68,14 @@ class UpdateCampaignDto {
   @IsOptional() @IsISO8601() scheduledAt?: string | null;
 }
 
+// REGRA 2: query param não declarado aqui é derrubado com 400 pelo
+// `forbidNonWhitelisted` global — foi o que já aconteceu no incidente do DISP-015.
+class AudienceQueryDto {
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
+}
+
 class SenderSettingsDto {
   @Type(() => Number) @IsInt() @Min(0) waStartHour!: number;
   @Type(() => Number) @IsInt() @Min(0) waEndHour!: number;
@@ -154,6 +162,19 @@ export class SenderController {
   @Patch('campaigns/:id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateCampaignDto) {
     return this.sender.updateCampaign(tenantId, id, dto);
+  }
+
+  // Quem receberia a campanha de e-mail "Contatos com e-mail", com busca.
+  // Antes o operador só via "disparado para todos os contatos ativos com e-mail" e
+  // criava a campanha sem saber para quem. Espelha o where do disparo — ver
+  // EmailCampaignSenderService.audienciaWhere.
+  @Get('campaigns/audience/email')
+  audienceEmail(@CurrentTenant() tenantId: string, @Query() q: AudienceQueryDto) {
+    return this.emailCampaign.previewAudienciaEmail(tenantId, {
+      search: q.search,
+      limit: q.limit,
+      offset: q.offset,
+    });
   }
 
   @Post('campaigns/email')

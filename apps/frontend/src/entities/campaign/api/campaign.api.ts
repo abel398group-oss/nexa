@@ -8,6 +8,7 @@ import type {
   SenderNumber,
   SenderSettings,
   CampaignMedia,
+  EmailAudience,
 } from '../types/campaign.types';
 
 export async function listCampaigns(archived = false): Promise<Campaign[]> {
@@ -123,5 +124,21 @@ export async function saveSenderSettings(settings: SenderSettings): Promise<Send
   // strip tenantId — backend derives it from JWT; forbidNonWhitelisted would reject it
   const { waStartHour, waEndHour, emailStartHour, emailEndHour } = settings;
   const r = await api.put('/sender/settings', { waStartHour, waEndHour, emailStartHour, emailEndHour });
+  return r.data;
+}
+
+/**
+ * Pré-visualização de quem receberá a campanha "Contatos com e-mail".
+ * Espelha o where do disparo no servidor — `total` respeita a busca,
+ * `totalAudiencia` é o número real que vai receber.
+ */
+export async function getEmailAudience(params: { search?: string; limit?: number; offset?: number } = {}): Promise<EmailAudience> {
+  const r = await api.get('/campaigns/audience/email', {
+    params: {
+      search: params.search?.trim() || undefined,
+      limit: params.limit ?? 50,
+      offset: params.offset || undefined,
+    },
+  });
   return r.data;
 }

@@ -191,8 +191,11 @@ export class EmailCampaignSenderService {
     let targets = dto.emails ?? [];
 
     if (dto.fromContacts) {
+      // MESMO `where` da pré-visualização (audienciaWhere) — a tela mostra quem vai
+      // receber e o envio tem que concordar com ela. Alterar aqui sem alterar lá faz
+      // a tela mentir, e o operador confia no número que viu.
       const contacts = await this.prisma.contact.findMany({
-        where: { tenantId, status: 'active', email: { not: null } },
+        where: EmailCampaignSenderService.audienciaWhere(tenantId) as any,
         select: { email: true, name: true },
       });
       targets = contacts
@@ -318,6 +321,52 @@ export class EmailCampaignSenderService {
   }
 
   // ── Worker: tick a cada 15s ──────────────────────────────────────
+
+  /**
+   * Quem receberia a campanha se ela fosse criada agora com "Contatos com e-mail".
+   *
+   * O botão dizia só "disparado para todos os contatos ativos com e-mail" e o
+   * operador assinava em branco — sem ver quem é, nem quantos. A pré-visualização
+   * usa DE PROPÓSITO o mesmo `where` do disparo (createEmailCampaign), porque um
+   * preview que diverge do envio é pior que preview nenhum: ele dá confiança errada.
+   * Se um dia o critério mudar, os dois têm que mudar juntos — o teste prende isso.
+   *
+   * O que este número NÃO prevê: as exclusões que só acontecem na criação (dedup
+   * `ja_enviado`, blocklist, concorrente, cliente TMS). A tela diz isso em texto.
+   */
+  static audienciaWhere(tenantId: string) {
+    return { tenantId, status: 'active', email: { not: null }, NOT: { email: '' } } as const;
+  }
+
+  async previewAudienciaEmail(
+    tenantId: string,
+    opts: { search?: string; limit?: number; offset?: number } = {},
+  ) {
+    const busca = opts.search?.trim();
+    const where: any = { ...EmailCampaignSenderService.audienciaWhere(tenantId) };
+    if (busca) {
+      where.OR = [
+        { name: { contains: busca, mode: 'insensitive' } },
+        { email: { contains: busca, mode: 'insensitive' } },
+        { company: { contains: busca, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total, totalSemBusca] = await Promise.all([
+      this.prisma.contact.findMany({
+        where,
+        select: { id: true, name: true, email: true, company: true, createdAt: true },
+        orderBy: { createdAt: 'desc' }, // os que entraram por último aparecem primeiro
+        take: Math.min(opts.limit ?? 50, 200),
+        skip: opts.offset ?? 0,
+      }),
+      this.prisma.contact.count({ where }),
+      // Total REAL do disparo: a busca filtra a lista na tela, não o envio.
+      busca ? this.prisma.contact.count({ where: EmailCampaignSenderService.audienciaWhere(tenantId) as any }) : undefined,
+    ]);
+
+    return { items, total, totalAudiencia: totalSemBusca ?? total };
+  }
 
   @Interval(15_000)
   async tick(): Promise<void> {

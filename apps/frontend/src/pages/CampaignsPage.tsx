@@ -8,6 +8,7 @@ import {
   type Campaign,
   type SenderNumber,
   type SenderSettings,
+  type EmailAudience,
   listCampaigns,
   getCampaign,
   createWhatsappCampaign,
@@ -17,6 +18,7 @@ import {
   pauseCampaign,
   retryFailedTargets,
   resendAllTargets,
+  getEmailAudience,
   deleteCampaign,
   removeCampaignTarget,
   bulkDeleteCampaigns,
@@ -139,6 +141,10 @@ export function CampaignsPage() {
   const [schedHour, setSchedHour] = useState<number | null>(null);
   const [schedMinute, setSchedMinute] = useState(0);
   const [settings, setSettings] = useState<SenderSettings | null>(null);
+  // Pré-visualização de "Contatos com e-mail": quem vai receber, com busca.
+  const [emailAudience, setEmailAudience] = useState<EmailAudience | null>(null);
+  const [emailAudienceSearch, setEmailAudienceSearch] = useState('');
+  const [emailAudienceLoading, setEmailAudienceLoading] = useState(false);
   const [showHours, setShowHours] = useState(false);
   const [show, setShow] = useState(false);
   // Quantos contatos ativos existem — mostrado no formulário para o operador
@@ -431,6 +437,22 @@ export function CampaignsPage() {
       .catch(() => { if (!cancelado) setActiveCount(null); });
     return () => { cancelado = true; };
   }, [show]);
+
+  // Pré-visualização de "Contatos com e-mail". Só busca quando a aba está aberta —
+  // não faz sentido pagar a consulta enquanto o operador digita uma lista à mão.
+  // 300ms de espera na digitação: sem isso é uma requisição por tecla.
+  useEffect(() => {
+    if (!show || channel !== 'email' || !fromContacts) return;
+    let cancelado = false;
+    setEmailAudienceLoading(true);
+    const t = setTimeout(() => {
+      getEmailAudience({ search: emailAudienceSearch, limit: 50 })
+        .then((r) => { if (!cancelado) setEmailAudience(r); })
+        .catch(() => { if (!cancelado) setEmailAudience(null); })
+        .finally(() => { if (!cancelado) setEmailAudienceLoading(false); });
+    }, emailAudienceSearch ? 300 : 0);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [show, channel, fromContacts, emailAudienceSearch]);
 
   // reconcilia telefones pré-preenchidos (vindo de Contatos / reenvio): casa com a base ou vira avulso
   useEffect(() => {
@@ -1794,9 +1816,57 @@ export function CampaignsPage() {
                       </p>
                     </>
                   ) : (
-                    <p className="rounded-lg bg-base-100 px-3 py-2.5 text-xs text-base-content/50">
-                      Disparado para todos os contatos ativos com e-mail cadastrado. Opted-out excluídos automaticamente.
-                    </p>
+                    <div className="rounded-lg border border-base-200 bg-base-100">
+                      {/* cabeçalho: quantos vão receber + busca */}
+                      <div className="flex flex-wrap items-center gap-2 border-b border-base-200 px-3 py-2">
+                        <span className="text-xs text-base-content/60">
+                          {emailAudienceLoading && !emailAudience ? (
+                            'Carregando destinatários…'
+                          ) : (
+                            <>
+                              <strong className="text-base-content">{emailAudience?.totalAudiencia ?? 0}</strong> contato(s) vão receber
+                            </>
+                          )}
+                        </span>
+                        <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-base-300 bg-white dark:bg-base-300 px-2 py-1">
+                          <Icon name="search" className="h-3.5 w-3.5 shrink-0 text-base-content/40" />
+                          <input
+                            className="w-36 bg-transparent text-xs outline-none placeholder:text-base-content/35"
+                            placeholder="Buscar na lista…"
+                            value={emailAudienceSearch}
+                            onChange={(e) => setEmailAudienceSearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* a lista em si — os últimos cadastrados primeiro */}
+                      <div className="max-h-44 overflow-y-auto">
+                        {emailAudience?.items.length ? (
+                          emailAudience.items.map((ct) => (
+                            <div key={ct.id} className="flex items-baseline gap-2 border-b border-base-200/60 px-3 py-1.5 last:border-0">
+                              <span className="truncate text-xs text-base-content">{ct.name || '(sem nome)'}</span>
+                              <span className="truncate text-[11px] text-base-content/50">{ct.email}</span>
+                              {ct.company && <span className="ml-auto truncate text-[11px] text-base-content/35">{ct.company}</span>}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="px-3 py-3 text-xs text-base-content/40">
+                            {emailAudienceSearch
+                              ? 'Nenhum contato com esse termo. A busca filtra só esta lista — o disparo continua indo para todos.'
+                              : 'Nenhum contato ativo com e-mail cadastrado. Importe em Contatos antes de criar a campanha.'}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Rodapé honesto: a lista é uma janela, e o número de cima ainda
+                          não desconta as exclusões que só acontecem na criação. */}
+                      <p className="border-t border-base-200 px-3 py-1.5 text-[11px] text-base-content/40">
+                        {emailAudienceSearch
+                          ? `${emailAudience?.total ?? 0} na busca · mostrando até 50`
+                          : `Mostrando os ${Math.min(emailAudience?.items.length ?? 0, 50)} mais recentes`}
+                        {' · '}opted-out já excluídos; quem já recebeu campanha antes pode ser pulado no envio
+                      </p>
+                    </div>
                   )}
                 </div>
               </>
