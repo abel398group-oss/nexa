@@ -57,6 +57,13 @@ export class AnthropicService {
     return {
       failures: this._failureCount,
       lastFailAt: this._lastFailAt?.toISOString() ?? null,
+      // `peakQueued` > 0 no /health é o sinal de que AI_MAX_CONCURRENCY está apertado.
+      concurrency: {
+        limit: AI_MAX_CONCURRENCY,
+        active: this.active,
+        queued: this.queue.length,
+        peakQueued: this.peakQueued,
+      },
     };
   }
 
@@ -81,7 +88,24 @@ export class AnthropicService {
       this.active++;
       return Promise.resolve();
     }
-    return new Promise<void>((resolve) => this.queue.push(resolve));
+    const waiting = new Promise<void>((resolve) => this.queue.push(resolve));
+    if (this.queue.length > this.peakQueued) this.peakQueued = this.queue.length;
+    this.warnIfBacklogged();
+    return waiting;
+  }
+
+  // Avisa quando a fila passa do teto: a partir daí toda chamada nova espera pelo
+  // menos um ciclo inteiro antes de começar, e o lead sente isso como demora.
+  // Limitado a 1 aviso por minuto para não poluir o log num pico.
+  private warnIfBacklogged() {
+    if (this.queue.length < AI_MAX_CONCURRENCY) return;
+    const now = Date.now();
+    if (now - this.lastQueueWarnAt < 60_000) return;
+    this.lastQueueWarnAt = now;
+    this.logger.warn(
+      `Fila de IA: ${this.queue.length} chamada(s) esperando (teto ${AI_MAX_CONCURRENCY} simultâneas). ` +
+        `Se persistir sob carga, aumente AI_MAX_CONCURRENCY.`,
+    );
   }
 
   // Libera o slot: se há alguém esperando, passa o slot direto (active constante);
