@@ -7,6 +7,7 @@ import { EmailChannelService } from './email-channel.service';
 import { EmailCampaignSenderService } from './email-campaign-sender.service';
 import { SupportEscalationListener } from './support-escalation.listener';
 import { EmailOutboundListener } from './email-outbound.listener';
+import { EmailBounceService } from './email-bounce.service';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { AgentsModule } from '@/application/agents/agents.module';
@@ -28,6 +29,7 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     EmailCampaignSenderService,
     SupportEscalationListener, // P2: e-mail ao suporte no evento 'support.escalated'
     EmailOutboundListener,     // entrega SMTP das mensagens de saída do canal e-mail
+    EmailBounceService,        // devolução/DSN e resposta automática nunca chegam à Lia
   ],
   exports: [EmailReplyService, EmailOptOutService, EmailChannelService, EmailCampaignSenderService],
 })

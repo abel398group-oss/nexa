@@ -23,6 +23,7 @@ import { simpleParser } from 'mailparser';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailService } from './email.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
+import { EmailBounceService } from './email-bounce.service';
 
 const POLL_INTERVAL_SEC = Number(process.env.EMAIL_POLL_INTERVAL_SEC ?? 60);
 
@@ -61,6 +62,7 @@ export class EmailImapService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly crypto: EmailCryptoService,
+    private readonly bounce: EmailBounceService,
   ) {}
 
   onModuleInit() {
@@ -218,6 +220,35 @@ export class EmailImapService implements OnModuleInit {
           const fromAddress = parsed.from?.value?.[0]?.address ?? '';
           const subject = parsed.subject ?? '(sem assunto)';
           const bodyText = (parsed.text ?? '').trim();
+
+          // Devolução (DSN) e resposta automática NUNCA entram no pipeline da Lia.
+          // Antes desta trava, um `mailer-daemon` virava conversa no Inbox e a Lia
+          // respondia a ele — chamada de IA gasta, funil poluído e rate-limit do
+          // remetente consumido. Ver EmailBounceService.
+          const tipo = this.bounce.classify({
+            from: parsed.from?.text ?? fromAddress,
+            subject,
+            raw: String(raw),
+          });
+
+          if (tipo === 'bounce') {
+            const info = this.bounce.parse(String(raw));
+            this.logger.warn(
+              `IMAP ${cfg.user}: uid=${uid} é DEVOLUÇÃO (status=${info.status ?? '?'} ` +
+              `destinatário=${info.recipient ?? '?'}) — não vai para a Lia`,
+            );
+            await this.bounce.record(cfg.tenantId, info);
+            await connection.addFlags(uid, ['\\Seen']).catch(() => null);
+            if (uid > maiorUidProcessado) maiorUidProcessado = uid;
+            continue;
+          }
+
+          if (tipo === 'auto_reply') {
+            this.logger.log(`IMAP ${cfg.user}: uid=${uid} de ${fromAddress} é resposta automática — não vai para a Lia`);
+            await connection.addFlags(uid, ['\\Seen']).catch(() => null);
+            if (uid > maiorUidProcessado) maiorUidProcessado = uid;
+            continue;
+          }
 
           if (!fromAddress || !bodyText) {
             this.logger.warn(`IMAP ${cfg.user}: uid=${uid} sem remetente ou sem corpo — ignorado`);
