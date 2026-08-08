@@ -21,6 +21,31 @@ import { renderEmailHtml } from './email-template';
 
 const SIGNATURE = 'Lia · Assistente HiperTMS | hipertms.com.br';
 
+/**
+ * Nome anunciado no HELO/EHLO da sessão SMTP.
+ *
+ * Sem isto o nodemailer usa `os.hostname()`, que **nunca** é um nome válido nos
+ * nossos ambientes: na máquina de dev virou `DESKTOP-8NO954L` e dentro do Docker
+ * é o hash do container (`a3f9c1e8b204`). A RFC 5321 §4.1.1.1 exige FQDN ou
+ * literal de endereço entre colchetes — nenhum dos dois casos qualifica.
+ *
+ * Custo real disso (diagnosticado em 08/08/2026): o Exim do HostGator aceitava a
+ * mensagem e devolvia `250 OK` com id de fila, mas o gateway de saída dele
+ * (cloudfilter.net) descartava tudo com HELO inválido **sem gerar bounce**. Do
+ * nosso lado parecia envio bem-sucedido; nada chegava ao Gmail, nem no spam. O
+ * mesmo servidor entregava normalmente quando o cliente era o Thunderbird, que
+ * anuncia `helo=[192.168.0.14]`.
+ *
+ * Default: o domínio do próprio remetente — o valor que um servidor de e-mail
+ * espera ver. `EMAIL_HELO_NAME` sobrescreve quando o ambiente precisar de outro.
+ */
+export function heloName(fromEmail: string): string {
+  const env = process.env.EMAIL_HELO_NAME?.trim();
+  if (env) return env;
+  const dominio = fromEmail.split('@')[1]?.trim();
+  return dominio && dominio.includes('.') ? dominio : 'localhost';
+}
+
 function stripMarkdown(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -151,6 +176,8 @@ export class EmailReplyService {
       port: config.port,
       secure: config.secure, // true = SSL/TLS (porta 465)
       auth: { user: config.user, pass: config.pass },
+      // HELO válido — sem isto o gateway de saída descarta em silêncio (ver heloName)
+      name: heloName(config.fromEmail),
       tls: { rejectUnauthorized: false }, // Hostgator usa certificado cPanel, pode não ter CA raiz
       // DISP-012: sem timeout o nodemailer espera o SO desistir (minutos). O tick
       // de campanha de e-mail roda dentro de um lock Redis de 60s — se o envio
@@ -212,6 +239,7 @@ export class EmailReplyService {
       port: config.port,
       secure: config.secure,
       auth: { user: config.user, pass: config.pass },
+      name: heloName(config.fromEmail), // ver heloName — HELO inválido é descartado sem bounce
       tls: { rejectUnauthorized: false },
       connectionTimeout: 10_000, // DISP-012 — ver comentário em send()
       greetingTimeout: 10_000,
