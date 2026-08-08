@@ -4,6 +4,7 @@ import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
 import { EmbeddingsService, EMBEDDING_MODEL } from '@/shared/ai/embeddings.service';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
+import { unmappedCategories } from './knowledge-tracks.const';
 
 // Cache em memória por tenantId — evita recarregar a base a cada mensagem recebida em pico
 // TTL: 30s. Invalidado automaticamente após qualquer escrita (create/update/delete).
@@ -14,6 +15,8 @@ export class KnowledgeService {
   private readonly logger = new Logger('KnowledgeService');
   private readonly retrieveCache = new Map<string, KbCacheEntry>();
   private readonly CACHE_TTL_MS = 30_000; // 30 segundos
+  /** Tenants já verificados quanto a categoria fora das trilhas (uma vez por processo). */
+  private readonly trilhasVerificadas = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -94,14 +97,52 @@ export class KnowledgeService {
    *
    * Sem `productCode` o comportamento é o de antes: busca em tudo.
    */
+  /**
+   * Avisa, uma vez por tenant, sobre categoria que existe na base e não pertence a
+   * trilha nenhuma.
+   *
+   * Com lista branca, essa categoria fica INVISÍVEL para a Lia. É o comportamento
+   * seguro e também um jeito perfeito de esconder conhecimento novo sem ninguém
+   * perceber — alguém cadastra 200 artigos numa categoria nova e a Lia segue
+   * respondendo como se eles não existissem. Este log é o que separa "escondido de
+   * propósito" de "escondido por esquecimento" (REGRA 3).
+   */
+  private async avisarCategoriasNaoMapeadas(tenantId: string): Promise<void> {
+    if (this.trilhasVerificadas.has(tenantId)) return;
+    this.trilhasVerificadas.add(tenantId);
+    try {
+      const rows = await this.prisma.aiKnowledgeBase.findMany({
+        where: { tenantId, approved: true },
+        distinct: ['category'],
+        select: { category: true },
+      });
+      const orfas = unmappedCategories(rows.map((r) => r.category));
+      if (orfas.length) {
+        this.logger.warn(
+          `Categorias de conhecimento fora das trilhas de vendas/suporte: ${orfas.join(', ')} — ` +
+          'artigos nessas categorias NÃO são alcançáveis pela Lia. Classifique-as em ' +
+          'knowledge-tracks.const.ts ou mude a categoria dos artigos.',
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(`Falha ao verificar categorias por trilha (tenant=${tenantId}): ${e?.message}`);
+    }
+  }
+
   async retrieve(
     tenantId: string,
     query: string,
     topN = 3,
-    opts?: { excludeCategories?: string[]; productCode?: string },
+    opts?: { excludeCategories?: string[]; includeCategories?: readonly string[]; productCode?: string },
   ) {
     const ex = opts?.excludeCategories ?? [];
+    // Lista BRANCA de trilha (ver knowledge-tracks.const.ts). Quando presente, é a
+    // trava real: categoria fora dela não é alcançável, inclusive categoria nova
+    // que ninguém classificou ainda. A lista negra continua aceita para chamadas
+    // que não pertencem a trilha nenhuma.
+    const inc = opts?.includeCategories ?? [];
     const produto = opts?.productCode;
+    if (inc.length) void this.avisarCategoriasNaoMapeadas(tenantId);
     // ── BUSCA SEMÂNTICA ──────────────────────────────────────────────────────
     if (this.embeddings.enabled && query?.trim()) {
       try {
@@ -110,6 +151,10 @@ export class KnowledgeService {
           const lit = EmbeddingsService.toVectorLiteral(vec);
           const params: any[] = [lit, tenantId, topN];
           let filtros = '';
+          if (inc.length) {
+            params.push([...inc]);
+            filtros += ` AND category = ANY($${params.length}::text[])`;
+          }
           if (ex.length) {
             params.push(ex);
             filtros += ` AND NOT (category = ANY($${params.length}::text[]))`;
@@ -146,21 +191,25 @@ export class KnowledgeService {
     // ── FALLBACK TEXTUAL ─────────────────────────────────────────────────────
     // Cache em memória 30s — evita recarregar toda a base a cada mensagem.
     //
-    // A chave inclui o produto, e o filtro vai no BANCO (não depois): com
-    // `take: 100` e a base do TMS sendo muito maior que a do parceiro, filtrar
-    // em memória deixaria os artigos do parceiro de fora do corte — a Lia de
-    // pneus ficaria sem conhecimento nenhum e nem saberia por quê.
+    // A chave inclui o produto E a trilha, e os dois filtros vão no BANCO (não
+    // depois): com `take: 100` e a base de suporte sendo 1297 dos ~1477 artigos,
+    // filtrar em memória deixaria vendas com quase nada dentro do corte — mesmo
+    // motivo pelo qual o produto já era filtrado no banco (a Lia de pneus ficaria
+    // sem conhecimento nenhum e nem saberia por quê).
     const now = Date.now();
-    const cacheKey = produto ? `${tenantId}:${produto}` : tenantId;
+    const cacheKey = [tenantId, produto ?? '*', inc.length ? [...inc].sort().join(',') : '*'].join('|');
     const cached = this.retrieveCache.get(cacheKey);
     let all: any[];
     if (cached && cached.expiresAt > now) {
       all = cached.items;
     } else {
       all = await this.prisma.aiKnowledgeBase.findMany({
-        where: produto
-          ? { tenantId, approved: true, OR: [{ productCode: produto }, { productCode: null }] }
-          : { tenantId, approved: true },
+        where: {
+          tenantId,
+          approved: true,
+          ...(produto ? { OR: [{ productCode: produto }, { productCode: null }] } : {}),
+          ...(inc.length ? { category: { in: [...inc] } } : {}),
+        },
         take: 100,
         orderBy: { createdAt: 'desc' }, // prioriza artigos mais recentes no corte
       });

@@ -19,6 +19,7 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
 import { isWithinSupportHours, nextOpeningLabel, supportHoursLabel } from '@/application/conversations/support-hours';
 import { isSupportScript } from './support-scripts.const';
+import { isSupportConversation, trackWhere } from '@/application/conversations/conversation-track';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -630,6 +631,7 @@ export class ConversationAgentService {
           conversationId: input.conversationId,
           tmsCustomer,
           sector: input.sector,
+          productCode: input.productCode,
         });
         draft = r.draft;
         usedKnowledge = r.usedKnowledge;
@@ -787,14 +789,30 @@ export class ConversationAgentService {
   // (precisa de ≥2 inbound com conteúdo real). Uma única query com include (evita N+1).
   private async loadPriorHistory(tenantId: string, conversationId?: string): Promise<string> {
     if (!conversationId) return '';
-    const convPhone = await this.prisma.aiConversation
-      .findUnique({ where: { id: conversationId }, select: { phone: true } })
+    const atual = await this.prisma.aiConversation
+      .findUnique({
+        where: { id: conversationId },
+        select: { phone: true, ticketCategory: true, customerStage: true, status: true, sourceChannel: true },
+      })
       .catch(() => null);
-    if (!convPhone?.phone) return '';
+    if (!atual?.phone) return '';
+
+    // MESMA TRILHA, apenas.
+    //
+    // A busca era só por telefone. Um cliente que abriu chamado reclamando de CT-e
+    // rejeitado e meses depois falou com vendas levava a reclamação inteira para
+    // dentro do prompt de vendas, como "[Contexto de conversa anterior]". Suporte e
+    // vendas são funis separados; memória entre eles é vazamento, não contexto.
+    const trilha = isSupportConversation(atual) ? 'support' : 'sales';
 
     const priorConvs = await this.prisma.aiConversation
       .findMany({
-        where: { tenantId, phone: convPhone.phone, id: { not: conversationId } },
+        where: {
+          tenantId,
+          phone: atual.phone,
+          id: { not: conversationId },
+          ...trackWhere(trilha),
+        },
         orderBy: { startedAt: 'desc' },
         take: 5,
         include: { messages: { orderBy: { createdAt: 'asc' }, select: { direction: true, content: true } } },
@@ -812,7 +830,9 @@ export class ConversationAgentService {
       const filtered = pcMsgs.filter(
         (m: any) => !m.content.startsWith('Pronto! ✅') && !PROFANITY_RE.test(m.content),
       );
-      this.logger.log(`Contexto anterior carregado para ${convPhone.phone}: conv ${pc.id.slice(0, 8)}, ${filtered.length} msgs`);
+      this.logger.log(
+        `Contexto anterior carregado para ${atual.phone} (trilha=${trilha}): conv ${pc.id.slice(0, 8)}, ${filtered.length} msgs`,
+      );
       return (
         '[Contexto de conversa anterior — use estes dados sem repetir as perguntas já respondidas]\n' +
         filtered.map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content.slice(0, 200)}`).join('\n') +

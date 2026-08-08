@@ -62,6 +62,12 @@ export class SupportAgentService {
       conversationId?: string;
       tmsCustomer?: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; plan?: string; page?: string | null } | null;
       /**
+       * Produto do tenant — separa o conhecimento quando há mais de um. Vendas já
+       * filtrava por produto e o suporte não; com um segundo produto na base, uma
+       * pergunta de suporte alcançaria o conhecimento do outro.
+       */
+      productCode?: string;
+      /**
        * Setor escolhido pelo cliente no seletor do widget do TMS
        * (Fiscal/Frota/Financeiro/Logística/Sistema/Outro). É INDÍCIO, não verdade:
        * entra como dica no classificador e nunca substitui o que a mensagem diz.
@@ -134,7 +140,7 @@ export class SupportAgentService {
     // A busca de KB depende só da mensagem — não da categoria nem do diagnóstico.
     // Disparada aqui, o embedding + a query pgvector correm em paralelo com as duas
     // chamadas de IA seguintes em vez de entrarem em série depois delas.
-    const kbPromise = this.resolution.prefetchKnowledge(tenantId, input.question);
+    const kbPromise = this.resolution.prefetchKnowledge(tenantId, input.question, input.productCode);
 
     // ── 1. CLASSIFICAÇÃO ────────────────────────────────────────────────────
     const classification = await this.classifier.classify(input.question, history, input.sector);
@@ -171,6 +177,7 @@ export class SupportAgentService {
         ? { name: input.tmsCustomer.name, page: input.tmsCustomer.page, company: input.tmsCustomer.tenantName }
         : null,
       knowledge: await kbPromise,
+      productCode: input.productCode,
     });
 
     // ── 4. ESCALONAMENTO ────────────────────────────────────────────────────

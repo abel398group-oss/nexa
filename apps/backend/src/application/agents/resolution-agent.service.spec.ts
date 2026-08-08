@@ -1,5 +1,6 @@
 import { ResolutionAgentService, ResolutionResult } from './resolution-agent.service';
 import { DiagnosticResult } from './diagnostic-agent.service';
+import { SUPPORT_CATEGORIES } from '@/application/knowledge/knowledge-tracks.const';
 
 function mockAi(response: string) {
   return { complete: vi.fn().mockResolvedValue(response) } as any;
@@ -65,7 +66,11 @@ describe('ResolutionAgentService', () => {
     expect(result.usedKnowledge).toEqual([{ id: 'kb-1', title: 'Como emitir CT-e', score: 0.9 }]);
   });
 
-  it('queries knowledge.retrieve with the tenant, message, topN=4 and excludeCategories=[comercial]', async () => {
+  // Antes este teste travava `excludeCategories: ['comercial']`. Lista negra de UMA
+  // categoria contra 16 deixava `precificacao` e `vendas` alcançáveis pelo suporte —
+  // e esse conteúdo virava `allowedFacts`, então a Supervisora passava a APROVAR a Lia
+  // citando preço dentro de um chamado. Agora é lista branca da trilha.
+  it('busca a KB com lista BRANCA da trilha de suporte, topN=4', async () => {
     const ai = mockAi(aiJson({}));
     const knowledge = mockKnowledge([]);
     const playbook = mockPlaybook('');
@@ -73,10 +78,30 @@ describe('ResolutionAgentService', () => {
 
     await svc.resolve(baseInput);
 
-    // topN=4: suporte precisa de mais contexto KB do que vendas (atualizado no service)
+    // topN=4: suporte precisa de mais contexto KB do que vendas
     expect(knowledge.retrieve).toHaveBeenCalledWith('tenant-1', 'Minha CT-e não emite', 4, {
-      excludeCategories: ['comercial'],
+      includeCategories: SUPPORT_CATEGORIES,
+      productCode: undefined,
     });
+  });
+
+  it('nenhuma categoria comercial é alcançável pelo suporte', async () => {
+    for (const proibida of ['comercial', 'precificacao', 'vendas']) {
+      expect(SUPPORT_CATEGORIES).not.toContain(proibida);
+    }
+  });
+
+  it('repassa o productCode — vendas já filtrava por produto e o suporte não', async () => {
+    const ai = mockAi(aiJson({}));
+    const knowledge = mockKnowledge([]);
+    const svc = new ResolutionAgentService(ai, knowledge, mockPlaybook(''));
+
+    await svc.resolve({ ...baseInput, productCode: 'pneus' } as any);
+
+    expect(knowledge.retrieve).toHaveBeenCalledWith(
+      'tenant-1', 'Minha CT-e não emite', 4,
+      expect.objectContaining({ productCode: 'pneus' }),
+    );
   });
 
   it('strips residual markdown from the AI draft', async () => {

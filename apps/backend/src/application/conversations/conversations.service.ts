@@ -13,6 +13,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { AuditService } from '@/shared/audit/audit.service';
+import { trackWhere } from './conversation-track';
 
 @Injectable()
 export class ConversationsService {
@@ -28,25 +29,13 @@ export class ConversationsService {
   /**
    * Etapa 2B (item 2.2): quais conversas são "ticket de SUPORTE".
    *
-   * Espelha `isSupportTicket` do frontend (shared/lib/conversation.ts). A
-   * heurística nasceu lá como fonte da verdade, mas com a lista paginada no
-   * servidor ela PRECISA existir aqui — filtrar no cliente sobre uma página já
-   * cortada era justamente o bug: um pico de conversas de venda empurrava os
-   * chamados de suporte pra fora das 50 primeiras e eles sumiam da tela.
-   *
-   * As duas cópias têm que andar juntas. Mudou uma condição aqui, mude lá.
+   * O critério mora em `conversation-track.ts` — precisava existir também como
+   * predicado (não só como filtro Prisma) para o ConversationAgent decidir a
+   * trilha de uma conversa em memória, e manter duas definições do mesmo conceito
+   * era garantia de divergirem.
    */
-  private static readonly SUPPORT_MATCH = [
-    { ticketCategory: { not: null } },
-    { customerStage: 'cliente_ativo' },
-    { status: 'escalated' },
-    { sourceChannel: { in: ['portal', 'web_chat'] } },
-  ];
-
   private scopeFilter(scope?: 'support' | 'sales') {
-    if (scope === 'support') return { OR: ConversationsService.SUPPORT_MATCH };
-    if (scope === 'sales') return { NOT: { OR: ConversationsService.SUPPORT_MATCH } };
-    return null;
+    return scope ? trackWhere(scope) : null;
   }
 
   /**
@@ -222,7 +211,7 @@ export class ConversationsService {
       tenantId,
       AND: [
         { OR: [{ outcome: null }, { outcome: { not: 'archived' } }] },
-        { OR: ConversationsService.SUPPORT_MATCH },
+        trackWhere('support'),
       ],
       status: { notIn: ['closed', 'opt_out'] as any },
     };

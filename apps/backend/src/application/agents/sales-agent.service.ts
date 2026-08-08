@@ -4,6 +4,7 @@ import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { ConnectorsService } from '@/application/connectors/connectors.service';
 import { PlaybookService, PlaybookConfig } from '@/application/playbook/playbook.service';
 import { fenceUntrusted, UNTRUSTED_RULE } from '@/shared/ai/untrusted-input';
+import { categoriesFor } from '@/application/knowledge/knowledge-tracks.const';
 
 /**
  * Dados que o lead revelou sobre si NA CONVERSA (2026-08-01).
@@ -66,7 +67,10 @@ export class SalesAgentService {
     const [kb, plans, cfg] = await Promise.all([
       // F8: a busca é separada por produto — lead de pneus não recebe artigo do
       // TMS. Artigo sem produto conta como genérico e entra em qualquer um.
-      this.knowledge.retrieve(tenantId, input.question, 2, { excludeCategories: ['suporte'], productCode }),
+      // Lista BRANCA da trilha de vendas (knowledge-tracks.const.ts). Excluir só
+      // 'suporte' deixava 30 artigos operacionais (cadastros, administracao,
+      // operacional, compras, frota, financeiro...) alcançáveis pelo vendedor.
+      this.knowledge.retrieve(tenantId, input.question, 2, { includeCategories: categoriesFor('sales'), productCode }),
       this.connectors.getPlans(productCode).catch(() => []),
       this.playbook.get(tenantId),
     ]);

@@ -7,6 +7,7 @@ import { fenceUntrusted, UNTRUSTED_RULE } from '@/shared/ai/untrusted-input';
 import { DiagnosticResult } from './diagnostic-agent.service';
 import { TicketCategory, TicketPriority } from './case-classifier-agent.service';
 import { HELP_URLS, HELP_BASE_URL } from '@/application/connectors/hipertms-help-urls.data';
+import { categoriesFor } from '@/application/knowledge/knowledge-tracks.const';
 
 /** Artigo de KB já recuperado — permite buscar a KB fora do caminho crítico. */
 export interface KnowledgeHit {
@@ -45,11 +46,21 @@ export class ResolutionAgentService {
    * paralelo pelo SupportAgent, sai do caminho crítico. Nunca lança: falhar aqui
    * degrada para "sem KB" (o modelo escala), não derruba o atendimento.
    */
-  async prefetchKnowledge(tenantId: string, message: string): Promise<KnowledgeHit[]> {
+  async prefetchKnowledge(tenantId: string, message: string, productCode?: string): Promise<KnowledgeHit[]> {
     try {
-      // 4 resultados — suporte precisa de mais contexto que vendas
+      // 4 resultados — suporte precisa de mais contexto que vendas.
+      //
+      // Lista BRANCA da trilha de suporte (knowledge-tracks.const.ts), não lista
+      // negra: excluir só `comercial` deixava `precificacao` e `vendas` alcançáveis,
+      // e pior, esse conteúdo virava `allowedFacts` — a Supervisora então aprovava
+      // a Lia citando preço dentro de um chamado de suporte.
+      //
+      // `productCode` também é novo aqui: vendas já filtrava por produto e o suporte
+      // não, então com um segundo produto na base uma pergunta de suporte alcançaria
+      // o conhecimento do outro produto.
       return (await this.knowledge.retrieve(tenantId, message, 4, {
-        excludeCategories: ['comercial'],
+        includeCategories: categoriesFor('support'),
+        productCode,
       })) as KnowledgeHit[];
     } catch (err: any) {
       this.logger.warn(`Busca de KB falhou (${err?.message}) — resolução seguirá sem artigos`);
@@ -65,10 +76,12 @@ export class ResolutionAgentService {
     diagnostic: DiagnosticResult;
     history: string;
     tmsCustomer: { name: string; page?: string | null; company?: string | null } | null;
+    /** Produto do tenant — separa o conhecimento quando há mais de um. */
+    productCode?: string;
     /** KB já recuperada por `prefetchKnowledge()`. Ausente → busca aqui mesmo. */
     knowledge?: KnowledgeHit[];
   }): Promise<ResolutionResult> {
-    const kb = input.knowledge ?? (await this.prefetchKnowledge(input.tenantId, input.message));
+    const kb = input.knowledge ?? (await this.prefetchKnowledge(input.tenantId, input.message, input.productCode));
     const usedKnowledge = kb.map((k: any) => ({ id: k.id, title: k.title, score: k.score }));
     const kbCtx = kb.map((k: any, i: number) => `[KB ${i + 1}: ${k.title}]\n${k.content}`).join('\n\n');
     // kbCtx é repassado para a Supervisora verificar alucinações (allowedFacts)

@@ -414,7 +414,9 @@ describe('SupportAgentService — a solução nunca é descartada', () => {
 
     await svc.ask('t1', { question: 'CT-e rejeitado 519', conversationId: 'c1' });
 
-    expect(deps.resolution.prefetchKnowledge).toHaveBeenCalledWith('t1', 'CT-e rejeitado 519');
+    // 3º argumento é o productCode — separa o conhecimento quando o tenant tem
+    // mais de um produto. Vendas já filtrava; o suporte passou a filtrar também.
+    expect(deps.resolution.prefetchKnowledge).toHaveBeenCalledWith('t1', 'CT-e rejeitado 519', undefined);
     expect(deps.resolution.resolve).toHaveBeenCalledWith(expect.objectContaining({ knowledge: kb }));
   });
 });
