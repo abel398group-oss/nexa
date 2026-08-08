@@ -877,6 +877,21 @@ export class ConversationsService {
        * NÃO muda.
        */
       requireDelivery?: boolean;
+      /**
+       * A mensagem JÁ foi entregue por quem chamou — registra no histórico sem
+       * despachar de novo.
+       *
+       * Existe para o disparo de e-mail: ele monta assunto, template e link de
+       * descadastro próprios e envia pelo EmailReplyService, então passar pelo
+       * despacho daqui mandaria o MESMO e-mail duas vezes. Sem este registro, a
+       * mensagem enviada não existia em conversa nenhuma — o engajamento da
+       * campanha ficava zerado para sempre e o analista abria a conversa vendo a
+       * resposta do lead sem saber o que tinha sido perguntado.
+       *
+       * Marca ack=1 ("✓ enviado"), o mesmo que o canal de e-mail usa: o servidor
+       * aceitou, não que foi entregue na caixa ou lido.
+       */
+      alreadyDelivered?: boolean;
     },
   ) {
     const conv = await this.findOne(tenantId, conversationId);
@@ -929,7 +944,16 @@ export class ConversationsService {
     // F12: nota interna NUNCA é despachada, em canal nenhum — regra de segurança
     // crítica, não é só otimização de rota.
     const canal = conv.sourceChannel as string;
-    const despachavel = !dto.isInternal && dto.direction === 'outbound';
+    const despachavel = !dto.isInternal && dto.direction === 'outbound' && !dto.alreadyDelivered;
+
+    // Já entregue por quem chamou (ver `alreadyDelivered`): só registra o recibo.
+    if (dto.alreadyDelivered && dto.direction === 'outbound' && !dto.isInternal) {
+      await this.prisma.aiMessage
+        .update({ where: { id: message.id }, data: { ack: 1 } })
+        .catch((e: any) => this.logger.warn(`Falha ao marcar ack (msg=${message.id}): ${e?.message}`));
+      (message as any).ack = 1;
+      return message;
+    }
 
     // E-MAIL — 2026-08-07: este canal não tinha ramo nenhum aqui e caía no `else`
     // do WhatsApp, ou seja, o WAHA era chamado com `conv.phone` = "email:fulano@…".

@@ -63,3 +63,47 @@ describe('renderEmailHtml', () => {
     expect(html).not.toMatch(/@import|fonts\.googleapis/); // webfont não carrega em e-mail
   });
 });
+
+// ─── Preheader (08/08/2026) ───────────────────────────────────────────────────
+// O preheader trazia a punchline da marca, que TAMBÉM aparece visível embaixo do
+// wordmark. Como o Gmail concatena preheader + texto visível, o resumo na lista
+// saía com a mesma frase duas vezes — na única linha que decide se a pessoa abre.
+// Visto no e-mail citado numa resposta real.
+describe('renderEmailHtml — preheader', () => {
+  const CORPO = 'Boa tarde!\n\nAqui é a Lia do HiperTMS.\n\nPosso enviar uma demonstração?';
+
+  it('usa a primeira linha ÚTIL, pulando a saudação', () => {
+    const html = renderEmailHtml({ body: CORPO, optOutUrl: OPTOUT });
+    const escondido = html.slice(0, html.indexOf('<table'));
+    expect(escondido).toContain('Aqui é a Lia do HiperTMS.');
+    expect(escondido).not.toContain('Boa tarde!');
+  });
+
+  it('não repete a punchline da marca', () => {
+    const html = renderEmailHtml({ body: CORPO, optOutUrl: OPTOUT });
+    const ocorrencias = html.split('O TMS feito para vender frete.').length - 1;
+    expect(ocorrencias).toBe(1); // só a visível, embaixo do wordmark
+  });
+
+  it('preenche com espaços invisíveis para o texto visível não vazar no resumo', () => {
+    const html = renderEmailHtml({ body: CORPO, optOutUrl: OPTOUT });
+    expect(html).toContain('&nbsp;&zwnj;&nbsp;&zwnj;');
+  });
+
+  it('corta preheader longo', () => {
+    const longa = 'a'.repeat(400);
+    const html = renderEmailHtml({ body: `Oi!\n\n${longa}`, optOutUrl: OPTOUT });
+    const escondido = html.slice(0, html.indexOf('<table'));
+    expect(escondido).toContain('…');
+    expect(escondido).not.toContain('a'.repeat(200));
+  });
+
+  it('corpo só com saudação não quebra', () => {
+    expect(() => renderEmailHtml({ body: 'Boa tarde!', optOutUrl: OPTOUT })).not.toThrow();
+  });
+
+  it('escapa o preheader', () => {
+    const html = renderEmailHtml({ body: 'Oi\n\n<script>x</script>', optOutUrl: OPTOUT });
+    expect(html.slice(0, html.indexOf('<table'))).not.toContain('<script>');
+  });
+});

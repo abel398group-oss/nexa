@@ -984,3 +984,59 @@ describe('ConversationsService — recibo no web chat e portal', () => {
     expect(deps.prisma.aiMessage.update).not.toHaveBeenCalled();
   });
 });
+
+// ─── alreadyDelivered: registra sem despachar ─────────────────────────────────
+// Existe para o disparo de e-mail, que monta assunto/template próprios e já enviou
+// pelo SMTP. Sem isso, a mensagem enviada não existia em conversa nenhuma — o
+// engajamento da campanha ficava zerado para sempre e o analista abria a conversa
+// vendo a resposta do lead sem saber o que tinha sido perguntado.
+describe('ConversationsService — alreadyDelivered', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'email', phone: 'email:lead@empresa.com',
+      correlationId: 'c', humanTakeoverAt: null,
+    });
+  });
+
+  it('NÃO despacha de novo — evitaria mandar o mesmo e-mail duas vezes', async () => {
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound', content: 'corpo da campanha',
+      intent: 'outbound_campaign', metadata: { campaignId: 'camp-1' },
+      alreadyDelivered: true,
+    });
+
+    const eventos = deps.events.emit.mock.calls.map((c: any[]) => c[0]);
+    expect(eventos).not.toContain('conversation.outbound.email');
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
+  });
+
+  it('marca ack=1 — o servidor já aceitou a mensagem', async () => {
+    const msg: any = await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound', content: 'x', alreadyDelivered: true,
+    });
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { ack: 1 } });
+    expect(msg.ack).toBe(1);
+  });
+
+  it('grava campaignId e intent — é o que o engajamento da campanha lê', async () => {
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound', content: 'x',
+      intent: 'outbound_campaign', metadata: { campaignId: 'camp-1' },
+      alreadyDelivered: true,
+    });
+    const data = deps.prisma.aiMessage.create.mock.calls[0][0].data;
+    expect(data.campaignId).toBe('camp-1');
+    expect(data.intent).toBe('outbound_campaign');
+  });
+
+  it('sem a flag, o canal e-mail continua despachando', async () => {
+    await svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'x' });
+    const eventos = deps.events.emit.mock.calls.map((c: any[]) => c[0]);
+    expect(eventos).toContain('conversation.outbound.email');
+  });
+});

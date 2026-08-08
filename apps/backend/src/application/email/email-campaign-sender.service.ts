@@ -36,6 +36,7 @@ import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/com
 // canais, sem duplicar. Import só de estáticos: não entra no grafo de DI.
 import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
+import { ConversationsService } from '@/application/conversations/conversations.service';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -64,9 +65,56 @@ export class EmailCampaignSenderService {
     private readonly prisma: PrismaService,
     private readonly emailReply: EmailReplyService,
     private readonly lock: RedisLockService,
+    private readonly conversations: ConversationsService,
   ) {}
 
   // ── Helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Acha ou cria a conversa do destinatário e grava o e-mail enviado nela.
+   *
+   * Espelha o que o disparo de WhatsApp faz. A conversa reaproveitada é a mesma que
+   * o poller de IMAP usa quando o lead responde (`email:<endereço>` como phone,
+   * canal `email`) — é isso que faz a resposta cair no MESMO fio e o engajamento da
+   * campanha contar.
+   *
+   * Nunca lança para o chamador: falhar em registrar não pode desfazer um e-mail
+   * que já saiu, nem impedir o alvo de ser marcado como enviado.
+   */
+  private async registrarNaConversa(
+    campaign: { id: string; tenantId: string },
+    email: string,
+    contactId: string,
+    corpo: string,
+  ): Promise<void> {
+    const phone = emailToPhone(email);
+
+    const aberta = await this.prisma.aiConversation.findFirst({
+      where: {
+        tenantId: campaign.tenantId,
+        phone,
+        status: { in: ['open', 'waiting_customer', 'waiting_internal', 'escalated'] as any },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
+    });
+
+    const conv =
+      aberta ??
+      (await this.conversations.create(campaign.tenantId, {
+        contactId,
+        phone,
+        sourceChannel: 'email',
+      }));
+
+    await this.conversations.addMessage(campaign.tenantId, conv.id, {
+      direction: 'outbound',
+      content: corpo,
+      intent: 'outbound_campaign',
+      metadata: { campaignId: campaign.id, channel: 'email' },
+      alreadyDelivered: true,
+    });
+  }
 
   private today(): string {
     const d = new Date();
@@ -395,6 +443,23 @@ export class EmailCampaignSenderService {
         });
 
         if (result.sent) {
+          // Registra o e-mail enviado na CONVERSA do destinatário.
+          //
+              // O disparo de WhatsApp já fazia isso (sender.service.ts) e o de e-mail
+          // não — chamava o SMTP direto. Duas consequências, as duas observadas em
+          // 08/08/2026: o engajamento da campanha (Entregue/Lido/Respondeu) ficava
+          // ZERADO para sempre, porque é calculado a partir de mensagens com
+          // `intent: 'outbound_campaign'`; e o e-mail enviado não existia em conversa
+          // nenhuma, então quando o lead respondia o analista abria a conversa e via
+          // a resposta sem saber o que tinha sido perguntado.
+          //
+          // `alreadyDelivered` porque o envio já aconteceu acima, com assunto e
+          // template próprios da campanha — deixar o despacho do addMessage rodar
+          // mandaria o mesmo e-mail duas vezes.
+          await this.registrarNaConversa(campaign, target.email, upsertedContact.id, body).catch((e: any) =>
+            this.logger.warn(`Falha ao registrar e-mail da campanha na conversa (${target.email}): ${e?.message}`),
+          );
+
           await this.prisma.campaignTarget.update({
             where: { id: target.id },
             data: { status: 'sent', sentAt: new Date() },

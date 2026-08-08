@@ -71,6 +71,25 @@ function corpoParaHtml(texto: string): string {
     .join('');
 }
 
+/** Só saudação, sem conteúdo — não serve como preheader. */
+const SO_SAUDACAO = /^(bom dia|boa tarde|boa noite|ol[áa]|oi|prezad[oa]s?|caro|caros)[\s!,.…]*$/i;
+
+/**
+ * Primeira linha da mensagem que realmente diz algo, para o preheader.
+ *
+ * "Boa tarde!" é a primeira linha de praticamente todo e-mail nosso e não informa
+ * nada — usá-la como preheader desperdiça a única frase que o destinatário lê antes
+ * de decidir abrir. Então salta as saudações e pega a linha seguinte.
+ */
+export function primeiraLinhaUtil(body: string, max = 110): string {
+  const linhas = (body ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const escolhida = linhas.find((l) => !SO_SAUDACAO.test(l)) ?? linhas[0] ?? '';
+  return escolhida.length > max ? `${escolhida.slice(0, max - 1)}…` : escolhida;
+}
+
 export interface EmailTemplateInput {
   /** Corpo da mensagem, em texto puro. */
   body: string;
@@ -92,6 +111,19 @@ export interface EmailTemplateInput {
 export function renderEmailHtml(input: EmailTemplateInput): string {
   const corpo = corpoParaHtml(input.body);
 
+  // PREHEADER — o trecho que o cliente de e-mail mostra na lista, ao lado do
+  // assunto. É a primeira linha REAL da mensagem, não a punchline da marca.
+  //
+  // Antes trazia a punchline, que também aparece visível embaixo do wordmark. O
+  // Gmail concatena preheader + texto visível, então o resumo na lista saía com a
+  // mesma frase duas vezes — justamente na única linha que o destinatário lê antes
+  // de decidir abrir. Confirmado no texto citado numa resposta real (08/08/2026).
+  //
+  // A explicação fica AQUI e não num comentário HTML: comentário no template viaja
+  // dentro de cada e-mail enviado, e raciocínio interno nosso não tem por que
+  // chegar ao lead. Foi o que aconteceu na primeira versão desta correção.
+  const preheader = primeiraLinhaUtil(input.body);
+
   const blocoWhatsapp = input.whatsappUrl
     ? `<tr><td style="padding:4px 32px 24px;">
          <a href="${esc(input.whatsappUrl)}"
@@ -111,9 +143,8 @@ export function renderEmailHtml(input: EmailTemplateInput): string {
 <title>HiperTMS</title>
 </head>
 <body style="margin:0;padding:0;background:${FUNDO};">
-<!-- Preheader: primeira linha que o cliente mostra na lista, antes de abrir.
-     Escondido no corpo para não duplicar o texto visível. -->
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">O TMS feito para vender frete.</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${'&nbsp;&zwnj;'.repeat(60)}</div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
        style="background:${FUNDO};padding:32px 12px;">
