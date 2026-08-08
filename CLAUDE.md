@@ -301,7 +301,11 @@ The `docs/` tree is the source of truth — consult it before large changes:
   `context-engineering.md`, `memory-strategy.md`, `ai-review-process.md`).
 - **Feature PRDs**: `docs/features/**/prd.md` and `docs/prd/`.
 - **API standards**: `docs/api/` (`api-standards.md`, `error-handling.md`,
-  `naming-conventions.md`) and `docs/api-contract.md`.
+  `naming-conventions.md`).
+- **TMS↔Nexa contract**: `apps/backend/docs/portal-api-contract.md` is the source of
+  truth for the endpoints the TMS consumes (handoff token, portal session, portal
+  routes, web-chat token) — keep it in sync with the DTOs. `docs/api/guia-integracao.md`
+  covers the WhatsApp handoff flow.
 - **Security**: `docs/security/` (`security-overview.md`, `secrets-management.md`).
 - **Architecture**: `docs/architecture/` (`codebase-structure.md`,
   `frontend-architecture.md`, C4 diagrams) and `docs/overview/system-overview.md`.

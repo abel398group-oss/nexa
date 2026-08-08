@@ -915,3 +915,58 @@ describe('ConversationsService — despacho do canal e-mail', () => {
     expect(eventos).not.toContain('conversation.outbound.email');
   });
 });
+
+// ─── Recibo em canal sem ack nativo (web chat / portal) ──────────────────────
+// O Inbox desenha o status a partir de `ack` e só o WhatsApp preenchia o campo —
+// então toda mensagem de web chat e portal ficava "enviando" para sempre, mesmo
+// tendo sido entregue pelo WebSocket.
+describe('ConversationsService — recibo no web chat e portal', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  for (const canal of ['web_chat', 'portal'] as const) {
+    it(`resposta em ${canal} é marcada como enviada (ack=1)`, async () => {
+      deps.prisma.aiConversation.findFirst.mockResolvedValue({
+        ...existingConv, sourceChannel: canal, phone: 'ext-1', correlationId: 'c', humanTakeoverAt: null,
+      });
+
+      const msg: any = await svc.addMessage('t1', 'conv-1', {
+        direction: 'outbound',
+        content: 'Segue a orientação.',
+        byHuman: true,
+      });
+
+      expect(deps.prisma.aiMessage.update).toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { ack: 1 } });
+      expect(msg.ack).toBe(1);
+      expect(deps.waha.sendText).not.toHaveBeenCalled();
+    });
+  }
+
+  it('nunca passa de ack=1 — canal sem recibo de leitura não finge ter um', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'web_chat', phone: 'ext-1', correlationId: 'c', humanTakeoverAt: null,
+    });
+
+    await svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'oi', byHuman: true });
+
+    const acks = deps.prisma.aiMessage.update.mock.calls.map((c: any[]) => c[0].data.ack);
+    expect(acks.every((a: number) => a === 1)).toBe(true);
+  });
+
+  it('nota interna não recebe recibo (não foi entregue a ninguém)', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'web_chat', phone: 'ext-1', correlationId: 'c', humanTakeoverAt: null,
+    });
+
+    await svc.addMessage('t1', 'conv-1', {
+      direction: 'outbound', content: 'nota pro time', byHuman: true, isInternal: true,
+    });
+
+    expect(deps.prisma.aiMessage.update).not.toHaveBeenCalled();
+  });
+});

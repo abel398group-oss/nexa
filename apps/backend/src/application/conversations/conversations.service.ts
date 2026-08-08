@@ -961,6 +961,24 @@ export class ConversationsService {
       return message;
     }
 
+    // WEB CHAT / PORTAL — a entrega é o próprio 'message.created' emitido acima:
+    // o gateway empurra para a sala do socket e a mensagem já está persistida, então
+    // o widget a vê agora ou ao carregar o histórico.
+    //
+    // O recibo (`ack`) precisa refletir isso. Só o WhatsApp preenchia o campo, e o
+    // Inbox lê justamente ele para desenhar o status — resultado: TODA mensagem de
+    // web chat e portal ficava marcada "enviando" para sempre, mesmo entregue.
+    //
+    // ack=1 ("✓ enviado") e nunca 2/3: sabemos que saiu daqui, não que a pessoa
+    // recebeu na tela nem que leu. Canal sem recibo de leitura não pode fingir ter um.
+    if (despachavel && (canal === 'web_chat' || canal === 'portal')) {
+      await this.prisma.aiMessage
+        .update({ where: { id: message.id }, data: { ack: 1 } })
+        .catch((e: any) => this.logger.warn(`Falha ao marcar ack (conv=${conv.id} msg=${message.id}): ${e?.message}`));
+      (message as any).ack = 1;
+      return message;
+    }
+
     if (despachavel && canal !== 'web_chat' && canal !== 'portal') {
       const r = await this.waha.sendText(conv.phone, dto.content);
       if (r.sent) {

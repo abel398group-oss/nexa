@@ -36,7 +36,10 @@ Endpoints do Nexa consumidos pelo TMS (server-to-server, `TMS_SERVICE_TOKEN`):
 
 - [ ] Localizar TODOS os consumidores no repo `hipertms_v12` (grep pela rota)
 - [ ] Verificar o payload exato que o TMS envia hoje (ler o service do TMS, não assumir)
-- [ ] Atualizar `docs/api-contract.md` / `apps/backend/docs/portal-api-contract.md`
+- [ ] Atualizar `apps/backend/docs/portal-api-contract.md` (contrato dos endpoints que o
+      TMS consome) e, se for o fluxo de handoff por WhatsApp, `docs/api/guia-integracao.md`
+      — *não existe `docs/api-contract.md`; este checklist apontava para um arquivo
+      inexistente, e o resultado prático era ninguém atualizar contrato nenhum*
 - [ ] Se o TMS precisar mudar junto: avisar o Abel ANTES de commitar — os deploys são
       independentes e a ordem importa (receptor primeiro, emissor depois)
 - [ ] Mudanças em DTO de endpoint consumido pelo TMS devem ser **retrocompatíveis**:
