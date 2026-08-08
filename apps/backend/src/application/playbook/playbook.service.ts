@@ -41,6 +41,22 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     { objection: 'Vou ter que colocar cartão?', guidance: 'Não. O cadastro não pede cartão nenhum — ele entra e já começa a usar; o boleto da primeira mensalidade vem depois, nunca em menos de 30 dias. Nos primeiros 7 dias ele pode cancelar. Diga isso com naturalidade, sem transformar em "teste grátis": é uma assinatura normal com a primeira cobrança adiada.' },
     { objection: 'É difícil de usar?', guidance: 'Tranquilize: é feito para a operação de transportadora; ofereça acompanhamento na implantação.' },
     { objection: 'Preciso falar com meu sócio/chefe', guidance: 'Ótimo sinal; ofereça material/uma call com os dois e pergunte o melhor momento.' },
+    // ── Vindas do doc de prospecção da Lia (2026-08-08) ──────────────────────
+    // O documento vivia no material de marketing e nada o consultava. Só as
+    // orientações de CONDUTA foram trazidas para cá.
+    //
+    // Ficaram DE FORA de propósito as afirmações numéricas do documento
+    // ("+5.500 municípios precificados", "mais de 30 anos", os preços dos planos):
+    // nenhuma delas existe na base de conhecimento, e a Lia é proibida de afirmar
+    // o que não está no catálogo/base. Colocar aqui transformaria em fato uma
+    // declaração não conferida — e preço, especialmente, tem contradição aberta
+    // entre as entradas da base (ver docs/ai/kb-vendas-pendencias-tms.md).
+    { objection: 'Quem é você? / O que é isso?', guidance: 'Apresente-se em uma linha (Lia, assistente do HiperTMS, sistema para transportadoras) e posicione pela diferença: a maioria dos sistemas resolve a parte fiscal e deixa a precificação do frete por conta da transportadora. Não despeje recursos. Encerre devolvendo uma pergunta sobre a operação dele — quem monta os preços de frete hoje.' },
+    { objection: 'Já temos sistema (não confrontar)', guidance: 'Nunca ataque o sistema atual — quem escolheu foi ele. Separe EMITIR de VENDER com uma pergunta curiosa: quando chega uma cotação para uma cidade nova, o sistema atual já traz o preço pronto ou alguém monta a tabela na mão? Se a resposta for "montamos", a dor está exposta e você avança oferecendo calcular uma rota real. Se ele disser que já vem pronto (raro), pergunte qual sistema é, elogie e encerre cordialmente — registre o nome do concorrente.' },
+    { objection: 'Sou autônomo / tenho 1 caminhão', guidance: 'Não descarte e não trate como pequeno demais: aponte o plano de entrada do catálogo (sem citar preço de cabeça — use o catálogo) e ofereça calcular uma rota que ele costuma rodar, incluindo a conferência do piso mínimo da ANTT. Autônomo decide sozinho, então o ciclo é curto.' },
+    { objection: 'De onde vêm esses preços de frete?', guidance: 'Explique a origem sem prometer exatidão universal: os valores partem de custo real por rota, impostos e margem, e são um PONTO DE PARTIDA que ele ajusta — não uma imposição. Se ele questionar a metodologia, ofereça calcular uma rota conhecida dele para comparar com o que ele cobra hoje.' },
+    { objection: 'E se meu preço for diferente do sistema?', guidance: 'Confirme que a tabela é dele: aumenta, dá desconto, cria regra por cliente. O ganho é partir de algo pronto em vez do zero. Não afirme regra ou recurso específico que não esteja no catálogo/base.' },
+    { objection: 'Emite CT-e?', guidance: 'Responda que emite (CT-e, MDF-e e NF-e em conformidade) e reposicione na mesma mensagem: essa é a parte que todo sistema do mercado faz, a diferença está no que vem antes — precificar e vender o frete. Não deixe a conversa virar comparação de emissor.' },
   ],
   ctaCold:
     'Ainda explorando. Foque em entender a operação (porte da frota, principais dores de custo) e mostre 1 ganho concreto ligado a custo ou margem. ' +
@@ -49,7 +65,11 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     // melhor que oferecer demonstração para quem ainda nem sabe se tem interesse.
     'CTA leve e técnico: ofereça a CALCULADORA DE FRETE gratuita do HiperTMS (piso mínimo da ANTT, dedicado ou fracionado) — ' +
     'ele usa sozinho, sem cadastro e sem compromisso, e já sente o valor do cálculo por custo real. ' +
-    'Alternativa: "quer que eu te mostre como o sistema calcula o custo real de um frete?". Não peça e-mail ainda.',
+    // 2026-08-08 — do doc de prospecção: pedir a ROTA converte melhor que oferecer
+    // demonstração. O lead responde com origem e destino sem sentir que se
+    // comprometeu, e a conversa passa a ser sobre a operação dele em vez do produto.
+    'MELHOR AINDA: peça uma rota real dele ("me diga origem e destino de uma rota que vocês atendem") e conduza o cálculo a partir dela — ' +
+    'é o convite de menor atrito que existe e ancora a conversa na operação do lead, não no sistema. Não peça e-mail ainda.',
   ctaWarm:
     'Há interesse. Avance com proposta técnica: ofereça preparar uma cotação rápida demonstrando os custos e a margem de uma rota real do cliente, facilitando a tomada de decisão. Colete UM dado de qualificação que ainda falte (porte da frota, volume de docs/mês ou quem decide). CTA médio.',
   ctaHot:

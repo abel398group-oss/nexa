@@ -15,7 +15,34 @@ desatualizadas e **não servem como fonte de verdade**.
 > **Regra:** a fonte de verdade dos planos é a tela `/admin/subscription` do TMS
 > em produção — não as migrations, não o seed, não o schema.
 
-### Valores REAIS (conferidos na tela em 2026-08-01)
+## 🔴 A TABELA ABAIXO ESTÁ EM DISPUTA (2026-08-08) — não use como referência
+
+A tabela desta seção diz **Essencial R$ 199 · Profissional R$ 299** com **5/8/15
+usuários**. A página pública do TMS
+(`hipertms_v12/apps/web/src/pages/public/LandingPage.tsx`) diz outra coisa, e diz
+desde **11/05/2026** — antes desta auditoria:
+
+| | Básico | Essencial | Profissional |
+|---|---|---|---|
+| Este doc (01/08) | R$ 89 · 5 usuários | **R$ 199** · 8 usuários | **R$ 299** · 15 usuários |
+| Site público (desde 11/05) | R$ 89 · **1 usuário** | **R$ 299** · 5 usuários | **R$ 599** · 15 usuários |
+
+As duas versões existem na base de conhecimento, **as duas aprovadas** (2 artigos
+com R$ 199, 4 com R$ 299). Não sabemos qual é a atual: o site tem os planos
+*hardcoded* no frontend (candidato clássico a ficar velho) e este doc afirma ter
+lido a tela de assinatura. **Não dá para resolver pelo repositório.**
+
+Quem for decidir: a única autoridade é o catálogo ao vivo — `GET {TMS}/nexa/plans`
+(é de onde a Lia lê o preço em tempo de execução, via
+`hipertms.connector.ts:getPlans`) ou a tela `/admin/subscription` em produção.
+Depois de conferir, apagar da KB as entradas da versão errada — enquanto as duas
+convivem, o prompt da Lia recebe as duas e ela pode dizer qualquer uma.
+
+Nota: o preço que a Lia cita vem do catálogo AO VIVO, não da KB. O risco da KB é
+outro e igualmente ruim: o texto dos artigos entra no mesmo prompt e pode
+contradizer o catálogo dentro da mesma mensagem.
+
+### Valores conforme esta auditoria (01/08/2026) — ver disputa acima
 
 | | Básico | Essencial | Profissional | Corporativo |
 |---|---|---|---|---|
