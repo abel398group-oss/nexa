@@ -42,6 +42,10 @@ const NAV_GROUPS: NavGroup[] = [
     // o caminho do dia a dia.
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
     { to: '/campaigns',      label: 'Disparo',           ic: 'campaigns', perm: 'campaigns' },
+      // Audiência do site fica ao lado do Disparo, não em 'Saúde dos números':
+      // aquela tela é sessão do WAHA e risco de ban. A pergunta desta é 'a campanha
+      // trouxe gente ao site?', e quem a faz é quem dispara.
+      { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye', perm: 'campaigns' },
     { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
     { to: '/contacts/abuse', label: 'Números banidos',   ic: 'ban',       perm: 'contacts' },
     { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
