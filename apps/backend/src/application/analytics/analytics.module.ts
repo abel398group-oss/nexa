@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
 import { PageviewService } from './pageview.service';
+import { PageviewStatsService } from './pageview-stats.service';
+import { SiteDigestCron } from './site-digest.cron';
+import { AnalyticsController } from '@/presentation/http/analytics/analytics.controller';
+import { MonitorModule } from '@/application/monitor/monitor.module';
+import { RedisLockModule } from '@/shared/lock/redis-lock.module';
 import { TrackingController } from '@/presentation/http/analytics/tracking.controller';
 
 /**
@@ -11,8 +16,9 @@ import { TrackingController } from '@/presentation/http/analytics/tracking.contr
  * primeiro, emissor depois).
  */
 @Module({
-  controllers: [TrackingController],
-  providers: [PageviewService],
-  exports: [PageviewService],
+  imports: [MonitorModule, RedisLockModule],
+  controllers: [TrackingController, AnalyticsController],
+  providers: [PageviewService, PageviewStatsService, SiteDigestCron],
+  exports: [PageviewService, PageviewStatsService],
 })
 export class AnalyticsModule {}

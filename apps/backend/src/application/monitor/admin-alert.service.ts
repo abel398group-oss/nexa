@@ -31,9 +31,19 @@ export class AdminAlertService {
    * Avisa o admin no WhatsApp E no e-mail (o que estiver configurado). `body` é
    * texto puro (sirve pros dois). Retorna quais canais saíram — útil pra log/teste.
    */
-  async notifyAdmin(subject: string, body: string): Promise<{ whatsapp: boolean; email: boolean }> {
+  /**
+   * `opts.icon` troca o emoji da versão WhatsApp. Default ⚠️ porque quase todo
+   * chamador aqui é monitor de falha; o resumo diário de visitas do site passa 📊 —
+   * marcar informação de rotina com sinal de alerta ensina o leitor a não distinguir
+   * mais os dois, e aí o alerta que importa passa batido.
+   */
+  async notifyAdmin(
+    subject: string,
+    body: string,
+    opts: { icon?: string } = {},
+  ): Promise<{ whatsapp: boolean; email: boolean }> {
     const [whatsapp, email] = await Promise.all([
-      this.notifyWhatsapp(`⚠️ *${subject}*\n\n${body}`),
+      this.notifyWhatsapp(`${opts.icon ?? '⚠️'} *${subject}*\n\n${body}`),
       this.notifyEmail(subject, body),
     ]);
     return { whatsapp, email };
