@@ -1,0 +1,12 @@
+-- E-mail de AVISO do vendedor (handoff de lead quente).
+--
+-- Até aqui o aviso saía só no WhatsApp do vendedor + sino do portal. Lead que chega
+-- por e-mail fora do horário, ou vendedor que não está com o celular na mão, ficava
+-- dependendo de alguém abrir o inbox.
+--
+-- Coluna própria, e NÃO reaproveitar users.email: aquele é credencial de login do
+-- portal. Vendedor pode receber lead sem ter conta, e mudar o login não pode mudar
+-- para onde o aviso vai — são coisas diferentes que só por acaso costumam coincidir.
+--
+-- Aditiva e nullable: vendedor sem e-mail continua exatamente como hoje.
+ALTER TABLE "sellers" ADD COLUMN IF NOT EXISTS "email" TEXT;

@@ -549,6 +549,11 @@ model Seller {
   tenantId      String   @map("tenant_id")
   name          String
   phone         String // WhatsApp do vendedor (ex 5511994327713)
+  // E-mail para AVISO de handoff (lead quente / cliente pediu humano).
+  // Fica aqui e não em User.email porque vendedor recebe lead sem precisar ter
+  // conta no portal — antes, cadastrar vendedor sem senha jogava o e-mail fora.
+  // Vazio = só WhatsApp e sino do portal, como era antes.
+  email         String?
   active        Boolean  @default(true)
   // ADR 034 ("Estou fora"): true → handoff notifica também no WhatsApp do
   // vendedor (com deep link pro inbox); false → só sino do portal. Default

@@ -32,8 +32,10 @@ function makeService(opts: {
   } as any;
 
   const waha = { sendText: vi.fn().mockResolvedValue({ sent: true }) } as any;
-  const svc = new SellersService(prisma, waha);
-  return { svc, prisma, waha };
+  // aviso por e-mail do handoff (só dispara quando o vendedor tem endereço)
+  const emailReply = { sendAlertEmail: vi.fn().mockResolvedValue({ sent: true }) } as any;
+  const svc = new SellersService(prisma, waha, emailReply);
+  return { svc, prisma, waha, emailReply };
 }
 
 const INPUT = { conversationId: 'conv-1', contactPhone: '5512911112222', leadScore: 85 };
@@ -138,5 +140,62 @@ describe('SellersService.handoff — kind (hot_lead vs human_request)', () => {
     const [, msg] = waha.sendText.mock.calls[0];
     expect(msg).toContain('Cliente voltou');
     expect(msg).not.toContain('score');
+  });
+});
+
+// ── Aviso de handoff por e-mail (2026-08-08) ────────────────────────────────
+// O aviso saía só no WhatsApp do vendedor. Lead quente que chega fora do horário
+// dependia de alguém ver a mensagem no celular; agora também cai na caixa de e-mail.
+describe('SellersService.handoff — aviso por e-mail', () => {
+  const COM_EMAIL = {
+    id: 's1', tenantId: 't1', name: 'Mateus Gomes', phone: '5511994327713',
+    email: 'mateus.gomes@hipertms.com.br', active: true, outOfOffice: true, assignedCount: 0,
+  };
+
+  it('avisa por e-mail quando o vendedor tem endereço', async () => {
+    const { svc, emailReply } = makeService({ seller: COM_EMAIL });
+
+    await svc.handoff('t1', INPUT);
+
+    expect(emailReply.sendAlertEmail).toHaveBeenCalledTimes(1);
+    const [para, assunto, corpo] = emailReply.sendAlertEmail.mock.calls[0];
+    expect(para).toBe('mateus.gomes@hipertms.com.br');
+    expect(assunto).toContain(INPUT.contactPhone);
+    // Responder o aviso não fala com o cliente — o vendedor precisa saber disso.
+    expect(corpo).toMatch(/NÃO fala com o cliente/i);
+  });
+
+  it('vendedor sem e-mail: nada muda (WhatsApp + sino, como antes)', async () => {
+    const { svc, emailReply, waha } = makeService({ seller: { ...COM_EMAIL, email: null } });
+
+    await svc.handoff('t1', INPUT);
+
+    expect(emailReply.sendAlertEmail).not.toHaveBeenCalled();
+    expect(waha.sendText).toHaveBeenCalled();
+  });
+
+  it('e-mail em branco conta como sem e-mail', async () => {
+    const { svc, emailReply } = makeService({ seller: { ...COM_EMAIL, email: '   ' } });
+    await svc.handoff('t1', INPUT);
+    expect(emailReply.sendAlertEmail).not.toHaveBeenCalled();
+  });
+
+  // O lead JÁ está atribuído quando o aviso sai. Trocar "não avisou" por "lead sem
+  // dono" seria estritamente pior.
+  it('falha de SMTP não derruba o handoff', async () => {
+    const { svc } = makeService({ seller: COM_EMAIL });
+    (svc as any).emailReply.sendAlertEmail = vi.fn().mockRejectedValue(new Error('smtp fora'));
+
+    const r = await svc.handoff('t1', INPUT);
+
+    expect(r).toMatchObject({ assigned: true, sellerName: 'Mateus Gomes' });
+  });
+
+  it('pedido de humano usa assunto próprio (não é lead quente)', async () => {
+    const { svc, emailReply } = makeService({ seller: COM_EMAIL });
+
+    await svc.handoff('t1', { ...INPUT, kind: 'human_request' });
+
+    expect(emailReply.sendAlertEmail.mock.calls[0][1]).toMatch(/pediu atendimento/i);
   });
 });
