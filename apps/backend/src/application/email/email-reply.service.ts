@@ -18,8 +18,11 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailOptOutService } from './email-optout.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { renderEmailHtml } from './email-template';
+import { resolveSignature, signatureText } from './email-signature';
 
-const SIGNATURE = 'Lia · Assistente HiperTMS | hipertms.com.br';
+// Assinatura configurável — ver email-signature.ts. A versão texto e a versão HTML
+// vêm da MESMA fonte, para não existir a situação de o destinatário ver um nome no
+// HTML e outro no fallback de texto puro.
 
 /**
  * Nome anunciado no HELO/EHLO da sessão SMTP.
@@ -150,11 +153,15 @@ export class EmailReplyService {
 
     const corpoLimpo = stripMarkdown(opts.body);
 
+    // Resolvida UMA vez e usada nas duas versões — texto e HTML precisam mostrar o
+    // mesmo nome, senão o destinatário vê assinaturas diferentes conforme o cliente.
+    const assinatura = resolveSignature();
+
     // Alternativa em texto puro (multipart) — para cliente sem HTML e para o score
     // de spam: e-mail só-HTML pontua pior nos filtros.
     const bodyText =
       `${corpoLimpo}${waInvite}\n\n` +
-      `--\n${SIGNATURE}\n\n` +
+      `--\n${signatureText(assinatura)}\n\n` +
       `Cancelar e-mails: ${optOutUrl}`;
 
     // Versão HTML com a identidade da marca. O descadastro vai em 11px cinza no
@@ -164,6 +171,7 @@ export class EmailReplyService {
       body: corpoLimpo,
       optOutUrl,
       whatsappUrl: waQualificado ? waLink : undefined,
+      signature: assinatura,
     });
 
     const subject =
@@ -251,7 +259,7 @@ export class EmailReplyService {
         from: `"${config.fromName}" <${config.fromEmail}>`,
         to,
         subject,
-        text: `${text}\n\n--\n${SIGNATURE}`,
+        text: `${text}\n\n--\n${signatureText()}`,
         ...(html ? { html } : {}),
         replyTo: config.replyTo,
       });

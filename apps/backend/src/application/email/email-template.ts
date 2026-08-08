@@ -15,6 +15,8 @@
  *   • Sempre multipart (text + html): cliente sem HTML recebe o texto puro.
  */
 
+import { signatureHtml, type Signature } from './email-signature';
+
 const LARANJA = '#FF5A1F';
 const GRAFITE = '#16181D';
 const FUNDO = '#FFF3ED';
@@ -76,6 +78,8 @@ export interface EmailTemplateInput {
   optOutUrl: string;
   /** Convite de WhatsApp, quando o lead está qualificado. */
   whatsappUrl?: string;
+  /** Assinatura. Ausente → resolvida do ambiente (ver email-signature.ts). */
+  signature?: Signature;
 }
 
 /**
@@ -139,14 +143,9 @@ export function renderEmailHtml(input: EmailTemplateInput): string {
 
         ${blocoWhatsapp}
 
-        <!-- Assinatura -->
+        <!-- Assinatura (configurável — ver email-signature.ts) -->
         <tr>
-          <td style="padding:8px 32px 28px;">
-            <div style="border-top:1px solid #EFEAE6;padding-top:16px;font-size:13px;line-height:1.5;color:${SUAVE};">
-              <strong style="color:${GRAFITE};font-weight:600;">Lia</strong> · Assistente HiperTMS<br />
-              <a href="https://hipertms.com.br" style="color:${SUAVE};text-decoration:none;">hipertms.com.br</a>
-            </div>
-          </td>
+          <td style="padding:8px 32px 28px;">${signatureHtml(input.signature)}</td>
         </tr>
       </table>
 
