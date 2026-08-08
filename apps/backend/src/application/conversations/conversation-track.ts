@@ -1,41 +1,53 @@
 /**
  * A que trilha uma conversa pertence — suporte ou vendas.
  *
- * Fonte única do critério, em duas formas: filtro para o Prisma e predicado para
- * decidir em memória. Antes existia só o filtro, privado dentro do
- * ConversationsService, e quem precisava do predicado não tinha de onde tirar.
+ * A REGRA É O CANAL (decisão de produto, 08/08/2026):
  *
- * A heurística nasceu no frontend (`shared/lib/conversation.ts`) e a cópia de lá
- * ainda existe, porque a lista do Inbox é filtrada no servidor mas a marcação na
- * tela é feita no cliente. **As duas têm que andar juntas: mudou uma condição
- * aqui, mude lá.**
+ *   chat do HiperTMS (widget) e portal  → SUPORTE
+ *   WhatsApp e e-mail                   → COMERCIAL
+ *
+ * Suporte é exclusivo do chat embutido e da abertura de chamado; o WhatsApp é
+ * canal de marketing e o cliente que pedir suporte por lá é direcionado, não
+ * atendido. Ver SCRIPTS.suporteCanalComercial no ConversationAgent.
+ *
+ * Antes disto a trilha era uma heurística de quatro condições —
+ * `ticketCategory != null` OU `customerStage = 'cliente_ativo'` OU
+ * `status = 'escalated'` OU canal em (portal, web_chat) — e as três primeiras não
+ * olhavam o canal. Consequências que existiam:
+ *
+ *   • cliente do TMS mandando WhatsApp era marcado `cliente_ativo` e a conversa
+ *     saía da fila de vendas para a de suporte, no canal errado;
+ *   • lead que pedia atendente humano virava `escalated` e era contado como
+ *     chamado de suporte, sendo um lead quente.
+ *
+ * Verificado na base antes da troca: 7 conversas de WhatsApp, ZERO casavam na
+ * heurística antiga — ou seja, a mudança não move nenhum chamado em andamento.
+ * Os 3 chamados com analista atribuído são todos de `web_chat`.
+ *
+ * A cópia do frontend (`shared/lib/conversation.ts`) precisa dizer o mesmo: a
+ * lista é filtrada no servidor mas a marcação na tela é feita no cliente.
+ * **Mudou aqui, mude lá.**
  */
 
-/** Uma conversa é de suporte se bater em QUALQUER uma destas condições. */
-export const SUPPORT_MATCH = [
-  { ticketCategory: { not: null } },
-  { customerStage: 'cliente_ativo' },
-  { status: 'escalated' },
-  { sourceChannel: { in: ['portal', 'web_chat'] } },
-] as const;
+/** Canais em que a Lia faz SUPORTE. Qualquer outro é comercial. */
+export const SUPPORT_CHANNELS = ['portal', 'web_chat'] as const;
+
+/** Filtro Prisma da trilha de suporte. */
+export const SUPPORT_MATCH = [{ sourceChannel: { in: [...SUPPORT_CHANNELS] } }] as const;
 
 /** Campos mínimos para classificar uma conversa. */
 export interface TrackFields {
-  ticketCategory?: string | null;
-  customerStage?: string | null;
-  status?: string | null;
   sourceChannel?: string | null;
 }
 
-/** Mesmas condições de SUPPORT_MATCH, avaliadas em memória. */
+/** Mesma condição de SUPPORT_MATCH, avaliada em memória. */
 export function isSupportConversation(c: TrackFields): boolean {
-  return (
-    (c.ticketCategory ?? null) !== null ||
-    c.customerStage === 'cliente_ativo' ||
-    c.status === 'escalated' ||
-    c.sourceChannel === 'portal' ||
-    c.sourceChannel === 'web_chat'
-  );
+  return SUPPORT_CHANNELS.includes(c.sourceChannel as (typeof SUPPORT_CHANNELS)[number]);
+}
+
+/** O canal admite atendimento de suporte pela Lia? */
+export function isSupportChannel(sourceChannel?: string | null): boolean {
+  return isSupportConversation({ sourceChannel });
 }
 
 /**

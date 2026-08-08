@@ -215,3 +215,35 @@ Adicionar no painel do HiperTMS o botão:
 
 O `[via-painel-tms]` garante que a Lia vá direto para o suporte sem perguntar
 se o cliente já usa o sistema.
+
+---
+
+## Adendo (08/08/2026) — Modalidades A e B SUPERADAS
+
+Decisão de produto: **suporte é exclusivo do chat embutido no HiperTMS e da
+abertura de chamado.** O WhatsApp passa a ser canal exclusivamente comercial.
+
+Consequência para esta ADR:
+
+- **Modalidade A** (botão abrindo `wa.me` com o marcador `[via-painel-tms]`) e
+  **Modalidade B** (`wa.me` com `HANDOFF:<token>`) estão **superadas**. A
+  Modalidade C — widget embutido, detalhada na ADR 027 — é o único caminho de
+  suporte.
+- O frontend do TMS já não usava nenhuma das duas: o endpoint `POST /lia-handoff`
+  (`lia-support.controller.ts`) existe mas nenhum componente o chama. Ou seja, o
+  TMS já se comportava assim; o Nexa é que continuava aceitando.
+- No Nexa, o marcador e o token **só são honrados em canal de suporte**
+  (`web_chat`, `portal`) — ver `conversation-track.ts`. Chegando pelo WhatsApp,
+  ficam registrados em log e a rota permanece comercial. O token nem é consumido:
+  ele é de uso único, e queimá-lo aqui invalidaria a sessão que o cliente abriria
+  no widget em seguida.
+- Cliente do HiperTMS que pede suporte pelo WhatsApp é **direcionado** ao chat do
+  sistema (`SCRIPTS.suporteCanalComercial`). A Lia não diagnostica, não abre
+  chamado e não escala por lá.
+- Quem **não** é cliente e pede suporte pelo WhatsApp continua recebendo a
+  orientação comercial (`SCRIPTS.supportSemCadastro`) — não tem acesso ao chat do
+  HiperTMS, então mandá-lo para lá seria um beco sem saída.
+
+O endpoint `POST /lia-handoff` do TMS não foi removido: mexer no repo do TMS exige
+combinar com o Abel (REGRA 8). Ele está inerte — nada o chama, e o Nexa ignora o
+resultado dele em canal comercial.

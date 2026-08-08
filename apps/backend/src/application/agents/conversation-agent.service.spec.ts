@@ -817,8 +817,10 @@ describe('ConversationAgentService.handle()', () => {
   // ── handoff token & via-painel-tms ─────────────────────────────────────────
 
   describe('HANDOFF token', () => {
-    it('resolves token and forces support route', async () => {
+    it('resolve o token e força suporte QUANDO o canal é de suporte', async () => {
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      // A trilha é o canal (08/08/2026): o token só é honrado no widget/portal.
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ sourceChannel: 'web_chat' });
       mockHandoff.consume.mockResolvedValue({
         externalId: 'ext123',
         tenantId: 't1',
@@ -859,14 +861,41 @@ describe('ConversationAgentService.handle()', () => {
       expect(mockSales.sell).toHaveBeenCalled();
     });
 
-    it('[via-painel-tms] marker forces support route', async () => {
+    it('[via-painel-tms] força suporte QUANDO o canal é de suporte', async () => {
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ sourceChannel: 'web_chat' });
 
       const svc = makeService();
-      const res = await svc.handle('t1', { message: '[via-painel-tms] preciso de ajuda' });
+      const res = await svc.handle('t1', { message: '[via-painel-tms] preciso de ajuda', conversationId: 'conv1' });
 
       expect(res.route.agent).toBe('support');
       expect(mockSupport.ask).toHaveBeenCalled();
+    });
+
+    // ADR 022 modalidades A e B (botão do TMS abrindo wa.me para suporte) foram
+    // SUPERADAS: o frontend do TMS não as usa mais e o WhatsApp virou exclusivamente
+    // comercial. O marcador chegando por lá não pode reabrir a porta.
+    it('marcador de suporte no WhatsApp NÃO força suporte', async () => {
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ sourceChannel: 'whatsapp' });
+
+      const svc = makeService();
+      const res = await svc.handle('t1', { message: '[via-painel-tms] preciso de ajuda', conversationId: 'conv1' });
+
+      expect(res.route.agent).not.toBe('support');
+      expect(mockSupport.ask).not.toHaveBeenCalled();
+    });
+
+    it('HANDOFF token no WhatsApp não é nem consumido', async () => {
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockPrisma.aiConversation.findUnique.mockResolvedValue({ sourceChannel: 'whatsapp' });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'HANDOFF:abc123xyz olá', conversationId: 'conv1' });
+
+      // Não consumir o token importa: ele é de uso único e queimá-lo aqui
+      // invalidaria a sessão que o cliente abriria no widget em seguida.
+      expect(mockHandoff.consume).not.toHaveBeenCalled();
     });
   });
 
@@ -934,5 +963,79 @@ describe('ConversationAgentService.escalateOnly()', () => {
     expect(res.route.agent).toBe('sales');
     expect(res.handoff?.assigned).toBe(true);
     expect(mockConversations.addMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ── Trilha pelo canal (decisão de produto, 08/08/2026) ───────────────────────
+// Suporte é exclusivo do chat dentro do HiperTMS e da abertura de chamado. No
+// WhatsApp/e-mail a Lia direciona quem pede suporte — não diagnostica, não abre
+// chamado, não escala.
+describe('suporte pedido em canal comercial', () => {
+  beforeEach(() => {
+    mockAutonomy.isEnabled.mockReturnValue(true);
+    mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support', intent: 'support_question' }));
+  });
+
+  it('CLIENTE do TMS no WhatsApp é direcionado ao chat do HiperTMS', async () => {
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511999999999', sourceChannel: 'whatsapp' });
+    // lookup encontra o telefone → é cliente ativo
+    // .get fixo: o service chama TmsLookupService.normalize(phone) na chave, e
+    // reproduzir a normalização aqui acoplaria o teste ao formato interno dela.
+    mockTmsLookup.batchLookup.mockResolvedValue({
+      get: () => ({ name: 'Empresa ABC', role: 'ADMIN', tenantName: 'ABC' }),
+    } as any);
+
+    const svc = makeService();
+    const res = await svc.handle('t1', { message: 'meu CT-e foi rejeitado', conversationId: 'conv1' });
+
+    expect(res.draft).toContain('time comercial');
+    expect(res.draft).toMatch(/chat da Lia dentro do HiperTMS/);
+    // Não gasta as chamadas de IA do pipeline de suporte só para dizer "canal errado"
+    expect(mockSupport.ask).not.toHaveBeenCalled();
+    // E não vira chamado: nada de escalar nem de marcar needsHuman
+    expect(res.needsHuman).toBe(false);
+  });
+
+  it('PROSPECT no WhatsApp continua recebendo a orientação comercial, não o chat', async () => {
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511977777777', sourceChannel: 'whatsapp' });
+    mockTmsLookup.batchLookup.mockResolvedValue(new Map()); // não é cliente
+
+    const svc = makeService();
+    const res = await svc.handle('t1', { message: 'preciso de suporte', conversationId: 'conv1' });
+
+    // Quem não é cliente não tem acesso ao chat do HiperTMS — mandá-lo para lá
+    // seria beco sem saída. Prospect pedindo suporte é oportunidade comercial.
+    expect(res.draft).toMatch(/exclusivo para clientes/i);
+    expect(res.draft).not.toContain('time comercial');
+  });
+
+  it('no widget o suporte funciona normalmente', async () => {
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ sourceChannel: 'web_chat' });
+
+    const svc = makeService();
+    const res = await svc.handle('t1', {
+      message: 'meu CT-e foi rejeitado',
+      conversationId: 'conv1',
+      portalIdentity: { externalId: 'ext1', name: 'Empresa ABC' },
+    });
+
+    expect(mockSupport.ask).toHaveBeenCalled();
+    expect(res.draft).not.toContain('time comercial');
+  });
+
+  it('cliente do TMS no WhatsApp segue na fila de VENDAS, não vira chamado', async () => {
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511999999999', sourceChannel: 'whatsapp' });
+    // .get fixo: o service chama TmsLookupService.normalize(phone) na chave, e
+    // reproduzir a normalização aqui acoplaria o teste ao formato interno dela.
+    mockTmsLookup.batchLookup.mockResolvedValue({
+      get: () => ({ name: 'Empresa ABC', role: 'ADMIN', tenantName: 'ABC' }),
+    } as any);
+
+    const svc = makeService();
+    const res = await svc.handle('t1', { message: 'meu CT-e foi rejeitado', conversationId: 'conv1' });
+
+    // customerStage continua sendo gravado (é fato: ele É cliente), mas hoje isso
+    // é só informação para quem vende — não move mais a conversa para o suporte.
+    expect(res.route.agent).not.toBe('support');
   });
 });

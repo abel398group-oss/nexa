@@ -19,7 +19,7 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 import { AbuseGuardService } from '@/application/contacts/abuse-guard.service';
 import { isWithinSupportHours, nextOpeningLabel, supportHoursLabel } from '@/application/conversations/support-hours';
 import { isSupportScript } from './support-scripts.const';
-import { isSupportConversation, trackWhere } from '@/application/conversations/conversation-track';
+import { isSupportChannel, isSupportConversation, trackWhere } from '@/application/conversations/conversation-track';
 
 // Detecta marcador do botão TMS (Modalidade A — ADR 022)
 const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
@@ -49,6 +49,19 @@ const SCRIPTS = {
     `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${url} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`,
   supportSemCadastro:
     `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`,
+  /**
+   * Pediram suporte num canal COMERCIAL (WhatsApp, e-mail).
+   *
+   * Decisão de produto (08/08/2026): suporte é exclusivo do chat dentro do
+   * HiperTMS e da abertura de chamado. Aqui a Lia direciona — ela não diagnostica,
+   * não abre chamado e não escala. Atender suporte no canal de marketing misturaria
+   * os dois funis, que é justamente o que a separação de trilhas evita.
+   */
+  suporteCanalComercial:
+    'Este canal aqui é do time comercial. 🙂\n\n' +
+    'Para suporte técnico, use o chat da Lia dentro do HiperTMS ou abra um chamado por lá — ' +
+    'a equipe de suporte te atende direto no sistema, com acesso aos seus dados.\n\n' +
+    'Se a sua dúvida for sobre planos, contratação ou um módulo novo, aí eu te ajudo agora mesmo!',
 } as const;
 
 /**
@@ -65,7 +78,12 @@ const SCRIPTS = {
 function isKnownScript(draft: string): boolean {
   if (!draft) return true;
 
-  const fixos: string[] = [SCRIPTS.optOut, SCRIPTS.handoffHuman, SCRIPTS.supportSemCadastro];
+  const fixos: string[] = [
+    SCRIPTS.optOut,
+    SCRIPTS.handoffHuman,
+    SCRIPTS.supportSemCadastro,
+    SCRIPTS.suporteCanalComercial,
+  ];
   if (fixos.includes(draft)) return true;
 
   // Catálogo do suporte (saudação, CSAT, avisos de transbordo) — mesma regra:
@@ -181,12 +199,17 @@ export class ConversationAgentService {
     // existe justamente para parar isso, não só para calar a saída.
     let ownPhone: string | null = null;
     let ownEmail: string | null = null;
+    // Canal da conversa — é ele que decide a trilha (ver conversation-track.ts).
+    // Sem conversationId (chamada avulsa) a presença de portalIdentity é o indício:
+    // ela só existe no widget e no portal.
+    let canal: string | null = input.portalIdentity ? 'web_chat' : null;
     if (input.conversationId) {
       const convId = input.conversationId;
       const convForGuard = await this.prisma.aiConversation
-        .findUnique({ where: { id: convId }, select: { phone: true, productCode: true } })
+        .findUnique({ where: { id: convId }, select: { phone: true, productCode: true, sourceChannel: true } })
         .catch(() => null);
       ownPhone = convForGuard?.phone ?? null;
+      canal = (convForGuard?.sourceChannel as string | null) ?? canal;
 
       // F8: o produto fica gravado na conversa quando o lead entra pela campanha
       // (sender.service.ts). Quando ele RESPONDE, quem chama o handle() não sabe
@@ -238,7 +261,7 @@ export class ConversationAgentService {
 
     // Resolve a identidade do remetente (handoff token / marcador de painel / portal /
     // lookup no TMS), podendo forçar rota 'support', e limpa a mensagem dos marcadores (A3).
-    const identity = await this.resolveIdentity(tenantId, input, route);
+    const identity = await this.resolveIdentity(tenantId, input, route, canal);
     route = identity.route;
     const { handoffContext, tmsCustomer, hasPanel, agentMessage } = identity;
 
@@ -260,6 +283,8 @@ export class ConversationAgentService {
       handoffContext,
       tmsCustomer,
       hasPanel,
+      canal,
+      canalDeSuporte: isSupportChannel(canal),
     });
     route = resp.route;
     const { draft, suggestedAction, usedKnowledge, confidence, allowedFacts, scripted, usage } = resp;
@@ -499,6 +524,9 @@ export class ConversationAgentService {
       msgs: any[];
       liaAlreadyTalked: boolean;
       handoffContext: unknown;
+      /** Canal da conversa — decide a trilha (ver conversation-track.ts). */
+      canal: string | null;
+      canalDeSuporte: boolean;
       tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
       hasPanel: boolean;
     },
@@ -625,6 +653,34 @@ export class ConversationAgentService {
           this.logger.log('Prospect pediu suporte sem cadastro no TMS → orientação direcionada a vendas');
           break;
         }
+
+        // CLIENTE pedindo suporte em CANAL COMERCIAL (WhatsApp, e-mail): direciona.
+        //
+        // Suporte é exclusivo do chat dentro do HiperTMS e da abertura de chamado
+        // (decisão de produto, 08/08/2026). Aqui a Lia não diagnostica, não abre
+        // chamado e não escala — fazer isso misturaria os dois funis.
+        //
+        // Vem DEPOIS do bloco de prospect de propósito: quem não é cliente não tem
+        // acesso ao chat do HiperTMS, então mandá-lo para lá seria um beco sem saída.
+        // Prospect pedindo suporte é oportunidade comercial, e é o que o bloco acima
+        // trata.
+        //
+        // Este caminho não chama o SupportAgent, então não gasta as chamadas de IA de
+        // classificação/diagnóstico/resolução só para dizer "canal errado".
+        if (!ctx.canalDeSuporte) {
+          draft = SCRIPTS.suporteCanalComercial;
+          suggestedAction = 'none';
+          scripted = true;
+          // A rota volta para comercial. Deixá-la em 'support' num canal comercial
+          // seria um estado mentiroso: os efeitos pós-resposta olham `route.agent`
+          // para decidir escalação e fila, e a conversa É comercial.
+          route = { ...route, agent: 'sales', reason: 'suporte pedido em canal comercial — direcionado' };
+          this.logger.log(
+            `Cliente pediu suporte em canal comercial (canal=${ctx.canal ?? '-'}) → direcionado ao chat do HiperTMS`,
+          );
+          break;
+        }
+
         // Passa conversationId para que o SupportAgent recupere o histórico da conversa
         const r = await this.support.ask(tenantId, {
           question: agentMessage,
@@ -682,6 +738,7 @@ export class ConversationAgentService {
     tenantId: string,
     input: { message: string; conversationId?: string; portalIdentity?: { externalId: string; name?: string | null; page?: string | null } },
     route: RouteDecision,
+    canal: string | null,
   ): Promise<{
     route: RouteDecision;
     handoffContext: HandoffContext | null;
@@ -697,7 +754,21 @@ export class ConversationAgentService {
     // Identidade do cliente — nome vem do TMS (token de handoff ou lookup por telefone), NUNCA do que a pessoa digita.
     let tmsCustomer: { externalId?: string; name: string; role?: string; tenantName?: string; isAdmin: boolean; page?: string | null } | undefined;
 
-    if (handoffMatch) {
+    // Suporte só existe em canal de suporte (widget/portal). Marcador e token de
+    // handoff chegavam pelo WhatsApp — modalidades A e B da ADR 022, hoje SUPERADAS:
+    // o frontend do TMS não usa mais nenhuma das duas, e a decisão de produto de
+    // 08/08/2026 tornou o WhatsApp exclusivamente comercial. Se algo ainda mandar
+    // esses marcadores por lá, o log registra em vez de abrir uma porta de suporte
+    // no canal errado.
+    const canalDeSuporte = isSupportChannel(canal);
+    if ((handoffMatch || hasPanel) && !canalDeSuporte) {
+      this.logger.warn(
+        `Marcador de suporte recebido em canal comercial (canal=${canal ?? '-'}) — ` +
+        'ADR 022 modalidades A/B foram superadas; a rota permanece comercial.',
+      );
+    }
+
+    if (handoffMatch && canalDeSuporte) {
       handoffContext = await this.handoff.consume(handoffMatch[1]);
       if (handoffContext) {
         route = { ...route, agent: 'support' };
@@ -718,7 +789,7 @@ export class ConversationAgentService {
       } else {
         this.logger.warn(`HANDOFF token inválido/expirado: ${handoffMatch[1]}`);
       }
-    } else if (hasPanel) {
+    } else if (hasPanel && canalDeSuporte) {
       route = { ...route, agent: 'support' };
       this.logger.log('Marcador [via-painel-tms] detectado → rota suporte direto');
     }
@@ -738,10 +809,13 @@ export class ConversationAgentService {
     // cumprimentar e perguntar a dúvida — em vez de processar o token cru.
     const agentMessage = cleanMessage || 'Olá, preciso de ajuda com o HiperTMS.';
 
-    // ── TMS lookup: se o remetente já é cliente HiperTMS → rota suporte (não vendas) ──
-    // Busca o telefone da conversa para consultar o TMS antes de rotear
-    // Roda tanto p/ 'sales' (redireciona cliente → suporte) quanto p/ 'support'
-    // (precisamos saber se é cliente DE VERDADE; se não for, é prospect e tratamos abaixo).
+    // ── TMS lookup: quem é o remetente ──────────────────────────────────────────
+    //
+    // Antes este bloco FORÇAVA rota de suporte quando o telefone era de um cliente
+    // do TMS — inclusive no WhatsApp. Cliente que mandava mensagem no número de
+    // marketing era atendido pelo suporte no canal errado, e a conversa saía da fila
+    // de vendas. Agora ele só resolve a IDENTIDADE (útil para o vendedor saber que
+    // fala com um cliente ativo); a trilha continua sendo do canal.
     if (input.conversationId && !handoffContext && !hasPanel && !input.portalIdentity && (route.agent === 'sales' || route.agent === 'support')) {
       const convForPhone = await this.conversations.findOne(tenantId, input.conversationId).catch(() => null);
       if (convForPhone?.phone) {
@@ -752,18 +826,26 @@ export class ConversationAgentService {
         });
         const tmsInfo = tmsMap.get(TmsLookupService.normalize(convForPhone.phone));
         if (tmsInfo) {
-          // É cliente TMS: garante rota suporte + identidade
-          route = { ...route, agent: 'support' };
+          // Cliente do TMS. A rota só vira suporte se o CANAL for de suporte — num
+          // canal comercial ele segue com a Lia de vendas, que agora sabe estar
+          // falando com um cliente ativo (bom para renovação e upsell).
+          if (canalDeSuporte) route = { ...route, agent: 'support' };
           tmsCustomer = {
             name: tmsInfo.name,
             role: tmsInfo.role,
             tenantName: tmsInfo.tenantName,
             isAdmin: tmsInfo.role?.toUpperCase() === 'ADMIN',
           };
-          this.logger.log(`TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — roteado para suporte`);
+          this.logger.log(
+            `TMS customer detected (${convForPhone.phone} → ${tmsInfo.name}) — ` +
+            `canal=${canal ?? '-'} rota=${route.agent}`,
+          );
 
-          // BUG-FIX: atualiza customerStage para 'cliente_ativo' na conversa se ainda for 'lead'.
-          // Isso garante que a conversa apareça no inbox de Suporte (isSupportTicket usa customerStage).
+          // `customerStage = 'cliente_ativo'` registra um FATO sobre o contato: ele já
+          // é cliente. Antes esse campo era também o que jogava a conversa para o
+          // inbox de Suporte — motivo pelo qual um cliente no WhatsApp saía da fila de
+          // vendas. Agora a trilha é do canal, então o campo volta a ser só
+          // informação, útil para quem vende (renovação, upsell).
           if (convForPhone.customerStage !== 'cliente_ativo') {
             await this.prisma.aiConversation
               .update({ where: { id: input.conversationId }, data: { customerStage: 'cliente_ativo' as any } })

@@ -736,23 +736,37 @@ describe('ConversationsService — 2B findAll: escopo, fila e ordenação', () =
     expect(orderBy[1]).toEqual({ startedAt: 'desc' });
   });
 
-  it('scope=support: filtra pelas condições de ticket de suporte', async () => {
+  // A trilha passou a ser o CANAL (08/08/2026): suporte é o chat do HiperTMS e o
+  // portal; WhatsApp e e-mail são comerciais. Antes eram quatro condições e três
+  // não olhavam o canal — cliente do TMS no WhatsApp saía da fila de vendas para a
+  // de suporte, no canal errado.
+  it('scope=support: filtra pelo canal (portal e web_chat)', async () => {
     await svc.findAll('t1', q, undefined, undefined, { scope: 'support' });
 
-    const grupoEscopo = whereDe().AND.find((c: any) => Array.isArray(c.OR) && c.OR.some((o: any) => o.ticketCategory));
-    expect(grupoEscopo).toBeDefined();
-    expect(grupoEscopo.OR).toEqual(
-      expect.arrayContaining([{ ticketCategory: { not: null } }, { status: 'escalated' }]),
+    const grupoEscopo = whereDe().AND.find(
+      (c: any) => Array.isArray(c.OR) && c.OR.some((o: any) => o.sourceChannel),
     );
+    expect(grupoEscopo).toBeDefined();
+    expect(grupoEscopo.OR).toEqual([{ sourceChannel: { in: ['portal', 'web_chat'] } }]);
+  });
+
+  it('scope=support NÃO usa mais ticketCategory, customerStage nem status', async () => {
+    await svc.findAll('t1', q, undefined, undefined, { scope: 'support' });
+
+    const grupoEscopo = whereDe().AND.find(
+      (c: any) => Array.isArray(c.OR) && c.OR.some((o: any) => o.sourceChannel),
+    );
+    const chaves = grupoEscopo.OR.flatMap((o: any) => Object.keys(o));
+    expect(chaves).not.toContain('ticketCategory');
+    expect(chaves).not.toContain('customerStage');
+    expect(chaves).not.toContain('status');
   });
 
   it('scope=sales: é a NEGAÇÃO exata do mesmo conjunto (sem buraco nem sobreposição)', async () => {
     await svc.findAll('t1', q, undefined, undefined, { scope: 'sales' });
 
     const grupoEscopo = whereDe().AND.find((c: any) => c.NOT);
-    expect(grupoEscopo.NOT.OR).toEqual(
-      expect.arrayContaining([{ ticketCategory: { not: null } }, { status: 'escalated' }]),
-    );
+    expect(grupoEscopo.NOT.OR).toEqual([{ sourceChannel: { in: ['portal', 'web_chat'] } }]);
   });
 
   it('queue=waiting_internal força o status, ignorando o filtro de status', async () => {
