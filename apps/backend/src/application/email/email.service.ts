@@ -20,7 +20,7 @@ import { stripQuotedReply } from '@/shared/ai/untrusted-input';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { EmailReplyService } from './email-reply.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
-import { CampaignReplyLinker } from './campaign-reply-linker';
+import { CampaignReplyLinker, normalizarMessageId } from './campaign-reply-linker';
 
 // E-mail normalizado extraído do webhook Mailgun
 export interface NormalizedEmail {
@@ -128,6 +128,26 @@ export class EmailService {
 
     if (!n.fromAddress || !n.fromAddress.includes('@')) {
       return { ignored: true, reason: 'invalid_from' };
+    }
+
+    // DEDUP por Message-ID — mesma trava que o WhatsApp já tinha e o e-mail não.
+    //
+    // Em 08/08/2026 a resposta do Uelder entrou TRÊS vezes: duas no mesmo
+    // milissegundo (dois polls do IMAP rodando ao mesmo tempo) e uma terceira 18s
+    // depois. As duas primeiras dispararam a Lia em paralelo e ela mandou DUAS
+    // respostas diferentes para o mesmo lead, com 33ms de diferença.
+    //
+    // A trava é o INSERT: a violação da unique é a prova de que outro processo (ou
+    // outra passada) já pegou esta mensagem. Verificar antes com um SELECT deixaria
+    // a janela de corrida aberta, que é exatamente o que aconteceu.
+    const dedupeId = normalizarMessageId(rawBody['Message-ID'] ?? rawBody['message-id']);
+    if (dedupeId) {
+      try {
+        await this.prisma.processedMessage.create({ data: { messageId: `email:${dedupeId}` } });
+      } catch {
+        this.logger.warn(`E-mail de ${n.fromAddress} já processado (Message-ID ${dedupeId}) — ignorado`);
+        return { ignored: true, reason: 'duplicada' };
+      }
     }
     if (!n.bodyText) {
       return { ignored: true, reason: 'empty_body' };

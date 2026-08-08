@@ -57,6 +57,19 @@ interface ImapConfig {
 export class EmailImapService implements OnModuleInit {
   private readonly logger = new Logger('EmailImap');
   private timer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Um poll de cada vez.
+   *
+   * O `setInterval` de 60s disparava o próximo poll mesmo com o anterior em curso — e
+   * um poll DEMORA: cada e-mail é processado dentro do laço, o que inclui a chamada da
+   * IA e o envio da resposta. Passar de 60s é o normal, não a exceção.
+   *
+   * Em 08/08/2026 dois polls concorrentes leram a mesma mensagem e a Lia respondeu ao
+   * mesmo lead duas vezes, com textos diferentes, separados por 33 milissegundos. O
+   * dedup por Message-ID (EmailService.process) barra a segunda; esta trava evita
+   * chegar lá — e evita duas conexões IMAP simultâneas na mesma caixa.
+   */
+  private polling = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -124,13 +137,24 @@ export class EmailImapService implements OnModuleInit {
 
   /** Poll todas as caixas configuradas. */
   async pollAll() {
-    const configs = await this.getConfigs();
-    if (configs.length === 0) return; // nenhuma caixa configurada — silencioso
+    // Ver `polling`: o poll anterior ainda está rodando. Pular é o certo — ele vai
+    // pegar tudo que chegou; insistir em paralelo é que causa mensagem dobrada.
+    if (this.polling) {
+      this.logger.warn('Poll anterior ainda em andamento — esta rodada foi pulada.');
+      return;
+    }
+    this.polling = true;
+    try {
+      const configs = await this.getConfigs();
+      if (configs.length === 0) return; // nenhuma caixa configurada — silencioso
 
-    for (const cfg of configs) {
-      await this.pollOne(cfg).catch((e) =>
-        this.logger.error(`Erro ao fazer poll de ${cfg.user}: ${e?.message}`),
-      );
+      for (const cfg of configs) {
+        await this.pollOne(cfg).catch((e) =>
+          this.logger.error(`Erro ao fazer poll de ${cfg.user}: ${e?.message}`),
+        );
+      }
+    } finally {
+      this.polling = false;
     }
   }
 
@@ -258,6 +282,9 @@ export class EmailImapService implements OnModuleInit {
               from: parsed.from?.text ?? fromAddress,
               subject,
               'stripped-text': bodyText,
+              // Identidade da mensagem — é o que permite ao process() recusar a
+              // segunda passada. Sem isto o dedup lá não tem por onde pegar.
+              ...(parsed.messageId ? { 'Message-ID': parsed.messageId } : {}),
               // Thread da RFC 5322 §3.6.4 — é o que liga a resposta ao disparo mesmo
               // quando ela vem de um endereço diferente do que recebeu a campanha.
               // Ver CampaignReplyLinker. `references` pode vir como array no mailparser.

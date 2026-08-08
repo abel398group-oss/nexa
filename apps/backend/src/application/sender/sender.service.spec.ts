@@ -586,8 +586,23 @@ describe('SenderService.resendAll — reenvio total atrás de interruptor', () =
     expect(out).toMatchObject({ requeued: 5, status: 'running' });
     const call = prisma.campaignTarget.updateMany.mock.calls[0][0];
     expect(call.where).toMatchObject({ campaignId: 'c1', tenantId: 't1' });
-    expect(call.where.status).toBeUndefined(); // não filtra por status: 'sent' também volta
+    // Não filtra por 'sent': quem já recebeu é justamente o alvo do botão.
+    // O único status barrado é 'sending' (alvo em voo — ver teste acima).
+    expect(call.where.status).toEqual({ not: 'sending' });
     expect(call.data).toMatchObject({ status: 'queued', error: null, sentAt: null });
+  });
+
+  // 08/08/2026: o mesmo destinatário recebeu duas mensagens com 5s de diferença.
+  // Reenviar enquanto o worker tinha o alvo reservado ('sending') desfazia a reserva
+  // atômica, e o tick seguinte mandava de novo.
+  it('NÃO recoloca alvo em voo (status sending)', async () => {
+    process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
+    const prisma = makePrisma();
+
+    await makeSvc(prisma).resendAll('t1', 'c1');
+
+    const { where } = prisma.campaignTarget.updateMany.mock.calls[0][0];
+    expect(where.status).toEqual({ not: 'sending' });
   });
 
   it('campanha pausada continua pausada (pausa é decisão do operador)', async () => {

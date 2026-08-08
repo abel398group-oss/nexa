@@ -798,6 +798,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: {
         campaignId: id,
         tenantId,
+        // 'sending' fica de fora: é alvo EM VOO. O worker marca 'sending' e só depois
+        // fala com o SMTP; devolver para 'queued' no meio disso desfaz a reserva
+        // atômica e o próximo tick manda o mesmo e-mail de novo — dois envios, um
+        // alvo. Foi o que aconteceu em 08/08/2026 (duas mensagens com 5s de
+        // diferença para o mesmo destinatário). Quem está em voo vira 'sent' sozinho
+        // em segundos; basta clicar de novo depois.
+        status: { not: 'sending' },
         NOT: { status: 'skipped', error: { in: EXCLUSAO_DELIBERADA } },
       },
       data: { status: 'queued', error: null, sentAt: null },
