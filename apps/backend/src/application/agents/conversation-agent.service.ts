@@ -38,30 +38,47 @@ const VIA_PANEL_MARKER = /\[via-painel-tms\]/i;
  * aceno seguro e o caso é logado.
  */
 const SCRIPTS = {
+  /**
+   * Mensagem ambígua num canal COMERCIAL.
+   *
+   * Até 09/08/2026 esta frase perguntava "você quer conhecer os planos, ou já é
+   * cliente e precisa de suporte?" — e foi assim que o primeiro teste real
+   * descarrilou: a Lia OFERECEU a trilha de suporte num canal que é só comercial,
+   * e o lead naturalmente entrou por ela. A regra agora é: ela nunca menciona
+   * suporte por conta própria; só responde sobre isso se for provocada.
+   */
   clarify: (greeting: string) =>
-    `${greeting}! Aqui é a Lia, do HiperTMS. ` +
-    `Para eu te direcionar do jeito certo: você quer conhecer o sistema e os planos, ou já é cliente e precisa de suporte?`,
+    `${greeting}! Aqui é a Lia, do HiperTMS — sistema de gestão para transportadoras. ` +
+    `Me conta rapidinho: qual é o principal desafio da sua operação hoje?`,
   optOut:
-    'Pronto! ✅ Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada! 🙏',
+    'Pronto! Você não receberá mais mensagens nossas. Se mudar de ideia, é só chamar por aqui. Obrigada!',
   handoffHuman:
-    'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor. 🙂',
-  supportSemCadastroComUrl: (url: string) =>
-    `Nosso suporte técnico é exclusivo para clientes com acesso ao HiperTMS. Para ter acesso, você pode falar com nossa equipe comercial aqui: ${url} 😊\n\nEnquanto isso, posso te contar como o sistema funciona e quais os planos disponíveis — quer saber mais?`,
-  supportSemCadastro:
-    `Nosso suporte técnico é exclusivo para clientes cadastrados no HiperTMS. Seu número ainda não está registrado no sistema. 😊\n\nPosso te apresentar o HiperTMS e explicar como contratar — quer que eu te explique?`,
+    'Entendi! Vou te conectar agora com um dos nossos especialistas pra te atender melhor.',
   /**
    * Pediram suporte num canal COMERCIAL (WhatsApp, e-mail).
    *
-   * Decisão de produto (08/08/2026): suporte é exclusivo do chat dentro do
-   * HiperTMS e da abertura de chamado. Aqui a Lia direciona — ela não diagnostica,
-   * não abre chamado e não escala. Atender suporte no canal de marketing misturaria
-   * os dois funis, que é justamente o que a separação de trilhas evita.
+   * Uma resposta só, para cliente e para prospect. Antes eram três, e a escolha
+   * entre elas dependia de o número estar cadastrado no TMS — o que produzia, para
+   * quem ainda não é cliente, um texto que dizia "fale com a equipe comercial" e
+   * entregava um link de autocadastro. Confuso, e sem citar onde o suporte fica.
+   *
+   * Não leva URL de propósito: a única que o playbook conhece é a de cadastro, e
+   * suporte não é cadastro. Inventar um endereço aqui seria pior que não ter.
    */
-  suporteCanalComercial:
-    'Este canal aqui é do time comercial. 🙂\n\n' +
-    'Para suporte técnico, use o chat da Lia dentro do HiperTMS ou abra um chamado por lá — ' +
-    'a equipe de suporte te atende direto no sistema, com acesso aos seus dados.\n\n' +
-    'Se a sua dúvida for sobre planos, contratação ou um módulo novo, aí eu te ajudo agora mesmo!',
+  suporteNoSite:
+    'O suporte técnico do HiperTMS é feito pelo chat no site, e é exclusivo para quem já é cliente ' +
+    'com acesso ao sistema — lá a equipe atende com seus dados em mãos.\n\n' +
+    'Aqui neste número eu cuido da parte comercial: planos, contratação e dúvidas sobre o sistema. ' +
+    'Posso te ajudar com alguma dessas?',
+  /**
+   * Pediram suporte JÁ no canal de suporte (chat do site), mas o número/identidade
+   * não é de cliente. Aqui não cabe dizer "vá para o chat do site" — a pessoa já
+   * está nele; o que falta é o cadastro.
+   */
+  suporteSomenteCliente:
+    'O suporte técnico é exclusivo para quem já é cliente com acesso ao HiperTMS, ' +
+    'porque a equipe precisa dos dados da sua conta para te atender.\n\n' +
+    'Se você ainda não tem acesso, posso te explicar os planos e como contratar — quer que eu explique?',
 } as const;
 
 /**
@@ -81,8 +98,8 @@ function isKnownScript(draft: string): boolean {
   const fixos: string[] = [
     SCRIPTS.optOut,
     SCRIPTS.handoffHuman,
-    SCRIPTS.supportSemCadastro,
-    SCRIPTS.suporteCanalComercial,
+    SCRIPTS.suporteNoSite,
+    SCRIPTS.suporteSomenteCliente,
   ];
   if (fixos.includes(draft)) return true;
 
@@ -94,17 +111,8 @@ function isKnownScript(draft: string): boolean {
     if (draft === SCRIPTS.clarify(saudacao)) return true;
   }
 
-  // Variante com URL: confere a MOLDURA e aceita qualquer URL http(s) no slot.
-  // O sentinela precisa ser um token que nao ocorra no texto do roteiro: com um
-  // espaco, o split partiria a frase em todas as palavras em vez de separar
-  // prefixo e sufixo.
-  const SLOT = '<<URL>>';
-  const [antes, depois] = SCRIPTS.supportSemCadastroComUrl(SLOT).split(SLOT);
-  if (draft.length > antes.length + depois.length && draft.startsWith(antes) && draft.endsWith(depois)) {
-    const url = draft.slice(antes.length, draft.length - depois.length);
-    return /^https?:\/\/\S+$/.test(url);
-  }
-
+  // A validação por moldura+URL saiu em 09/08/2026 junto com o roteiro que a
+  // usava: nenhum roteiro de suporte carrega URL hoje.
   return false;
 }
 // Detecta token de handoff (Modalidade B — ADR 022)
@@ -112,10 +120,18 @@ const HANDOFF_TOKEN_RE = /\bHANDOFF:([a-z0-9]{6,12})\b/i;
 
 // QUAL-005: mensagens de fallback seguro extraídas como constantes de módulo
 // (evita string literals duplicadas no meio de método crítico).
+//
+// 09/08/2026 — o teste real mostrou que este texto NÃO é raro: duas das quatro
+// respostas da conversa foram ele, porque a Supervisora reprovou os rascunhos.
+// Ou seja, é a cara da Lia com mais frequência do que o nome "fallback" sugere,
+// e ele abria por "documentos, emissão de CT-e/MDF-e" — exatamente o ângulo que
+// o prompt de vendas proíbe, por ser o que todo sistema do mercado faz. Agora
+// abre pela dor de precificar e cotar, como o resto da conversa.
 const SAFE_FALLBACK_SALES =
-  'Posso te explicar como o HiperTMS organiza documentos, emissão de CT-e/MDF-e, precificação e financeiro — e te indicar o plano ideal pro seu porte. O que você quer ver primeiro? 🙂';
+  'O HiperTMS ajuda a transportadora a precificar o frete por custo real e a responder cotação rápido, ' +
+  'com a parte fiscal e o financeiro no mesmo lugar. Qual é o principal desafio da sua operação hoje?';
 const SAFE_FALLBACK_SUPPORT =
-  'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente da nossa equipe, que vai entrar em contato com você em breve. 🙏';
+  'Não consegui identificar a solução para o seu problema. Vou encaminhar para um atendente da nossa equipe, que vai entrar em contato com você em breve.';
 
 export interface HandleResult {
   route: RouteDecision;
@@ -641,49 +657,22 @@ export class ConversationAgentService {
 
       case 'support':
       default: {
-        // PROSPECT (não é cliente do TMS) pedindo suporte → suporte é pós-venda:
-        // a Lia orienta a se cadastrar em vez de atender. Cliente (tmsCustomer / painel /
-        // handoff) segue pro suporte normal. Pré-venda já fica em 'sales' (não cai aqui).
-        if (!tmsCustomer && !hasPanel && !handoffContext) {
-          // Prospect (número não cadastrado no TMS) pedindo suporte:
-          // o suporte é exclusivo para clientes HiperTMS registrados no sistema.
-          // Se tiver URL de contato/demo no playbook, oferece; senão orienta via Lia de Vendas.
-          // Playbook do TENANT (`productCode` nulo). O unique deixou de ser só
-          // `tenantId` quando o playbook passou a poder ser por mercado (ADR 037), e
-          // aqui a intenção continua sendo a linha base — este trecho é o prospect
-          // pedindo suporte, antes de existir mercado definido na conversa.
-          const pb = await this.prisma.salesPlaybook
-            .findFirst({ where: { tenantId, productCode: null } as any })
-            .catch(() => null);
-          const contactUrl = pb?.signupUrl?.trim();
-          // Só usa a variante com link quando a URL do playbook é http(s) de verdade.
-          // `signupUrl` é campo editável do tenant: sem esta checagem, um valor
-          // qualquer entraria numa resposta que pula a Supervisora.
-          const urlValida = !!contactUrl && /^https?:\/\/\S+$/.test(contactUrl);
-          draft = urlValida
-            ? SCRIPTS.supportSemCadastroComUrl(contactUrl as string)
-            : SCRIPTS.supportSemCadastro;
-          suggestedAction = 'none';
-          scripted = true;
-          this.logger.log('Prospect pediu suporte sem cadastro no TMS → orientação direcionada a vendas');
-          break;
-        }
-
-        // CLIENTE pedindo suporte em CANAL COMERCIAL (WhatsApp, e-mail): direciona.
+        // Suporte pedido num CANAL COMERCIAL (WhatsApp, e-mail): a Lia direciona.
         //
-        // Suporte é exclusivo do chat dentro do HiperTMS e da abertura de chamado
-        // (decisão de produto, 08/08/2026). Aqui a Lia não diagnostica, não abre
-        // chamado e não escala — fazer isso misturaria os dois funis.
+        // Decisão de produto (08/08/2026, reafirmada em 09/08): suporte é exclusivo
+        // do chat no site do HiperTMS. Aqui ela não diagnostica, não abre chamado e
+        // não escala — fazer isso misturaria os dois funis.
         //
-        // Vem DEPOIS do bloco de prospect de propósito: quem não é cliente não tem
-        // acesso ao chat do HiperTMS, então mandá-lo para lá seria um beco sem saída.
-        // Prospect pedindo suporte é oportunidade comercial, e é o que o bloco acima
-        // trata.
+        // Resposta ÚNICA, para cliente e para prospect. Antes o texto dependia de o
+        // número estar cadastrado no TMS: quem não era cliente recebia "fale com a
+        // equipe comercial" mais um link de autocadastro, sem nunca dizer onde o
+        // suporte fica. Distinguir os dois só fazia sentido quando a Lia tentava
+        // resolver algo; direcionando, o endereço é o mesmo para todo mundo.
         //
         // Este caminho não chama o SupportAgent, então não gasta as chamadas de IA de
         // classificação/diagnóstico/resolução só para dizer "canal errado".
         if (!ctx.canalDeSuporte) {
-          draft = SCRIPTS.suporteCanalComercial;
+          draft = SCRIPTS.suporteNoSite;
           suggestedAction = 'none';
           scripted = true;
           // A rota volta para comercial. Deixá-la em 'support' num canal comercial
@@ -691,8 +680,20 @@ export class ConversationAgentService {
           // para decidir escalação e fila, e a conversa É comercial.
           route = { ...route, agent: 'sales', reason: 'suporte pedido em canal comercial — direcionado' };
           this.logger.log(
-            `Cliente pediu suporte em canal comercial (canal=${ctx.canal ?? '-'}) → direcionado ao chat do HiperTMS`,
+            `Suporte pedido em canal comercial (canal=${ctx.canal ?? '-'}) → direcionado ao chat do site`,
           );
+          break;
+        }
+
+        // Já está no canal de suporte, mas não é cliente. Mandá-lo "para o chat do
+        // site" seria circular — ele está nele. O que falta é o cadastro, e é isso
+        // que a resposta diz. Sem este guard o prospect cairia no pipeline de
+        // suporte completo, que é pós-venda.
+        if (!tmsCustomer && !hasPanel && !handoffContext) {
+          draft = SCRIPTS.suporteSomenteCliente;
+          suggestedAction = 'none';
+          scripted = true;
+          this.logger.log('Prospect pediu suporte no canal de suporte → orientado ao comercial');
           break;
         }
 

@@ -173,7 +173,9 @@ describe('ConversationAgentService.handle()', () => {
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'SAIR' });
 
-      expect(res.draft).toContain('Pronto! ✅');
+      // Sem emoji desde 09/08: o prompt da Lia proíbe, e os roteiros fixos
+      // estavam furando a própria regra.
+      expect(res.draft).toContain('Pronto! Você não receberá mais mensagens');
       expect(res.suggestedAction).toBe('handoff_human');
       expect(res.needsHuman).toBe(false); // opt-out não precisa de humano (é automatico)
       expect(mockSales.sell).not.toHaveBeenCalled();
@@ -327,7 +329,9 @@ describe('ConversationAgentService.handle()', () => {
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'oi' });
 
-      expect(res.draft).toMatch(/cliente|suporte/i);
+      // O esclarecimento é comercial e não menciona suporte (ver SCRIPTS.clarify).
+      expect(res.draft).toMatch(/desafio da sua operação/i);
+      expect(res.draft).not.toMatch(/suporte/i);
       expect(mockSales.sell).not.toHaveBeenCalled();
     });
 
@@ -904,7 +908,10 @@ describe('ConversationAgentService.handle()', () => {
   // ── prospect asking for support ─────────────────────────────────────────────
 
   describe('prospect asking for support', () => {
-    it('shows signup message when TMS customer is unknown and no handoff', async () => {
+    // 09/08/2026: a resposta deixou de carregar o link de cadastro. Suporte não é
+    // cadastro, e o texto antigo dizia "fale com a equipe comercial" enquanto
+    // entregava um autoatendimento — sem nunca dizer onde o suporte fica.
+    it('direciona ao chat do site, sem link de cadastro', async () => {
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
       mockTmsLookup.batchLookup.mockResolvedValue(new Map()); // not a customer
       mockPrisma.salesPlaybook.findFirst.mockResolvedValue({ signupUrl: 'https://app.hipervias.com/register' });
@@ -912,7 +919,8 @@ describe('ConversationAgentService.handle()', () => {
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'preciso de suporte técnico', conversationId: 'conv1' });
 
-      expect(res.draft).toContain('https://app.hipervias.com/register');
+      expect(res.draft).toMatch(/chat no site/i);
+      expect(res.draft).not.toMatch(/https?:\/\//);
       expect(mockSupport.ask).not.toHaveBeenCalled();
     });
   });
@@ -978,7 +986,7 @@ describe('suporte pedido em canal comercial', () => {
     mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support', intent: 'support_question' }));
   });
 
-  it('CLIENTE do TMS no WhatsApp é direcionado ao chat do HiperTMS', async () => {
+  it('CLIENTE do TMS no WhatsApp é direcionado ao chat do site', async () => {
     mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511999999999', sourceChannel: 'whatsapp' });
     // lookup encontra o telefone → é cliente ativo
     // .get fixo: o service chama TmsLookupService.normalize(phone) na chave, e
@@ -990,25 +998,54 @@ describe('suporte pedido em canal comercial', () => {
     const svc = makeService();
     const res = await svc.handle('t1', { message: 'meu CT-e foi rejeitado', conversationId: 'conv1' });
 
-    expect(res.draft).toContain('time comercial');
-    expect(res.draft).toMatch(/chat da Lia dentro do HiperTMS/);
+    expect(res.draft).toMatch(/chat no site/i);
     // Não gasta as chamadas de IA do pipeline de suporte só para dizer "canal errado"
     expect(mockSupport.ask).not.toHaveBeenCalled();
     // E não vira chamado: nada de escalar nem de marcar needsHuman
     expect(res.needsHuman).toBe(false);
   });
 
-  it('PROSPECT no WhatsApp continua recebendo a orientação comercial, não o chat', async () => {
+  // 09/08/2026: cliente e prospect passaram a receber a MESMA resposta no canal
+  // comercial. A variante do prospect dizia "fale com a equipe comercial" e
+  // entregava um link de autocadastro, sem nunca dizer onde o suporte fica.
+  it('PROSPECT no WhatsApp recebe a mesma resposta do cliente', async () => {
     mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511977777777', sourceChannel: 'whatsapp' });
     mockTmsLookup.batchLookup.mockResolvedValue(new Map()); // não é cliente
 
     const svc = makeService();
     const res = await svc.handle('t1', { message: 'preciso de suporte', conversationId: 'conv1' });
 
-    // Quem não é cliente não tem acesso ao chat do HiperTMS — mandá-lo para lá
-    // seria beco sem saída. Prospect pedindo suporte é oportunidade comercial.
-    expect(res.draft).toMatch(/exclusivo para clientes/i);
-    expect(res.draft).not.toContain('time comercial');
+    expect(res.draft).toMatch(/chat no site/i);
+    expect(res.draft).toMatch(/exclusivo para quem já é cliente/i);
+    // Nada de link de cadastro nesta resposta — suporte não é cadastro.
+    expect(res.draft).not.toMatch(/https?:\/\//);
+  });
+
+  it('PROSPECT no chat do site não cai no suporte real — a resposta não é circular', async () => {
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511977777777', sourceChannel: 'web_chat' });
+    mockTmsLookup.batchLookup.mockResolvedValue(new Map()); // não é cliente
+
+    const svc = makeService();
+    const res = await svc.handle('t1', { message: 'preciso de suporte', conversationId: 'conv1' });
+
+    expect(mockSupport.ask).not.toHaveBeenCalled();
+    expect(res.draft).toMatch(/exclusivo para quem já é cliente/i);
+    // Já está NO chat do site — mandá-lo para lá seria circular.
+    expect(res.draft).not.toMatch(/chat no site/i);
+  });
+
+  // A causa raiz do descarrilamento no primeiro teste real (09/08): a Lia ofereceu
+  // a trilha de suporte por conta própria, e o lead entrou pela porta que ela abriu.
+  it('a mensagem de esclarecimento NUNCA oferece suporte', async () => {
+    mockRouter.route.mockResolvedValue(
+      makeRoute({ agent: 'sales', intent: 'unknown', needsClarification: true }),
+    );
+    mockPrisma.aiConversation.findUnique.mockResolvedValue({ phone: '5511977777777', sourceChannel: 'whatsapp' });
+
+    const svc = makeService();
+    const res = await svc.handle('t1', { message: 'oi', conversationId: 'conv1' });
+
+    expect(res.draft).not.toMatch(/suporte/i);
   });
 
   it('no widget o suporte funciona normalmente', async () => {
