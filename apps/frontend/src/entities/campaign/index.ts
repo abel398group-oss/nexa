@@ -19,6 +19,7 @@ export {
   updateCampaign,
   startCampaign,
   pauseCampaign,
+  cancelCampaign,
   retryFailedTargets,
   resendAllTargets,
   getEmailAudience,

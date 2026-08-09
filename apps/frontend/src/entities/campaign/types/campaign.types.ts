@@ -21,6 +21,16 @@ export interface CampaignDetail {
   /** DISP-003: total que casa com o filtro atual (base da paginação da lista). */
   matching?: number;
   engagement?: { delivered: number; read: number; replied: number };
+  /**
+   * DISP-009: alvos marcados como enviados que o WhatsApp nunca confirmou.
+   *
+   * `status` diz o que o worker fez; o `ack` diz o que voltou. Os dois podiam
+   * divergir sem aviso — inclusive de propósito, porque uma entrega não
+   * confirmada é gravada como 'sent' para não gerar reenvio duplicado
+   * (DISP-021). Número alto aqui costuma ser sessão do WAHA instável: o disparo
+   * "funcionou" e a mensagem pode não ter chegado a ninguém.
+   */
+  deliveryUnconfirmed?: number;
 }
 
 // Resultado da criação de campanha (mensagem de sucesso lê included/skippedOptOut).

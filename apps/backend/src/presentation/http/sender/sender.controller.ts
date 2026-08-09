@@ -216,6 +216,14 @@ export class SenderController {
     return this.sender.setStatus(tenantId, id, 'paused');
   }
 
+  // DISP-004: cancela de verdade — zera a fila e encerra. Diferente de `pause`,
+  // que só suspende: os alvos `queued` continuavam na fila para sempre e um
+  // `start` acidental meses depois disparava a lista inteira.
+  @Post('campaigns/:id/cancel')
+  cancel(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.sender.cancelCampaign(tenantId, id);
+  }
+
   // DISP-002: recoloca na fila os alvos que falharam (só 'failed' — 'skipped' é
   // exclusão deliberada). Vale para WhatsApp e e-mail.
   @Post('campaigns/:id/retry-failed')

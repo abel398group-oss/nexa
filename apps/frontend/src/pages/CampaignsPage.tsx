@@ -16,6 +16,7 @@ import {
   updateCampaign,
   startCampaign,
   pauseCampaign,
+  cancelCampaign,
   retryFailedTargets,
   resendAllTargets,
   getEmailAudience,
@@ -1014,6 +1015,25 @@ export function CampaignsPage() {
     }
   }
   async function pause(id: string) { await pauseCampaign(id); toast.info('Campanha pausada.'); await load(); }
+
+  // DISP-004: cancelar é irreversível para os alvos na fila (viram 'skipped'),
+  // então confirma antes — e a confirmação diz quantos deixarão de receber, que
+  // é a informação que falta para decidir.
+  async function cancel(c: Campaign) {
+    const naFila = (c.counts?.queued ?? 0) + (c.counts?.sending ?? 0);
+    const ok = await confirm({
+      title: 'Cancelar campanha?',
+      message: naFila > 0
+        ? `${naFila} contato(s) ainda não receberam e sairão da fila. Quem já recebeu não é afetado. Não dá para desfazer — só criando uma campanha nova.`
+        : 'Não há mais ninguém na fila. A campanha será encerrada.',
+      confirmLabel: 'Cancelar campanha',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const r = await cancelCampaign(c.id);
+    toast.info(r.cancelled > 0 ? `Campanha cancelada — ${r.cancelled} contato(s) retirados da fila.` : 'Campanha encerrada.');
+    await load();
+  }
   async function del(c: Campaign) {
     const ok = await confirm({
       title: 'Excluir campanha',
@@ -1235,6 +1255,12 @@ export function CampaignsPage() {
                     {!archivedView && c.status === 'running' && (
                       <button onClick={(e) => { e.stopPropagation(); pause(c.id); }} className="inline-flex h-7 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs text-white hover:bg-amber-400"><Icon name="pause" className="h-3.5 w-3.5" /> Pausar</button>
                     )}
+                    {/* DISP-004: só faz sentido enquanto existe fila. Numa campanha
+                        'done' não há o que cancelar, e em 'draft' o botão Excluir
+                        já resolve. */}
+                    {!archivedView && (c.status === 'running' || c.status === 'paused') && (
+                      <Button onClick={(e) => { e.stopPropagation(); cancel(c); }} variant="outline" size="sm" title="Retira da fila quem ainda não recebeu e encerra a campanha"><Icon name="x" className="h-3.5 w-3.5" /> Cancelar</Button>
+                    )}
                     {!archivedView && (
                       <Button onClick={(e) => {
                         e.stopPropagation();
@@ -1310,6 +1336,17 @@ export function CampaignsPage() {
                       <span className="rounded-full bg-base-200 px-2 py-0.5 text-base-content/70">Entregue: {exData.engagement.delivered}</span>
                       <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700 dark:bg-sky-500/15">Lido: {exData.engagement.read}</span>
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15">Respondeu: {exData.engagement.replied}</span>
+                      {/* DISP-009: "enviado" é o que o worker fez; o recibo é o que
+                          o WhatsApp confirmou. Sem isto a tela dizia 100% enviada
+                          com a sessão do WAHA caída. */}
+                      {(exData.deliveryUnconfirmed ?? 0) > 0 && (
+                        <span
+                          className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+                          title="Marcados como enviados, mas sem recibo do WhatsApp. Costuma indicar sessão instável — vale conferir a Saúde dos números."
+                        >
+                          Sem confirmação: {exData.deliveryUnconfirmed}
+                        </span>
+                      )}
                     </div>
                   )}
 

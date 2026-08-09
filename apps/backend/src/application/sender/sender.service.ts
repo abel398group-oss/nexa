@@ -595,7 +595,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: { campaignId: id },
       _count: { _all: true },
     });
-    const counts = countRows.reduce(
+    const counts: Record<string, number> = countRows.reduce(
       (a: Record<string, number>, r: any) => ({ ...a, [r.status]: r._count._all }),
       {} as Record<string, number>,
     );
@@ -761,6 +761,45 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  /**
+   * DISP-004 — cancela a campanha de verdade: zera a fila e a encerra.
+   *
+   * `pause` só impede o worker de PEGAR mais alvos; os `queued` continuam lá
+   * para sempre, e qualquer `start` acidental meses depois dispara a lista
+   * inteira. Não havia ação que zerasse a fila de propósito.
+   *
+   * Os alvos viram `skipped` com motivo `cancelado` em vez de serem apagados —
+   * o relatório precisa mostrar quem NÃO recebeu e por quê, que é justamente a
+   * pergunta que se faz depois de cancelar.
+   *
+   * `sending` entra junto: é um alvo já reivindicado pelo tick. Deixá-lo de
+   * fora faria a recuperação de travados devolvê-lo para `queued` 5-10 min
+   * depois, e a campanha "cancelada" mandaria mais uma mensagem.
+   *
+   * Já enviados não são tocados — não dá para cancelar o que já chegou.
+   */
+  async cancelCampaign(tenantId: string, id: string) {
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id, tenantId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+    if (campaign.status === 'done') return { cancelled: 0, status: 'done' };
+
+    const [zerados] = await this.prisma.$transaction([
+      this.prisma.campaignTarget.updateMany({
+        where: { campaignId: id, tenantId, status: { in: ['queued', 'sending'] } },
+        data: { status: 'skipped', error: 'cancelado' },
+      }),
+      this.prisma.campaign.update({ where: { id }, data: { status: 'done' } }),
+    ]);
+
+    this.logger.log(
+      `Campanha "${campaign.name}" cancelada: ${zerados.count} alvo(s) retirados da fila (status anterior: ${campaign.status})`,
+    );
+    return { cancelled: zerados.count, status: 'done' };
   }
 
   /**

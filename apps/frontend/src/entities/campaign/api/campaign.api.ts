@@ -67,6 +67,17 @@ export async function pauseCampaign(id: string): Promise<void> {
   await api.post(`/campaigns/${id}/pause`);
 }
 
+/**
+ * DISP-004: cancela de verdade — retira da fila os alvos que ainda não saíram e
+ * encerra a campanha. Diferente de pausar: os `queued` de uma campanha pausada
+ * ficam lá para sempre, e um "Iniciar" acidental meses depois dispara a lista
+ * inteira. Já enviados não são tocados.
+ */
+export async function cancelCampaign(id: string): Promise<{ cancelled: number; status: string }> {
+  const r = await api.post(`/campaigns/${id}/cancel`);
+  return r.data;
+}
+
 // DISP-002: recoloca na fila os alvos que falharam, na própria campanha.
 // Só 'failed' volta — 'skipped' é exclusão deliberada (opt-out, blocklist, etc).
 export async function retryFailedTargets(id: string): Promise<{ requeued: number; status: string }> {
