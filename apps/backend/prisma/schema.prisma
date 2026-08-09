@@ -185,6 +185,12 @@ model Contact {
   tags              String[]
   notes             String?
   optOutAt          DateTime? @map("opt_out_at")
+  // Devolução PERMANENTE (hard bounce) do endereço — ver EmailBounceService.
+  // Separado de `status` de propósito: endereço morto não invalida o WhatsApp do
+  // mesmo contato, e usar `status` tiraria ele também do público de WhatsApp.
+  // Preenchido = nunca mais entra em campanha de e-mail (reputação de remetente).
+  emailBouncedAt    DateTime? @map("email_bounced_at")
+  emailBounceReason String?   @map("email_bounce_reason")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

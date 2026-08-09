@@ -6,6 +6,22 @@ import { listSenderNumbers } from '@/entities/campaign';
 import { WhatsappConnectionStatus } from '@/components/WhatsappConnectionStatus';
 import { restartWhatsappSession, getWhatsappQr } from '@/shared/lib/whatsappStatus';
 
+// Rótulos das origens de envio (NumberBudgetService). Chave desconhecida cai no
+// próprio nome — origem nova aparece na tela sem precisar mexer aqui.
+const ORIGIN_LABELS: Record<string, string> = {
+  campaign: 'Campanha',
+  lia: 'Lia',
+  followup: 'Follow-up',
+  monitor: 'Alertas TMS',
+  janitor: 'Encerramento',
+  handoff: 'Vendedor',
+  admin: 'Admin',
+  'suporte-interno': 'Suporte',
+  anexo: 'Anexo',
+  teste: 'Teste',
+  outros: 'Outros',
+};
+
 // barra de progresso com cor por nível de uso (verde → âmbar → vermelho)
 function UsageBar({ used, total }: { used: number; total: number }) {
   const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -147,6 +163,43 @@ export function NumberHealthPage() {
                     <div className="mt-1 text-[11px] text-base-content/40">teto por hora (anti-ban)</div>
                   </div>
                 </div>
+
+                {/* Uso REAL do chip — os dois medidores acima contam só a campanha.
+                    O mesmo número responde lead, manda alerta do Monitor, avisa
+                    vendedor e fecha conversa. Sem este bloco a tela mostrava
+                    "0/30 hoje" com o chip tendo mandado sessenta mensagens. */}
+                {n.budget && (
+                  <div className="mt-4 border-t border-base-200 pt-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-base-content/60">Uso real do número (todos os canais)</span>
+                      <span className="text-xs font-medium text-base-content">
+                        {n.budget.today}/{n.budget.dailyCeiling} hoje
+                        <span className="text-base-content/40"> · {n.budget.thisHour}/{n.budget.hourlyCeiling} nesta hora</span>
+                      </span>
+                    </div>
+                    <UsageBar used={n.budget.today} total={n.budget.dailyCeiling} />
+                    {Object.keys(n.budget.byOrigin).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {Object.entries(n.budget.byOrigin)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([origem, qtd]) => (
+                            <span
+                              key={origem}
+                              className="rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/70"
+                            >
+                              {ORIGIN_LABELS[origem] ?? origem}: {qtd}
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                    {n.budget.today >= n.budget.dailyCeiling && (
+                      <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                        <strong>Campanhas pausadas até amanhã.</strong> O número atingiu o teto do dia
+                        somando todos os canais. Alertas e respostas continuam saindo normalmente.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Engajamento — os medidores acima contam só o que SAI. Quem decide
                     banir um número é o WhatsApp, e o sinal dele é quanta gente responde.

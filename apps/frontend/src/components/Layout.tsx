@@ -51,6 +51,9 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
     { to: '/partners',       label: 'Parceiros',         ic: 'building',  perm: 'partners' },
     { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
+    // Mercados fica no fim do bloco de Vendas: é configuração de quem monta a
+    // operação, não do dia a dia de quem dispara.
+    { to: '/markets',        label: 'Mercados',          ic: 'building',  perm: 'settings' },
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────

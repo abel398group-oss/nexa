@@ -57,6 +57,24 @@ export interface SenderNumber {
     healthy: boolean;
     reason?: string;
   } | null;
+  /**
+   * Uso REAL do número, somando todos os canais (NumberBudgetService).
+   *
+   * `sentToday` acima conta só o disparo de campanha. O mesmo chip também
+   * responde lead, manda digest do Monitor, avisa vendedor e fecha conversa —
+   * é este bloco que mostra quanto ele realmente mandou. Global ao número, não
+   * por tenant.
+   *
+   * Opcional: vem null quando a apuração falha (ex.: Redis fora), e a tela
+   * omite o bloco em vez de mostrar zeros que pareceriam um chip ocioso.
+   */
+  budget?: {
+    today: number;
+    thisHour: number;
+    byOrigin: Record<string, number>;
+    dailyCeiling: number;
+    hourlyCeiling: number;
+  } | null;
 }
 
 // Janela de horário de envio (GET/PUT /sender/settings).
