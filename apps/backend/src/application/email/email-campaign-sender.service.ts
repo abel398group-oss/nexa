@@ -8,14 +8,21 @@
  * ─────────────────────────────────
  * 1. Delay entre envios: 90–180s aleatório (e-mail detecta bursts de envio sequencial)
  * 2. Limite diário: 50/dia por padrão (configurável); domínio novo começa em 20
- * 3. Horário comercial: 8h–18h (Brasília UTC-3) — rejeição/marcação de spam é maior à noite
- * 4. Plain text APENAS — e-mails HTML com imagens têm score de spam mais alto
+ * 3. Horário comercial: 8h–18h (Brasília UTC-3), dias úteis — rejeição e marcação de
+ *    spam são maiores à noite e no fim de semana
+ * 4. Corpo enxuto, sem imagem e sem webfont — ver email-template.ts
  * 5. Link de descadastro obrigatório em todos os e-mails (LGPD + filtros anti-spam)
  * 6. Personalização {{nome}} reduz score de spam (menos genérico = menos spam)
- * 7. Subject: não pode ter MAIÚSCULAS excessivas, pontuação excessiva ou palavras proibidas
+ * 7. Assunto e corpo passam pela peneira de conteúdo (ver email-spam-check.ts):
+ *    encurtador de link BLOQUEIA a criação, o resto vira aviso na resposta
  * 8. Reply-To configurado (filtros confiam mais em e-mail com reply-to válido)
- * 9. Nunca envia para opted_out (LGPD)
+ * 9. Nunca envia para opted_out (LGPD), bloqueado, ou endereço com hard bounce
  * 10. Preaquecimento do domínio: começa baixo e aumenta gradualmente (SENDER_EMAIL_WARMUP_STAGE)
+ *
+ * O limite diário e o intervalo entre envios são contados a partir do BANCO, não de
+ * campos do processo: um restart do backend zerava o contador em memória e o
+ * preaquecimento de 20/dia virava 40 ou 60, dependendo de quantos deploys tivessem
+ * saído naquele dia — exatamente o oposto do que preaquecer significa.
  *
  * Variáveis de ambiente:
  *   SENDER_EMAIL_DELAY_MIN_MS   (padrão: 90000  — 90s)
@@ -24,8 +31,9 @@
  *   SENDER_EMAIL_BUSINESS_START (padrão: 8)
  *   SENDER_EMAIL_BUSINESS_END   (padrão: 18)
  *   SENDER_EMAIL_WARMUP_STAGE   (padrão: 0 — começa conservador)
+ *   SENDER_EMAIL_WEEKEND        (padrão: false — não dispara sábado/domingo)
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
@@ -37,8 +45,11 @@ import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/com
 import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
 import { dedupSentAtFilter, dedupWindowLabel } from '@/application/sender/campaign-dedup';
+import { precisaTrocarMercado } from '@/application/sender/conversation-market';
 import { normalizarMessageId } from './campaign-reply-linker';
 import { ConversationsService } from '@/application/conversations/conversations.service';
+import { normalizeEmail, isSendableEmail } from './email-address';
+import { avisosDeSpam, encurtadoresEncontrados } from './email-spam-check';
 
 // ── Config anti-spam ────────────────────────────────────────────
 const DELAY_MIN_MS = Number(process.env.SENDER_EMAIL_DELAY_MIN_MS ?? 90_000);
@@ -49,19 +60,41 @@ const BUSINESS_END = Number(process.env.SENDER_EMAIL_BUSINESS_END ?? 18);
 // Preaquecimento: quantos envios por dia por estágio (0=novo domínio, 3=aquecido)
 const WARMUP_STAGES = [20, 35, 50, 75];
 
-// Palavras que aumentam o score de spam no assunto — bloqueia se encontrar
-const SPAM_SUBJECT_WORDS = [
-  'grátis', 'gratuito', 'promoção', 'oferta', 'ganhe', 'lucre',
-  '100%', 'urgente', 'clique aqui', 'compre agora', '!!!',
-];
+/** Brasília é UTC-3 fixo — o horário de verão acabou no Brasil em 2019. */
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** Hora do dia (0–23) em Brasília. */
+export function horaBrasilia(agora: Date = new Date()): number {
+  return new Date(agora.getTime() - BRT_OFFSET_MS).getUTCHours();
+}
+
+/** Dia da semana em Brasília: 0 = domingo … 6 = sábado. */
+export function diaDaSemanaBrasilia(agora: Date = new Date()): number {
+  return new Date(agora.getTime() - BRT_OFFSET_MS).getUTCDay();
+}
+
+/**
+ * Instante da meia-noite de HOJE em Brasília, como Date UTC.
+ *
+ * É o corte do contador diário. Precisa ser o dia de Brasília, e não o dia UTC,
+ * porque a janela de envio é definida em horário de Brasília — usar UTC cortaria
+ * o dia às 21h, no meio de uma janela que ainda pode estar aberta se alguém
+ * ampliar SENDER_EMAIL_BUSINESS_END.
+ */
+export function inicioDoDiaBrasilia(agora: Date = new Date()): Date {
+  const brt = new Date(agora.getTime() - BRT_OFFSET_MS);
+  return new Date(Date.UTC(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate()) + BRT_OFFSET_MS);
+}
 
 @Injectable()
 export class EmailCampaignSenderService {
   private readonly logger = new Logger('EmailCampaignSender');
-  private lastSentAt = 0;
+  /**
+   * Intervalo sorteado para o PRÓXIMO envio. Só isto continua em memória: é uma
+   * variação aleatória, não uma contagem — perdê-la num restart custa, no pior
+   * caso, um envio no piso de 90s em vez de um valor maior.
+   */
   private nextDelayMs = DELAY_MIN_MS;
-  private sentTodayCount = 0;
-  private todayStamp = '';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,7 +117,7 @@ export class EmailCampaignSenderService {
    * que já saiu, nem impedir o alvo de ser marcado como enviado.
    */
   private async registrarNaConversa(
-    campaign: { id: string; tenantId: string },
+    campaign: { id: string; tenantId: string; productCode?: string | null },
     email: string,
     contactId: string,
     corpo: string,
@@ -98,7 +131,7 @@ export class EmailCampaignSenderService {
         status: { in: ['open', 'waiting_customer', 'waiting_internal', 'escalated'] as any },
       },
       orderBy: { startedAt: 'desc' },
-      select: { id: true },
+      select: { id: true, productCode: true },
     });
 
     const conv =
@@ -107,7 +140,19 @@ export class EmailCampaignSenderService {
         contactId,
         phone,
         sourceChannel: 'email',
+        // ADR 037: o lead herda o mercado da campanha que o trouxe. O disparo de
+        // WhatsApp já fazia isso na criação; o de e-mail não passava nada, então a
+        // Lia respondia todo lead de e-mail com o conhecimento do produto padrão.
+        productCode: campaign.productCode ?? undefined,
       }));
+
+    // E na conversa REAPROVEITADA, o mercado passa a ser o desta campanha — é o caso
+    // do lead que recebe de mais de um mercado. Ver conversation-market.ts.
+    if (aberta && precisaTrocarMercado(aberta.productCode, campaign.productCode)) {
+      await this.prisma.aiConversation
+        .update({ where: { id: conv.id }, data: { productCode: campaign.productCode } })
+        .catch((e: any) => this.logger.warn(`Falha ao marcar mercado da conversa: ${e?.message}`));
+    }
 
     await this.conversations.addMessage(campaign.tenantId, conv.id, {
       direction: 'outbound',
@@ -118,17 +163,30 @@ export class EmailCampaignSenderService {
     });
   }
 
-  private today(): string {
-    const d = new Date();
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  /**
+   * Fim de semana: fora do ar por padrão.
+   *
+   * Prospecção fria que chega no sábado é lida na segunda junto com o resto da
+   * caixa, ou não é lida — e tem taxa de reclamação mais alta que a mesma mensagem
+   * em dia útil. Como a reclamação de spam é a métrica que o Google mais pesa
+   * (teto formal de 0,10%), o disparo simplesmente espera. `SENDER_EMAIL_WEEKEND=true`
+   * libera, para quem tiver público que responde no fim de semana.
+   */
+  private weekendLiberado(): boolean {
+    return (process.env.SENDER_EMAIL_WEEKEND ?? 'false').toLowerCase() === 'true';
   }
 
   // janela de e-mail do tenant (cai no default env se não houver config salva)
   private async withinEmailWindow(tenantId: string): Promise<boolean> {
+    const agora = new Date();
+
+    const dia = diaDaSemanaBrasilia(agora);
+    if ((dia === 0 || dia === 6) && !this.weekendLiberado()) return false;
+
     const s = await this.prisma.senderSettings.findUnique({ where: { tenantId } });
     const start = s?.emailStartHour ?? BUSINESS_START;
     const end = s?.emailEndHour ?? BUSINESS_END;
-    const h = (new Date().getUTCHours() - 3 + 24) % 24; // UTC-3 Brasília
+    const h = horaBrasilia(agora);
     return h >= start && h < end;
   }
 
@@ -139,10 +197,32 @@ export class EmailCampaignSenderService {
     return Math.min(configured, warmup);
   }
 
-  /** Valida se o assunto é aceitável (sem palavras de spam óbvias). */
-  private isSubjectSafe(subject: string): boolean {
-    const lower = subject.toLowerCase();
-    return !SPAM_SUBJECT_WORDS.some((w) => lower.includes(w));
+  /**
+   * Quantos e-mails de campanha já saíram hoje (dia de Brasília), lido do banco.
+   *
+   * Contar em memória era o defeito: `sentTodayCount` morria a cada deploy e o
+   * preaquecimento perdia o sentido. Vem do banco também porque o contador tem de
+   * ser único entre réplicas — o lock do Redis serializa o tick, não o estado de
+   * cada processo.
+   */
+  private async enviadosHoje(): Promise<number> {
+    return this.prisma.campaignTarget.count({
+      where: {
+        status: 'sent',
+        sentAt: { gte: inicioDoDiaBrasilia() },
+        campaign: { channel: 'email' },
+      },
+    });
+  }
+
+  /** Instante do último e-mail de campanha que saiu — base do intervalo anti-spam. */
+  private async ultimoEnvio(): Promise<number> {
+    const alvo = await this.prisma.campaignTarget.findFirst({
+      where: { status: 'sent', sentAt: { not: null }, campaign: { channel: 'email' } },
+      orderBy: { sentAt: 'desc' },
+      select: { sentAt: true },
+    });
+    return alvo?.sentAt ? new Date(alvo.sentAt).getTime() : 0;
   }
 
   /**
@@ -183,12 +263,29 @@ export class EmailCampaignSenderService {
     },
   ) {
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
-    // Aviso de assunto perigoso (não bloqueia, apenas loga)
-    if (!this.isSubjectSafe(dto.subject)) {
-      this.logger.warn(`Assunto pode aumentar score de spam: "${dto.subject}"`);
+
+    // Encurtador de link é o único bloqueio: o Gmail não classifica como promoção,
+    // ele descarta por associação com phishing. Deixar criar seria criar uma
+    // campanha que nunca chega. Ver email-spam-check.ts.
+    const encurtadores = encurtadoresEncontrados(dto.subject, dto.template, dto.link ?? '');
+    if (encurtadores.length) {
+      throw new BadRequestException(
+        `Link encurtado não pode ser usado em e-mail (${encurtadores.join(', ')}) — ` +
+        'o Gmail bloqueia por associação com phishing. Use a URL completa do domínio.',
+      );
     }
 
-    let targets = dto.emails ?? [];
+    // O resto sobe o score de spam sem condenar o e-mail: volta como aviso para a
+    // tela, porque quem escreveu tem contexto que o código não tem.
+    const avisos = avisosDeSpam(dto.subject, dto.template);
+    if (avisos.length) {
+      this.logger.warn(`Campanha "${dto.name}" — avisos de conteúdo: ${avisos.join(' | ')}`);
+    }
+
+    // Endereço SEMPRE normalizado na entrada (ver email-address.ts): é o que faz o
+    // opt-out e o dedup encontrarem a pessoa quando a planilha traz "Joao@X.com" e
+    // o banco tem "joao@x.com".
+    let targets = (dto.emails ?? []).map((t) => ({ ...t, email: normalizeEmail(t.email) }));
 
     if (dto.fromContacts) {
       // MESMO `where` da pré-visualização (audienciaWhere) — a tela mostra quem vai
@@ -200,31 +297,60 @@ export class EmailCampaignSenderService {
       });
       targets = contacts
         .filter((c: any) => c.email)
-        .map((c: any) => ({ email: c.email!, name: c.name ?? undefined }));
+        .map((c: any) => ({ email: normalizeEmail(c.email), name: c.name ?? undefined }));
     }
 
-    // Dedup por e-mail
-    const seen = new Set<string>();
-    targets = targets.filter((t) => {
-      const k = t.email.toLowerCase();
-      return seen.has(k) ? false : seen.add(k);
-    });
+    // Endereço quebrado vira hard bounce, e hard bounce derruba a reputação do
+    // domínio inteiro — a peneira é aqui, antes de entrar na fila.
+    const invalidList = targets.filter((t) => !isSendableEmail(t.email));
+    if (invalidList.length) {
+      const invalidSet = new Set(invalidList.map((t) => t.email));
+      targets = targets.filter((t) => !invalidSet.has(t.email));
+      this.logger.warn(
+        `Campanha "${dto.name}": ${invalidList.length} endereço(s) inválido(s) — pulados: ` +
+        invalidList.map((t) => t.email || '(vazio)').join(', '),
+      );
+    }
 
-    // Remove opted_out E bloqueados (blocklist de concorrentes, 2026-08-01) —
-    // mesma paridade do canal WhatsApp: opted_out é pedido do contato (LGPD),
-    // blocked é decisão nossa. Ambos ficam fora, com motivo distinto no relatório.
+    // Dedup por e-mail (já normalizado acima)
+    const seen = new Set<string>();
+    targets = targets.filter((t) => (seen.has(t.email) ? false : seen.add(t.email)));
+
+    // Remove opted_out, bloqueados (blocklist de concorrentes, 2026-08-01) e
+    // endereços com devolução PERMANENTE. Paridade com o WhatsApp nos dois
+    // primeiros: opted_out é pedido do contato (LGPD), blocked é decisão nossa.
+    //
+    // O terceiro é exclusivo do e-mail e é o que protege a reputação do domínio:
+    // insistir num endereço morto é o caminho mais rápido para passar dos 2% de
+    // rejeição que os provedores toleram — e aí TODOS os e-mails vão para o spam,
+    // não só os desta campanha. Ver EmailBounceService.
     const excluded = await this.prisma.contact.findMany({
-      where: { tenantId, status: { in: ['opted_out', 'blocked'] }, email: { in: targets.map((t) => t.email) } },
-      select: { email: true, status: true },
+      where: {
+        tenantId,
+        email: { in: targets.map((t) => t.email) },
+        OR: [{ status: { in: ['opted_out', 'blocked'] } }, { emailBouncedAt: { not: null } }],
+      },
+      select: { email: true, status: true, emailBouncedAt: true },
     });
-    const optedSet = new Set(excluded.filter((o: any) => o.status === 'opted_out').map((o: any) => o.email!.toLowerCase()));
-    const blockedSet = new Set(excluded.filter((o: any) => o.status === 'blocked').map((o: any) => o.email!.toLowerCase()));
-    const skippedOptOut = targets.filter((t) => optedSet.has(t.email.toLowerCase())).length;
-    const blockedList = targets.filter((t) => blockedSet.has(t.email.toLowerCase()));
-    targets = targets.filter((t) => {
-      const k = t.email.toLowerCase();
-      return !optedSet.has(k) && !blockedSet.has(k);
-    });
+    const setDe = (fn: (o: any) => boolean) =>
+      new Set(excluded.filter(fn).map((o: any) => normalizeEmail(o.email)));
+
+    const optedSet = setDe((o) => o.status === 'opted_out');
+    const blockedSet = setDe((o) => o.status === 'blocked');
+    const bouncedSet = setDe((o) => !!o.emailBouncedAt && o.status !== 'opted_out' && o.status !== 'blocked');
+
+    const skippedOptOut = targets.filter((t) => optedSet.has(t.email)).length;
+    const blockedList = targets.filter((t) => blockedSet.has(t.email));
+    const bouncedList = targets.filter((t) => bouncedSet.has(t.email));
+    if (bouncedList.length) {
+      this.logger.log(
+        `Campanha "${dto.name}": ${bouncedList.length} endereço(s) com devolução permanente — ` +
+        'pulados (email_invalido). Insistir neles derruba a entrega do domínio inteiro.',
+      );
+    }
+    targets = targets.filter(
+      (t) => !optedSet.has(t.email) && !blockedSet.has(t.email) && !bouncedSet.has(t.email),
+    );
 
     // Concorrente por NOME (heurística) ou por DOMÍNIO do e-mail (certeza) —
     // @bsoft.com.br não tem como ser lead. Ver competitor-names.const.ts.
@@ -254,10 +380,10 @@ export class EmailCampaignSenderService {
         select: { email: true },
         distinct: ['email'],
       });
-      alreadySent = new Set(prior.map((p: any) => (p.email ?? '').toLowerCase()));
+      alreadySent = new Set(prior.map((p: any) => normalizeEmail(p.email)));
     }
-    const dupList = targets.filter((t) => alreadySent.has(t.email.toLowerCase()));
-    targets = targets.filter((t) => !alreadySent.has(t.email.toLowerCase()));
+    const dupList = targets.filter((t) => alreadySent.has(t.email));
+    targets = targets.filter((t) => !alreadySent.has(t.email));
     if (dupList.length) {
       // Este log é a resposta para "criei a campanha e não saiu nada": sem ele, o
       // operador vê 200 alvos virarem 0 enviados e conclui que o disparo travou.
@@ -269,6 +395,8 @@ export class EmailCampaignSenderService {
 
     const skippedRows = [
       ...blockedList.map((t) => ({ status: 'skipped', error: 'bloqueado', t })),
+      ...bouncedList.map((t) => ({ status: 'skipped', error: 'email_invalido', t })),
+      ...invalidList.map((t) => ({ status: 'skipped', error: 'endereco_invalido', t })),
       ...suspectList.map((t) => ({ status: 'skipped', error: 'suspeito_concorrente', t })),
       ...dupList.map((t) => ({ status: 'skipped', error: 'ja_enviado', t })),
     ];
@@ -315,8 +443,13 @@ export class EmailCampaignSenderService {
       included: targets.length,
       skippedOptOut,
       skippedBlocked: blockedList.length,
+      skippedBounced: bouncedList.length,
+      skippedInvalid: invalidList.length,
       skippedSuspect: suspectList.length,
       skippedAlreadySent: dupList.length,
+      // Avisos de conteúdo (assunto/corpo). Vão para a tela porque um `logger.warn`
+      // que ninguém lê é o mesmo que não ter verificação nenhuma — foi o que existia.
+      avisos,
     };
   }
 
@@ -333,9 +466,19 @@ export class EmailCampaignSenderService {
    *
    * O que este número NÃO prevê: as exclusões que só acontecem na criação (dedup
    * `ja_enviado`, blocklist, concorrente, cliente TMS). A tela diz isso em texto.
+   *
+   * `emailBouncedAt: null` entra aqui, e não só na criação, porque endereço com
+   * devolução permanente não é "quem receberia" — é quem nunca mais recebe. Um
+   * preview que o contasse inflaria o número que o operador usa para decidir.
    */
   static audienciaWhere(tenantId: string) {
-    return { tenantId, status: 'active', email: { not: null }, NOT: { email: '' } } as const;
+    return {
+      tenantId,
+      status: 'active',
+      email: { not: null },
+      emailBouncedAt: null,
+      NOT: { email: '' },
+    } as const;
   }
 
   async previewAudienciaEmail(
@@ -382,13 +525,6 @@ export class EmailCampaignSenderService {
 
   private async tickLocked() {
     try {
-      // Reset do contador diário na virada do dia
-      const today = this.today();
-      if (this.todayStamp !== today) {
-        this.sentTodayCount = 0;
-        this.todayStamp = today;
-      }
-
       // Recupera targets presos em 'sending' (crash do worker)
       await this.prisma.campaignTarget.updateMany({
         where: {
@@ -408,11 +544,14 @@ export class EmailCampaignSenderService {
         data: { status: 'done' },
       });
 
-      if (this.sentTodayCount >= this.dailyLimit()) {
-        this.logger.warn(`Limite diário de e-mails atingido (${this.dailyLimit()}) — pausa hoje`);
+      const enviadosHoje = await this.enviadosHoje();
+      if (enviadosHoje >= this.dailyLimit()) {
+        this.logger.warn(
+          `Limite diário de e-mails atingido (${enviadosHoje}/${this.dailyLimit()}) — pausa até amanhã`,
+        );
         return;
       }
-      if (Date.now() - this.lastSentAt < this.nextDelayMs) return;
+      if (Date.now() - (await this.ultimoEnvio()) < this.nextDelayMs) return;
 
       // Pega campanha rodando — respeitando agendamento (scheduledAt no futuro = espera)
       const campaign = await this.prisma.campaign.findFirst({
@@ -457,26 +596,36 @@ export class EmailCampaignSenderService {
       });
       if (claim.count === 0) return;
 
-      // Verifica opt-out em tempo real
+      // Última checagem antes de sair: opt-out e devolução permanente podem ter
+      // acontecido DEPOIS da criação da campanha — a fila pode levar dias para
+      // esvaziar a 20 e-mails/dia. `insensitive` porque alvo antigo (anterior à
+      // normalização) pode ter caixa mista gravada. Ver email-address.ts.
+      const email = normalizeEmail(target.email);
       const contact = await this.prisma.contact.findFirst({
-        where: { tenantId: campaign.tenantId, email: target.email },
+        where: { tenantId: campaign.tenantId, email: { equals: email, mode: 'insensitive' } },
       });
-      if (contact?.status === 'opted_out') {
+      const impedimento =
+        contact?.status === 'opted_out' ? 'opted_out'
+        : contact?.status === 'blocked' ? 'bloqueado'
+        : contact?.emailBouncedAt ? 'email_invalido'
+        : null;
+      if (impedimento) {
+        this.logger.log(`Email disparo pulado → ${email} (motivo: ${impedimento})`);
         await this.prisma.campaignTarget.update({
           where: { id: target.id },
-          data: { status: 'skipped', error: 'opted_out' },
+          data: { status: 'skipped', error: impedimento },
         });
         return;
       }
 
       // Upsert contato (garante que existe para gerar opt-out token)
       const upsertedContact = await this.prisma.contact.upsert({
-        where: { tenantId_phone: { tenantId: campaign.tenantId, phone: emailToPhone(target.email) } },
-        update: { email: target.email },
+        where: { tenantId_phone: { tenantId: campaign.tenantId, phone: emailToPhone(email) } },
+        update: { email },
         create: {
           tenantId: campaign.tenantId,
-          phone: emailToPhone(target.email),
-          email: target.email,
+          phone: emailToPhone(email),
+          email,
           name: target.name ?? undefined,
           source: 'email_campaign',
           tags: [],
@@ -499,7 +648,7 @@ export class EmailCampaignSenderService {
 
       try {
         const result = await this.emailReply.send({
-          to: target.email,
+          to: email,
           subject,
           body,
           tenantId: campaign.tenantId,
@@ -522,8 +671,8 @@ export class EmailCampaignSenderService {
           // `alreadyDelivered` porque o envio já aconteceu acima, com assunto e
           // template próprios da campanha — deixar o despacho do addMessage rodar
           // mandaria o mesmo e-mail duas vezes.
-          await this.registrarNaConversa(campaign, target.email, upsertedContact.id, body).catch((e: any) =>
-            this.logger.warn(`Falha ao registrar e-mail da campanha na conversa (${target.email}): ${e?.message}`),
+          await this.registrarNaConversa(campaign, email, upsertedContact.id, body).catch((e: any) =>
+            this.logger.warn(`Falha ao registrar e-mail da campanha na conversa (${email}): ${e?.message}`),
           );
 
           // O Message-ID vai junto: é o que permite reconhecer a resposta quando o
@@ -541,13 +690,12 @@ export class EmailCampaignSenderService {
               messageId: normalizarMessageId(result.messageId),
             },
           });
-          this.sentTodayCount++;
-          this.lastSentAt = Date.now();
-          // Delay aleatório 90–180s (anti-spam)
+          // Delay aleatório 90–180s (anti-spam). O `sentAt` que acabou de ser gravado
+          // é a base do próximo intervalo — por isso não há mais contador em memória.
           this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
           this.logger.log(
-            `Email disparo → ${target.email} (campanha "${campaign.name}") ` +
-            `[${this.sentTodayCount}/${this.dailyLimit()} hoje · próx em ${Math.round(this.nextDelayMs / 1000)}s]`,
+            `Email disparo → ${email} (campanha "${campaign.name}") ` +
+            `[${enviadosHoje + 1}/${this.dailyLimit()} hoje · próx em ${Math.round(this.nextDelayMs / 1000)}s]`,
           );
         } else {
           await this.prisma.campaignTarget.update({

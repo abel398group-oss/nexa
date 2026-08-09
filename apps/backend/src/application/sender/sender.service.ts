@@ -13,9 +13,11 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
 import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
-import { spin, spinVariants } from './spintax';
+import { spin, spinVariants, lowVariationWarning } from './spintax';
+import { firstName, tidyMissingName } from './name-render';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
+import { precisaTrocarMercado } from './conversation-market';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 
 // Config anti-ban (env com defaults)
@@ -510,7 +512,18 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       },
       include: { _count: { select: { targets: true } } },
     });
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid };
+    // Variação de texto: `spin()` passa o template intacto quando não há
+    // `{a|b}`, então uma campanha com texto plano sai byte a byte igual para
+    // todo mundo — em silêncio. Avisa, mas não bloqueia: variação é heurística
+    // de risco, não regra de negócio, e existe caso legítimo de texto fixo.
+    const warnings: string[] = [];
+    const avisoVariacao = lowVariationWarning(dto.template ?? '', tmsAllowed.length);
+    if (avisoVariacao) {
+      warnings.push(avisoVariacao);
+      this.logger.warn(`Campanha "${dto.name}": ${avisoVariacao}`);
+    }
+
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid, warnings };
   }
 
   async listCampaigns(tenantId: string, archived = false) {
@@ -733,6 +746,29 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  /**
+   * Carimba na conversa o mercado da campanha que acabou de sair (ADR 037).
+   *
+   * Compartilhado com o disparo de e-mail via `MERCADO_DA_CONVERSA`, para os dois
+   * canais decidirem igual — divergir aqui seria a Lia responder de um jeito no
+   * WhatsApp e de outro no e-mail para o mesmo lead.
+   *
+   * Nunca lança: o e-mail/mensagem já saiu quando chegamos aqui, e falhar em
+   * atualizar um campo de contexto não pode desfazer um envio.
+   */
+  private async marcarMercadoDaConversa(
+    conversationId: string,
+    atual: string | null | undefined,
+    daCampanha: string | null | undefined,
+  ): Promise<void> {
+    if (!precisaTrocarMercado(atual, daCampanha)) return;
+    await this.prisma.aiConversation
+      .update({ where: { id: conversationId }, data: { productCode: daCampanha } })
+      .catch((e: any) =>
+        this.logger.warn(`Falha ao marcar mercado da conversa ${conversationId}: ${e?.message}`),
+      );
   }
 
   /**
@@ -1169,6 +1205,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             },
           });
         }
+        // ADR 037: a conversa passa a ser do mercado desta campanha.
+        //
+        // O produto era gravado só na CRIAÇÃO. Com um número de WhatsApp só, o mesmo
+        // lead recebe de mais de um mercado na MESMA thread — e a conversa ficava
+        // presa no mercado do primeiro disparo. O lead recebia pneu e perguntava
+        // "quanto custa?"; a Lia respondia o preço do TMS, com a marca do TMS.
+        //
+        // Só sobrescreve quando a campanha declara mercado: campanha sem produto não
+        // pode APAGAR o contexto que a conversa já tinha.
+        await this.marcarMercadoDaConversa(conv.id, (conv as any).productCode, (campaign as any).productCode);
+
         // DISP-001: requireDelivery faz o addMessage LANÇAR quando o WAHA recusa
         // (sessão caída, 5xx, timeout, fora do allowlist). Sem isto o fluxo seguia
         // direto para o `sent` abaixo e a campanha aparecia 100% enviada mesmo com
@@ -1259,34 +1306,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return 'Boa noite';
   }
 
-  /**
-   * Primeiro nome utilizável, ou '' quando não dá para tratar a pessoa pelo nome.
-   * Descarta lixo comum de lista raspada: só dígitos, uma letra só, ou o próprio
-   * telefone no lugar do nome — nesses casos é melhor não chamar de nada.
-   */
-  static firstName(name?: string | null): string {
-    const first = String(name ?? '').trim().split(/\s+/)[0] ?? '';
-    if (first.length < 2) return '';
-    if (/^\d+$/.test(first)) return '';          // "5511999998888"
-    if (!/[a-zA-ZÀ-ÿ]/.test(first)) return '';   // só símbolo/emoji
-    return first;
-  }
-
-  /**
-   * Recompõe a frase quando `{{nome}}` saiu vazio, para não sobrar pontuação
-   * órfã. "Bom dia , tudo bem?" → "Bom dia, tudo bem?" · "Olá !" → "Olá!"
-   */
-  static tidyMissingName(txt: string): string {
-    return txt
-      .replace(/[ \t]{2,}/g, ' ')          // espaço duplo deixado pelo placeholder
-      .replace(/[ \t]+([,.!?;:])/g, '$1')  // " ," → ","
-      .replace(/,\s*,/g, ',')              // ", ," → ","
-      // pontuação colidindo: "{{saudacao}}, {{nome}}." vira "Bom dia,." — a
-      // vírgula existia só para separar o nome, então some.
-      .replace(/,\s*([.!?;:])/g, '$1')
-      .replace(/^[ \t]+/gm, '')            // espaço no começo da linha
-      .replace(/[ \t]+$/gm, '');           // espaço no fim da linha
-  }
+  // Delegam para `name-render.ts`. A implementação saiu daqui porque o
+  // follow-up também precisa dela e não pode importar este serviço (ciclo:
+  // SenderService injeta FollowUpService). Os estáticos ficam como fachada — o
+  // disparo de e-mail e as specs chamam por aqui.
+  static firstName = firstName;
+  static tidyMissingName = tidyMissingName;
 
   // opt-out footer (LGPD §4/§8). Disabled by setting LGPD_OPT_OUT_FOOTER=false in .env.
   // Warning: disabling removes the legally-recommended opt-out notice for Brazilian law.

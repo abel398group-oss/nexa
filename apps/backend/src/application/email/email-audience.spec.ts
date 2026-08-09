@@ -26,13 +26,22 @@ function makeSvc(contacts: any[] = [], total = contacts.length) {
 }
 
 describe('audienciaWhere — critério único do público de e-mail', () => {
+  // toMatchObject e não toEqual: o critério pode GANHAR exclusões (foi o que
+  // aconteceu com o hard bounce). O que o teste protege é que estas continuem lá,
+  // não que a lista nunca cresça.
   it('ativo, com e-mail, e e-mail não vazio', () => {
-    expect(EmailCampaignSenderService.audienciaWhere('t1')).toEqual({
+    expect(EmailCampaignSenderService.audienciaWhere('t1')).toMatchObject({
       tenantId: 't1',
       status: 'active',
       email: { not: null },
       NOT: { email: '' },
     });
+  });
+
+  // Endereço que já devolveu hard bounce não existe mais. Continuar mandando para ele
+  // é o que mais rápido derruba a reputação do domínio.
+  it('exclui quem já deu hard bounce', () => {
+    expect(EmailCampaignSenderService.audienciaWhere('t1')).toMatchObject({ emailBouncedAt: null });
   });
 
   // Sem isto, um contato com email='' apareceria no preview e sumiria no envio
