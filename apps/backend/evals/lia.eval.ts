@@ -15,7 +15,16 @@ import { RouterAgentService } from '@/application/agents/router-agent.service';
 import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { inspectOutbound } from '@/shared/governance/output-guard';
 import { isOptOutMessage } from '@/application/whatsapp/opt-out-detection';
-import { ROUTER_CASES, INJECTION_CASES, OPT_OUT_CASES, INTENT_ONLY_CASES } from './cases';
+import { SalesAgentService } from '@/application/agents/sales-agent.service';
+import { PLAYBOOK_DEFAULTS } from '@/application/playbook/playbook.service';
+import {
+  ROUTER_CASES,
+  INJECTION_CASES,
+  OPT_OUT_CASES,
+  INTENT_ONLY_CASES,
+  SALES_CASES,
+  SALES_FACTS,
+} from './cases';
 
 /**
  * Injeção de prompt — trava determinística, roda SEM chamar o modelo.
@@ -110,5 +119,67 @@ describe('Golden set — roteamento (chama a API, custa dinheiro)', () => {
         `"${c.message}" → intent=${r.intent} (agent=${r.agent}), fora de [${c.expectIntent.join('|')}]`,
       ).toContain(r.intent);
     }, 30_000);
+  }
+});
+
+/**
+ * A vendedora — chama o modelo de verdade.
+ *
+ * O roteador acima prova para ONDE a mensagem vai. Isto prova o que a Lia FALA
+ * depois: se a matriz de qualificação separa quente de frio, se preço simples
+ * continua no autoatendimento em vez de virar fila, e se ela recusa dar conselho
+ * fiscal — o que dá processo num TMS.
+ *
+ * Banco e catálogo entram como stub com dado fixo: o que está sob teste é o
+ * julgamento do modelo. Insumo variável viraria "regressão de comportamento" no
+ * relatório quando o problema é dado.
+ */
+describe('Golden set — vendedora (chama a API, custa dinheiro)', () => {
+  let sales: SalesAgentService;
+
+  beforeAll(() => {
+    const ai = new AnthropicService();
+    if (!ai.configured) {
+      throw new Error(
+        'ANTHROPIC_API_KEY ausente. O golden set chama o modelo de verdade — ' +
+        'rode com o .env do backend carregado.',
+      );
+    }
+    sales = new SalesAgentService(
+      ai,
+      { retrieve: async () => [] } as any,
+      {
+        getPlans: async () => [
+          { code: 'basico', name: 'Básico', price: 89, maxUsers: 5, features: ['500 embarques/mês'] },
+          { code: 'essencial', name: 'Essencial', price: 299, maxUsers: 8, features: ['API', 'relatórios avançados'] },
+          { code: 'profissional', name: 'Profissional', price: 599, maxUsers: 15, features: ['suporte prioritário'] },
+          { code: 'corporativo', name: 'Corporativo', price: 0, features: [] },
+        ],
+      } as any,
+      { get: async () => PLAYBOOK_DEFAULTS } as any,
+    );
+  });
+
+  for (const c of SALES_CASES) {
+    it(`${c.id} — ${c.why}`, async () => {
+      const r = await sales.sell('eval', { question: c.message });
+
+      expect(
+        r.suggestedAction,
+        `"${c.message}" → ACTION=${r.suggestedAction} (esperado ${c.expectAction})\nRascunho: ${r.draft}`,
+      ).toBe(c.expectAction);
+
+      for (const proibido of c.mustNotMatch ?? []) {
+        expect(
+          proibido.re.test(r.draft),
+          `${proibido.porque}\nRascunho: ${r.draft}`,
+        ).toBe(false);
+      }
+
+      // O guard rodando sobre o texto REAL dela — é aqui que uma alucinação de
+      // prazo, recurso ou conselho fiscal aparece antes de um lead recebê-la.
+      const v = inspectOutbound(r.draft, SALES_FACTS);
+      expect(v.safe, `o guard barraria a resposta dela (${v.detail})\nRascunho: ${r.draft}`).toBe(true);
+    }, 45_000);
   }
 });
