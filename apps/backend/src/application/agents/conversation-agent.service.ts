@@ -140,6 +140,12 @@ const HOT_LEAD_SCORE = Number(process.env.HOT_LEAD_SCORE ?? 70);
 // humanização: espera alguns segundos antes de auto-responder (parecer humano) — G5
 const HUMANIZE_MIN_MS = Number(process.env.HUMANIZE_MIN_MS ?? 3000);
 const HUMANIZE_MAX_MS = Number(process.env.HUMANIZE_MAX_MS ?? 6000);
+// Janela de contexto: quantos turnos da conversa atual vão no prompt.
+// Eram 6 — curto demais desde que o agrupamento passou a juntar mensagens
+// picadas: três mensagens do lead e uma resposta da Lia já consumiam 4 dos 6
+// turnos, e um "sim" solto perdia a pergunta que o motivou. 12 cobre o
+// vai-e-vem de uma qualificação inteira sem inchar o prompt (~+400 tokens).
+const HISTORY_TURNS = Number(process.env.AI_HISTORY_TURNS ?? 12);
 // anti-loop (ia-autonoma §9.8): nº de perguntas seguidas da Lia antes de parar e escalar p/ humano.
 const MAX_AI_QUESTIONS = Number(process.env.MAX_AI_QUESTIONS ?? 3);
 // Filtro de conteúdo ofensivo/teste — usado ao reaproveitar contexto de conversas anteriores.
@@ -268,7 +274,7 @@ export class ConversationAgentService {
     // a Lia já respondeu nesta conversa? (se sim, NÃO cumprimenta de novo)
     const liaAlreadyTalked = msgs.some((m: any) => m.direction === 'outbound');
     const history = priorHistory + msgs
-      .slice(-6)
+      .slice(-HISTORY_TURNS)
       .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : 'Lia'}: ${m.content}`)
       .join('\n');
 
@@ -729,6 +735,39 @@ export class ConversationAgentService {
     return { route, draft, suggestedAction, usedKnowledge, confidence, needsHuman, allowedFacts, scripted, usage };
   }
 
+  /**
+   * Resumo de qualificação que o vendedor recebe no handoff (2026-08-08).
+   *
+   * Antes daqui o resumo era só `input.message.slice(0, 120)` — a última
+   * mensagem crua. O vendedor abria o WhatsApp e via "🔥 Novo lead quente!
+   * Cliente: 5511999999999 / Resumo: quero saber o preço": nenhum nome, nenhuma
+   * empresa, nenhuma frota. E o sistema JÁ tinha esses dados: a vendedora os
+   * extrai da conversa e o `applyLeadProfile` os grava no contato.
+   *
+   * Best-effort de propósito: se a consulta falhar, devolve a mensagem crua.
+   * Um resumo pobre é ruim; um handoff que não acontece é muito pior.
+   */
+  private async buildHandoffSummary(tenantId: string, phone: string, lastMessage: string): Promise<string> {
+    const crua = lastMessage.slice(0, 120);
+    try {
+      const c: any = await this.prisma.contact.findFirst({
+        where: { tenantId, phone },
+        select: { name: true, company: true, fleetSize: true } as any,
+      });
+      if (!c) return crua;
+
+      const partes: string[] = [];
+      if (c.name) partes.push(c.name);
+      if (c.company) partes.push(c.company);
+      if (c.fleetSize != null) partes.push(`frota ${c.fleetSize}`);
+      // Sem nenhum dado de qualificação o prefixo seria só ruído.
+      return partes.length ? `${partes.join(' · ')} — "${crua}"` : crua;
+    } catch (e: any) {
+      this.logger.warn(`buildHandoffSummary falhou (${phone}): ${e?.message}`);
+      return crua;
+    }
+  }
+
   // A3: resolve a identidade do remetente antes do roteamento e limpa os marcadores da
   // mensagem. Ordem: handoff token (ADR 022 modalidade B) → marcador [via-painel-tms]
   // (modalidade A) → portal (sessão) → lookup no TMS por telefone. Qualquer um força rota
@@ -989,11 +1028,12 @@ export class ConversationAgentService {
     if (isHot || isHumanRequest) {
       // F6+ seller-leads: handoff ANTES de criar a oportunidade — o sellerId do
       // rodizio vira o dono real (assignedSellerId) do lead no funil.
+      const handoffSummary = await this.buildHandoffSummary(tenantId, conv.phone, input.message);
       handoff = await this.sellers.handoff(tenantId, {
         conversationId: input.conversationId ?? '',
         contactPhone: conv.phone,
         leadScore: route.leadScore,
-        summary: input.message.slice(0, 120),
+        summary: handoffSummary,
         kind: isHot ? 'hot_lead' : 'human_request',
       });
       if (isHot) {
@@ -1200,7 +1240,7 @@ export class ConversationAgentService {
         conversationId: input.conversationId,
         contactPhone: conv.phone,
         leadScore: route.leadScore,
-        summary: input.message.slice(0, 120),
+        summary: await this.buildHandoffSummary(tenantId, conv.phone, input.message),
         kind: isHot ? 'hot_lead' : 'human_request',
       });
       await this.notifications.create(tenantId, {
