@@ -8,11 +8,18 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
+/**
+ * Opções repassadas ao sonner. Opcional em todos os métodos — as chamadas
+ * existentes (só a mensagem) continuam válidas. Serve para o caso de aviso
+ * longo, que some antes de dar tempo de ler no tempo padrão.
+ */
+type ToastOpts = { duration?: number };
+
 interface ToastApi {
-  success: (msg: string) => void;
-  error:   (msg: string) => void;
-  info:    (msg: string) => void;
-  warning: (msg: string) => void;
+  success: (msg: string, opts?: ToastOpts) => void;
+  error:   (msg: string, opts?: ToastOpts) => void;
+  info:    (msg: string, opts?: ToastOpts) => void;
+  warning: (msg: string, opts?: ToastOpts) => void;
 }
 
 const ToastCtx = createContext<ToastApi>({
@@ -23,10 +30,10 @@ const ToastCtx = createContext<ToastApi>({
 });
 
 const api: ToastApi = {
-  success: (m) => toast.success(m),
-  error:   (m) => toast.error(m),
-  info:    (m) => toast.info(m),
-  warning: (m) => toast.warning(m),
+  success: (m, o) => toast.success(m, o),
+  error:   (m, o) => toast.error(m, o),
+  info:    (m, o) => toast.info(m, o),
+  warning: (m, o) => toast.warning(m, o),
 };
 
 /** Keeps the provider wrapper so App.tsx tree structure stays the same. */

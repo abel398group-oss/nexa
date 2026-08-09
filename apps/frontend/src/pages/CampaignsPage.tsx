@@ -917,7 +917,7 @@ export function CampaignsPage() {
     setFormErrors({});
     setBusy(true);
     try {
-      let r: { included?: number; skippedOptOut?: number; _count?: { targets?: number } };
+      let r: { included?: number; skippedOptOut?: number; warnings?: string[]; _count?: { targets?: number } };
       if (channel === 'email') {
         const payload: any = {
           name: name.trim(),
@@ -961,6 +961,11 @@ export function CampaignsPage() {
       const inc = r.included ?? r._count?.targets ?? 0;
       const skip = r.skippedOptOut ?? 0;
       toast.success(`Campanha criada! ${inc} contato(s)${skip > 0 ? ` · ${skip} pulado(s) por opt-out` : ''}.`);
+      // Avisos que não impedem a criação — hoje só o de variação de texto. Vão
+      // num toast separado e persistente: enfiados no de sucesso passariam
+      // batido, e a campanha ainda não começou a disparar, então dá tempo de
+      // editar o texto antes de dar Iniciar.
+      for (const w of r.warnings ?? []) toast.warning(w, { duration: 15000 });
       await load();
     } catch (err: any) {
       const raw = err?.response?.data?.message;

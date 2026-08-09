@@ -3,6 +3,8 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
+import { spin } from '@/application/sender/spintax';
+import { firstName, tidyMissingName } from '@/application/sender/name-render';
 
 // Cadência configurável (horas). Default 24h e 72h (a partir do 1º contato).
 const STAGE1_HOURS = Number(process.env.FOLLOWUP_STAGE1_HOURS ?? 24);
@@ -26,16 +28,53 @@ function optOutFooter(): string {
   return process.env.LGPD_OPT_OUT_FOOTER === 'false' ? '' : OPT_OUT_FOOTER;
 }
 
+/**
+ * Textos do follow-up, em spintax (`{a|b|c}` — ver sender/spintax.ts).
+ *
+ * Eram duas frases fixas, enviadas caractere por caractere iguais para 100% dos
+ * leads que não responderam. As campanhas ganharam spintax justamente porque
+ * conteúdo idêntico repetido para números que nunca falaram com o remetente é o
+ * sinal de spam mais direto que o WhatsApp usa — e o follow-up vai para
+ * exatamente o mesmo público, com o mesmo número. Ficou de fora por descuido.
+ *
+ * Contagem de variantes (spinVariants): estágio 1 = 81, estágio 2 = 243.
+ */
 const MSG_BASE = {
-  1: 'Oi {{nome}}, passando pra saber se você teve a chance de ver minha mensagem sobre o sistema de gestão de fretes. Posso ajudar com alguma dúvida? 🙂',
-  2: 'Oi {{nome}}! Última passadinha por aqui 😊 Se tiver interesse no sistema de gestão de fretes do HiperTMS, é só me chamar quando quiser. Abraço!',
+  1:
+    '{Oi|Olá|Opa} {{nome}}, {passando pra saber|passando aqui pra ver|só queria saber} se você ' +
+    '{teve a chance de ver|conseguiu ver|chegou a ver} minha mensagem sobre o sistema de gestão de fretes. ' +
+    '{Posso ajudar com alguma dúvida|Ficou alguma dúvida que eu possa esclarecer|Alguma dúvida que eu possa tirar}? 🙂',
+  2:
+    '{Oi|Olá|Opa} {{nome}}! {Última passadinha por aqui|Só uma última mensagem|Passando aqui pela última vez} 😊 ' +
+    'Se {tiver interesse no|quiser conhecer o|fizer sentido pra você o} sistema de gestão de fretes do HiperTMS, ' +
+    '{é só me chamar quando quiser|me chama quando quiser|estou por aqui}. {Abraço|Um abraço|Abraços}!',
 };
+
 // exportado para teste: o rodapé é resolvido na LEITURA (getter), então o spec
 // consegue variar LGPD_OPT_OUT_FOOTER sem recarregar o módulo.
 export const MSG = {
   get 1() { return MSG_BASE[1] + optOutFooter(); },
   get 2() { return MSG_BASE[2] + optOutFooter(); },
 };
+
+/**
+ * Monta a mensagem do estágio: `{{nome}}` primeiro, spintax depois.
+ *
+ * A ordem importa e é a mesma do `SenderService.render`: com o placeholder já
+ * resolvido, nenhuma chave remanescente pode ser confundida com grupo de
+ * variação. Sem nome, o placeholder some e a frase se recompõe — o fallback
+ * antigo era a string "tudo bem", que virava "Oi tudo bem, passando pra saber…".
+ *
+ * Exportada para teste; `rand` injetável para o spec fixar a variante sorteada.
+ */
+export function renderFollowUp(stage: 1 | 2, name?: string | null, rand: () => number = Math.random): string {
+  const template = (MSG as Record<number, string>)[stage];
+  if (!template) return '';
+  const first = firstName(name);
+  let txt = spin(template.replace(/\{\{\s*nome\s*\}\}/gi, first), rand);
+  if (!first) txt = tidyMissingName(txt);
+  return txt;
+}
 
 @Injectable()
 export class FollowUpService {
@@ -127,7 +166,7 @@ export class FollowUpService {
         }
 
         const nextStage = f.stage + 1; // 1 ou 2
-        const text = (MSG as any)[nextStage]?.replace(/\{\{\s*nome\s*\}\}/gi, (f.name ?? '').split(' ')[0] || 'tudo bem');
+        const text = renderFollowUp(nextStage as 1 | 2, f.name);
         if (!text) {
           await this.prisma.followUp.update({ where: { id: f.id }, data: { status: 'done' } });
           continue;

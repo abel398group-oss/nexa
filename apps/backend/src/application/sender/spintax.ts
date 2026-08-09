@@ -70,3 +70,41 @@ export function spinVariants(text: string): number {
   }
   return total;
 }
+
+/**
+ * Lista pequena não precisa de variação — o sinal de spam é a REPETIÇÃO, e vinte
+ * mensagens iguais não formam padrão. Abaixo disso o aviso seria só ruído.
+ */
+const minDestinatarios = () => Number(process.env.SPINTAX_WARN_MIN_RECIPIENTS ?? 20);
+/** Quantas vezes o mesmo texto pode se repetir antes de virar padrão detectável. */
+const maxRepeticoes = () => Number(process.env.SPINTAX_WARN_MAX_REPEAT ?? 20);
+
+/**
+ * Aviso para o operador quando o template não varia o bastante para o tamanho da
+ * lista, ou `null` quando está de bom tamanho.
+ *
+ * Por que existe: `spin()` devolve o texto intacto quando não há `{a|b}` — o que
+ * é a retrocompatibilidade que queremos, mas significa que colar um template
+ * plano manda a campanha inteira byte a byte igual, em silêncio. A função de
+ * contar variantes já existia (`spinVariants`) e nunca era chamada por ninguém.
+ *
+ * Não bloqueia a criação de propósito: variação é heurística de risco, não regra
+ * de negócio, e há casos legítimos de texto fixo (aviso operacional para uma
+ * base pequena). Quem decide é o operador — desde que ele saiba.
+ */
+export function lowVariationWarning(template: string, destinatarios: number): string | null {
+  if (destinatarios < minDestinatarios()) return null;
+
+  const variantes = spinVariants(template);
+  const repeticoes = Math.round(destinatarios / variantes);
+  if (repeticoes < maxRepeticoes()) return null;
+
+  const comoVariar =
+    'Use {opção1|opção2|opção3} no texto para variar — ex.: "{Oi|Olá|Bom dia} {{nome}}".';
+
+  return variantes === 1
+    ? `Os ${destinatarios} destinatários vão receber o texto EXATAMENTE igual. ` +
+      `Conteúdo idêntico repetido é o sinal de spam mais direto que o WhatsApp usa. ${comoVariar}`
+    : `O texto tem ${variantes} variações para ${destinatarios} destinatários — ` +
+      `cada mensagem se repete ~${repeticoes}x. ${comoVariar}`;
+}
