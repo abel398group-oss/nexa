@@ -45,7 +45,18 @@ export interface SupervisorVerdict {
 // Regras duras (não dependem de IA): nunca deixa passar.
 const HARD_BLOCKS: { re: RegExp; issue: string }[] = [
   { re: /garant\w+ (de )?(lucro|retorno|resultado)/i, issue: 'promessa de garantia de resultado' },
-  { re: /(100%|sempre|nunca falha|infal[íi]vel)/i, issue: 'absolutismo/promessa exagerada' },
+  // 09/08/2026 — esta regra era `/(100%|sempre|nunca falha|infalível)/i`. As duas
+  // primeiras alternativas casavam a PALAVRA, não a promessa: "estou sempre por
+  // aqui" e "o sistema é 100% na nuvem" voltavam reprovados com risco alto, e o
+  // lead recebia o aceno seguro no lugar da resposta.
+  //
+  // Agora pega só a forma que É promessa. O caso ambíguo ("com a gente sua margem
+  // sempre sobe") deixa de morrer aqui e passa a ser julgado pela Supervisora,
+  // cujo prompt já manda reprovar promessa exagerada. Quem lê o sentido é ela;
+  // este regex é burro de propósito, e coisa burra não pode ser convencida.
+  { re: /\b(?:sempre|nunca)\s+(?:funciona|falha|erra|d[áa]\s+certo|resolve|entrega|acerta)\b/i, issue: 'absolutismo/promessa exagerada' },
+  { re: /\b(?:funciona|resolve|d[áa]\s+certo)\s+sempre\b|\binfal[íi]vel\b/i, issue: 'absolutismo/promessa exagerada' },
+  { re: /\b100\s*%\s+de\s+(?:garantia|sucesso|aprova[çc][ãa]o|efic[áa]cia)\b/i, issue: 'absolutismo/promessa exagerada' },
   { re: /(gr[áa]tis para sempre|de gra[çc]a para sempre|vital[íi]cio)/i, issue: 'oferta vitalícia não autorizada' },
 ];
 
