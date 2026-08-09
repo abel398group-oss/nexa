@@ -10,6 +10,12 @@ const STAGE2_HOURS = Number(process.env.FOLLOWUP_STAGE2_HOURS ?? 72);
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7);
 const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19);
 
+// Espaçamento entre os envios de um mesmo lote (o tick pega até 5 por vez).
+const SPACING_MIN_MS = Number(process.env.FOLLOWUP_SPACING_MIN_MS ?? 8000);
+const SPACING_MAX_MS = Number(process.env.FOLLOWUP_SPACING_MAX_MS ?? 20000);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 const OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
 
 // DISP-018: o rodapé era CONCATENADO na constante, então o follow-up ignorava o
@@ -86,7 +92,11 @@ export class FollowUpService {
   @Interval(20000) // checa a cada 20s
   async tick(): Promise<void> {
     // Multi-instance guard: only one replica runs the tick at a time.
-    const release = await this.lock.acquire('lock:followup:tick', 60);
+    // TTL acima da duração máxima do tick: 5 alvos espaçados em até 20s dão ~80s,
+    // mais o tempo de envio. Com os 60s antigos o lock expirava no meio do lote e
+    // outra réplica (ou o próximo @Interval) entrava junto — exatamente o envio
+    // duplicado que o lock existe para impedir.
+    const release = await this.lock.acquire('lock:followup:tick', 180);
     if (!release) return;
     try {
       await this.tickLocked();
@@ -102,7 +112,13 @@ export class FollowUpService {
         where: { status: 'pending', nextRunAt: { lte: new Date() } },
         take: 5,
       });
-      for (const f of due) {
+      for (const [i, f] of due.entries()) {
+        // Espaça os envios do lote. O `take: 5` acima virava 5 mensagens do
+        // mesmo número em poucos segundos, a cada 20s — rajada, que é o padrão
+        // que o WhatsApp procura. O ritmo aqui é mais folgado que o da campanha
+        // (30–90s) porque follow-up é para quem já recebeu uma mensagem nossa.
+        if (i > 0) await sleep(SPACING_MIN_MS + Math.random() * (SPACING_MAX_MS - SPACING_MIN_MS));
+
         // segurança: não segue quem deu opt-out
         const contact = await this.prisma.contact.findFirst({ where: { tenantId: f.tenantId, phone: f.phone } });
         if (contact?.status === 'opted_out') {
@@ -123,6 +139,7 @@ export class FollowUpService {
             content: text,
             intent: `followup_${nextStage}`,
             metadata: { followup: true, stage: nextStage },
+            sendOrigin: 'followup',
           });
           const done = nextStage >= 2;
           await this.prisma.followUp.update({

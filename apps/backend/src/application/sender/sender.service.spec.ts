@@ -344,6 +344,56 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     expect(conversations.addMessage).not.toHaveBeenCalled();
   });
 
+  // ── Teto global do numero (NumberBudgetService) ────────────────────────────
+  // Os dois limites acima contam so o que ESTE worker mandou. O mesmo chip
+  // tambem responde lead, manda digest do Monitor e fecha conversa — nada disso
+  // passava por contador nenhum, entao "0/30 hoje" podia significar 60 envios
+  // reais. Quem cede quando o numero satura e a campanha, nunca o alerta.
+  const comOrcamento = (budget: any) =>
+    new SenderService(prisma, contacts, conversations, followup, waha, tmsLookup,
+      { acquire: async () => async () => {} } as any, OPTOUT_MOCK, undefined, budget);
+
+  it('NAO envia com o teto global do numero estourado, mesmo com o limite proprio folgado', async () => {
+    // numero zerado para ESTE worker — o que estourou foi o trafego dos outros canais
+    prisma.senderNumber.findFirst.mockResolvedValue(msgNumber({ sentToday: 0, sentThisHour: 0 }));
+    const budget = {
+      overCeiling: vi.fn().mockResolvedValue({
+        over: true,
+        reason: 'teto DIÁRIO do número atingido (250/250 somando todos os canais: monitor=240, lia=10)',
+        snapshot: {},
+      }),
+      snapshot: vi.fn().mockResolvedValue({}),
+    };
+
+    await comOrcamento(budget).tick();
+
+    expect(budget.overCeiling).toHaveBeenCalled();
+    expect(prisma.campaignTarget.findFirst).not.toHaveBeenCalled();
+    expect(conversations.addMessage).not.toHaveBeenCalled();
+  });
+
+  it('envia normalmente com o teto global folgado', async () => {
+    const budget = {
+      overCeiling: vi.fn().mockResolvedValue({ over: false, snapshot: {} }),
+      snapshot: vi.fn().mockResolvedValue({}),
+    };
+
+    await comOrcamento(budget).tick();
+
+    expect(conversations.addMessage).toHaveBeenCalled();
+  });
+
+  it('sem o servico de orcamento o worker segue como antes (nao quebra)', async () => {
+    await makeService().tick(); // construido sem budget
+    expect(conversations.addMessage).toHaveBeenCalled();
+  });
+
+  it('rotula o envio de campanha como origin "campaign" para o orcamento', async () => {
+    await makeService().tick();
+    const [, , dto] = conversations.addMessage.mock.calls[0];
+    expect(dto.sendOrigin).toBe('campaign');
+  });
+
   it('claim atomico perdido (outro tick pegou o alvo) → nao envia', async () => {
     prisma.campaignTarget.updateMany
       .mockResolvedValueOnce({ count: 1 }) // recuperacao

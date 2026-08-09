@@ -3,6 +3,18 @@ import { ConversationJanitorService } from './conversation-janitor.service';
 
 // ─── N4: Janitor — SLA por prioridade + dedup DB + notifyClose ───────────────
 
+// O espaçamento entre avisos de fechamento (3–8s por padrão) é anti-rajada de
+// produção — nos testes ele só faria a suíte esperar de verdade. Zerado para o
+// arquivo inteiro; o teste que verifica o espaçamento configura o seu próprio.
+beforeEach(() => {
+  process.env.JANITOR_CLOSE_SPACING_MIN_MS = '0';
+  process.env.JANITOR_CLOSE_SPACING_MAX_MS = '0';
+});
+afterEach(() => {
+  delete process.env.JANITOR_CLOSE_SPACING_MIN_MS;
+  delete process.env.JANITOR_CLOSE_SPACING_MAX_MS;
+});
+
 function makeDeps() {
   const prisma = {
     aiConversation: {
@@ -305,29 +317,133 @@ describe('ConversationJanitorService — N4 notifyClose pula portal: e email:', 
     svc = makeService(deps);
   });
 
-  it('nao chama WAHA para phone com prefixo portal:', () => {
-    callNotifyClose(svc, ['portal:ext123', '5511999999999'], 'encerrado');
+  it('nao chama WAHA para phone com prefixo portal:', async () => {
+    await callNotifyClose(svc, ['portal:ext123', '5511999999999'], 'encerrado');
 
     expect(deps.waha.sendText).toHaveBeenCalledTimes(1);
-    expect(deps.waha.sendText).toHaveBeenCalledWith('5511999999999', expect.any(String));
+    expect(deps.waha.sendText).toHaveBeenCalledWith('5511999999999', expect.any(String), expect.anything());
   });
 
-  it('nao chama WAHA para phone com prefixo email:', () => {
-    callNotifyClose(svc, ['email:foo@bar.com', '5511999999999'], 'encerrado');
+  it('nao chama WAHA para phone com prefixo email:', async () => {
+    await callNotifyClose(svc, ['email:foo@bar.com', '5511999999999'], 'encerrado');
 
     expect(deps.waha.sendText).toHaveBeenCalledTimes(1);
-    expect(deps.waha.sendText).toHaveBeenCalledWith('5511999999999', expect.any(String));
+    expect(deps.waha.sendText).toHaveBeenCalledWith('5511999999999', expect.any(String), expect.anything());
   });
 
-  it('nao chama WAHA quando todos os phones sao sinteticos', () => {
-    callNotifyClose(svc, ['portal:abc', 'email:x@y.com'], 'encerrado');
+  it('nao chama WAHA quando todos os phones sao sinteticos', async () => {
+    await callNotifyClose(svc, ['portal:abc', 'email:x@y.com'], 'encerrado');
 
     expect(deps.waha.sendText).not.toHaveBeenCalled();
   });
 
-  it('chama WAHA para phone real normalmente', () => {
-    callNotifyClose(svc, ['5511988887777'], 'encerrado');
+  it('chama WAHA para phone real normalmente', async () => {
+    await callNotifyClose(svc, ['5511988887777'], 'encerrado');
 
-    expect(deps.waha.sendText).toHaveBeenCalledWith('5511988887777', 'encerrado');
+    expect(deps.waha.sendText).toHaveBeenCalledWith('5511988887777', 'encerrado', { origin: 'janitor' });
+  });
+
+  // O aviso de fechamento debita no orçamento do número como qualquer outro
+  // envio — era um dos caminhos que saíam do mesmo chip sem contar em lugar nenhum.
+  it('rotula a origem como "janitor" para o orcamento do numero', async () => {
+    await callNotifyClose(svc, ['5511988887777'], 'encerrado');
+
+    const [, , opts] = deps.waha.sendText.mock.calls[0];
+    expect(opts).toEqual({ origin: 'janitor' });
+  });
+
+  it('envia SEQUENCIALMENTE: o 2o envio so comeca depois do 1o terminar', async () => {
+    // Antes o loop disparava sem `await` — 40 conversas vencidas viravam 40
+    // mensagens simultâneas do mesmo número, que é a rajada que queima o chip.
+    const emVoo: number[] = [];
+    let ativos = 0;
+    deps.waha.sendText.mockImplementation(async () => {
+      ativos += 1;
+      emVoo.push(ativos);
+      await new Promise((r) => setTimeout(r, 5));
+      ativos -= 1;
+      return { sent: true };
+    });
+
+    await callNotifyClose(svc, ['5511111111111', '5522222222222', '5533333333333'], 'encerrado');
+
+    expect(deps.waha.sendText).toHaveBeenCalledTimes(3);
+    // nunca houve mais de um envio em voo ao mesmo tempo
+    expect(Math.max(...emVoo)).toBe(1);
+  });
+
+  it('falha de um envio nao impede os seguintes', async () => {
+    deps.waha.sendText
+      .mockRejectedValueOnce(new Error('waha_down'))
+      .mockResolvedValue({ sent: true });
+
+    await callNotifyClose(svc, ['5511111111111', '5522222222222'], 'encerrado');
+
+    expect(deps.waha.sendText).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── Janela de horário do fechamento automático ─────────────────────────────
+// O ciclo roda de hora em hora, 24h por dia. Sem janela, um lote vencendo às 3h
+// mandava "Encerramos nossa conversa" às 3h da manhã.
+describe('ConversationJanitorService — janela de horario do fechamento', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationJanitorService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const rodar = () => (svc as any).closeInactiveConversationsLocked();
+
+  // Cada branch de fechamento faz UMA busca de candidatos, e o alerta de SLA faz
+  // a sua — que continua rodando fora da janela de propósito (só cria
+  // notificação in-app, não manda WhatsApp para ninguém).
+  const SO_O_ALERTA_DE_SLA = 1;
+  const TRES_FECHAMENTOS_MAIS_SLA = 4;
+
+  it('as 3h da manha nao roda nenhum branch de fechamento', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T06:00:00Z')); // 03:00 BRT
+
+    await rodar();
+
+    expect(deps.prisma.aiConversation.findMany).toHaveBeenCalledTimes(SO_O_ALERTA_DE_SLA);
+  });
+
+  it('as 10h roda os tres branches normalmente', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T13:00:00Z')); // 10:00 BRT
+
+    await rodar();
+
+    expect(deps.prisma.aiConversation.findMany).toHaveBeenCalledTimes(TRES_FECHAMENTOS_MAIS_SLA);
+  });
+
+  it('as 22h nao roda — o fim da janela e exclusivo', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T01:00:00Z')); // 22:00 BRT do dia 09
+
+    await rodar();
+
+    expect(deps.prisma.aiConversation.findMany).toHaveBeenCalledTimes(SO_O_ALERTA_DE_SLA);
+  });
+
+  it('o alerta de SLA continua rodando fora da janela', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T06:00:00Z')); // 03:00 BRT
+
+    await rodar();
+
+    // a busca que rodou foi a do SLA — segurar alerta de SLA à noite atrasaria
+    // o aviso sem poupar mensagem de WhatsApp nenhuma
+    expect(deps.prisma.aiConversation.findMany).toHaveBeenCalledTimes(SO_O_ALERTA_DE_SLA);
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
   });
 });

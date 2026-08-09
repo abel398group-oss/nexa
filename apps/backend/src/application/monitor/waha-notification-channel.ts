@@ -35,7 +35,7 @@ export class WahaNotificationChannel implements NotificationChannel {
     const text = message.startsWith(DO_NOT_REPLY_NOTICE)
       ? message
       : `${DO_NOT_REPLY_NOTICE}\n\n${message}`;
-    const result = await this.waha.sendText(to, text);
+    const result = await this.waha.sendText(to, text, { origin: 'monitor' });
     if (!result.sent) {
       this.logger.warn(`WAHA: falha ao enviar para ${to} (tenant=${tenantId}): ${result.reason}`);
       return { sent: false, reason: result.reason ?? 'waha_send_failed' };

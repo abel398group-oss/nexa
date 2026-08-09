@@ -452,7 +452,7 @@ export class MonitorController {
       `Se você recebeu esta mensagem, as notificações estão funcionando corretamente! ✅\n\n` +
       `_Enviado em: ${now}_\n\n` +
       `Acesse o painel do HiperTMS: https://www.hipertms.com.br`;
-    const result = await this.waha.sendText(phone, msg);
+    const result = await this.waha.sendText(phone, msg, { origin: 'teste' });
     return { sent: result.sent, phone, reason: result.reason ?? null };
   }
 

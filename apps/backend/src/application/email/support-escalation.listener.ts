@@ -111,7 +111,7 @@ export class SupportEscalationListener {
           `Cliente: ${contact?.name ?? '-'} (${phone})\n` +
           `Assunto: ${c.subject ?? '-'}\n` +
           (inboxLink ? `👉 Atender agora: ${inboxLink}` : `👉 Atenda pelo Inbox do painel Nexa.`);
-        const r = await this.waha.sendText(supportWa, waMsg);
+        const r = await this.waha.sendText(supportWa, waMsg, { origin: 'suporte-interno' });
         if (!r.sent) {
           this.logger.warn(`WhatsApp de escalação falhou (conv=${event.conversationId}): ${r.reason}`);
         }

@@ -31,6 +31,7 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { businessHoursBetween } from './support-hours';
+import { withinBusinessHours } from '@/shared/utils/brasilia-hours.util';
 import { TicketSyncService } from '@/application/connectors/ticket-sync.service';
 
 const INACTIVITY_DAYS = Number(process.env.CONVERSATION_INACTIVITY_DAYS ?? 7);
@@ -70,6 +71,23 @@ const SESSION_RETENTION_DAYS = Number(process.env.SESSION_RETENTION_DAYS ?? 30);
 // A3 (alertas em escala): logs de envio de notificação — 1 linha por envio,
 // cresce para sempre sem expurgo. 90 dias cobre auditoria operacional.
 const NOTIFICATION_LOG_RETENTION_DAYS = Number(process.env.NOTIFICATION_LOG_RETENTION_DAYS ?? 90);
+// Janela de horário do fechamento automático — mesma do disparo de campanha
+// (SENDER_BUSINESS_START/END), porque o efeito visível é o mesmo: mensagem
+// chegando no WhatsApp de alguém. Sem isto o ciclo rodava de hora em hora, 24h
+// por dia, e um lote vencendo às 3h mandava "Encerramos nossa conversa" às 3h.
+// Acordar lead de madrugada é o caminho mais curto para "Bloquear e denunciar",
+// que é o sinal que derruba o número.
+const CLOSE_WINDOW_START = Number(process.env.JANITOR_CLOSE_START ?? process.env.SENDER_BUSINESS_START ?? 7);
+const CLOSE_WINDOW_END = Number(process.env.JANITOR_CLOSE_END ?? process.env.SENDER_BUSINESS_END ?? 19);
+// Espaçamento entre avisos de fechamento do mesmo lote. Bem menor que o delay
+// de campanha (30–90s) de propósito: aqui é encerramento de conversa que a
+// pessoa já teve, não abordagem fria — o que se evita é a RAJADA, não o volume.
+// Lidos a cada lote (não no import) para o .env valer sem rebuild — e para os
+// testes poderem zerar o espaçamento sem esperar 8s por mensagem.
+const closeSpacingMinMs = () => Number(process.env.JANITOR_CLOSE_SPACING_MIN_MS ?? 3000);
+const closeSpacingMaxMs = () => Number(process.env.JANITOR_CLOSE_SPACING_MAX_MS ?? 8000);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 @Injectable()
 export class ConversationJanitorService {
@@ -89,14 +107,28 @@ export class ConversationJanitorService {
     private readonly ticketSync: TicketSyncService,
   ) {}
 
-  // Envia mensagem de encerramento ao cliente (fire-and-forget, não bloqueia o fechamento).
+  // Envia mensagem de encerramento ao cliente. Nunca derruba o fechamento: a
+  // conversa já foi fechada no banco quando isto roda, e falha de aviso é um
+  // warn no log, não uma exceção.
+  //
   // N4: pula phones sintéticos: 'email:' e 'portal:' nunca chegam ao WAHA.
-  private notifyClose(phones: string[], message: string): void {
-    for (const phone of phones) {
-      if (!phone || phone.startsWith('email:') || phone.startsWith('portal:')) continue;
-      this.waha.sendText(phone, message).catch((e) =>
-        this.logger.warn(`Falha ao notificar fechamento para ${phone}: ${e?.message}`),
-      );
+  //
+  // Sequencial e espaçado de propósito. Antes era um `for` disparando sem
+  // `await`: um lote de 40 conversas vencidas virava 40 mensagens simultâneas
+  // do mesmo número, que é a assinatura de rajada que o WhatsApp procura.
+  private async notifyClose(phones: string[], message: string): Promise<void> {
+    const alvos = phones.filter((p) => p && !p.startsWith('email:') && !p.startsWith('portal:'));
+    for (const [i, phone] of alvos.entries()) {
+      if (i > 0) {
+        const min = closeSpacingMinMs();
+        await sleep(min + Math.random() * Math.max(0, closeSpacingMaxMs() - min));
+      }
+      try {
+        const r = await this.waha.sendText(phone, message, { origin: 'janitor' });
+        if (r && !r.sent) this.logger.warn(`Aviso de fechamento não enviado para ${phone}: ${r.reason}`);
+      } catch (e: any) {
+        this.logger.warn(`Falha ao notificar fechamento para ${phone}: ${e?.message}`);
+      }
     }
   }
 
@@ -114,13 +146,28 @@ export class ConversationJanitorService {
 
   private async closeInactiveConversationsLocked() {
     ConversationJanitorService.lastRunAt = new Date();
-    // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
-    await this.closeResolvedSupport();
-    // ── Suporte: ticket aberto sem resposta do cliente → 48h → CLOSED ────
-    await this.closeNoResponseSupport();
-    // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
-    await this.closeInactiveLeads();
+
+    // Os três branches de fechamento avisam o cliente por WhatsApp, então só
+    // rodam dentro da janela. Nada se perde: o tick é de hora em hora e uma
+    // conversa parada há 7 dias pode muito bem ser fechada às 7h em vez das 3h.
+    if (withinBusinessHours(new Date(), CLOSE_WINDOW_START, CLOSE_WINDOW_END)) {
+      // ── Suporte: RESOLVED → 48h → CLOSED (ADR 015 D5) ────────────────────
+      await this.closeResolvedSupport();
+      // ── Suporte: ticket aberto sem resposta do cliente → 48h → CLOSED ────
+      await this.closeNoResponseSupport();
+      // ── Comercial: lead inativo → 7 dias → CLOSED (no_response) ──────────
+      await this.closeInactiveLeads();
+    } else {
+      this.logger.log(
+        `Fora da janela de fechamento (${CLOSE_WINDOW_START}h–${CLOSE_WINDOW_END}h BRT) — ` +
+          `fechamentos adiados para o próximo ciclo dentro da janela`,
+      );
+    }
+
     // ── MON-006: ticket escalado sem atendimento humano → alerta ──────────
+    // Fora da janela de propósito: só cria notificação in-app, não manda
+    // WhatsApp para ninguém. Segurar o alerta de SLA à noite atrasaria o aviso
+    // sem poupar mensagem nenhuma.
     await this.alertSlaEscalated();
   }
 
@@ -355,7 +402,7 @@ export class ConversationJanitorService {
     ]);
 
     this.logger.log(`Suporte: ${resolved.length} conversa(s) resolvida(s) → CLOSED (outcome=resolved, csatToken gerado)`);
-    this.notifyClose(
+    await this.notifyClose(
       resolved.map((c: any) => c.phone),
       'Seu chamado foi resolvido. Se precisar de mais ajuda, é só nos chamar novamente. 😊',
     );
@@ -410,7 +457,7 @@ export class ConversationJanitorService {
     this.logger.log(
       `Suporte: ${candidates.length} ticket(s) sem resposta >${SUPPORT_INACTIVITY_HOURS}h → CLOSED (outcome=no_response)`,
     );
-    this.notifyClose(
+    await this.notifyClose(
       candidates.map((c: any) => c.phone),
       `Fechamos seu chamado pois não recebemos resposta em ${SUPPORT_INACTIVITY_HOURS}h. Se ainda precisar de ajuda, é só nos chamar. 🙏`,
     );
@@ -468,7 +515,7 @@ export class ConversationJanitorService {
     this.logger.log(
       `Auto-fechamento: ${candidates.length} lead(s) inativo(s) há >${INACTIVITY_DAYS} dias → CLOSED (outcome=no_response)`,
     );
-    this.notifyClose(
+    await this.notifyClose(
       candidates.map((c: any) => c.phone),
       `Olá! Encerramos nossa conversa por inatividade. Quando quiser retomar, é só nos chamar. 😊`,
     );

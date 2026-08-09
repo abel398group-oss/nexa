@@ -892,6 +892,13 @@ export class ConversationsService {
        * aceitou, não que foi entregue na caixa ou lido.
        */
       alreadyDelivered?: boolean;
+      /**
+       * Rótulo do caminho de envio para o orçamento do número
+       * (`NumberBudgetService`): `campaign` para disparo frio, `lia` para
+       * resposta em conversa. Só afeta o relatório de quem gastou o quê — o
+       * teto é do número, não da origem.
+       */
+      sendOrigin?: string;
     },
   ) {
     const conv = await this.findOne(tenantId, conversationId);
@@ -993,7 +1000,14 @@ export class ConversationsService {
     }
 
     if (despachavel && canal !== 'web_chat' && canal !== 'portal') {
-      const r = await this.waha.sendText(conv.phone, dto.content);
+      // presence: marca como lida e mostra "digitando…" antes de mandar. Toda
+      // mensagem que passa por aqui é conversa de verdade (resposta da Lia,
+      // inbox humano, primeira mensagem de campanha) — é exatamente onde uma
+      // pessoa apareceria digitando. Alerta automático não passa por aqui.
+      const r = await this.waha.sendText(conv.phone, dto.content, {
+        presence: true,
+        origin: dto.sendOrigin ?? 'lia',
+      });
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);
         if (r.externalId) {

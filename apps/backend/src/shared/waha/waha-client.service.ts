@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { NumberBudgetService } from './number-budget.service';
 
 export interface SendResult {
   sent: boolean;
@@ -25,10 +26,34 @@ export interface StatusPostResult {
   postId?: string; // id do post no Status do WhatsApp
 }
 
+/** Opções de envio — `origin` rotula o débito no orçamento do número. */
+export interface SendOptions {
+  /**
+   * Simula presença antes de mandar: marca a conversa como lida e mostra
+   * "digitando…" por um tempo proporcional ao texto.
+   *
+   * Ligado só onde faz sentido (resposta em conversa, disparo de campanha). Um
+   * alerta automático para o admin não precisa fingir que alguém digitou.
+   */
+  presence?: boolean;
+  /** Rótulo do caminho de envio: `campaign`, `lia`, `monitor`, `janitor`, … */
+  origin?: string;
+}
+
+const PRESENCE_ENABLED = () => process.env.WHATSAPP_PRESENCE_ENABLED !== 'false';
+const TYPING_MAX_MS = () => Number(process.env.WHATSAPP_TYPING_MAX_MS ?? 5000);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // Cliente do WAHA — envia mensagens de saída pro WhatsApp (Nexa → WAHA → cliente).
 @Injectable()
 export class WahaClientService {
   private readonly logger = new Logger('WahaClient');
+
+  // Opcional de propósito: várias specs constroem este cliente posicionalmente
+  // (`new WahaClientService()`), e contar envio não pode ser condição para
+  // enviar. Sem o serviço o envio segue normal, só não é debitado.
+  constructor(@Optional() private readonly budget?: NumberBudgetService) {}
 
   private get baseUrl() {
     return process.env.WAHA_API_URL ?? '';
@@ -48,7 +73,7 @@ export class WahaClientService {
   }
 
   // envia um arquivo (PDF/Word/imagem) via WAHA, por URL
-  async sendFile(phone: string, fileUrl: string, filename: string, caption?: string): Promise<SendResult> {
+  async sendFile(phone: string, fileUrl: string, filename: string, caption?: string, origin?: string): Promise<SendResult> {
     if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
     if (!this.allowed(phone)) return { sent: false, reason: 'fora_do_allowlist' };
     const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
@@ -71,9 +96,11 @@ export class WahaClientService {
         this.logger.error(`WAHA sendFile ${res.status}: ${(await res.text()).slice(0, 160)}`);
         return { sent: false, reason: `waha_${res.status}` };
       }
+      await this.debit(origin ?? 'anexo');
       return { sent: true };
     } catch (e: any) {
       this.logger.error(`WAHA sendFile falhou: ${e?.message}`);
+      await this.debit(origin ?? 'anexo');
       return { sent: false, reason: 'erro_rede' };
     }
   }
@@ -124,7 +151,56 @@ export class WahaClientService {
     }
   }
 
-  async sendText(phone: string, text: string): Promise<SendResult> {
+  // ── Presença (anti-bloqueio) ────────────────────────────────────────────────
+  // Um número que nunca marca mensagem como lida e responde do nada em 1,5s é
+  // perfil de robô — a documentação do WAHA lista "sendSeen" e "startTyping"
+  // como as primeiras recomendações contra bloqueio. Os endpoints sempre
+  // existiram; só não eram chamados.
+  //
+  // Best-effort por definição: falha de presença NUNCA pode impedir o envio da
+  // mensagem em si, então estes três engolem o erro e seguem (só log em debug).
+  private async presenceCall(path: string, phone: string): Promise<void> {
+    if (!this.configured) return;
+    const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
+    try {
+      await fetch(`${this.baseUrl}/api/${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        body: JSON.stringify({ session: this.session, chatId }),
+        signal: AbortSignal.timeout(8_000),
+      });
+    } catch (e: any) {
+      this.logger.debug(`presença ${path} falhou para ${phone}: ${e?.message}`);
+    }
+  }
+
+  /** Marca a conversa como lida (dá o "check azul" nas mensagens recebidas). */
+  async sendSeen(phone: string): Promise<void> {
+    return this.presenceCall('sendSeen', phone);
+  }
+
+  /** Liga o "digitando…" no aparelho de quem vai receber. */
+  async startTyping(phone: string): Promise<void> {
+    return this.presenceCall('startTyping', phone);
+  }
+
+  /** Desliga o "digitando…". */
+  async stopTyping(phone: string): Promise<void> {
+    return this.presenceCall('stopTyping', phone);
+  }
+
+  /**
+   * Quanto tempo "digitando" antes de mandar. Proporcional ao tamanho do texto
+   * (a doc do WAHA pede "random interval depending on the size"), com teto para
+   * não travar o worker de campanha, e piso para não parecer instantâneo.
+   */
+  private typingDelayMs(text: string): number {
+    const base = 800 + text.length * 25;
+    const jitter = Math.random() * 700;
+    return Math.min(Math.round(base + jitter), TYPING_MAX_MS());
+  }
+
+  async sendText(phone: string, text: string, opts: SendOptions = {}): Promise<SendResult> {
     if (!this.configured) {
       this.logger.warn('WAHA não configurado — mensagem NÃO enviada ao WhatsApp');
       return { sent: false, reason: 'waha_nao_configurado', definitive: true };
@@ -132,6 +208,13 @@ export class WahaClientService {
     if (!this.allowed(phone)) {
       this.logger.warn(`Envio bloqueado por allowlist: ${phone}`);
       return { sent: false, reason: 'fora_do_allowlist', definitive: true };
+    }
+
+    if (opts.presence && PRESENCE_ENABLED()) {
+      await this.sendSeen(phone);
+      await this.startTyping(phone);
+      await sleep(this.typingDelayMs(text));
+      await this.stopTyping(phone);
     }
 
     const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
@@ -148,16 +231,28 @@ export class WahaClientService {
         const body = await res.text();
         this.logger.error(`WAHA sendText ${res.status}: ${body.slice(0, 160)}`);
         // 4xx = o WAHA recusou (não saiu). 5xx = pode ter saído antes de quebrar.
-        return { sent: false, reason: `waha_${res.status}`, definitive: res.status < 500 };
+        const definitive = res.status < 500;
+        // 5xx entra no orçamento: a mensagem PODE ter saído, e um teto que
+        // subestima o que o número mandou não serve para nada. Mesmo critério
+        // do DISP-021 usado no worker de campanha.
+        if (!definitive) await this.debit(opts.origin);
+        return { sent: false, reason: `waha_${res.status}`, definitive };
       }
       const data: any = await res.json().catch(() => ({}));
+      await this.debit(opts.origin);
       return { sent: true, externalId: data?.id?._serialized ?? data?.id ?? undefined };
     } catch (e: any) {
       // timeout/rede: a mensagem PODE ter ido. Nunca assumir que não foi.
       const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
       this.logger.error(`WAHA sendText falhou (${timeout ? 'timeout' : 'rede'}): ${e?.message}`);
+      await this.debit(opts.origin);
       return { sent: false, reason: timeout ? 'timeout_sem_confirmacao' : 'erro_rede', definitive: false };
     }
+  }
+
+  /** Debita um envio no orçamento do número. Nunca lança — ver NumberBudgetService. */
+  private async debit(origin?: string): Promise<void> {
+    await this.budget?.record(origin ?? 'outros').catch(() => undefined);
   }
 
   // ── Gestão da sessão (reconectar número) ────────────────────────────────────

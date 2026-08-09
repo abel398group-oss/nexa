@@ -56,7 +56,7 @@ export class AdminAlertService {
     let anySent = false;
     for (const phone of phones) {
       try {
-        const r = await this.waha.sendText(phone, text);
+        const r = await this.waha.sendText(phone, text, { origin: 'admin' });
         if (r.sent) anySent = true;
         else this.logger.warn(`admin WhatsApp não enviado (${phone}): ${r.reason}`);
       } catch (e: any) {

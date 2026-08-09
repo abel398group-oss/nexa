@@ -8,6 +8,7 @@ import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.s
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { NumberBudgetService } from '@/shared/waha/number-budget.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
@@ -103,6 +104,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // freio de engajamento não pode depender de notificação para funcionar — sem
     // ela o número ainda é desativado e o motivo ainda vai para o log.
     private readonly notifications?: NotificationsService,
+    // Também opcional pelo mesmo motivo: as specs constroem posicionalmente, e
+    // um teto de segurança não pode ser condição para o worker existir. Sem ele
+    // valem só os limites por número (o comportamento anterior a 2026-08-09).
+    private readonly budget?: NumberBudgetService,
   ) {}
 
   // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
@@ -152,12 +157,18 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async listNumbers(tenantId: string) {
     const numbers = await this.prisma.senderNumber.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
     const health = await this.engagementHealth(tenantId).catch(() => null);
+    // `sentToday` conta só o disparo de campanha. `budget` conta o que o número
+    // realmente mandou, por todos os canais — é o número que importa para risco
+    // de bloqueio, e sem ele a tela de saúde mostrava um chip ocioso que na
+    // verdade estava a plena carga.
+    const budget = (await this.budget?.snapshot().catch(() => null)) ?? null;
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
     // e com a saúde de engajamento das últimas 24h (freio anti-queima).
     return numbers.map((n: any) => ({
       ...n,
       effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
       health,
+      budget,
     }));
   }
 
@@ -1033,6 +1044,19 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // Teto GLOBAL do número (NumberBudgetService): os dois limites acima contam
+      // só o que este worker mandou. O mesmo chip também responde lead, manda
+      // digest do Monitor, avisa vendedor e fecha conversa — nada disso passava
+      // por contador nenhum, então "10/10 hoje" podia significar 60 envios reais.
+      //
+      // Quem cede é a campanha, sempre: prospecção fria é o tráfego descartável.
+      // Alerta de cliente e resposta em conversa aberta nunca são bloqueados.
+      const ceiling = await this.budget?.overCeiling();
+      if (ceiling?.over) {
+        this.logger.warn(`Campanha pausada — ${ceiling.reason}`);
+        return;
+      }
+
       // Freio por ENGAJAMENTO (ver sender-health.ts): os limites acima medem só o que
       // SAI. Este mede o que VOLTA — lista ruim queima o chip mesmo respeitando todos
       // os tetos, porque quem decide banir é o WhatsApp e o sinal dele é o silêncio
@@ -1155,6 +1179,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           intent: 'outbound_campaign',
           metadata: { campaignId: campaign.id },
           requireDelivery: true,
+          sendOrigin: 'campaign',
         });
 
         // anexo NATIVO (PDF/Word) — só quando a API oficial do WhatsApp estiver habilitada.
@@ -1168,7 +1193,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           const wahaUrl = campaign.mediaUrl.startsWith('http') && idx2 < 0
             ? campaign.mediaUrl
             : wahaBase.replace(/\/$/, '') + relativePath2;
-          await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '');
+          await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign');
         }
 
         await this.prisma.$transaction([

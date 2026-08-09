@@ -215,7 +215,7 @@ export class SellersService {
           (input.summary ? `Resumo: ${input.summary}\n` : '') +
           `Este atendimento já é seu — chegou uma nova mensagem.\n` +
           this.attendLine(input.conversationId);
-        const sent = await this.waha.sendText(seller.phone, msg);
+        const sent = await this.waha.sendText(seller.phone, msg, { origin: 'handoff' });
         this.logger.log(`Re-engagement → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);
         return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: sent.sent };
       }
@@ -264,7 +264,7 @@ export class SellersService {
       (input.summary ? `Resumo: ${input.summary}\n` : '') +
       `Atendimento atribuído a você.\n` +
       this.attendLine(input.conversationId);
-    const sent = await this.waha.sendText(seller.phone, msg);
+    const sent = await this.waha.sendText(seller.phone, msg, { origin: 'handoff' });
     this.anunciarHandoff(seller, kind, input, tenantId);
 
     this.logger.log(`Handoff → ${seller.name} (${seller.phone}); notificado: ${sent.sent}`);

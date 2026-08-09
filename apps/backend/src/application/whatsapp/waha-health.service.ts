@@ -212,7 +212,7 @@ export class WahaHealthService {
       // enviar (WAHA responde 500). Tenta algumas vezes, espaçado, antes de desistir.
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          const r = await this.waha.sendText(phone, text);
+          const r = await this.waha.sendText(phone, text, { origin: 'admin' });
           if (r.sent) break;
           this.logger.warn(`alerta WhatsApp não enviado a ${phone} (tentativa ${attempt}/3): ${r.reason}`);
         } catch (e: any) {
