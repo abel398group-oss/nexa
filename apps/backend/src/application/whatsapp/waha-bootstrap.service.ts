@@ -45,7 +45,20 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
 
       const sessionData = (await sessionRes.json()) as any;
       const existingWebhooks: any[] = sessionData?.config?.webhooks ?? [];
-      const desiredEvents = ['message', 'message.ack', 'session.status'];
+      // `message` do WAHA é SÓ o que ENTRA. O que sai do nosso número — inclusive
+      // um humano digitando no WhatsApp Web da empresa — só chega por `message.any`.
+      //
+      // Sem ele o takeover da ADR 035 nunca dispara nesse caminho: o vendedor
+      // assume a conversa pelo celular e a Lia segue respondendo por cima dele.
+      // Confirmado em produção em 09/08/2026 — o log não tinha uma linha sequer de
+      // ADR 035, porque o webhook não existia.
+      //
+      // Os dois convivem de propósito. `message.any` também repete o que entra, e a
+      // segunda entrega morre no dedup por `messageId` (ver whatsapp.service:
+      // processedMessage). Trocar `message` por `message.any` seria mais enxuto,
+      // mas mexeria no caminho de TODA mensagem que entra para consertar o de saída
+      // — e o WAHA roda `latest` aqui, com formato de payload que já mudou antes.
+      const desiredEvents = ['message', 'message.any', 'message.ack', 'session.status'];
 
       // Já registrado COM a URL certa E todos os eventos desejados?
       // Se faltar algum evento (ex.: session.status novo), re-registra.
