@@ -28,6 +28,7 @@ const CampaignsPage = lazy(() => import('@/pages/CampaignsPage').then((m) => ({ 
 const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) => ({ default: m.NumberHealthPage })));
 const SiteAudiencePage = lazy(() => import('@/pages/SiteAudiencePage').then((m) => ({ default: m.SiteAudiencePage })));
 const MarketsPage = lazy(() => import('@/pages/MarketsPage').then((m) => ({ default: m.MarketsPage })));
+const MessageTemplatesPage = lazy(() => import('@/pages/MessageTemplatesPage').then((m) => ({ default: m.MessageTemplatesPage })));
 const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
@@ -96,6 +97,7 @@ export default function App() {
                     <Route path="/site/audiencia" element={<Perm perm="campaigns"><SiteAudiencePage /></Perm>} />
                     {/* Liberar mercado muda o que o vendedor enxerga — fica atrás de settings, não de campaigns. */}
                     <Route path="/markets" element={<Perm perm="settings"><MarketsPage /></Perm>} />
+                    <Route path="/messages" element={<Perm perm="campaigns"><MessageTemplatesPage /></Perm>} />
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />

@@ -53,6 +53,9 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
     // Mercados fica no fim do bloco de Vendas: é configuração de quem monta a
     // operação, não do dia a dia de quem dispara.
+    // Mensagens é do dia a dia de quem dispara (perm campaigns); Mercados é de quem
+    // monta a operação (perm settings).
+    { to: '/messages',       label: 'Mensagens',         ic: 'mail',      perm: 'campaigns' },
     { to: '/markets',        label: 'Mercados',          ic: 'building',  perm: 'settings' },
   ] },
 
