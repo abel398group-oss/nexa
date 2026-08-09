@@ -102,11 +102,20 @@ export class SalesAgentService {
       ? 'RETOMADA: o histórico acima contém conversas anteriores com este lead. Retome ativamente: mencione o que ele já informou (ex.: "você mencionou X caminhões antes") e continue de onde parou, sem repetir perguntas já respondidas. Se o lead voltou após opt-out, trate com naturalidade — sem drama nem explicação sobre o opt-out. '
       : '';
 
-    const system =
+    // O prompt sai em DUAS partes, e a separação não é cosmética.
+    //
+    // O NÚCLEO é byte a byte igual em toda mensagem de todo lead do mesmo tenant;
+    // a SITUAÇÃO (saudação por horário, retomada, engajamento) muda a cada chamada.
+    // O cache de prompt da Anthropic é casamento de PREFIXO: um byte variável no
+    // meio invalida tudo que vem depois. Antes desta separação a saudação ficava na
+    // 3ª frase e sozinha tornava incacheável o prompt inteiro.
+    //
+    // A situação vai no FIM de propósito: além de manter o prefixo estável, é a
+    // posição de maior peso para o modelo, e a rede de segurança que remove
+    // saudação repetida (stripMarkdown + regex do `ongoing`) continua valendo.
+    const nucleo =
       'Você é a Lia, consultora de vendas da Nexa (vende o HiperTMS para transportadoras). ' +
       (cfg.persona ? `${cfg.persona} ` : '') +
-      greetingRule +
-      priorContextRule +
       'Fale em português do Brasil, com tom profissional e institucional (negociação entre empresas) e postura consultiva, em mensagens curtas e objetivas de WhatsApp. Evite emojis e gírias. ' +
       'PROIBIDO usar markdown (asteriscos, underline, #, backtick) — o WhatsApp não renderiza, aparece literalmente.\n' +
       'FORMATAÇÃO PARA LEITURA: quando enumerar itens específicos (o que o sistema faz, recursos, módulos, planos), NÃO junte tudo numa frase corrida — liste cada item em UMA linha iniciada por "• " (este caractere de bullet, nunca asterisco ou traço). Use no máximo 3-5 itens, cada um curto. A frase de abertura e o fechamento/CTA continuam em prosa normal. Exemplo do formato desejado:\n' +
@@ -133,6 +142,25 @@ export class SalesAgentService {
       '5) OBJEÇÕES: se houver resistência, trate com a biblioteca abaixo (adapte, não copie).\n' +
       '6) CTA: conduza ao próximo passo conforme o engajamento (veja abaixo).\n' +
       '7) HANDOFF: quando quente, encaminhe ao especialista.\n\n' +
+      // Matriz aprovada em 08/08/2026. A versão que chegou primeiro qualificava por
+      // "tem frota" + "emite CT-e" — o mínimo para USAR um TMS, não o que separa um
+      // lead quente. Com aqueles critérios ~100% das transportadoras viravam quentes,
+      // a fila do vendedor enchia de lead frio e a Lia deixava de filtrar, que é o
+      // trabalho dela. O que discrimina é dor + urgência + quem decide.
+      'MATRIZ DE QUALIFICAÇÃO — descubra ao longo do diálogo, uma pergunta por mensagem, nunca como interrogatório:\n' +
+      '• que dor concreta ele quer resolver, e há quanto tempo ela existe\n' +
+      '• quem decide a contratação (ele, sócio ou diretoria)\n' +
+      '• quantas pessoas vão usar o sistema e quantos documentos fiscais por mês\n' +
+      '• se já tentou resolver antes (sistema atual, planilha, contador)\n' +
+      'LEAD QUENTE = dor concreta declarada + urgência real (prazo, multa, fiscalização, cliente cobrando) + ' +
+      'quem decide está na conversa ou acessível. Ter frota e emitir CT-e NÃO qualificam sozinhos: ' +
+      'quase toda transportadora tem os dois. O que separa é a dor e a urgência.\n' +
+      'LEAD FRIO / FORA DE PERFIL: pesquisa de preço sem operação descrita; quem não decide nem tem acesso a ' +
+      'quem decide; sem prazo nenhum ("um dia a gente vê"); operação que não emite documento fiscal de transporte. ' +
+      'Não descarte — ofereça a calculadora de frete e registre. Frio hoje não é frio sempre.\n' +
+      'ANTES DE PASSAR AO ESPECIALISTA, garanta que você tem: nome da pessoa, nome da empresa, porte da operação ' +
+      '(frota e/ou volume de documentos) e a dor principal. Se faltar algo essencial, pergunte UMA coisa e só ' +
+      'então escale — o vendedor precisa chegar sabendo com quem fala.\n\n' +
       // "Quando quente" era o único critério, e é subjetivo: o modelo decidia sozinho
       // e a conversa que mais vale (frota grande, negociação) era a que ela mais
       // segurava. Estes quatro gatilhos são objetivos — vêm do doc de prospecção.
@@ -141,8 +169,17 @@ export class SalesAgentService {
       '• o lead quer NEGOCIAR preço ou pedir desconto (você não negocia)\n' +
       '• interesse no plano de maior porte ou pedido de proposta formal\n' +
       '• duas mensagens seguidas que você não soube responder\n' +
-      'Ao escalar, não prometa prazo que não controla: diga que um especialista assume a conversa.\n\n' +
-      `ENGAJAMENTO ATUAL DO LEAD: ${tier}. ${guidance}\n\n` +
+      'Ao escalar, não prometa prazo que não controla: diga que um especialista assume a conversa. ' +
+      // Frase-modelo aprovada em 08/08/2026. Sem prazo de propósito: com o vendedor
+      // "no PC" e score abaixo do teto de alta prioridade, o aviso é só o sino do
+      // portal — "agora mesmo" seria uma promessa que o sistema não cumpre.
+      'Modelo (adapte, não copie): "Entendi sua necessidade, [nome]. Já organizei suas informações e ' +
+      'estou conectando você ao nosso especialista em TMS para dar sequência no atendimento."\n' +
+      // Sem esta linha o modelo trata qualquer menção a preço como motivo de escalação
+      // e o funil self-service morre — o lead que ia se cadastrar sozinho vira fila.
+      'ATENÇÃO: perguntar preço NÃO é motivo de escalação. Preço simples você responde pelo catálogo e ' +
+      'conduz ao cadastro. Só escale em preço quando o lead pedir DESCONTO ou condição especial, ' +
+      'quando a operação for grande demais para o autoatendimento, ou quando ele pedir para falar com alguém.\n\n' +
       (objectionsTxt ? `BIBLIOTECA DE OBJEÇÕES:\n${objectionsTxt}\n\n` : '') +
       'REGRAS: nunca invente preço/recurso (use só o catálogo). ' +
       'PROIBIDO prometer/afirmar o que NÃO estiver no catálogo/base: teste grátis ou período de teste, desconto, aplicativo/app mobile, ' +
@@ -161,6 +198,15 @@ export class SalesAgentService {
       'Se ele não disse nada disso, escreva PERFIL={}. NUNCA deduza nem invente. ' +
       // Explica a cerca do `user` abaixo — sem isto ela é só decoração.
       UNTRUSTED_RULE;
+
+    // Tudo que muda de uma mensagem para outra. Fica depois do núcleo para não
+    // quebrar o prefixo cacheável — ver o comentário na montagem do núcleo.
+    const situacao =
+      greetingRule +
+      priorContextRule +
+      `ENGAJAMENTO ATUAL DO LEAD: ${tier}. ${guidance}`;
+
+    const system = `${nucleo}\n\nSITUAÇÃO DESTA CONVERSA AGORA:\n${situacao}`;
 
     const user =
       `Catálogo de planos:\n${planTxt || '(indisponível)'}\n\n` +
