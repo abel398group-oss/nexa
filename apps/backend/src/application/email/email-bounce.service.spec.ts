@@ -7,6 +7,9 @@ function makeDeps() {
       findFirst: vi.fn().mockResolvedValue({ id: 'alvo-1', campaignId: 'camp-1' }),
       update: vi.fn().mockResolvedValue({}),
     },
+    contact: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
   } as any;
   return { prisma };
 }
@@ -107,7 +110,13 @@ describe('EmailBounceService — registro no alvo de campanha', () => {
     await svc.record('t1', svc.parse(DSN_GOOGLE));
 
     expect(deps.prisma.campaignTarget.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { tenantId: 't1', email: 'nao-existe@gmail.com', status: 'sent' } }),
+      expect.objectContaining({
+        where: {
+          tenantId: 't1',
+          email: { equals: 'nao-existe@gmail.com', mode: 'insensitive' },
+          status: 'sent',
+        },
+      }),
     );
     const dados = deps.prisma.campaignTarget.update.mock.calls[0][0].data;
     expect(dados.status).toBe('failed');
@@ -129,6 +138,58 @@ describe('EmailBounceService — registro no alvo de campanha', () => {
     deps.prisma.campaignTarget.findFirst.mockResolvedValue(null);
     await svc.record('t1', svc.parse(DSN_GOOGLE));
     expect(deps.prisma.campaignTarget.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A parte que faltava e que custa reputação: sem marcar o CONTATO, o endereço morto
+ * voltava na campanha seguinte. O dedup entre campanhas só pula quem tem alvo
+ * `sent`, e a devolução transforma o alvo em `failed` — ou seja, a proteção que
+ * parecia existir empurrava o endereço de volta para a fila.
+ */
+describe('EmailBounceService — bloqueio do contato (protege a reputação do domínio)', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: EmailBounceService;
+  beforeEach(() => { deps = makeDeps(); svc = new EmailBounceService(deps.prisma); });
+
+  it('devolução definitiva marca emailBouncedAt no contato', async () => {
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+
+    expect(deps.prisma.contact.updateMany).toHaveBeenCalledTimes(1);
+    const chamada = deps.prisma.contact.updateMany.mock.calls[0][0];
+    expect(chamada.where).toEqual({
+      tenantId: 't1',
+      email: { equals: 'nao-existe@gmail.com', mode: 'insensitive' },
+    });
+    expect(chamada.data.emailBouncedAt).toBeInstanceOf(Date);
+    expect(chamada.data.emailBounceReason).toContain('5.1.1');
+  });
+
+  // O relatório devolve o endereço na caixa em que o servidor remoto o escreveu.
+  it('acha o contato mesmo com caixa diferente da do relatório', async () => {
+    await svc.record('t1', { recipient: 'Joao@Empresa.com', status: '5.1.1', diagnostic: 'x', permanent: true });
+    expect(deps.prisma.contact.updateMany.mock.calls[0][0].where.email.mode).toBe('insensitive');
+  });
+
+  it('devolução TEMPORÁRIA não bloqueia o contato', async () => {
+    await svc.record('t1', svc.parse(DSN_TEMPORARIO));
+    expect(deps.prisma.contact.updateMany).not.toHaveBeenCalled();
+  });
+
+  // A devolução pode vir de uma resposta de conversa, não de campanha. O endereço
+  // está morto do mesmo jeito — bloquear não pode depender de achar o alvo.
+  it('bloqueia o contato mesmo sem alvo de campanha correspondente', async () => {
+    deps.prisma.campaignTarget.findFirst.mockResolvedValue(null);
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+    expect(deps.prisma.contact.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  // Falhar em bloquear não pode impedir o alvo de ser marcado — são dois registros
+  // independentes, e perder os dois por causa de um é pior.
+  it('erro ao bloquear o contato não impede a marcação do alvo', async () => {
+    deps.prisma.contact.updateMany.mockRejectedValue(new Error('db fora'));
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+    expect(deps.prisma.campaignTarget.update).toHaveBeenCalledTimes(1);
   });
 });
 

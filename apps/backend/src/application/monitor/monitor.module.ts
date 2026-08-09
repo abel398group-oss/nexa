@@ -8,6 +8,7 @@ import { WahaNotificationChannel } from './waha-notification-channel';
 import { WhatsAppCloudChannel } from './whatsapp-cloud-channel';
 import { ScaleWatchService } from './scale-watch.service';
 import { DevWatchService } from './dev-watch.service';
+import { EmailDeliverabilityWatchService } from './email-deliverability-watch.service';
 import { AdminAlertService } from './admin-alert.service';
 import { MonitorController } from './monitor.controller';
 import { MonitorIngestController } from './monitor-ingest.controller';
@@ -29,6 +30,10 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
     MonitorDispatchService, // A4: fila com retry/rate-limit
     ScaleWatchService, // termômetro de gargalos (docs/infra/monitoramento-gargalos)
     DevWatchService, // 4 falhas silenciosas → alerta de dev (WhatsApp + e-mail)
+    // Termômetro de reputação do remetente: devolução e descadastro dos últimos
+    // 7 dias. O disparo tinha travas de ritmo e nenhuma de resultado — a resposta
+    // para "estamos queimando o domínio?" só chegaria pela entrega parar.
+    EmailDeliverabilityWatchService,
     AdminAlertService, // aviso admin nos 2 canais (WhatsApp + e-mail)
     WahaNotificationChannel,
     WhatsAppCloudChannel,

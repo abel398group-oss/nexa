@@ -917,7 +917,14 @@ export function CampaignsPage() {
     setFormErrors({});
     setBusy(true);
     try {
-      let r: { included?: number; skippedOptOut?: number; warnings?: string[]; _count?: { targets?: number } };
+      let r: {
+        included?: number;
+        skippedOptOut?: number;
+        skippedBounced?: number;
+        skippedInvalid?: number;
+        warnings?: string[];
+        _count?: { targets?: number };
+      };
       if (channel === 'email') {
         const payload: any = {
           name: name.trim(),
@@ -959,8 +966,17 @@ export function CampaignsPage() {
       setShow(false);
       resetForm();
       const inc = r.included ?? r._count?.targets ?? 0;
-      const skip = r.skippedOptOut ?? 0;
-      toast.success(`Campanha criada! ${inc} contato(s)${skip > 0 ? ` · ${skip} pulado(s) por opt-out` : ''}.`);
+      // Cada motivo de exclusão aparece separado: "20 pulados" sem dizer por quê
+      // faz o operador desconfiar do disparo. E-mail inválido e devolução são
+      // exclusivos do canal de e-mail, então só aparecem quando houver.
+      const pulados = [
+        r.skippedOptOut ? `${r.skippedOptOut} por opt-out` : '',
+        r.skippedBounced ? `${r.skippedBounced} com e-mail que devolveu` : '',
+        r.skippedInvalid ? `${r.skippedInvalid} com endereço inválido` : '',
+      ].filter(Boolean);
+      toast.success(
+        `Campanha criada! ${inc} contato(s)${pulados.length ? ` · pulados: ${pulados.join(', ')}` : ''}.`,
+      );
       // Avisos que não impedem a criação — hoje só o de variação de texto. Vão
       // num toast separado e persistente: enfiados no de sucesso passariam
       // batido, e a campanha ainda não começou a disparar, então dá tempo de

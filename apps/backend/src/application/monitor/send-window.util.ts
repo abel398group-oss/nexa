@@ -19,13 +19,24 @@ export const DEFAULT_CRITICAL_OUTSIDE_WINDOW: 'hold' | 'send' = 'hold';
 /**
  * true quando `now` está dentro de [startHour, endHour) — endHour é exclusivo (20 = "até 19:59").
  *
- * ATENÇÃO: usa o fuso do PROCESSO (`getHours`), diferente do sender e do
- * follow-up, que corrigem para Brasília na mão. Funciona porque
- * `TZ=America/Sao_Paulo` está no compose e no .env — um deploy sem essa env
- * desloca a janela do Monitor em 3 horas sem nenhum erro. Trocar por
- * `brasiliaHour` (shared/utils/brasilia-hours.util.ts) exige atualizar os
- * testes do monitor, que constroem datas no fuso local; ver nota em
- * docs/infra/.
+ * ## Nota de fuso (2026-08-09) — dívida conhecida, NÃO corrigir isoladamente
+ *
+ * Usa o fuso do PROCESSO (`getHours`), diferente do sender e do follow-up, que
+ * corrigem para Brasília na mão. Funciona hoje porque `TZ=America/Sao_Paulo`
+ * está no compose e no `.env`; um deploy sem essa env desloca a janela do
+ * Monitor em 3 horas, sem erro nenhum para denunciar.
+ *
+ * A correção foi tentada e revertida. Trocar SÓ esta função deixa o módulo
+ * internamente INCONSISTENTE — pior que o problema original: o
+ * `ConsolidationService` compara `now.getHours()` com o horário configurado do
+ * contato (`consolidation.service.ts`), decide o dia da semana com `getDay()` e
+ * monta as chaves de dedup (`lastDigestDate`, slot) com `getFullYear/getMonth/
+ * getDate`. O mesmo vale para `closing-report.service.ts`, `digest-tabular.ts`
+ * e `dev-watch.service.ts` — cerca de 28 pontos.
+ *
+ * Ou seja: hoje o módulo é coerente (tudo no fuso do processo). A correção certa
+ * converte os 28 pontos de uma vez, com os testes junto, e exige cuidado porque
+ * as chaves de dedup governam envio duplicado e envio perdido.
  */
 export function isWithinSendWindow(now: Date, startHour: number, endHour: number): boolean {
   const h = now.getHours();

@@ -447,9 +447,13 @@ export class EmailCampaignSenderService {
       skippedInvalid: invalidList.length,
       skippedSuspect: suspectList.length,
       skippedAlreadySent: dupList.length,
-      // Avisos de conteúdo (assunto/corpo). Vão para a tela porque um `logger.warn`
-      // que ninguém lê é o mesmo que não ter verificação nenhuma — foi o que existia.
-      avisos,
+      // `warnings` e não `avisos`: é o mesmo campo que a campanha de WhatsApp já
+      // devolve, e a tela de Disparo mostra cada item num toast de 15s. Nome
+      // diferente aqui significaria escrever de novo, no front, o que já existe.
+      //
+      // Eles vão para a TELA porque um `logger.warn` que ninguém lê é o mesmo que
+      // não ter verificação nenhuma — que era exatamente o estado anterior.
+      warnings: avisos,
     };
   }
 

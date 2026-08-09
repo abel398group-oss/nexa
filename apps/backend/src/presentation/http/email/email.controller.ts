@@ -57,9 +57,23 @@ export class EmailController {
 
     const ctx = await this.optout.peek(token);
 
+    // Só token DESCONHECIDO é erro. Vencido ou já usado segue para a confirmação —
+    // quem clica em "Cancelar inscrição" e recebe uma página de erro marca como
+    // spam, e reclamação de spam custa muito mais que um descadastro repetido.
+    // Ver EmailOptOutService.
     if (!ctx) {
       return res.status(410).send(
-        this.renderPage('Link expirado', 'Este link de descadastro expirou ou já foi utilizado.'),
+        this.renderPage('Link inválido', 'Este link de descadastro não foi reconhecido.'),
+      );
+    }
+
+    if (ctx.jaUsado) {
+      return res.status(200).send(
+        this.renderPage(
+          'Você já está descadastrado ✅',
+          `O endereço <strong>${this.escapeHtml(ctx.email)}</strong> já foi removido dos nossos envios.<br>
+           Não é preciso fazer mais nada.`,
+        ),
       );
     }
 
@@ -130,9 +144,10 @@ export class EmailController {
 
     const result = await this.optout.consume(token);
 
+    // `consume()` é idempotente — só devolve null para token desconhecido.
     if (!result) {
       return res.status(410).send(
-        this.renderPage('Link inválido', 'Este link já foi usado ou expirou.'),
+        this.renderPage('Link inválido', 'Este link de descadastro não foi reconhecido.'),
       );
     }
 

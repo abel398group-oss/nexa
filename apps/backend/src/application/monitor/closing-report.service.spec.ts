@@ -13,6 +13,20 @@ import { ClosingReportService } from './closing-report.service';
 import type { ContactRecipient } from './contact-recipient.types';
 import type { TmsClosingReport } from '@/application/connectors/hipertms.connector';
 
+/**
+ * Instante correspondente a `hora` no relógio de BRASÍLIA — não no fuso de quem
+ * roda o teste.
+ *
+ * O construtor local (`new Date(ano, mes, dia, 7, 0)`) monta 7h no fuso do
+ * PROCESSO: passa na máquina do time (UTC-3) e falha num runner em UTC, porque
+ * a janela de envio agora
+ * calcula a hora de Brasília por offset explícito em vez de confiar na env `TZ`.
+ * Fixar o instante em UTC deixa o teste dizer a mesma coisa em qualquer lugar.
+ */
+function brt(year: number, month0: number, day: number, hour = 0, minute = 0): Date {
+  return new Date(Date.UTC(year, month0, day, hour + 3, minute, 0, 0));
+}
+
 function makeReport(overrides?: Partial<TmsClosingReport>): TmsClosingReport {
   return {
     period: { start: '2026-07-01', end: '2026-07-15', label: '1ª quinzena de julho' },
@@ -91,14 +105,14 @@ describe('ClosingReportService', () => {
   it('MONITOR_ENABLED != true → não faz nada em nenhum dia', async () => {
     process.env.MONITOR_ENABLED = 'false';
     const { svc, tms } = makeService();
-    const result = await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0)); // dia 16 — bateria se enabled
+    const result = await svc.runDailyLocked(brt(2026, 6, 16, 7, 0)); // dia 16 — bateria se enabled
     expect(result).toEqual({ tenants: 0, sent: 0 });
     expect(tms.getClosingReport).not.toHaveBeenCalled();
   });
 
   it('(a) dia comum (não é 1º nem 16) → não faz nada, nunca chama o TMS', async () => {
     const { svc, tms } = makeService();
-    const result = await svc.runDailyLocked(new Date(2026, 6, 10, 7, 0));
+    const result = await svc.runDailyLocked(brt(2026, 6, 10, 7, 0));
     expect(result).toEqual({ tenants: 0, sent: 0 });
     expect(tms.getClosingReport).not.toHaveBeenCalled();
   });
@@ -109,7 +123,7 @@ describe('ClosingReportService', () => {
       makeContact({ id: 'c-mo', whatsapp: '5511999990002', closingReport: 'monthly' }),
     ];
     const { svc, tms, notification } = makeService({ contacts });
-    await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+    await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
 
     expect(tms.getClosingReport).toHaveBeenCalledOnce();
     expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'biweekly', expect.any(String));
@@ -130,7 +144,7 @@ describe('ClosingReportService', () => {
       ),
     );
     const { svc, tms, notification } = makeService({ contacts, getClosingReport });
-    await svc.runDailyLocked(new Date(2026, 6, 1, 7, 0));
+    await svc.runDailyLocked(brt(2026, 6, 1, 7, 0));
 
     expect(tms.getClosingReport).toHaveBeenCalledTimes(2);
     expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'biweekly', expect.any(String));
@@ -147,7 +161,7 @@ describe('ClosingReportService', () => {
   it('(d) dedup por lastClosingDate — rodar 2x no mesmo dia envia só 1 vez e não chama o TMS de novo', async () => {
     const contact = makeContact();
     const { svc, tms, notification } = makeService({ contacts: [contact] });
-    const now = new Date(2026, 6, 16, 7, 0);
+    const now = brt(2026, 6, 16, 7, 0);
 
     await svc.runDailyLocked(now);
     expect(notification.notifyPhone).toHaveBeenCalledTimes(1);
@@ -160,7 +174,7 @@ describe('ClosingReportService', () => {
 
   it('(e) TMS retorna null → zero envios + warn, nenhum contato marcado como enviado', async () => {
     const { svc, notification, logWarn } = makeService({ getClosingReport: vi.fn().mockResolvedValue(null) });
-    const result = await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+    const result = await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
     expect(result.sent).toBe(0);
     expect(notification.notifyPhone).not.toHaveBeenCalled();
     expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('TMS retornou null'));
@@ -181,7 +195,7 @@ describe('ClosingReportService', () => {
       cash: { receivedInPeriod: 0, overdueOpenAmount: 0, overdueOpenCount: 0, delinquencyRate: 0 },
     });
     const { svc, notification } = makeService({ getClosingReport: vi.fn().mockResolvedValue(report) });
-    await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+    await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
 
     const [, , msg] = notification.notifyPhone.mock.calls[0];
     expect(msg).not.toContain('Infinity');
@@ -192,7 +206,7 @@ describe('ClosingReportService', () => {
   it('e-mail: contato só com e-mail recebe via sendAlertEmail com assunto e corpo esperados', async () => {
     const contact = makeContact({ whatsapp: undefined, emails: ['financeiro@empresa.com'] });
     const { svc, emailReply } = makeService({ contacts: [contact] });
-    await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+    await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
 
     expect(emailReply.sendAlertEmail).toHaveBeenCalledOnce();
     const [to, subject, body] = emailReply.sendAlertEmail.mock.calls[0];
@@ -203,7 +217,7 @@ describe('ClosingReportService', () => {
 
   it('tenant sem contatos elegíveis pro kind do dia → não chama o TMS', async () => {
     const { svc, tms } = makeService({ contacts: [makeContact({ closingReport: 'off' })] });
-    await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+    await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
     expect(tms.getClosingReport).not.toHaveBeenCalled();
   });
 
@@ -216,7 +230,7 @@ describe('ClosingReportService', () => {
       makeContact({ id: 'c-bi', whatsapp: '5511999990002', closingReport: 'biweekly' }),
     ];
     const { svc, tms, notification } = makeService({ contacts });
-    const result = await svc.runDailyLocked(new Date(2026, 6, 6, 7, 0));
+    const result = await svc.runDailyLocked(brt(2026, 6, 6, 7, 0));
 
     expect(tms.getClosingReport).toHaveBeenCalledOnce();
     expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'weekly', expect.any(String));
@@ -228,7 +242,7 @@ describe('ClosingReportService', () => {
   it("T9-ADENDO: dia comum que NÃO é segunda nem 1º/16 → 'weekly' nunca dispara", async () => {
     // 2026-07-07 é terça-feira — nem segunda, nem dia 1º/16.
     const { svc, tms } = makeService({ contacts: [makeContact({ closingReport: 'weekly' })] });
-    const result = await svc.runDailyLocked(new Date(2026, 6, 7, 7, 0));
+    const result = await svc.runDailyLocked(brt(2026, 6, 7, 7, 0));
     expect(result).toEqual({ tenants: 0, sent: 0 });
     expect(tms.getClosingReport).not.toHaveBeenCalled();
   });
@@ -246,7 +260,7 @@ describe('ClosingReportService', () => {
       ),
     );
     const { svc, tms, notification } = makeService({ contacts, getClosingReport });
-    const result = await svc.runDailyLocked(new Date(2026, 1, 16, 7, 0));
+    const result = await svc.runDailyLocked(brt(2026, 1, 16, 7, 0));
 
     expect(tms.getClosingReport).toHaveBeenCalledTimes(2);
     expect(tms.getClosingReport).toHaveBeenCalledWith(expect.any(String), 'weekly', expect.any(String));
@@ -273,7 +287,7 @@ describe('ClosingReportService', () => {
       });
       const { svc, tms, notification, emailReply, update, logWarn } = makeService({ contacts: [contact] });
 
-      const result = await svc.runDailyLocked(new Date(2026, 6, 16, 7, 0));
+      const result = await svc.runDailyLocked(brt(2026, 6, 16, 7, 0));
 
       expect(tms.getClosingReport).toHaveBeenCalledOnce(); // já tinha buscado o relatório antes de checar delivery
       expect(notification.notifyPhone).not.toHaveBeenCalled();

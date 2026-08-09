@@ -104,7 +104,15 @@ function makeTenantConfig(sectorConfig: any, extra?: Record<string, any>) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Constrói um Date com hora e minuto explícitos (dia fixo = segunda-feira). */
+/**
+ * Constrói um Date com hora e minuto explícitos (dia fixo = segunda-feira).
+ *
+ * Deliberadamente no fuso do PROCESSO, para casar com o serviço: o
+ * ConsolidationService lê `now.getHours()`/`getDay()` e monta as chaves de dedup
+ * com `getFullYear/getMonth/getDate`, tudo local. Construção e leitura no mesmo
+ * fuso é o que faz estes testes passarem em qualquer runner. Ver a nota de
+ * dívida de fuso em `send-window.util.ts` antes de mexer nisto.
+ */
 function makeNow(hour: number, minute: number): Date {
   // 2026-07-13 = segunda-feira (weekday 1)
   return new Date(2026, 6, 13, hour, minute, 0, 0);

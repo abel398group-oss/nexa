@@ -27,6 +27,10 @@ export interface CampaignDetail {
 export interface CampaignCreateResult {
   included?: number;
   skippedOptOut?: number;
+  /** E-mail: endereços com devolução permanente — nunca mais recebem. */
+  skippedBounced?: number;
+  /** E-mail: endereços que nem chegam a ser um endereço (linha vazia, sem @). */
+  skippedInvalid?: number;
   _count?: { targets?: number };
   [k: string]: unknown;
 }

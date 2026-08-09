@@ -97,7 +97,18 @@ export class EmailBounceService {
   }
 
   /**
-   * Registra a devolução: marca o alvo de campanha como `failed` com o motivo real.
+   * Registra a devolução em DOIS lugares, e a ordem importa:
+   *
+   *  1. No CONTATO (`emailBouncedAt`) — é o que impede a próxima campanha de tentar
+   *     o mesmo endereço morto. Sem isto, o dedup entre campanhas não protegia nada:
+   *     ele só pula quem tem alvo `sent`, e um alvo devolvido vira `failed`, então o
+   *     endereço voltava para a fila na campanha seguinte. Taxa de rejeição acima de
+   *     2% joga TODOS os e-mails do domínio no spam, não só os desta campanha.
+   *  2. No ALVO da campanha (`failed`) — para o painel contar certo.
+   *
+   * O passo 1 acontece mesmo quando não existe alvo de campanha correspondente: a
+   * devolução pode ser de uma resposta de conversa, e o endereço está morto do
+   * mesmo jeito.
    *
    * Devolução temporária não altera nada — a mensagem ainda pode ser entregue, e
    * marcar `failed` cedo faria o painel mentir na direção oposta.
@@ -118,10 +129,31 @@ export class EmailBounceService {
       return;
     }
 
-    // Marca o alvo mais recente que constava como entregue para este endereço.
+    // 1) Endereço queimado — nunca mais entra em campanha de e-mail.
+    //
+    // `insensitive` porque o relatório de devolução devolve o endereço na caixa em
+    // que o servidor remoto o escreveu, que não precisa bater com a nossa.
+    const marcados = await this.prisma.contact
+      .updateMany({
+        where: { tenantId, email: { equals: info.recipient, mode: 'insensitive' } },
+        data: { emailBouncedAt: new Date(), emailBounceReason: motivo },
+      })
+      .catch((e: any) => {
+        this.logger.error(`Falha ao marcar contato ${info.recipient} como bounced: ${e?.message}`);
+        return { count: 0 };
+      });
+
+    if (marcados.count === 0) {
+      this.logger.warn(
+        `Devolução DEFINITIVA para ${info.recipient} — nenhum contato com esse e-mail no tenant ${tenantId}. ` +
+        'O endereço NÃO ficou bloqueado; se ele voltar numa planilha, será tentado de novo.',
+      );
+    }
+
+    // 2) Marca o alvo mais recente que constava como entregue para este endereço.
     const alvo = await this.prisma.campaignTarget
       .findFirst({
-        where: { tenantId, email: info.recipient, status: 'sent' },
+        where: { tenantId, email: { equals: info.recipient, mode: 'insensitive' }, status: 'sent' },
         orderBy: { sentAt: 'desc' },
         select: { id: true, campaignId: true },
       })
@@ -129,8 +161,9 @@ export class EmailBounceService {
 
     if (!alvo) {
       this.logger.warn(
-        `Devolução DEFINITIVA para ${info.recipient} — ${motivo}. Nenhum alvo de campanha ` +
-        'com status "sent" para este endereço (envio pode ter sido resposta de conversa, não campanha).',
+        `Devolução DEFINITIVA para ${info.recipient} — ${motivo}. Contato marcado ` +
+        `(${marcados.count}), mas nenhum alvo de campanha com status "sent" para este endereço ` +
+        '(envio pode ter sido resposta de conversa, não campanha).',
       );
       return;
     }
@@ -140,7 +173,8 @@ export class EmailBounceService {
       .catch((e: any) => this.logger.warn(`Falha ao marcar alvo ${alvo.id} como failed: ${e?.message}`));
 
     this.logger.warn(
-      `Devolução DEFINITIVA: ${info.recipient} (campanha=${alvo.campaignId}) marcado como failed — ${motivo}`,
+      `Devolução DEFINITIVA: ${info.recipient} (campanha=${alvo.campaignId}) marcado como failed ` +
+      `e contato bloqueado para e-mail — ${motivo}`,
     );
   }
 }
