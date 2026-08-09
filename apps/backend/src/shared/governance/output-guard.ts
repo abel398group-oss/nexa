@@ -41,7 +41,29 @@ export type GuardViolation =
   | 'preco_nao_autorizado'
   | 'vazamento_de_prompt'
   | 'linguagem_ofensiva'
-  | 'vazamento_de_dados';
+  | 'vazamento_de_dados'
+  // 2026-08-09: afirmações perigosas feitas em PALAVRAS, sem número — o que as
+  // travas acima, todas numéricas ou de string literal, não alcançavam.
+  | 'conselho_fiscal_ou_juridico'
+  | 'promessa_de_prazo'
+  | 'recurso_nao_confirmado'
+  | 'garantia_de_resultado';
+
+/**
+ * Violações que indicam MANIPULAÇÃO — alguém tentando dobrar a Lia.
+ *
+ * A separação existe porque uma violação do guard conta strike no abuse-guard, e
+ * três strikes banem o número. Preço inventado e recitação de prompt só aparecem
+ * quando o lead empurrou para lá; já um prazo alucinado ou um conselho fiscal
+ * errado são a Lia se excedendo sozinha, muitas vezes numa pergunta inocente.
+ * Punir o lead por isso bane cliente legítimo — e em silêncio.
+ */
+export const MANIPULATION_VIOLATIONS: ReadonlySet<GuardViolation> = new Set([
+  'preco_nao_autorizado',
+  'vazamento_de_prompt',
+  'linguagem_ofensiva',
+  'vazamento_de_dados',
+]);
 
 export interface GuardVerdict {
   safe: boolean;
@@ -224,6 +246,78 @@ function detectDataLeak(text: string, allowedFacts: string, own: OwnData): strin
   return achados;
 }
 
+// ── 5. AFIRMAÇÕES PERIGOSAS EM PALAVRAS ───────────────────────────────────────
+
+/**
+ * As travas 1–4 pegam número e string literal. Sobra o que dá processo escrito
+ * por extenso: um prazo prometido, um recurso que não existe, uma garantia de
+ * resultado — e, num TMS, o pior de todos: conselho fiscal.
+ *
+ * O conselho fiscal é o vetor mais provável e o menos óbvio. "Nesse caso você
+ * não precisa emitir MDF-e" não constrange ninguém: o cliente segue a orientação,
+ * toma multa, e existe registro escrito de que a orientação saiu daqui. Nenhuma
+ * das travas anteriores olhava para isso.
+ *
+ * ## A escapatória por `allowedFacts`
+ *
+ * Toda regra desta seção libera quando o trecho casado aparece em `allowedFacts`.
+ * É a mesma filosofia da trava de preço: a Lia pode repetir o que a base de
+ * conhecimento afirma, o que ela não pode é inventar. Se o artigo do TMS diz
+ * "a SEFAZ exige certificado digital", repetir isso é fundamentado; dizer que o
+ * cliente está isento de emitir CT-e, não.
+ *
+ * ## Por que estas NÃO contam strike
+ *
+ * Ver MANIPULATION_VIOLATIONS. Um prazo alucinado é falha da Lia, não ataque do
+ * lead — banir o número por isso seria punir a vítima.
+ */
+type ClaimRule = { re: RegExp; issue: GuardViolation; rotulo: string };
+
+const CLAIM_RULES: ClaimRule[] = [
+  // ── Conselho fiscal/jurídico: PRESCRITIVO sobre a obrigação do cliente ──
+  // Descrever o produto ("o sistema emite MDF-e") é livre; dizer ao cliente o que
+  // ele deve ou não fazer perante o fisco, não.
+  { re: /\bvoc[êe]s?\s+(?:n[ãa]o\s+)?(?:é|e|s[ãa]o|est[áa]|est[ãa]o)\s+obrigad[oa]s?\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'afirma obrigação legal do cliente' },
+  { re: /\bn[ãa]o\s+precisa\s+(?:emitir|declarar|recolher|pagar|informar)\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'dispensa de obrigação fiscal' },
+  { re: /\b(?:a\s+)?(?:lei|legisla[çc][ãa]o)\s+(?:exige|obriga|determina|permite|pro[íi]be|dispensa)\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'interpretação da lei' },
+  { re: /\bpor\s+lei\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'afirmação "por lei"' },
+  { re: /\b(?:est[áa]|fica|s[ãa]o|é|e)\s+isent[oa]s?\s+d[eo]\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'afirma isenção' },
+  { re: /\b(?:a\s+)?(?:ANTT|SEFAZ|Receita\s+Federal)\s+(?:exige|obriga|determina|permite|pro[íi]be|dispensa)\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'fala pelo órgão regulador' },
+  { re: /\bdispensad[oa]s?\s+d[eo]\s+(?:emitir|emiss[ãa]o|recolher)\b/i, issue: 'conselho_fiscal_ou_juridico', rotulo: 'afirma dispensa' },
+
+  // ── Prazo: só o COMPROMISSO, não qualquer menção a tempo ──
+  // "nos primeiros 7 dias pode cancelar" e "nunca em menos de 30 dias" são frases
+  // aprovadas do playbook e não casam aqui de propósito.
+  { re: /\b(?:em|dentro\s+de|no\s+prazo\s+de|at[ée])\s+(?:at[ée]\s+)?\d+\s*(?:minutos?|horas?|dias?|semanas?|m[êe]s(?:es)?)\b/i, issue: 'promessa_de_prazo', rotulo: 'prazo com número' },
+  { re: /\b(?:implanta[çc][ãa]o|instala[çc][ãa]o|ativa[çc][ãa]o|migra[çc][ãa]o)\s+(?:em|leva|dura|acontece\s+em)\b/i, issue: 'promessa_de_prazo', rotulo: 'prazo de implantação' },
+  { re: /\bfica\s+pronto\s+em\b|\bretorn(?:o|amos|a)\s+em\s+\d/i, issue: 'promessa_de_prazo', rotulo: 'promessa de entrega' },
+
+  // ── Recurso que a base não confirma ──
+  { re: /\b(?:aplicativo|app)\s+(?:mobile|no\s+celular|para\s+(?:android|ios|celular))\b/i, issue: 'recurso_nao_confirmado', rotulo: 'aplicativo mobile' },
+  { re: /\b(?:teste|per[íi]odo)\s+gr[áa]tis\b|\bfree\s*trial\b|\btrial\s+gratuito\b/i, issue: 'recurso_nao_confirmado', rotulo: 'teste grátis (não existe — ver KB)' },
+  { re: /\bintegra(?:mos|\s*[çc][ãa]o)?\s+com\s+(?:o\s+|a\s+)?[A-ZÀ-Þ][\w-]{2,}/, issue: 'recurso_nao_confirmado', rotulo: 'integração específica' },
+
+  // ── Garantia de resultado ──
+  // Sem o "sempre" e o "100%" soltos que a Supervisora usa: palavra comum demais
+  // ("estou sempre por aqui") para virar bloqueio determinístico.
+  { re: /\bgarant\w+\s+(?:de\s+)?(?:lucro|retorno|resultado|economia|ROI)\b/i, issue: 'garantia_de_resultado', rotulo: 'garantia de resultado' },
+  { re: /\bgarantimos\s+que\b/i, issue: 'garantia_de_resultado', rotulo: 'garantia explícita' },
+  { re: /\bnunca\s+falha\b|\binfal[íi]vel\b|\b100%\s+de\s+(?:garantia|sucesso|aprova[çc][ãa]o)\b/i, issue: 'garantia_de_resultado', rotulo: 'absolutismo' },
+];
+
+function detectClaims(text: string, allowedFacts: string): { issue: GuardViolation; detail: string }[] {
+  const permitido = String(allowedFacts ?? '').toLowerCase();
+  const achados: { issue: GuardViolation; detail: string }[] = [];
+  for (const regra of CLAIM_RULES) {
+    const m = regra.re.exec(text);
+    if (!m) continue;
+    // Fundamentado na base → a Lia está repetindo, não inventando.
+    if (permitido && permitido.includes(m[0].toLowerCase().trim())) continue;
+    achados.push({ issue: regra.issue, detail: `${regra.rotulo}: "${m[0].trim()}"` });
+  }
+  return achados;
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -272,6 +366,13 @@ export function inspectOutbound(text: string, allowedFacts: string, own: OwnData
   if (vazamentos.length) {
     violations.push('vazamento_de_dados');
     detail.push(...vazamentos);
+  }
+
+  // 5. Afirmação perigosa escrita por extenso (conselho fiscal, prazo, recurso,
+  //    garantia). Não conta manipulação — ver MANIPULATION_VIOLATIONS.
+  for (const c of detectClaims(text, allowedFacts)) {
+    if (!violations.includes(c.issue)) violations.push(c.issue);
+    detail.push(c.detail);
   }
 
   return { safe: violations.length === 0, violations, detail: detail.join(' | ') };

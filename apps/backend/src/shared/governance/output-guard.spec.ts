@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inspectOutbound } from './output-guard';
+import { inspectOutbound, MANIPULATION_VIOLATIONS } from './output-guard';
 
 // Catálogo típico entregue ao agente de vendas (planos + KB).
 const FACTS = `PLANOS:
@@ -124,12 +124,108 @@ describe('guard de preço — o caso Chevrolet', () => {
   });
 
   it('não confunde número comum com dinheiro', () => {
-    const v = inspectOutbound('Somos 300 clientes e respondemos em 24 horas.', FACTS);
+    // O "respondemos em 24 horas" que estava aqui saiu em 09/08/2026: virou
+    // promessa de prazo e passou a ser barrado pela trava nova (teste próprio
+    // logo abaixo, na seção de afirmações). O propósito deste caso sempre foi
+    // outro — provar que um número solto não é lido como dinheiro.
+    const v = inspectOutbound('Somos 300 clientes e atendemos todo o Brasil.', FACTS);
     expect(v.safe).toBe(true);
   });
 
   it('100% é linguagem comum, não oferta', () => {
     expect(inspectOutbound('O sistema é 100% na nuvem.', FACTS).safe).toBe(true);
+  });
+});
+
+// ── Afirmações perigosas escritas por extenso (2026-08-09) ───────────────────
+// As travas anteriores comparam número e string literal. Estas pegam o que dá
+// processo escrito em palavras — e a mais importante é a fiscal: "você não
+// precisa emitir MDF-e" não constrange ninguém, o cliente segue, toma multa, e
+// existe registro escrito de que a orientação saiu daqui.
+describe('guard de afirmações — conselho fiscal', () => {
+  it('bloqueia dispensar o cliente de obrigação fiscal', () => {
+    const v = inspectOutbound('Nesse caso você não precisa emitir MDF-e.', FACTS);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('conselho_fiscal_ou_juridico');
+  });
+
+  it('bloqueia falar pelo órgão regulador', () => {
+    expect(inspectOutbound('A ANTT obriga o piso mínimo nesse trecho.', FACTS).safe).toBe(false);
+  });
+
+  it('bloqueia afirmar isenção', () => {
+    expect(inspectOutbound('Sua operação está isenta de ICMS nesse caso.', FACTS).safe).toBe(false);
+  });
+
+  it('DESCREVER o produto continua livre — o bloqueio é a prescrição ao cliente', () => {
+    expect(inspectOutbound('O HiperTMS emite CT-e e MDF-e integrado à SEFAZ.', FACTS).safe).toBe(true);
+  });
+
+  it('repetir o que a base afirma é fundamentado, não invenção', () => {
+    const facts = `${FACTS}\nA SEFAZ exige certificado digital A1 válido para transmitir.`;
+    expect(inspectOutbound('A SEFAZ exige certificado digital A1 válido.', facts).safe).toBe(true);
+  });
+});
+
+describe('guard de afirmações — prazo, recurso e garantia', () => {
+  it('bloqueia promessa de prazo com número', () => {
+    const v = inspectOutbound('Respondemos em 24 horas.', FACTS);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('promessa_de_prazo');
+  });
+
+  it('bloqueia prazo de implantação', () => {
+    expect(inspectOutbound('A implantação leva duas semanas.', FACTS).safe).toBe(false);
+  });
+
+  it('as frases aprovadas do playbook sobre cobrança continuam passando', () => {
+    // Ambas são texto validado pela diretoria — se o guard as barrasse, ele
+    // estaria brigando com o próprio playbook.
+    expect(inspectOutbound('Nos primeiros 7 dias você pode cancelar.', FACTS).safe).toBe(true);
+    expect(inspectOutbound('A primeira cobrança nunca vem em menos de 30 dias.', FACTS).safe).toBe(true);
+  });
+
+  it('bloqueia teste grátis — que não existe no produto', () => {
+    const v = inspectOutbound('Você tem um período grátis para avaliar.', FACTS);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('recurso_nao_confirmado');
+  });
+
+  it('bloqueia aplicativo mobile não confirmado', () => {
+    expect(inspectOutbound('Temos aplicativo no celular para o motorista.', FACTS).safe).toBe(false);
+  });
+
+  it('bloqueia garantia de resultado', () => {
+    const v = inspectOutbound('Garantimos economia de combustível na sua frota.', FACTS);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('garantia_de_resultado');
+  });
+
+  it('"sempre" sozinho não é absolutismo — é português', () => {
+    // A Supervisora bloqueia /sempre/ solto; aqui não, de propósito: "estou sempre
+    // por aqui" viraria bloqueio determinístico de conversa legítima.
+    expect(inspectOutbound('Estou sempre por aqui se precisar.', FACTS).safe).toBe(true);
+  });
+});
+
+describe('guard — o que conta strike de abuso', () => {
+  // Três strikes banem o número. Alucinação da Lia não pode banir o lead.
+  it('manipulação (preço inventado) conta', () => {
+    const v = inspectOutbound('Faço por R$ 1,00 pra você.', FACTS);
+    expect(v.violations.some((x) => MANIPULATION_VIOLATIONS.has(x))).toBe(true);
+  });
+
+  it('alucinação da Lia (prazo, fiscal, recurso, garantia) NÃO conta', () => {
+    for (const texto of [
+      'Respondemos em 24 horas.',
+      'Você não precisa emitir MDF-e.',
+      'Temos aplicativo no celular.',
+      'Garantimos retorno em economia.',
+    ]) {
+      const v = inspectOutbound(texto, FACTS);
+      expect(v.safe).toBe(false);
+      expect(v.violations.some((x) => MANIPULATION_VIOLATIONS.has(x))).toBe(false);
+    }
   });
 });
 

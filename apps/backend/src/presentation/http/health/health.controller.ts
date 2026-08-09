@@ -11,6 +11,7 @@ import { AnthropicService } from '@/shared/ai/anthropic.service';
 import { ConversationJanitorService } from '@/application/conversations/conversation-janitor.service';
 import { ProactiveEngineCron } from '@/application/proactive-engine/proactive-engine.cron';
 import { ConversationAgentService } from '@/application/agents/conversation-agent.service';
+import { SupervisorAgentService } from '@/application/agents/supervisor-agent.service';
 
 @ApiTags('health')
 @Controller('health')
@@ -82,6 +83,9 @@ export class HealthController implements OnModuleDestroy {
         ...this.anthropic.getStats(),
         // MON-009: latência ponta a ponta do pipeline da Lia (p50/p95 das últimas 100 respostas)
         latency: ConversationAgentService.latency.percentiles(),
+        // 2026-08-09: quanto a Supervisora reprova. É o número que decide se auditar
+        // 100% das mensagens se paga ou se vale amostrar (ver supervisor-agent.service).
+        supervisor: SupervisorAgentService.stats.snapshot(),
       },
       // MON-004: canal de e-mail configurado?
       smtp: smtpConfigured ? 'configured' : 'not_configured',

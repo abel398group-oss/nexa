@@ -5,7 +5,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { SellersService } from '@/application/sellers/sellers.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AutonomyService } from '@/shared/governance/autonomy.service';
-import { inspectOutbound } from '@/shared/governance/output-guard';
+import { inspectOutbound, MANIPULATION_VIOLATIONS } from '@/shared/governance/output-guard';
 import { RouterAgentService, RouteDecision } from './router-agent.service';
 import { SalesAgentService, type LeadProfile } from './sales-agent.service';
 import { SupportAgentService } from './support-agent.service';
@@ -449,11 +449,14 @@ export class ConversationAgentService {
               `Guard de saída barrou resposta conv=${input.conversationId} ` +
               `intent=${route.intent} — ${guard.detail}. Rascunho: ${draft.slice(0, 160)}`,
             );
-            // O guard só dispara quando o rascunho JÁ continha algo que não devia sair —
-            // ou seja, alguém tentou manipular a Lia. Conta como tentativa ("3 strikes");
-            // ao atingir o teto, o número é banido (ver abuse-guard.service.ts).
-            if (ownPhone) {
-              await this.abuseGuard.recordStrike(tenantId, ownPhone, guard.violations, guard.detail).catch(() => null);
+            // Strike só quando a violação indica MANIPULAÇÃO (preço inventado,
+            // recitação do prompt, ofensa, vazamento) — três strikes banem o número.
+            // As travas de conselho fiscal, prazo, recurso e garantia bloqueiam do
+            // mesmo jeito, mas NÃO pontuam: ali quem se excedeu foi a Lia, e banir o
+            // lead por uma alucinação dela seria punir a vítima, em silêncio.
+            const manipulacao = guard.violations.filter((v) => MANIPULATION_VIOLATIONS.has(v));
+            if (ownPhone && manipulacao.length) {
+              await this.abuseGuard.recordStrike(tenantId, ownPhone, manipulacao, guard.detail).catch(() => null);
             }
           }
         }

@@ -49,9 +49,74 @@ const HARD_BLOCKS: { re: RegExp; issue: string }[] = [
   { re: /(gr[áa]tis para sempre|de gra[çc]a para sempre|vital[íi]cio)/i, issue: 'oferta vitalícia não autorizada' },
 ];
 
+/**
+ * Contadores da Supervisora — a resposta para "ela vale o que custa?".
+ *
+ * Ela roda em TODA mensagem, de forma síncrona, e é 1/3 das chamadas de IA do
+ * pipeline. A decisão de auditar por amostragem (ou só nas rotas de risco) depende
+ * de um número que ninguém tinha: quanto ela reprova. Reprovando ~0,5% é cara
+ * demais pelo que entrega; reprovando ~5% está ganhando o salário dela.
+ *
+ * Estático de propósito, como `ConversationAgentService.latency` — o /health lê
+ * sem precisar injetar o serviço. Zera no restart: é termômetro, não contabilidade.
+ */
+class SupervisorStats {
+  private reviews = 0;
+  private rejected = 0;
+  private byHardRule = 0;
+  private byAi = 0;
+  private unavailable = 0;
+  private injection = 0;
+  private readonly porMotivo = new Map<string, number>();
+
+  record(v: { approved: boolean; source: 'ai' | 'fallback'; issues: string[]; hardRule: boolean }) {
+    this.reviews++;
+    if (v.approved) return;
+    this.rejected++;
+    if (v.hardRule) this.byHardRule++;
+    else if (v.source === 'ai') this.byAi++;
+    else this.unavailable++;
+    for (const issue of v.issues) this.bump(issue);
+  }
+
+  recordInjection() {
+    this.injection++;
+  }
+
+  // O motivo vem em texto livre do modelo. Normaliza e limita o mapa: sem teto,
+  // um modelo criativo transforma o contador num vazamento de memória lento.
+  private bump(issue: string) {
+    const chave = String(issue).toLowerCase().slice(0, 60).trim();
+    if (!chave) return;
+    if (!this.porMotivo.has(chave) && this.porMotivo.size >= 50) return;
+    this.porMotivo.set(chave, (this.porMotivo.get(chave) ?? 0) + 1);
+  }
+
+  snapshot() {
+    const top = [...this.porMotivo.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([motivo, n]) => ({ motivo, n }));
+    return {
+      reviews: this.reviews,
+      rejected: this.rejected,
+      // É este número que decide se auditar 100% se paga.
+      rejectionRate: this.reviews ? Number((this.rejected / this.reviews).toFixed(4)) : 0,
+      byHardRule: this.byHardRule,
+      byAi: this.byAi,
+      unavailable: this.unavailable,
+      injectionBlocked: this.injection,
+      topIssues: top,
+    };
+  }
+}
+
 @Injectable()
 export class SupervisorAgentService {
   private readonly logger = new Logger('Supervisor');
+
+  /** Consumido pelo HealthController. */
+  static readonly stats = new SupervisorStats();
 
   constructor(private readonly ai: AnthropicService) {}
 
@@ -67,12 +132,14 @@ export class SupervisorAgentService {
     const { text: safeCustomerMessage, injectionDetected } = sanitizeCustomerMessage(input.customerMessage);
     if (injectionDetected) {
       this.logger.warn('Supervisor: prompt injection detectado em customerMessage — bloqueado');
+      SupervisorAgentService.stats.recordInjection();
     }
     const sanitizedInput = { ...input, customerMessage: safeCustomerMessage };
 
     // 1) regras duras
     const hardIssues = HARD_BLOCKS.filter((b) => b.re.test(sanitizedInput.draft)).map((b) => b.issue);
     if (hardIssues.length) {
+      SupervisorAgentService.stats.record({ approved: false, source: 'fallback', issues: hardIssues, hardRule: true });
       return { approved: false, risk: 'high', issues: hardIssues, source: 'fallback' };
     }
 
@@ -123,16 +190,15 @@ export class SupervisorAgentService {
     try {
       const out = await this.ai.completeJson<{ approved: boolean; risk: any; issues: string[] }>(system, user);
       const risk = ['low', 'medium', 'high'].includes(out.risk) ? out.risk : 'medium';
-      return {
-        approved: !!out.approved,
-        risk,
-        issues: Array.isArray(out.issues) ? out.issues : [],
-        source: 'ai',
-      };
+      const issues = Array.isArray(out.issues) ? out.issues : [];
+      SupervisorAgentService.stats.record({ approved: !!out.approved, source: 'ai', issues, hardRule: false });
+      return { approved: !!out.approved, risk, issues, source: 'ai' };
     } catch (e: any) {
       this.logger.warn(`Supervisor fallback (${e?.message}) — exige revisão humana`);
+      const issues = ['supervisora indisponível — revisar manualmente'];
+      SupervisorAgentService.stats.record({ approved: false, source: 'fallback', issues, hardRule: false });
       // sem supervisora disponível → não auto-aprova (conservador)
-      return { approved: false, risk: 'medium', issues: ['supervisora indisponível — revisar manualmente'], source: 'fallback' };
+      return { approved: false, risk: 'medium', issues, source: 'fallback' };
     }
   }
 }
