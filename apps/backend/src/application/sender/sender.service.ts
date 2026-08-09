@@ -655,7 +655,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     const enriched = targets.map((t: any) => {
       const e = engByPhone.get(t.phone);
       const respondeu = (e?.replied ?? false) || !!t.repliedAt;
-      return { ...t, ack: e?.ack ?? 0, replied: respondeu };
+      // DISP-009: `status` diz o que o WORKER fez; `ack` diz o que o WhatsApp
+      // confirmou. Os dois podem divergir e nada avisava — um alvo com
+      // `status:'sent'` e `ack:0` foi dado como enviado sem nenhum recibo de
+      // volta. Acontece de verdade: com `error:'entrega_nao_confirmada'` o
+      // DISP-021 marca 'sent' de propósito para não duplicar (ver
+      // dispatchOneTarget), e o operador só sabia lendo o campo de erro.
+      // `null` = não se aplica (alvo que nem chegou a ser enviado).
+      const deliveryConfirmed = t.status === 'sent' ? (e?.ack ?? 0) >= 1 || respondeu : null;
+      return { ...t, ack: e?.ack ?? 0, replied: respondeu, deliveryConfirmed };
     });
 
     // Quem RESPONDEU conta como entregue+lido (responder prova recebimento e
@@ -692,8 +700,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     );
     const conversion = { conversations: convIds.length, byOutcome };
 
+    // DISP-009: quantos alvos 'sent' da campanha INTEIRA nunca receberam recibo.
+    // Agregado próprio (não derivado da página) pelo mesmo motivo do engajamento.
+    // Número alto aqui costuma significar sessão do WAHA instável — o disparo
+    // "funcionou" e a mensagem pode não ter chegado a ninguém.
+    const confirmados = eng.filter((e) => e.ack >= 1 || e.replied).length;
+    const deliveryUnconfirmed = Math.max(0, (counts.sent ?? 0) - confirmados);
+
     // `matching` = total que casa com o filtro atual (base da paginação na tela)
-    return { campaign, targets: enriched, counts, engagement, conversion, matching };
+    return { campaign, targets: enriched, counts, engagement, conversion, matching, deliveryUnconfirmed };
   }
 
   // Edita uma campanha que ainda NÃO foi iniciada (status 'draft'). Só campos seguros.
@@ -1232,6 +1247,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         // anexo NATIVO (PDF/Word) — só quando a API oficial do WhatsApp estiver habilitada.
         // WAHA grátis não envia arquivo; até habilitar, o material vai como link no texto (acima).
         // Para ligar: defina WHATSAPP_MEDIA_ENABLED=true no .env.
+        // DISP-006: a falha do anexo era DESCARTADA — o alvo virava 'sent' do
+        // mesmo jeito e o relatório não indicava que o material nunca chegou.
+        // O texto já saiu quando chegamos aqui, então falhar o alvo inteiro
+        // seria pior (viraria reenvio e o lead receberia a mensagem duas
+        // vezes). O certo é registrar: continua 'sent', com o motivo no campo
+        // de erro para aparecer no relatório.
+        let anexoFalhou: string | null = null;
         if (campaign.mediaUrl && process.env.WHATSAPP_MEDIA_ENABLED === 'true') {
           // Build absolute URL for WAHA (internal reachable base, e.g. host.docker.internal).
           const wahaBase = process.env.WAHA_REACHABLE_BASE ?? 'http://host.docker.internal:3001';
@@ -1240,11 +1262,21 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           const wahaUrl = campaign.mediaUrl.startsWith('http') && idx2 < 0
             ? campaign.mediaUrl
             : wahaBase.replace(/\/$/, '') + relativePath2;
-          await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign');
+          const rAnexo = await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign');
+          if (!rAnexo.sent) {
+            anexoFalhou = rAnexo.reason ?? 'motivo desconhecido';
+            this.logger.warn(
+              `Anexo NÃO enviado p/ ${target.phone} (campanha ${campaign.name}): ${anexoFalhou} — ` +
+                `a mensagem de texto saiu, o alvo fica 'sent' com o motivo no relatório`,
+            );
+          }
         }
 
         await this.prisma.$transaction([
-          this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'sent', sentAt: new Date() } }),
+          this.prisma.campaignTarget.update({
+            where: { id: target.id },
+            data: { status: 'sent', sentAt: new Date(), ...(anexoFalhou ? { error: `anexo_nao_enviado: ${anexoFalhou}` } : {}) },
+          }),
           this.prisma.senderNumber.update({
             where: { id: number.id },
             data: { sentToday: { increment: 1 }, sentThisHour: { increment: 1 } },
@@ -1316,6 +1348,34 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   // opt-out footer (LGPD §4/§8). Disabled by setting LGPD_OPT_OUT_FOOTER=false in .env.
   // Warning: disabling removes the legally-recommended opt-out notice for Brazilian law.
   static OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
+
+  /**
+   * Substituição de `{{nome}}`/`{{saudacao}}` + spintax, como estático.
+   *
+   * Vira fachada pelo mesmo motivo de `firstName`/`tidyMissingName` logo acima: a
+   * pré-visualização de modelo (ADR 037) precisa renderizar EXATAMENTE como o disparo
+   * renderiza, e reimplementar lá faria a prévia divergir do envio — o problema que a
+   * própria prévia existe para evitar.
+   *
+   * `optOutFooter` desligado no e-mail: lá o descadastro é link no rodapé do HTML, e
+   * "Responda SAIR" num e-mail manda o lead responder algo que ninguém lê.
+   */
+  static renderTemplate(
+    template: string,
+    name?: string | null,
+    opts: { optOutFooter?: boolean } = {},
+  ): string {
+    const first = SenderService.firstName(name);
+    let txt = template
+      .replace(/\{\{\s*nome\s*\}\}/gi, first)
+      .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    txt = spin(txt);
+    if (!first) txt = SenderService.tidyMissingName(txt);
+
+    const footerEnabled = (opts.optOutFooter ?? true) && process.env.LGPD_OPT_OUT_FOOTER !== 'false';
+    if (footerEnabled && !txt.includes('Responda SAIR')) txt += SenderService.OPT_OUT_FOOTER;
+    return txt;
+  }
 
   private render(template: string, name?: string | null): string {
     // 2026-08-01: sem nome, `{{nome}}` some e a frase se recompõe sozinha.

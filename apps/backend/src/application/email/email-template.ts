@@ -38,7 +38,7 @@ function esc(s: string): string {
  * URLs viram link clicável com o texto encurtado: um link cru de 80 caracteres
  * quebra o layout no mobile e ainda pesa no score de spam.
  */
-function corpoParaHtml(texto: string): string {
+function corpoParaHtml(texto: string, cor: string = LARANJA): string {
   const URL_RE = /https?:\/\/[^\s<]+/g;
 
   // A URL é separada ANTES do escape. Escapar o parágrafo inteiro primeiro
@@ -52,7 +52,7 @@ function corpoParaHtml(texto: string): string {
       const url = m[0];
       out += esc(linha.slice(cursor, m.index));
       const rotulo = url.length > 48 ? `${url.slice(0, 45)}…` : url;
-      out += `<a href="${esc(url)}" style="color:${LARANJA};text-decoration:underline;">${esc(rotulo)}</a>`;
+      out += `<a href="${esc(url)}" style="color:${cor};text-decoration:underline;">${esc(rotulo)}</a>`;
       cursor = (m.index ?? 0) + url.length;
     }
     return out + esc(linha.slice(cursor));
@@ -90,9 +90,47 @@ export function primeiraLinhaUtil(body: string, max = 110): string {
   return escolhida.length > max ? `${escolhida.slice(0, max - 1)}…` : escolhida;
 }
 
+/**
+ * Marca do MERCADO no e-mail (ADR 037).
+ *
+ * Ausente = HiperTMS, que é o comportamento de sempre. Mercado de parceiro sem isto
+ * sairia com o wordmark do HiperTMS na frente do lead dele — o erro mais visível que
+ * a operação multi-mercado pode cometer.
+ */
+export interface EmailBrand {
+  /** Nome exibido. Duas palavras coladas ("HiperTMS") ganham a segunda em destaque. */
+  name: string;
+  /** Cor primária (faixa, links). Só hex — valor inválido cai no laranja padrão. */
+  color?: string | null;
+  /** Linha curta embaixo do nome. Vazio = sem linha. */
+  tagline?: string | null;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Separa "HiperTMS" em "Hiper" + "TMS" para o destaque do wordmark.
+ *
+ * A regra é a maiúscula no meio da palavra, que é como a marca do HiperTMS é escrita.
+ * Nome sem isso ("Pneus Brasil") destaca a última palavra. Nome de uma palavra só sai
+ * inteiro, sem destaque — inventar uma quebra ficaria pior que não ter.
+ */
+export function partirWordmark(nome: string): { inicio: string; destaque: string } {
+  const camel = nome.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-zá-ú]+)([A-Z].*)$/);
+  if (camel) return { inicio: camel[1], destaque: camel[2] };
+
+  const partes = nome.trim().split(/\s+/);
+  if (partes.length > 1) {
+    return { inicio: `${partes.slice(0, -1).join(' ')} `, destaque: partes[partes.length - 1] };
+  }
+  return { inicio: nome, destaque: '' };
+}
+
 export interface EmailTemplateInput {
   /** Corpo da mensagem, em texto puro. */
   body: string;
+  /** Marca do mercado. Ausente = HiperTMS. */
+  brand?: EmailBrand;
   /** URL de descadastro (obrigatória em e-mail de marketing — LGPD). */
   optOutUrl: string;
   /** Convite de WhatsApp, quando o lead está qualificado. */
@@ -109,7 +147,13 @@ export interface EmailTemplateInput {
  * de ~90 caracteres que aparecia antes chamava mais atenção que a própria oferta.
  */
 export function renderEmailHtml(input: EmailTemplateInput): string {
-  const corpo = corpoParaHtml(input.body);
+  // Marca do mercado; ausente = HiperTMS (ADR 037). Cor inválida cai no padrão em vez
+  // de vazar string arbitrária para dentro de um atributo style.
+  const marca = input.brand ?? { name: 'HiperTMS', color: LARANJA, tagline: 'O TMS feito para vender frete.' };
+  const cor = marca.color && HEX.test(marca.color) ? marca.color : LARANJA;
+  const { inicio, destaque } = partirWordmark(marca.name);
+
+  const corpo = corpoParaHtml(input.body, cor);
 
   // PREHEADER — o trecho que o cliente de e-mail mostra na lista, ao lado do
   // assunto. É a primeira linha REAL da mensagem, não a punchline da marca.
@@ -127,7 +171,7 @@ export function renderEmailHtml(input: EmailTemplateInput): string {
   const blocoWhatsapp = input.whatsappUrl
     ? `<tr><td style="padding:4px 32px 24px;">
          <a href="${esc(input.whatsappUrl)}"
-            style="display:inline-block;background:${LARANJA};color:#ffffff;text-decoration:none;
+            style="display:inline-block;background:${cor};color:#ffffff;text-decoration:none;
                    font-size:14px;font-weight:600;padding:11px 22px;border-radius:8px;">
            Falar no WhatsApp
          </a>
@@ -140,7 +184,7 @@ export function renderEmailHtml(input: EmailTemplateInput): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="color-scheme" content="light" />
-<title>HiperTMS</title>
+<title>${esc(marca.name)}</title>
 </head>
 <body style="margin:0;padding:0;background:${FUNDO};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</div>
@@ -157,15 +201,15 @@ export function renderEmailHtml(input: EmailTemplateInput): string {
                     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 
         <!-- Faixa da marca -->
-        <tr><td style="height:4px;background:${LARANJA};line-height:4px;font-size:0;">&nbsp;</td></tr>
+        <tr><td style="height:4px;background:${cor};line-height:4px;font-size:0;">&nbsp;</td></tr>
 
         <!-- Wordmark + punchline -->
         <tr>
           <td style="padding:28px 32px 4px;">
             <div style="font-size:22px;font-weight:700;letter-spacing:-.4px;color:${GRAFITE};">
-              Hiper<span style="color:${LARANJA};font-weight:800;">TMS</span>
+              ${esc(inicio)}${destaque ? `<span style="color:${cor};font-weight:800;">${esc(destaque)}</span>` : ''}
             </div>
-            <div style="margin-top:3px;font-size:12px;color:${SUAVE};">O TMS feito para vender frete.</div>
+            ${marca.tagline ? `<div style="margin-top:3px;font-size:12px;color:${SUAVE};">${esc(marca.tagline)}</div>` : ''}
           </td>
         </tr>
 
