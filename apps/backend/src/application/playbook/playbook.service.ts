@@ -81,9 +81,29 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
 export class PlaybookService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Retorna a config do tenant, criando com defaults na primeira vez.
-  async get(tenantId: string): Promise<PlaybookConfig> {
-    let row = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } });
+  /**
+   * Playbook do MERCADO, caindo no do tenant quando o mercado não tem o seu (ADR 037).
+   *
+   * O fallback não é conveniência — é o que mantém o HiperTMS funcionando exatamente
+   * como antes: a linha que existe hoje tem `productCode` nulo e continua atendendo
+   * todo mundo até alguém criar um playbook específico. Vender TMS e vender pneu com a
+   * mesma persona seria o padrão errado.
+   */
+  async get(tenantId: string, productCode?: string | null): Promise<PlaybookConfig> {
+    if (productCode) {
+      const doMercado = await this.prisma.salesPlaybook.findFirst({
+        where: { tenantId, productCode } as any,
+      });
+      if (doMercado) return this.toConfig(doMercado);
+    }
+    return this.getDoTenant(tenantId);
+  }
+
+  // Config do tenant (productCode nulo), criando com defaults na primeira vez.
+  private async getDoTenant(tenantId: string): Promise<PlaybookConfig> {
+    let row = await this.prisma.salesPlaybook.findFirst({
+      where: { tenantId, productCode: null } as any,
+    });
     if (!row) {
       row = await this.prisma.salesPlaybook.create({
         data: {
@@ -98,23 +118,40 @@ export class PlaybookService {
         },
       });
     }
+    return this.toConfig(row);
+  }
+
+  /** Linha do banco → config, com os defaults do código cobrindo campo vazio. */
+  private toConfig(row: any): PlaybookConfig {
     return {
       persona: row.persona || '',
-      supportPersona: (row as any).supportPersona || '',
+      supportPersona: row.supportPersona || '',
       objections: (Array.isArray(row.objections) ? row.objections : []) as unknown as Objection[],
       ctaCold: row.ctaCold || PLAYBOOK_DEFAULTS.ctaCold,
       ctaWarm: row.ctaWarm || PLAYBOOK_DEFAULTS.ctaWarm,
       ctaHot: row.ctaHot || PLAYBOOK_DEFAULTS.ctaHot,
-      signupUrl: (row as any).signupUrl || PLAYBOOK_DEFAULTS.signupUrl,
+      signupUrl: row.signupUrl || PLAYBOOK_DEFAULTS.signupUrl,
     };
   }
 
-  async update(tenantId: string, dto: Partial<PlaybookConfig>): Promise<PlaybookConfig> {
+  /**
+   * Grava o playbook. Sem `productCode`, mexe no do TENANT — que é o comportamento de
+   * sempre e o que a tela de Playbook edita hoje.
+   *
+   * O `where` do upsert usa a chave composta porque o unique deixou de ser só
+   * `tenant_id` (ADR 037). Em Postgres NULL não colide com NULL num unique composto,
+   * então a linha do tenant convive com as dos mercados.
+   */
+  async update(
+    tenantId: string,
+    dto: Partial<PlaybookConfig>,
+    productCode: string | null = null,
+  ): Promise<PlaybookConfig> {
     const clean = (dto.objections ?? [])
       .filter((o) => o && o.objection?.trim())
       .map((o) => ({ objection: String(o.objection).trim(), guidance: String(o.guidance ?? '').trim() }));
     await this.prisma.salesPlaybook.upsert({
-      where: { tenantId },
+      where: { tenantId_productCode: { tenantId, productCode } } as any,
       update: {
         ...(dto.persona !== undefined ? { persona: dto.persona } : {}),
         ...(dto.supportPersona !== undefined ? { supportPersona: dto.supportPersona } : {}),
@@ -126,6 +163,7 @@ export class PlaybookService {
       },
       create: {
         tenantId,
+        productCode,
         persona: dto.persona ?? PLAYBOOK_DEFAULTS.persona,
         supportPersona: dto.supportPersona ?? PLAYBOOK_DEFAULTS.supportPersona,
         objections: (dto.objections !== undefined ? clean : PLAYBOOK_DEFAULTS.objections) as any,
@@ -135,11 +173,11 @@ export class PlaybookService {
         signupUrl: dto.signupUrl ?? PLAYBOOK_DEFAULTS.signupUrl,
       },
     });
-    return this.get(tenantId);
+    return this.get(tenantId, productCode);
   }
 
   // restaura os defaults de fábrica
-  async reset(tenantId: string): Promise<PlaybookConfig> {
-    return this.update(tenantId, PLAYBOOK_DEFAULTS);
+  async reset(tenantId: string, productCode: string | null = null): Promise<PlaybookConfig> {
+    return this.update(tenantId, PLAYBOOK_DEFAULTS, productCode);
   }
 }

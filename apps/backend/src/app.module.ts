@@ -19,6 +19,7 @@ import { PartnersModule } from './application/partners/partners.module';
 import { MetricsModule } from './application/metrics/metrics.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { SellersModule } from './application/sellers/sellers.module';
+import { MarketsModule } from '@/application/markets/markets.module';
 import { SenderModule } from './application/sender/sender.module';
 import { FollowUpModule } from './application/followup/followup.module';
 import { UsersModule } from './application/users/users.module';
@@ -91,6 +92,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     MetricsModule,
     WhatsappModule,
     SellersModule,
+    MarketsModule,
     SenderModule,
     FollowUpModule,
     UsersModule,

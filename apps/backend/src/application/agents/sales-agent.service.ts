@@ -72,7 +72,8 @@ export class SalesAgentService {
       // operacional, compras, frota, financeiro...) alcançáveis pelo vendedor.
       this.knowledge.retrieve(tenantId, input.question, 2, { includeCategories: categoriesFor('sales'), productCode }),
       this.connectors.getPlans(productCode).catch(() => []),
-      this.playbook.get(tenantId),
+      // ADR 037: playbook do MERCADO (cai no do tenant quando não existe um).
+      this.playbook.get(tenantId, productCode),
     ]);
 
     const planTxt = plans

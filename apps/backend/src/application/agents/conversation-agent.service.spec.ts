@@ -69,7 +69,9 @@ const mockPrisma         = {
   },
   contact:       { updateMany: vi.fn(), findFirst: vi.fn() },
   complaint:     { create: vi.fn() },
-  salesPlaybook: { findUnique: vi.fn() },
+  // ADR 037: o playbook base é lido por findFirst (productCode nulo), porque o
+  // unique deixou de ser só tenantId quando ele passou a poder ser por mercado.
+  salesPlaybook: { findFirst: vi.fn() },
   planLimit:     { findUnique: vi.fn() },   // A6: teto de mensagens/mês do plano
   // A6: contagem de outbound do mês · aggregate: teto de GASTO diário (OWASP LLM10)
   aiMessage:     { count: vi.fn(), aggregate: vi.fn() },
@@ -131,7 +133,7 @@ beforeEach(() => {
   mockAbuseGuard.isBanned.mockResolvedValue(false);
   mockAbuseGuard.recordStrike.mockResolvedValue({ banned: false, strikeCount: 1 });
   mockPrisma.complaint.create.mockResolvedValue({});
-  mockPrisma.salesPlaybook.findUnique.mockResolvedValue(null);
+  mockPrisma.salesPlaybook.findFirst.mockResolvedValue(null);
 
   mockAutonomy.isEnabled.mockReturnValue(false); // kill switch OFF by default
   mockNotifications.create.mockResolvedValue(undefined);
@@ -588,7 +590,7 @@ describe('ConversationAgentService.handle()', () => {
       mockSupervisor.review.mockResolvedValue(nokVerdict);
       // Simula o cenário de regressão: o playbook injeta um link inválido no roteiro
       // de "suporte sem cadastro", quebrando a moldura conhecida.
-      mockPrisma.salesPlaybook.findUnique.mockResolvedValue({ signupUrl: 'javascript:alert(1)' });
+      mockPrisma.salesPlaybook.findFirst.mockResolvedValue({ signupUrl: 'javascript:alert(1)' });
 
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'quero falar com humano', conversationId: 'conv1' });
@@ -905,7 +907,7 @@ describe('ConversationAgentService.handle()', () => {
     it('shows signup message when TMS customer is unknown and no handoff', async () => {
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'support' }));
       mockTmsLookup.batchLookup.mockResolvedValue(new Map()); // not a customer
-      mockPrisma.salesPlaybook.findUnique.mockResolvedValue({ signupUrl: 'https://app.hipervias.com/register' });
+      mockPrisma.salesPlaybook.findFirst.mockResolvedValue({ signupUrl: 'https://app.hipervias.com/register' });
 
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'preciso de suporte técnico', conversationId: 'conv1' });

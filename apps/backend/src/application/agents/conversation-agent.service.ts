@@ -648,7 +648,13 @@ export class ConversationAgentService {
           // Prospect (número não cadastrado no TMS) pedindo suporte:
           // o suporte é exclusivo para clientes HiperTMS registrados no sistema.
           // Se tiver URL de contato/demo no playbook, oferece; senão orienta via Lia de Vendas.
-          const pb = await this.prisma.salesPlaybook.findUnique({ where: { tenantId } }).catch(() => null);
+          // Playbook do TENANT (`productCode` nulo). O unique deixou de ser só
+          // `tenantId` quando o playbook passou a poder ser por mercado (ADR 037), e
+          // aqui a intenção continua sendo a linha base — este trecho é o prospect
+          // pedindo suporte, antes de existir mercado definido na conversa.
+          const pb = await this.prisma.salesPlaybook
+            .findFirst({ where: { tenantId, productCode: null } as any })
+            .catch(() => null);
           const contactUrl = pb?.signupUrl?.trim();
           // Só usa a variante com link quando a URL do playbook é http(s) de verdade.
           // `signupUrl` é campo editável do tenant: sem esta checagem, um valor

@@ -430,6 +430,11 @@ model AiKnowledgeBase {
   // painel) continuam visíveis sem backfill — só criações NOVAS com
   // autoApprove=false (hoje: só o Lúcio) nascem com approved=false.
   approved       Boolean              @default(true) @map("approved")
+  // ADR 037: número sem fonte ("mais de 30 anos", "98% de aprovação") vindo de
+  // material de marketing. Não conta para a trava de liberação do mercado enquanto
+  // ninguém confirmar — IA inventa estatística, e afirmar isso ao lead de um
+  // parceiro é mentir com o nome dele.
+  requiresSource Boolean              @default(false) @map("requires_source")
 
   versions AiKnowledgeVersion[]
 
@@ -513,17 +518,58 @@ model Tenant {
 }
 
 // ===================== PRODUTOS / CONECTORES (ADR 009/010) =====================
+/// MERCADO (ADR 037). Na tela chama-se "mercado"; aqui continua `products` porque
+/// `productCode` já é a chave que separa conhecimento, campanha e conector em todo o
+/// sistema. Criar um `marketId` paralelo daria duas chaves para o mesmo conceito.
 model Product {
   id        String   @id @default(uuid())
   code      String   @unique
   name      String
   connector String
+  /// draft = em montagem, invisível para o vendedor · active = liberado para disparo
+  /// · paused = liberado antes, suspenso agora. Ver MarketReadiness (trava).
   status    String   @default("active")
   createdAt DateTime @default(now()) @map("created_at")
+
+  // ── A cara: identidade do mercado no e-mail ────────────────────────────────
+  // Vazio = usa a marca padrão do HiperTMS (email-template.ts). Mercado de
+  // parceiro sem marca própria sairia com o wordmark errado para o lead dele.
+  displayName   String?   @map("display_name")   // como a Lia se apresenta
+  brandColor    String?   @map("brand_color")    // hex da faixa/links do e-mail
+  brandTagline  String?   @map("brand_tagline")  // linha embaixo do wordmark
+  signupUrl     String?   @map("signup_url")     // destino do fechamento
+  senderName    String?   @map("sender_name")    // nome no "De:" do e-mail
+  releasedAt    DateTime? @map("released_at")
 
   credentials ProductConnectorCredential[]
 
   @@map("products")
+}
+
+/// Modelo de mensagem de um mercado (ADR 037).
+///
+/// Antes não existia biblioteca: cada campanha era texto digitado do zero, e a única
+/// forma de reaproveitar era clonar — daí a lista de produção cheia de
+/// "Cópia de Cópia de teste". O modelo é o que o vendedor escolhe no disparo.
+model MessageTemplate {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  /// Mercado dono deste modelo. É o filtro que impede copy de pneus sair para
+  /// transportadora.
+  productCode String   @map("product_code")
+  name        String
+  channel     String   // email | whatsapp
+  subject     String?  // só e-mail
+  body        String
+  /// Posição na cadência (1 = primeiro toque). Guardado desde já; o disparo
+  /// automático da sequência ficou fora do primeiro corte — ver ADR 037.
+  step        Int      @default(1)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, productCode, active])
+  @@map("message_templates")
 }
 
 // (Billing removido — pagamento é feito no site do HiperTMS, não no Nexa.)
@@ -749,7 +795,11 @@ model Notification {
 // Playbook de vendas editável pelo painel (objeções, tom, CTAs) — sem mexer no código.
 model SalesPlaybook {
   id         String   @id @default(uuid())
-  tenantId   String   @unique @map("tenant_id")
+  tenantId   String   @map("tenant_id")
+  // ADR 037: playbook por MERCADO. NULL = playbook do tenant, que é o que já existe
+  // e continua valendo para quem não tiver um específico. Sem isto, HiperTMS e pneus
+  // dividiriam a mesma persona, as mesmas objeções e o mesmo link de cadastro.
+  productCode String? @map("product_code")
   persona    String   @default("") // tom/identidade extra injetado no prompt (VENDAS)
   supportPersona String @default("") @map("support_persona") // tom extra injetado no prompt (SUPORTE)
   objections Json     @default("[]") // [{ objection, guidance }]
@@ -759,6 +809,9 @@ model SalesPlaybook {
   signupUrl  String   @default("") @map("signup_url")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
+  // Um playbook por mercado, mais um do tenant (product_code NULL) como base.
+  // O unique de antes era só `tenant_id` — sem trocar, o segundo mercado não caberia.
+  @@unique([tenantId, productCode])
   @@map("sales_playbook")
 }
 
