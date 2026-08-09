@@ -5,6 +5,10 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { normalizePhone } from '@/shared/utils/phone.util';
 
+// Score a partir do qual o lead é "alta prioridade" e fura a regra da ADR 034
+// (WhatsApp só com "Estou fora" ligado). Ver deveNotificarWhatsapp().
+const HIGH_PRIORITY_SCORE = Number(process.env.SELLER_WHATSAPP_ALWAYS_SCORE ?? 80);
+
 @Injectable()
 export class SellersService {
   private readonly logger = new Logger('Sellers');
@@ -196,10 +200,11 @@ export class SellersService {
           return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
         }
         // ADR 034: WhatsApp só quando o vendedor está "fora" — no PC, o sino do
-        // portal (hot_lead, criado pelo ConversationAgent) já cobre.
-        if (!this.isOutOfOffice(seller)) {
+        // portal (hot_lead, criado pelo ConversationAgent) já cobre. Exceção:
+        // lead de alta prioridade (ver deveNotificarWhatsapp).
+        if (!this.deveNotificarWhatsapp(seller, kind, input.leadScore)) {
           this.logger.log(
-            `Re-engagement → ${seller.name}: "Estou fora" desligado — só sino do portal (sem WhatsApp)`,
+            `Re-engagement → ${seller.name}: "Estou fora" desligado e score ${input.leadScore} < ${HIGH_PRIORITY_SCORE} — só sino do portal`,
           );
           return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
         }
@@ -245,9 +250,9 @@ export class SellersService {
     // "Responda pelo WhatsApp" — mas responder ESTA notificação não fala com o
     // cliente (cai no número do Nexa e é descartada pelo gate de números
     // internos). O caminho é sempre o inbox — daí o deep link.
-    if (!this.isOutOfOffice(seller)) {
+    if (!this.deveNotificarWhatsapp(seller, kind, input.leadScore)) {
       this.logger.log(
-        `Handoff → ${seller.name}: "Estou fora" desligado — só sino do portal (sem WhatsApp)`,
+        `Handoff → ${seller.name}: "Estou fora" desligado e score ${input.leadScore} < ${HIGH_PRIORITY_SCORE} — só sino do portal`,
       );
       return { assigned: true, sellerId: seller.id, sellerName: seller.name, notified: false };
     }
@@ -299,6 +304,27 @@ export class SellersService {
   /** ADR 034: default true (comportamento pré-ADR) quando o campo ainda não existe no client/banco. */
   private isOutOfOffice(seller: { outOfOffice?: boolean } | Record<string, any>): boolean {
     return (seller as any).outOfOffice !== false;
+  }
+
+  /**
+   * A notificação vai pro WhatsApp do vendedor? (2026-08-08)
+   *
+   * A ADR 034 mandava WhatsApp só com "Estou fora" ligado — no PC, o sino do
+   * portal cobriria. O furo apareceu na auditoria: vendedor com o status
+   * desligado que não vive no painel simplesmente não fica sabendo, e é o lead
+   * mais caro da fila que espera.
+   *
+   * Alta prioridade fura o silêncio. Um lead com score muito alto justifica o
+   * ping mesmo com o vendedor "no PC"; abaixo disso a ADR 034 continua valendo,
+   * senão volta o spam que a ADR foi escrita para resolver.
+   */
+  private deveNotificarWhatsapp(
+    seller: Record<string, any>,
+    kind: 'hot_lead' | 'human_request',
+    leadScore: number,
+  ): boolean {
+    if (this.isOutOfOffice(seller)) return true;
+    return kind === 'hot_lead' && leadScore >= HIGH_PRIORITY_SCORE;
   }
 
   /**

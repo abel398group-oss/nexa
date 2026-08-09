@@ -44,6 +44,13 @@ const BATCH_QUIET_MS = Number(process.env.INBOUND_BATCH_QUIET_MS ?? 6000);
 const BATCH_MAX_MSGS = 10;
 const BATCH_MAX_CHARS = 4000;
 
+// Carência do eco (ADR 035, 2026-08-08): janela após um envio NOSSO na conversa
+// em que um `fromMe` sem correspondência ainda é tratado como eco, não como
+// digitação humana. Existe porque o WAHA devolve o eco com um id diferente do
+// que usamos no envio — o mesmo motivo do fallback tolerante em handleAck().
+// Generosa de propósito: ver o comentário de handleOwnNumberOutbound.
+const ECHO_GRACE_MS = Number(process.env.WA_ECHO_GRACE_MS ?? 60_000);
+
 interface PendingBatch {
   texts: string[];
   timer: ReturnType<typeof setTimeout>;
@@ -170,6 +177,112 @@ export class WhatsappService {
     };
   }
 
+  /**
+   * Numa mensagem que SAI, o outro lado é o destinatário — `from`/`Sender`
+   * somos nós. O normalize() procura o remetente, então não serve aqui.
+   */
+  private counterpartPhone(rawBody: any): string | null {
+    const body = rawBody?.body || rawBody || {};
+    const p = body.payload || body;
+    const cands = [p.to, p._data?.Info?.Chat, p.chatId, p._data?.Info?.RecipientAlt, p._data?.to];
+    for (const c of cands) {
+      const limpo = String(c || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+      if (limpo.startsWith('55') && limpo.length >= 12 && limpo.length <= 13) return limpo;
+    }
+    return null;
+  }
+
+  /**
+   * Mensagem com `fromMe` — saiu do NOSSO número. Duas origens possíveis:
+   *
+   *   a) eco de um envio do próprio Nexa (a Lia, ou alguém pelo inbox);
+   *   b) um humano digitou no celular / WhatsApp Web da empresa.
+   *
+   * Até 2026-08-08 tudo era descartado como (a), e (b) era invisível: o vendedor
+   * assumia a conversa pelo celular e a Lia continuava respondendo por cima
+   * dele, porque o takeover da ADR 035 só era ativado por envio pelo inbox.
+   *
+   * A classificação erra de propósito para o lado de (a). Um falso "é nossa"
+   * apenas mantém o comportamento antigo; um falso "é humana" CALA a Lia numa
+   * conversa em que ninguém assumiu — pior, e silencioso.
+   */
+  private async handleOwnNumberOutbound(rawBody: any, tenantId: string) {
+    const ignorar = (reason: string) => ({ ignored: true, reason });
+    try {
+      const texto = this.normalize(rawBody).text?.trim();
+      if (!texto) return ignorar('fromMe (sem texto)');
+
+      // 1) foi o Nexa que enviou? Match exato e, depois, pelo id puro — o WAHA
+      //    devolve o eco com prefixo diferente do usado no envio (mesmo motivo
+      //    do fallback tolerante em handleAck).
+      const id = this.messageId(rawBody);
+      if (id) {
+        const tail = String(id).split('_').pop();
+        const nossa = await this.prisma.aiMessage.findFirst({
+          where: {
+            OR: [
+              { externalId: String(id) },
+              ...(tail && tail.length >= 8 ? [{ externalId: { endsWith: tail } }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        if (nossa) return ignorar('fromMe (eco de envio do Nexa)');
+      }
+
+      const phone = this.counterpartPhone(rawBody);
+      if (!phone) return ignorar('fromMe (destinatário não identificado)');
+
+      const conv: any = await this.prisma.aiConversation.findFirst({
+        where: { tenantId, phone, status: { notIn: ['closed', 'opt_out'] as any } },
+        orderBy: { lastActivityAt: 'desc' },
+        select: { id: true, humanTakeoverAt: true } as any,
+      });
+      if (!conv) return ignorar('fromMe (sem conversa aberta)');
+      if (conv.humanTakeoverAt) return ignorar('fromMe (takeover já ativo)');
+
+      // 2) carência: logo depois de um envio nosso, um fromMe sem match ainda é
+      //    eco com id divergente. Erra para o lado de NÃO calar a Lia.
+      const envioRecente = await this.prisma.aiMessage.findFirst({
+        where: {
+          conversationId: conv.id,
+          direction: 'outbound',
+          createdAt: { gte: new Date(Date.now() - ECHO_GRACE_MS) },
+        },
+        select: { id: true },
+      });
+      if (envioRecente) return ignorar('fromMe (dentro da carência de eco)');
+
+      // 3) idempotência: uma reentrega do webhook não pode gravar duas vezes.
+      if (id) {
+        try {
+          await this.prisma.processedMessage.create({ data: { messageId: String(id) } });
+        } catch {
+          return ignorar('fromMe (duplicada)');
+        }
+      }
+
+      // 4) sobrou: humano digitou fora do Nexa. Gravar como outbound byHuman
+      //    ativa o takeover da ADR 035. `alreadyDelivered` é obrigatório — sem
+      //    ele o addMessage DESPACHA a mensagem e o lead a recebe duas vezes.
+      await this.conversations.addMessage(tenantId, conv.id, {
+        direction: 'outbound',
+        content: texto,
+        byHuman: true,
+        alreadyDelivered: true,
+        metadata: { source: 'whatsapp_direto', externalId: id ?? null },
+      });
+      this.logger.warn(
+        `ADR 035: resposta humana pelo WhatsApp da empresa (${phone}) — takeover ativado, Lia em modo rascunho`,
+      );
+      return { ok: true, reason: 'fromMe (humano assumiu)', conversationId: conv.id };
+    } catch (e: any) {
+      // Este caminho NUNCA pode derrubar o webhook: na dúvida, comportamento antigo.
+      this.logger.warn(`fromMe: falha ao avaliar takeover — ${e?.message}`);
+      return ignorar('fromMe (erro na avaliação)');
+    }
+  }
+
   // Ignora eco das próprias mensagens (fromMe) — não processa o que NÓS enviamos.
   private isFromMe(rawBody: any): boolean {
     const p = rawBody?.payload || rawBody?.body?.payload || rawBody?.body || rawBody || {};
@@ -285,7 +398,7 @@ export class WhatsappService {
   }
 
   async process(rawBody: any, tenantId = 'default') {
-    if (this.isFromMe(rawBody)) return { ignored: true, reason: 'fromMe' };
+    if (this.isFromMe(rawBody)) return this.handleOwnNumberOutbound(rawBody, tenantId);
 
     // DEDUP: se já processamos essa mensagem, ignora (evita resposta/processamento dobrado)
     const msgId = this.messageId(rawBody);

@@ -53,16 +53,37 @@ describe('SellersService.handoff — ADR 034', () => {
     expect(waha.sendText).toHaveBeenCalledOnce();
   });
 
-  it('outOfOffice=false → NÃO envia WhatsApp, mas atribui normalmente', async () => {
+  it('outOfOffice=false + score abaixo do teto → NÃO envia WhatsApp, mas atribui normalmente', async () => {
     const { svc, waha, prisma } = makeService({
       seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: false },
     });
-    const r = await svc.handoff('t1', INPUT);
+    const r = await svc.handoff('t1', { ...INPUT, leadScore: 72 });
     expect(r.assigned).toBe(true);
     expect(r.notified).toBe(false);
     expect(waha.sendText).not.toHaveBeenCalled();
     // atribuição aconteceu (transação com update da conversa + dedup)
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  // 2026-08-08: exceção de alta prioridade. Vendedor com o status desligado que
+  // não vive no painel não ficava sabendo — e quem esperava era o lead mais caro
+  // da fila. Acima do teto o WhatsApp sai mesmo "no PC"; abaixo, ADR 034 intacta.
+  it('outOfOffice=false + score alto → FURA a ADR 034 e envia WhatsApp', async () => {
+    const { svc, waha } = makeService({
+      seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: false },
+    });
+    const r = await svc.handoff('t1', { ...INPUT, leadScore: 85 });
+    expect(r.notified).toBe(true);
+    expect(waha.sendText).toHaveBeenCalledOnce();
+  });
+
+  it('outOfOffice=false + score alto mas "pediu atendente" → NÃO fura (só hot_lead fura)', async () => {
+    const { svc, waha } = makeService({
+      seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: false },
+    });
+    const r = await svc.handoff('t1', { ...INPUT, leadScore: 95, kind: 'human_request' });
+    expect(r.notified).toBe(false);
+    expect(waha.sendText).not.toHaveBeenCalled();
   });
 
   it('com NEXA_APP_URL → mensagem leva o deep link /inbox?c=<conversa>', async () => {
@@ -89,10 +110,20 @@ describe('SellersService.handoff — ADR 034', () => {
       seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: false },
       existingNotification: { sellerId: 's1', conversationId: 'conv-1' },
     });
-    const r = await svc.handoff('t1', INPUT);
+    const r = await svc.handoff('t1', { ...INPUT, leadScore: 72 });
     expect(r.assigned).toBe(true);
     expect(r.notified).toBe(false);
     expect(waha.sendText).not.toHaveBeenCalled();
+  });
+
+  it('re-engagement de lead com score alto: fura a ADR 034 também', async () => {
+    const { svc, waha } = makeService({
+      seller: { id: 's1', name: 'João', phone: '5511988073788', tenantId: 't1', active: true, outOfOffice: false },
+      existingNotification: { sellerId: 's1', conversationId: 'conv-1' },
+    });
+    const r = await svc.handoff('t1', { ...INPUT, leadScore: 85 });
+    expect(r.notified).toBe(true);
+    expect(waha.sendText).toHaveBeenCalledOnce();
   });
 
   it('re-engagement com "Estou fora" ligado: WhatsApp com deep link', async () => {
