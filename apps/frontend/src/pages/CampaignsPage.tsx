@@ -143,6 +143,8 @@ export function CampaignsPage() {
   const [schedMinute, setSchedMinute] = useState(0);
   const [settings, setSettings] = useState<SenderSettings | null>(null);
   // Pré-visualização de "Contatos com e-mail": quem vai receber, com busca.
+  // TESTE: reenviar para quem já recebeu. Só aparece quando o ambiente libera.
+  const [ignoreDedup, setIgnoreDedup] = useState(false);
   const [emailAudience, setEmailAudience] = useState<EmailAudience | null>(null);
   const [emailAudienceSearch, setEmailAudienceSearch] = useState('');
   const [emailAudienceLoading, setEmailAudienceLoading] = useState(false);
@@ -938,6 +940,9 @@ export function CampaignsPage() {
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
+        // Ferramenta de teste: manda de novo para quem já recebeu. O servidor ignora
+        // este campo quando o ambiente não libera (ver podeIgnorarDedup).
+        if (ignoreDedup) payload.ignoreDedup = true;
         r = await createEmailCampaign(payload);
       } else {
         const payload: any = { name: name.trim(), template: template.trim() };
@@ -2346,6 +2351,26 @@ export function CampaignsPage() {
               <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700">
 <strong>Anti-spam ativo:</strong> delay 90–180s entre envios · máx 50/dia · link de opt-out em todos os e-mails.
               </div>
+            )}
+
+            {/* Ferramenta de TESTE. Só existe quando o ambiente libera (a mesma
+                variável do "Reenviar para todos"), então em produção nem aparece.
+                O aviso diz o custo real: repetir a mesma mensagem para a mesma
+                pessoa é o sinal de spam mais forte que existe. */}
+            {channel === 'email' && settings?.resendAllEnabled && (
+              <label className="flex cursor-pointer items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={ignoreDedup}
+                  onChange={(e) => setIgnoreDedup(e.target.checked)}
+                />
+                <span>
+                  <strong>Reenviar para quem já recebeu</strong> — ignora o “já enviado” nesta campanha.
+                  Serve para testar com o mesmo endereço várias vezes. Fora de teste, repetir a mesma
+                  mensagem para a mesma pessoa derruba a entrega do domínio.
+                </span>
+              </label>
             )}
 
             </div>{/* fim px-7 py-5 */}
