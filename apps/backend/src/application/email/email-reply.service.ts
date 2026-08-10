@@ -19,6 +19,7 @@ import { EmailOptOutService } from './email-optout.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { renderEmailHtml } from './email-template';
 import { resolveSignature, signatureText } from './email-signature';
+import { identidadeDoMercado } from './email-market-identity';
 
 // Assinatura configurável — ver email-signature.ts. A versão texto e a versão HTML
 // vêm da MESMA fonte, para não existir a situação de o destinatário ver um nome no
@@ -66,6 +67,12 @@ export interface SendEmailOptions {
   contactId: string;
   leadScore?: number;
   inReplyToSubject?: string; // assunto original para o Re:
+  /**
+   * Mercado do e-mail (ADR 037). Presente → o e-mail sai com a CARA do mercado:
+   * wordmark, cor, From e assinatura. Ausente/sem identidade → HiperTMS, como
+   * sempre. Ver email-market-identity.ts — inclusive por que é tudo ou nada.
+   */
+  productCode?: string | null;
 }
 
 // Configuração SMTP resolvida (banco ou .env)
@@ -162,9 +169,20 @@ export class EmailReplyService {
 
     const corpoLimpo = stripMarkdown(opts.body);
 
+    // Identidade do MERCADO (ADR 037): a prévia da tela Mensagens já renderizava
+    // com a marca do mercado e o envio real saía sempre HiperTMS — a divergência
+    // exata que a prévia existe para impedir. Falha na consulta não segura o
+    // e-mail: identidade é apresentação, o envio é o trabalho.
+    const market = opts.productCode
+      ? await this.prisma.product
+          .findUnique({ where: { code: opts.productCode } })
+          .catch(() => null)
+      : null;
+    const identidade = identidadeDoMercado(market as any);
+
     // Resolvida UMA vez e usada nas duas versões — texto e HTML precisam mostrar o
     // mesmo nome, senão o destinatário vê assinaturas diferentes conforme o cliente.
-    const assinatura = resolveSignature();
+    const assinatura = identidade.signature ?? resolveSignature();
 
     // Alternativa em texto puro (multipart) — para cliente sem HTML e para o score
     // de spam: e-mail só-HTML pontua pior nos filtros.
@@ -178,6 +196,7 @@ export class EmailReplyService {
     // corpo normal, que competia visualmente com a própria mensagem.
     const bodyHtml = renderEmailHtml({
       body: corpoLimpo,
+      brand: identidade.brand,
       optOutUrl,
       whatsappUrl: waQualificado ? waLink : undefined,
       signature: assinatura,
@@ -208,7 +227,10 @@ export class EmailReplyService {
 
     try {
       const info = await transporter.sendMail({
-        from: `"${config.fromName}" <${config.fromEmail}>`,
+        // O NOME é o do mercado quando há um; o ENDEREÇO é sempre o do canal.
+        // Trocar o endereço exigiria SPF/DKIM do outro domínio — sem isso o
+        // e-mail é descartado, então o mercado muda a cara, não o remetente.
+        from: `"${identidade.fromName ?? config.fromName}" <${config.fromEmail}>`,
         to: opts.to,
         subject,
         text: bodyText,
@@ -244,6 +266,10 @@ export class EmailReplyService {
     text: string,
     tenantId: string,
     html?: string,
+    // O teste de modelo da tela Mensagens passa o nome do mercado aqui: o From é
+    // uma das coisas que o teste existe para mostrar, e chegar de "Lia HiperTMS"
+    // quando o disparo real sairia como o mercado seria a prévia mentindo de novo.
+    fromName?: string,
   ): Promise<{ sent: boolean; reason?: string }> {
     const config = await this.resolveConfig(tenantId);
     if (!config) {
@@ -265,7 +291,7 @@ export class EmailReplyService {
 
     try {
       await transporter.sendMail({
-        from: `"${config.fromName}" <${config.fromEmail}>`,
+        from: `"${fromName ?? config.fromName}" <${config.fromEmail}>`,
         to,
         subject,
         text: `${text}\n\n--\n${signatureText()}`,

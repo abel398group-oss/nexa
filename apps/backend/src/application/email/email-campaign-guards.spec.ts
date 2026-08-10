@@ -31,6 +31,7 @@ function makePrisma(over: any = {}) {
       create: vi.fn().mockImplementation(({ data }: any) => ({ id: 'camp-1', ...data })),
       ...over.campaign,
     },
+    product: { findUnique: vi.fn().mockResolvedValue(null), ...over.product },
     senderSettings: { findUnique: vi.fn().mockResolvedValue(null), ...over.senderSettings },
   } as any;
 }
@@ -58,6 +59,64 @@ const base = {
     'entender como vocês fazem a cotação de frete hoje. Faz sentido conversarmos dez minutos ' +
     'esta semana para eu te mostrar como outras transportadoras resolveram isso?',
 };
+
+describe('createEmailCampaign — trava de mercado (ADR 037)', () => {
+  // O seletor do vendedor esconde mercado em rascunho, mas quem chama a API
+  // direto passava por cima da liberação inteira — conhecimento não aprovado,
+  // identidade vazia, e o disparo saindo assim mesmo. A trava só é trava se
+  // valer no endpoint.
+  it('mercado em rascunho não cria campanha', async () => {
+    const prisma = makePrisma({
+      product: { findUnique: vi.fn().mockResolvedValue({ code: 'pneus', name: 'Pneus', status: 'draft' }) },
+    });
+    const { svc } = makeSvc(prisma);
+
+    await expect(
+      svc.createEmailCampaign('t1', { ...base, productCode: 'pneus', emails: [{ email: 'a@b.com' }] }),
+    ).rejects.toThrow(/não está liberado/);
+  });
+
+  it('mercado suspenso também não', async () => {
+    const prisma = makePrisma({
+      product: { findUnique: vi.fn().mockResolvedValue({ code: 'pneus', name: 'Pneus', status: 'paused' }) },
+    });
+    const { svc } = makeSvc(prisma);
+
+    await expect(
+      svc.createEmailCampaign('t1', { ...base, productCode: 'pneus', emails: [{ email: 'a@b.com' }] }),
+    ).rejects.toThrow(/não está liberado/);
+  });
+
+  // Um typo no código desligaria em silêncio o conhecimento e a marca do mercado —
+  // a campanha sairia "sem mercado" e ninguém perceberia até a Lia responder errado.
+  it('código de mercado que não existe é erro, não campanha sem mercado', async () => {
+    const { svc } = makeSvc();
+
+    await expect(
+      svc.createEmailCampaign('t1', { ...base, productCode: 'pneuss', emails: [{ email: 'a@b.com' }] }),
+    ).rejects.toThrow(/não existe/);
+  });
+
+  it('mercado liberado cria normalmente', async () => {
+    const prisma = makePrisma({
+      product: { findUnique: vi.fn().mockResolvedValue({ code: 'pneus', name: 'Pneus', status: 'active' }) },
+    });
+    const { svc } = makeSvc(prisma);
+
+    const r: any = await svc.createEmailCampaign('t1', {
+      ...base, productCode: 'pneus', emails: [{ email: 'a@b.com' }],
+    });
+    expect(r.included).toBe(1);
+  });
+
+  it('campanha sem mercado nem consulta a tabela (comportamento de sempre)', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.createEmailCampaign('t1', { ...base, emails: [{ email: 'a@b.com' }] });
+
+    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+  });
+});
 
 describe('createEmailCampaign — normalização de endereço', () => {
   // O defeito: a lista vinha da planilha com "Joao@X.com", o opt-out no banco
@@ -261,6 +320,65 @@ describe('worker — janela de envio', () => {
     process.env.SENDER_EMAIL_WEEKEND = 'true';
     vi.setSystemTime(new Date('2026-08-15T10:00:00-03:00'));
     expect(await dentro(svc as any)).toBe(true);
+  });
+});
+
+describe('worker — a marca do mercado chega ao envio (ADR 037)', () => {
+  // O furo: a prévia renderizava com a marca do mercado e o tick chamava o send
+  // sem productCode — todo disparo real saía HiperTMS. Este teste percorre o tick
+  // inteiro até o SMTP para provar que o fio não se solta de novo.
+  it('tick repassa campaign.productCode para o emailReply.send', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00')); // segunda, 10h BRT
+
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Pneus agosto', channel: 'email',
+      status: 'running', productCode: 'pneus', subject: 'Sobre a frota, {{nome}}',
+      template: 'corpo da campanha', link: null, sendLinkOnFirst: false,
+      sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        // 1ª forma (ultimoEnvio, sem campaignId) → null; 2ª (próximo alvo) → o alvo
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'lead@empresa.com', name: 'João' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contact: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({ id: 'ct-1' }),
+      },
+    });
+    prisma.aiConversation = { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() };
+
+    const emailReply = { send: vi.fn().mockResolvedValue({ sent: true, messageId: '<m@x>' }) };
+    const conversations = {
+      create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+      addMessage: vi.fn().mockResolvedValue({}),
+    };
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send).toHaveBeenCalledTimes(1);
+    expect(emailReply.send.mock.calls[0][0]).toMatchObject({
+      to: 'lead@empresa.com',
+      productCode: 'pneus',
+    });
+    // e a conversa criada herda o mercado — é o que faz a Lia responder como
+    // o mercado quando o lead volta
+    expect(conversations.create.mock.calls[0][1]).toMatchObject({ productCode: 'pneus' });
+
+    vi.useRealTimers();
   });
 });
 

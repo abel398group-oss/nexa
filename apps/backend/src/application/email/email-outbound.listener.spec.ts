@@ -22,6 +22,7 @@ const conv = {
   phone: 'email:lead@empresa.com',
   contactId: 'contact-1',
   subject: null as string | null,
+  productCode: null as string | null,
 };
 
 describe('EmailOutboundListener', () => {
@@ -94,5 +95,25 @@ describe('EmailOutboundListener', () => {
     await listener.handle(evento);
 
     expect(deps.emailReply.send).not.toHaveBeenCalled();
+  });
+
+  // ADR 037: o disparo saiu com a marca do mercado; a resposta da Lia no mesmo fio
+  // tem que sair com a MESMA marca. Sem repassar o productCode da conversa, o lead
+  // via duas identidades diferentes na mesma thread — e marca trocada no meio da
+  // conversa é o que mais parece golpe.
+  it('repassa o mercado da conversa para o envio', async () => {
+    deps.prisma.aiConversation.findUnique.mockResolvedValue({ ...conv, productCode: 'pneus' });
+
+    await listener.handle(evento);
+
+    expect(deps.emailReply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ productCode: 'pneus' }),
+    );
+  });
+
+  it('conversa sem mercado envia sem productCode (marca padrão)', async () => {
+    await listener.handle(evento);
+
+    expect(deps.emailReply.send.mock.calls[0][0].productCode).toBeNull();
   });
 });

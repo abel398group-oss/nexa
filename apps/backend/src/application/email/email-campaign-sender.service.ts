@@ -215,6 +215,15 @@ export class EmailCampaignSenderService {
     });
   }
 
+  /** Nome de exibição do mercado, para o fallback de assunto. Sem mercado → HiperTMS. */
+  private async nomeDoMercado(productCode: string | null): Promise<string> {
+    if (!productCode) return 'HiperTMS';
+    const m = await this.prisma.product
+      .findUnique({ where: { code: productCode }, select: { name: true, displayName: true } as any })
+      .catch(() => null);
+    return (m as any)?.displayName || (m as any)?.name || 'HiperTMS';
+  }
+
   /** Instante do último e-mail de campanha que saiu — base do intervalo anti-spam. */
   private async ultimoEnvio(): Promise<number> {
     const alvo = await this.prisma.campaignTarget.findFirst({
@@ -263,6 +272,24 @@ export class EmailCampaignSenderService {
     },
   ) {
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+
+    // Trava de mercado NA API, não só no seletor (ADR 037). O seletor do vendedor
+    // já esconde mercado em rascunho, mas quem chama o endpoint direto passava por
+    // cima da trava de liberação inteira — conhecimento não aprovado, identidade
+    // vazia, e o disparo saindo mesmo assim. Código desconhecido também barra:
+    // um typo aqui desligaria silenciosamente o conhecimento e a marca do mercado.
+    if (dto.productCode) {
+      const market = await this.prisma.product.findUnique({ where: { code: dto.productCode } });
+      if (!market) {
+        throw new BadRequestException(`Mercado "${dto.productCode}" não existe.`);
+      }
+      if (market.status !== 'active') {
+        throw new BadRequestException(
+          `Mercado "${market.name}" não está liberado para disparo (status: ${market.status}). ` +
+          'Libere-o na tela de Mercados antes de criar a campanha.',
+        );
+      }
+    }
 
     // Encurtador de link é o único bloqueio: o Gmail não classifica como promoção,
     // ele descarta por associação com phishing. Deixar criar seria criar uma
@@ -646,9 +673,13 @@ export class EmailCampaignSenderService {
       // O assunto também passa pelo render: `{{nome}}` nele já era esperado por quem
       // escreve a campanha (e antes saía literal), e o spintax importa AINDA MAIS aqui —
       // assunto repetido é o campo que os provedores mais usam para agrupar em massa.
+      //
+      // Fallback sem assunto: o nome do MERCADO, não "HiperTMS" fixo — campanha de
+      // pneus com assunto de TMS é a incoerência que termina em "Reportar spam".
+      // Caminho raro (modelo de mensagem exige assunto), então a consulta só roda nele.
       const subject = campaign.subject
         ? this.render(campaign.subject, target.name)
-        : `Sobre o HiperTMS — ${this.render('{{saudacao}}', target.name)}`;
+        : `Sobre o ${await this.nomeDoMercado(campaign.productCode)} — ${this.render('{{saudacao}}', target.name)}`;
 
       try {
         const result = await this.emailReply.send({
@@ -657,6 +688,10 @@ export class EmailCampaignSenderService {
           body,
           tenantId: campaign.tenantId,
           contactId: upsertedContact.id,
+          // A marca do mercado no e-mail (wordmark, cor, From, assinatura) —
+          // ver email-market-identity.ts. Sem isto a prévia mostrava a marca do
+          // mercado e o envio real saía HiperTMS.
+          productCode: campaign.productCode,
           // Sem leadScore em campanha outbound — sem convite WhatsApp automático
           // (evita parecer agressivo no primeiro contato por e-mail)
         });

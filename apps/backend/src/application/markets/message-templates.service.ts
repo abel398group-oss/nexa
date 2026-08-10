@@ -11,6 +11,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { SenderService } from '@/application/sender/sender.service';
 import { renderEmailHtml, type EmailBrand } from '@/application/email/email-template';
 import { EmailReplyService } from '@/application/email/email-reply.service';
+import { identidadeDoMercado } from '@/application/email/email-market-identity';
 
 export interface TemplateInput {
   productCode: string;
@@ -165,12 +166,20 @@ export class MessageTemplatesService {
     if (!para?.includes('@')) throw new BadRequestException('Informe um e-mail válido para o teste.');
     const p = await this.preview(tenantId, { ...entrada, channel: 'email' });
 
+    // O From do teste é o From do disparo real (nome do mercado): é uma das coisas
+    // que quem manda o teste está julgando. Ver email-market-identity.ts.
+    const mercado = entrada.productCode
+      ? await this.prisma.product.findUnique({ where: { code: entrada.productCode } })
+      : null;
+    const { fromName } = identidadeDoMercado(mercado as any);
+
     const r = await this.emailReply.sendAlertEmail(
       para,
       `[TESTE] ${p.assunto ?? '(sem assunto)'}`,
       p.corpo,
       tenantId,
       p.html ?? undefined,
+      fromName,
     );
     this.logger.log(`Teste de modelo enviado para ${para}: ${r.sent ? 'ok' : r.reason}`);
     return r;

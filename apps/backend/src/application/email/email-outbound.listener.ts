@@ -43,7 +43,10 @@ export class EmailOutboundListener {
     const conv = await this.prisma.aiConversation
       .findUnique({
         where: { id: conversationId },
-        select: { id: true, phone: true, contactId: true, subject: true },
+        // productCode: a resposta da Lia sai com a marca do MERCADO da conversa
+        // (ADR 037). Sem ele, o disparo ia com a cara do mercado e a resposta
+        // seguinte voltava HiperTMS — o lead veria duas marcas no mesmo fio.
+        select: { id: true, phone: true, contactId: true, subject: true, productCode: true },
       })
       .catch(() => null);
 
@@ -83,6 +86,7 @@ export class EmailOutboundListener {
       tenantId,
       contactId: conv.contactId,
       inReplyToSubject: subject,
+      productCode: (conv as any).productCode,
     });
 
     if (!r.sent) {

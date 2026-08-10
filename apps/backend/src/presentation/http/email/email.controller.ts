@@ -77,13 +77,18 @@ export class EmailController {
       );
     }
 
-    // Renderiza formulário de confirmação (POST confirma)
+    // Renderiza formulário de confirmação (POST confirma).
+    //
+    // Texto NEUTRO de marca (ADR 037): o token não registra de qual mercado o
+    // e-mail saiu, e um lead do mercado de um parceiro caindo numa página
+    // "HiperTMS" desconfia do link — e desconfiança aqui termina em "Reportar
+    // spam", que é exatamente o que a página existe para evitar.
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Descadastro de e-mail — HiperTMS</title>
+  <title>Descadastro de e-mail</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
            display: flex; align-items: center; justify-content: center;
@@ -104,7 +109,7 @@ export class EmailController {
 <body>
   <div class="card">
     <h1>Confirmar descadastro</h1>
-    <p>Deseja parar de receber mensagens da Lia / HiperTMS para:</p>
+    <p>Deseja parar de receber nossas mensagens em:</p>
     <span class="email">${this.escapeHtml(ctx.email)}</span>
     <form method="POST" action="/api/email/optout">
       <input type="hidden" name="token" value="${this.escapeHtml(token)}">
@@ -157,7 +162,7 @@ export class EmailController {
       this.renderPage(
         'Descadastro confirmado ✅',
         `O endereço <strong>${this.escapeHtml(result.email)}</strong> foi descadastrado com sucesso.<br>
-         Você não receberá mais mensagens automáticas da Lia.`,
+         Você não receberá mais nossas mensagens automáticas.`,
       ),
     );
   }
@@ -182,7 +187,7 @@ export class EmailController {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — HiperTMS</title>
+  <title>${title}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
            display: flex; align-items: center; justify-content: center;
