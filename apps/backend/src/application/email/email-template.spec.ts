@@ -41,7 +41,10 @@ describe('renderEmailHtml', () => {
   it('quebra parágrafos e preserva quebras simples de linha', () => {
     const html = renderEmailHtml({ body: 'Primeiro\nsegunda linha\n\nOutro parágrafo', optOutUrl: OPTOUT });
 
-    expect((html.match(/<p style="margin:0 0 16px/g) ?? []).length).toBe(2);
+    // Casa pela abertura do <p>, não pelo atributo exato: o parágrafo ganhou a
+    // classe do tema escuro e um teste preso à ordem dos atributos quebraria a
+    // cada ajuste de estilo, sem que nada de verdade tivesse mudado.
+    expect((html.match(/<p [^>]*margin:0 0 16px/g) ?? []).length).toBe(2);
     expect(html).toContain('Primeiro<br />segunda linha');
   });
 

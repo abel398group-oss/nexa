@@ -96,31 +96,43 @@ export function signatureText(s: Signature = resolveSignature()): string {
   return linhas.join('\n');
 }
 
-/** Versão HTML — sem imagem, sem coluna, uma linha por informação. */
-export function signatureHtml(s: Signature = resolveSignature()): string {
+/**
+ * Versão HTML — sem imagem, sem coluna, uma linha por informação.
+ *
+ * `cor` é a primária do mercado (ver email-market-identity.ts): a assinatura de um
+ * e-mail de parceiro não pode terminar com um link laranja de HiperTMS.
+ *
+ * As classes `c-*` não têm efeito sozinhas — elas são o gancho do bloco de tema
+ * escuro que o template injeta (ver email-template.ts). O estilo inline continua
+ * sendo a verdade para quem descarta `<style>`.
+ */
+export function signatureHtml(s: Signature = resolveSignature(), cor: string = LARANJA): string {
   const cargoEmpresa = [s.role, s.company].filter((x): x is string => !!x).map(esc).join(' · ');
 
   const contatos: string[] = [];
   if (s.phoneDigits && s.phoneLabel) {
     contatos.push(
-      `<a href="https://wa.me/${esc(s.phoneDigits)}" style="color:${SUAVE};text-decoration:none;">` +
-      `${esc(s.phoneLabel)}</a> <span style="color:#C3BFBB;">·</span> WhatsApp`,
+      `<a href="https://wa.me/${esc(s.phoneDigits)}" class="c-suave" style="color:${SUAVE};text-decoration:none;">` +
+      `${esc(s.phoneLabel)}</a> <span class="c-suave" style="color:#C3BFBB;">·</span> WhatsApp`,
     );
   }
+  // O e-mail NÃO entra aqui quando é o mesmo do remetente — ele já está no "De:",
+  // e repetir gasta uma das três linhas que o leitor percorre. Quem decide é o
+  // chamador, que conhece o endereço de envio (ver EmailReplyService.send).
   if (s.email) {
-    contatos.push(`<a href="mailto:${esc(s.email)}" style="color:${SUAVE};text-decoration:none;">${esc(s.email)}</a>`);
+    contatos.push(`<a href="mailto:${esc(s.email)}" class="c-suave" style="color:${SUAVE};text-decoration:none;">${esc(s.email)}</a>`);
   }
   if (s.site) {
     const url = /^https?:\/\//i.test(s.site) ? s.site : `https://${s.site}`;
     const rotulo = s.site.replace(/^https?:\/\//i, '');
-    contatos.push(`<a href="${esc(url)}" style="color:${LARANJA};text-decoration:none;">${esc(rotulo)}</a>`);
+    contatos.push(`<a href="${esc(url)}" class="c-accent" style="color:${cor};text-decoration:none;">${esc(rotulo)}</a>`);
   }
 
   return (
-    `<div style="border-top:1px solid #EFEAE6;padding-top:16px;font-size:13px;line-height:1.65;color:${SUAVE};">` +
-    `<div style="color:${GRAFITE};font-weight:600;font-size:14px;">${esc(s.name)}</div>` +
-    (cargoEmpresa ? `<div>${cargoEmpresa}</div>` : '') +
-    (contatos.length ? `<div style="margin-top:6px;">${contatos.join('<br />')}</div>` : '') +
+    `<div class="c-linha" style="border-top:1px solid #EFEAE6;padding-top:18px;font-size:13px;line-height:1.7;color:${SUAVE};">` +
+    `<div class="c-forte" style="color:${GRAFITE};font-weight:600;font-size:14px;">${esc(s.name)}</div>` +
+    (cargoEmpresa ? `<div class="c-suave" style="color:${SUAVE};">${cargoEmpresa}</div>` : '') +
+    (contatos.length ? `<div class="c-suave" style="margin-top:6px;color:${SUAVE};">${contatos.join('<br />')}</div>` : '') +
     '</div>'
   );
 }

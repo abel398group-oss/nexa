@@ -17,7 +17,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailOptOutService } from './email-optout.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
-import { renderEmailHtml } from './email-template';
+import { renderEmailHtml, type EmailLayout } from './email-template';
 import { resolveSignature, signatureText } from './email-signature';
 import { identidadeDoMercado } from './email-market-identity';
 import { normalizarMessageId } from './campaign-reply-linker';
@@ -74,6 +74,14 @@ export interface SendEmailOptions {
    * sempre. Ver email-market-identity.ts — inclusive por que é tudo ou nada.
    */
   productCode?: string | null;
+  /**
+   * Layout. Padrão `simples` (primeiro contato). `marca` só para quem já te
+   * conhece — ver o cabeçalho de email-template.ts.
+   */
+  layout?: EmailLayout;
+  /** Botão de ação. Ignorado no layout `simples`: e-mail frio não leva botão. */
+  ctaUrl?: string;
+  ctaLabel?: string;
 }
 
 // Configuração SMTP resolvida (banco ou .env)
@@ -187,7 +195,15 @@ export class EmailReplyService {
 
     // Resolvida UMA vez e usada nas duas versões — texto e HTML precisam mostrar o
     // mesmo nome, senão o destinatário vê assinaturas diferentes conforme o cliente.
-    const assinatura = identidade.signature ?? resolveSignature();
+    //
+    // O e-mail da assinatura é omitido quando é o MESMO do remetente: ele já está
+    // no "De:", e repetir gasta uma das poucas linhas que o leitor percorre. Quando
+    // difere, continua aparecendo — foi o que denunciou o endereço errado em
+    // 10/08/2026, e um contato divergente é informação, não ruído.
+    const base = identidade.signature ?? resolveSignature();
+    const mesmoEndereco =
+      !!base.email && base.email.trim().toLowerCase() === config.fromEmail.trim().toLowerCase();
+    const assinatura = mesmoEndereco ? { ...base, email: undefined } : base;
 
     // Alternativa em texto puro (multipart) — para cliente sem HTML e para o score
     // de spam: e-mail só-HTML pontua pior nos filtros.
@@ -205,6 +221,11 @@ export class EmailReplyService {
       optOutUrl,
       whatsappUrl: waQualificado ? waLink : undefined,
       signature: assinatura,
+      // Padrão `simples`: quem não disse nada está mandando primeiro contato ou
+      // respondendo numa conversa, e os dois pedem o layout discreto.
+      layout: opts.layout,
+      ctaUrl: opts.ctaUrl,
+      ctaLabel: opts.ctaLabel,
     });
 
     const subject =

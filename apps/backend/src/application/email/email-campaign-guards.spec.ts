@@ -382,6 +382,103 @@ describe('worker — a marca do mercado chega ao envio (ADR 037)', () => {
   });
 });
 
+/**
+ * A troca automática de layout no segundo toque.
+ *
+ * Faixa colorida, botão e rodapé são os marcadores que o Gmail usa para separar
+ * e-mail em massa de e-mail pessoal — em prospecção fria, a aba Promoções. Depois
+ * que a pessoa respondeu, ela já sabe quem somos e a marca ajuda em vez de
+ * levantar suspeita. Ninguém precisa lembrar de trocar: o `repliedAt` decide.
+ */
+describe('worker — layout muda no segundo toque', () => {
+  function cenario(jaRespondeu: boolean, link: string | null = 'https://hipertms.com.br/planos') {
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Agosto', channel: 'email', status: 'running',
+      productCode: null, subject: 'Sobre a sua operação', template: 'corpo da campanha',
+      link, sendLinkOnFirst: false, sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(), updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha), update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        // `repliedAt` no where = é a pergunta "já respondeu alguma vez".
+        // Promise, não número: o serviço encadeia `.catch()` nesta consulta, e um
+        // mock síncrono passaria por `await` mas quebraria ali.
+        count: vi.fn().mockImplementation(({ where }: any) =>
+          Promise.resolve(where.repliedAt ? (jaRespondeu ? 1 : 0) : 0)),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'lead@empresa.com', name: 'Carlos' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contact: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({ id: 'ct-1' }),
+      },
+    });
+    prisma.aiConversation = { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() };
+
+    const emailReply = { send: vi.fn().mockResolvedValue({ sent: true, messageId: '<m@x>' }) };
+    const conversations = {
+      create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+      addMessage: vi.fn().mockResolvedValue({}),
+    };
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    return { svc, emailReply };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00')); // segunda, 10h BRT
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('quem nunca respondeu recebe o layout discreto, sem botão', async () => {
+    const { svc, emailReply } = cenario(false);
+
+    await (svc as any).tickLocked();
+
+    const enviado = emailReply.send.mock.calls[0][0];
+    expect(enviado.layout).toBe('simples');
+    expect(enviado.ctaUrl).toBeUndefined();
+  });
+
+  // sendLinkOnFirst=false é o padrão: e-mail frio sem link tem score de spam menor
+  // e mais resposta. O link existe na campanha e mesmo assim não sai.
+  it('e o link nem entra no corpo no primeiro toque', async () => {
+    const { svc, emailReply } = cenario(false);
+
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send.mock.calls[0][0].body).not.toContain('hipertms.com.br');
+  });
+
+  it('quem já respondeu recebe o layout de marca, com o link no botão', async () => {
+    const { svc, emailReply } = cenario(true);
+
+    await (svc as any).tickLocked();
+
+    const enviado = emailReply.send.mock.calls[0][0];
+    expect(enviado.layout).toBe('marca');
+    expect(enviado.ctaUrl).toContain('hipertms.com.br/planos');
+    // no botão, não repetido no texto
+    expect(enviado.body).not.toContain('🔗');
+  });
+
+  it('campanha sem link não inventa botão para quem já respondeu', async () => {
+    const { svc, emailReply } = cenario(true, null);
+
+    await (svc as any).tickLocked();
+
+    const enviado = emailReply.send.mock.calls[0][0];
+    expect(enviado.layout).toBe('marca');
+    expect(enviado.ctaUrl).toBeUndefined();
+  });
+});
+
 describe('worker — limite diário vem do banco', () => {
   // O contador vivia no processo e morria a cada deploy: o preaquecimento de
   // 20/dia virava 40 ou 60 conforme o número de restarts do dia.

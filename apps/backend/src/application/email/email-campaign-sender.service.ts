@@ -216,6 +216,27 @@ export class EmailCampaignSenderService {
     });
   }
 
+  /**
+   * Este endereço já respondeu alguma campanha nossa?
+   *
+   * É o que separa o PRIMEIRO CONTATO do resto, e o layout do e-mail sai daí (ver
+   * email-template.ts): faixa colorida, botão e rodapé com endereço são os
+   * marcadores que o Gmail usa para separar e-mail em massa de e-mail pessoal.
+   * Em prospecção fria isso significa a aba Promoções, que na prática é o mesmo
+   * que não ter chegado. Depois que a pessoa respondeu, ela já sabe quem somos e a
+   * marca passa a ajudar em vez de levantar suspeita.
+   *
+   * O sinal é `repliedAt`, gravado pelo CampaignReplyLinker — resposta de verdade,
+   * não abertura. Abertura é medida por pixel de rastreio, que não usamos (imagem
+   * em e-mail é bloqueada por padrão e pesa no score de spam).
+   */
+  private async jaRespondeuAlgumaVez(tenantId: string, email: string): Promise<boolean> {
+    const n = await this.prisma.campaignTarget
+      .count({ where: { tenantId, email, repliedAt: { not: null } } })
+      .catch(() => 0); // falhar aqui cai no layout frio, que é o lado seguro
+    return n > 0;
+  }
+
   /** Nome de exibição do mercado, para o fallback de assunto. Sem mercado → HiperTMS. */
   private async nomeDoMercado(productCode: string | null): Promise<string> {
     if (!productCode) return 'HiperTMS';
@@ -664,22 +685,40 @@ export class EmailCampaignSenderService {
         },
       });
 
+      // Primeiro contato ou não — é o que decide o LAYOUT do e-mail.
+      const conhecido = await this.jaRespondeuAlgumaVez(campaign.tenantId, email);
+      const layout = conhecido ? 'marca' : 'simples';
+
       let body = this.render(campaign.template, target.name);
-      // Injeta link apenas se sendLinkOnFirst=true.
-      // Padrão (false): 1º e-mail sem link → lead responde → Lia envia na conversa.
-      // Emails frios sem link têm score de spam menor e maior taxa de resposta.
-      if (campaign.link && campaign.sendLinkOnFirst) {
-        // Link MARCADO com a origem: sem isto o clique chega no site como visita
-        // direta e "a campanha trouxe gente?" não tem resposta. Clique de e-mail
-        // quase nunca traz referrer (o Gmail abre por proxy). Ver campaign-link.ts.
-        const comOrigem = marcarLinkDaCampanha(campaign.link, {
-          canal: 'email',
-          campanhaId: campaign.id,
-          campanhaNome: campaign.name,
-          // QUEM recebeu: é o que permite dizer depois "o Carlos clicou".
-          contatoId: upsertedContact.id,
-        });
-        body += `\n\n🔗 ${comOrigem}`;
+
+      // Link MARCADO com a origem: sem isto o clique chega no site como visita
+      // direta e "a campanha trouxe gente?" não tem resposta. Clique de e-mail
+      // quase nunca traz referrer (o Gmail abre por proxy). Ver campaign-link.ts.
+      const linkComOrigem = campaign.link
+        ? marcarLinkDaCampanha(campaign.link, {
+            canal: 'email',
+            campanhaId: campaign.id,
+            campanhaNome: campaign.name,
+            // QUEM recebeu: é o que permite dizer depois "o Carlos clicou".
+            contatoId: upsertedContact.id,
+          })
+        : null;
+
+      // Onde o link entra depende do layout, e a diferença não é estética.
+      //
+      // `marca` (quem já respondeu): vira BOTÃO. É o formato que converte clique, e
+      // aqui ele é aceitável porque a pessoa já sabe quem somos.
+      //
+      // `simples` (contato frio): só entra como texto, e só se `sendLinkOnFirst`
+      // estiver ligado. O padrão continua sendo NÃO mandar link no primeiro toque —
+      // e-mail frio sem link tem score de spam menor e mais resposta. Botão em
+      // primeiro contato é o pior dos dois mundos: parece massa e ainda pede clique
+      // de quem não sabe quem está pedindo.
+      let ctaUrl: string | undefined;
+      if (linkComOrigem && layout === 'marca') {
+        ctaUrl = linkComOrigem;
+      } else if (linkComOrigem && campaign.sendLinkOnFirst) {
+        body += `\n\n🔗 ${linkComOrigem}`;
       }
       // O assunto também passa pelo render: `{{nome}}` nele já era esperado por quem
       // escreve a campanha (e antes saía literal), e o spintax importa AINDA MAIS aqui —
@@ -703,6 +742,10 @@ export class EmailCampaignSenderService {
           // ver email-market-identity.ts. Sem isto a prévia mostrava a marca do
           // mercado e o envio real saía HiperTMS.
           productCode: campaign.productCode,
+          // Discreto no primeiro contato, com a marca depois que a pessoa respondeu.
+          layout,
+          ctaUrl,
+          ctaLabel: 'Ver como funciona',
           // Sem leadScore em campanha outbound — sem convite WhatsApp automático
           // (evita parecer agressivo no primeiro contato por e-mail)
         });
