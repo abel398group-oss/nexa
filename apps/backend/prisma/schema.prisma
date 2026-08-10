@@ -195,10 +195,21 @@ model Contact {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, phone])
-  @@unique([tenantId, email])  // NULL é OK — Postgres aceita múltiplos NULL em unique (ADR 021)
+  // NULL é OK — Postgres aceita múltiplos NULL em unique (ADR 021).
+  //
+  // ATENÇÃO: no banco este índice é PARCIAL — `... WHERE (email IS NOT NULL)` —
+  // e o Prisma não sabe expressar isso. Resultado: `migrate diff` sempre acusa
+  // um `CREATE UNIQUE INDEX contacts_tenant_id_email_key` que já existe, e um
+  // `migrate dev` geraria essa migration inútil. Não é drift para corrigir; é
+  // limitação conhecida. Conferir com:
+  //   select indexdef from pg_indexes where indexname='contacts_tenant_id_email_key';
+  @@unique([tenantId, email])
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, externalContactId])
+  // Existe no banco desde a migration 20260809140000_email_hard_bounce, mas não
+  // estava declarado aqui — o próximo `migrate dev` geraria um DROP silencioso.
+  @@index([tenantId, emailBouncedAt])
   @@map("contacts")
 }
 
@@ -311,6 +322,9 @@ model AiConversation {
   @@index([tenantId, externalId])
   @@index([status, lastActivityAt])
   @@index([ticketSyncStatus, ticketSyncNextRetryAt])
+  // Existe no banco desde a migration 20260806140000_support_assignment_and_internal_notes,
+  // mas não estava declarado aqui — o próximo `migrate dev` geraria um DROP silencioso.
+  @@index([assignedAnalystId])
   @@map("ai_conversations")
 }
 
@@ -1373,5 +1387,8 @@ model PageView {
   @@index([tenantId, utmCampaign, createdAt])
   /// Top páginas.
   @@index([tenantId, path, createdAt])
+  // Existe no banco desde a migration 20260810120000_pageview_ip_geo, mas não
+  // estava declarado aqui — o próximo `migrate dev` geraria um DROP silencioso.
+  @@index([tenantId, ip])
   @@map("page_views")
 }
