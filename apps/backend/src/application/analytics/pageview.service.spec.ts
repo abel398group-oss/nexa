@@ -36,11 +36,30 @@ describe('PageviewService — ingest', () => {
     expect(data.visitorHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  // NUNCA persistir IP cru — é o requisito de LGPD que dispensa banner de cookie.
-  it('não grava o IP em lugar nenhum', async () => {
+  // ── Reversão DELIBERADA (10/08/2026) ─────────────────────────────────────
+  // Este teste garantia o oposto: "não grava o IP em lugar nenhum", que era o que
+  // mantinha a tabela anônima e dispensava banner de consentimento. O Abel pediu a
+  // coleta do IP depois de o custo jurídico ser apresentado, e reafirmou o pedido.
+  //
+  // O teste antigo quebrou nesta mudança — foi ele que provou que a garantia estava
+  // sendo revertida, e não perdida por acidente. Fica aqui na forma invertida para
+  // que a próxima pessoa saiba que a ausência do IP já foi uma decisão.
+  it('grava o IP (dado pessoal — ver o aviso no model PageView)', async () => {
     await svc.ingest(input, ctx());
-    const json = JSON.stringify(deps.prisma.pageView.create.mock.calls[0][0].data);
-    expect(json).not.toContain('203.0.113.9');
+    expect(deps.prisma.pageView.create.mock.calls[0][0].data.ip).toBe('203.0.113.9');
+  });
+
+  it('o hash diário continua existindo, independente do IP gravado', async () => {
+    await svc.ingest(input, ctx());
+    expect(deps.prisma.pageView.create.mock.calls[0][0].data.visitorHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // Sem CDN na frente não há de onde tirar localização, e chutar seria pior.
+  it('sem header de CDN, país e região ficam nulos', async () => {
+    await svc.ingest(input, ctx());
+    const data = deps.prisma.pageView.create.mock.calls[0][0].data;
+    expect(data.country).toBeNull();
+    expect(data.region).toBeNull();
   });
 
   it('bot é descartado antes de qualquer query ao banco', async () => {

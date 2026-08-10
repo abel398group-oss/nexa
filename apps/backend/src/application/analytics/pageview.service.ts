@@ -15,6 +15,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import {
   detectarCliente, dominioDoReferrer, ehBot, hashVisitante, higienizarUrl,
+  ipParaGravar, localizacaoDoHeader,
 } from './pageview-sanitizer';
 
 export interface PageviewInput {
@@ -32,6 +33,8 @@ export interface PageviewContexto {
   userAgent: string;
   /** Header Origin; na ausência, host derivado do Referer. */
   origin: string | null;
+  /** Headers da requisição — país/região vêm do CDN quando existe um. */
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 export type ResultadoIngest =
@@ -176,13 +179,16 @@ export class PageviewService {
           utmContent: u.utmContent,
           clickId: u.clickId,
           visitorHash: hashVisitante(ctx.ip, ctx.userAgent, this.segredoDoHash()),
+          // DADO PESSOAL a partir de 10/08/2026 — ver o aviso no model PageView.
+          ip: ipParaGravar(ctx.ip),
           browser: cliente.browser,
           os: cliente.os,
           device: cliente.device,
           language: input.language?.trim().slice(0, 20) || null,
           screen: /^\d{2,5}x\d{2,5}$/.test(input.screen ?? '') ? input.screen! : null,
-          // country/region ficam nulos na Fase 1 — derivar país exige base GeoIP e a
-          // dependência não foi decidida. As colunas já existem.
+          // País/região só quando um CDN informa por header. Sem CDN ficam nulos:
+          // derivar de IP exigiria base GeoIP, e localização chutada é pior que nula.
+          ...localizacaoDoHeader(ctx.headers ?? {}),
         },
       });
 

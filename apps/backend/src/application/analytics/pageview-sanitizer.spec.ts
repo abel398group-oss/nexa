@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   QUERY_PERMITIDA, detectarCliente, dominioDoReferrer, ehBot, hashVisitante, higienizarUrl,
+  ipParaGravar, localizacaoDoHeader,
 } from './pageview-sanitizer';
 
 describe('higienizarUrl — allowlist de query', () => {
@@ -163,5 +164,68 @@ describe('detectarCliente', () => {
 
   it('user agent desconhecido não quebra', () => {
     expect(detectarCliente('xyz')).toMatchObject({ browser: null, os: null, device: 'desktop' });
+  });
+});
+
+// ── IP e localização (10/08/2026) ───────────────────────────────────────────
+// Pedido explicitamente pelo Abel depois de o custo jurídico ser apresentado: a
+// tabela deixa de ser anônima e passa a conter dado pessoal. Ver o aviso no model.
+describe('ipParaGravar', () => {
+  it('guarda o IP como veio', () => {
+    expect(ipParaGravar('189.45.12.7')).toBe('189.45.12.7');
+  });
+
+  // O mesmo visitante chegando por rotas diferentes não pode aparecer com dois IPs.
+  it('reduz IPv6 mapeado à forma v4', () => {
+    expect(ipParaGravar('::ffff:189.45.12.7')).toBe('189.45.12.7');
+    expect(ipParaGravar('::FFFF:10.0.0.1')).toBe('10.0.0.1');
+  });
+
+  it('IPv6 de verdade passa inteiro', () => {
+    expect(ipParaGravar('2001:db8::8a2e:370:7334')).toBe('2001:db8::8a2e:370:7334');
+  });
+
+  it('ausente ou vazio vira null, não string vazia', () => {
+    expect(ipParaGravar(undefined)).toBeNull();
+    expect(ipParaGravar(null)).toBeNull();
+    expect(ipParaGravar('   ')).toBeNull();
+  });
+
+  // Header forjado é entrada hostil como qualquer outra.
+  it('corta valor absurdamente longo', () => {
+    expect(ipParaGravar('9'.repeat(500))!.length).toBe(45);
+  });
+});
+
+describe('localizacaoDoHeader', () => {
+  it('lê o país do Cloudflare', () => {
+    expect(localizacaoDoHeader({ 'cf-ipcountry': 'BR' })).toEqual({ country: 'BR', region: null });
+  });
+
+  it('aceita os headers de outros CDNs', () => {
+    expect(localizacaoDoHeader({
+      'x-vercel-ip-country': 'BR',
+      'x-vercel-ip-country-region': 'SP',
+    })).toEqual({ country: 'BR', region: 'SP' });
+  });
+
+  // Sem CDN na frente, nulo. Localização chutada viraria decisão comercial tomada
+  // em cima de invenção — pior que coluna vazia.
+  it('sem header nenhum devolve nulo, não um palpite', () => {
+    expect(localizacaoDoHeader({})).toEqual({ country: null, region: null });
+  });
+
+  // 'XX' e 'T1' são o que o Cloudflare manda para desconhecido e para Tor.
+  it('desconhecido e Tor contam como sem localização', () => {
+    expect(localizacaoDoHeader({ 'cf-ipcountry': 'XX' }).country).toBeNull();
+    expect(localizacaoDoHeader({ 'cf-ipcountry': 'T1' }).country).toBeNull();
+  });
+
+  it('header repetido usa o primeiro valor', () => {
+    expect(localizacaoDoHeader({ 'cf-ipcountry': ['BR', 'US'] }).country).toBe('BR');
+  });
+
+  it('corta valor longo', () => {
+    expect(localizacaoDoHeader({ 'cf-ipcountry': 'A'.repeat(200) }).country!.length).toBe(60);
   });
 });

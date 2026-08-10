@@ -11,7 +11,7 @@
  * A `websiteKey` do corpo IDENTIFICA o site, não autentica. Se vazar, o pior cenário
  * possível é alguém poluir estatística de visita — ela não dá acesso a nada.
  */
-import { Body, Controller, Headers, HttpCode, Ip, Post, Req } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Ip, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { PageviewService } from '@/application/analytics/pageview.service';
@@ -62,7 +62,9 @@ export class TrackingController {
     @Headers('user-agent') userAgent: string,
     @Headers('origin') origin: string,
     @Headers('referer') referer: string,
-    @Req() _req: unknown,
+    // Headers inteiros: país/região vêm do CDN (cf-ipcountry e afins) quando existe
+    // um na frente. Ver localizacaoDoHeader.
+    @Headers() headers: Record<string, string | string[] | undefined>,
   ): Promise<void> {
     await this.pageviews.ingest(
       {
@@ -79,6 +81,7 @@ export class TrackingController {
         // Origin é o header certo; o Referer entra como reserva para o caso de um
         // navegador antigo omitir Origin num POST same-site.
         origin: origin ?? referer ?? null,
+        headers,
       },
     );
     // Sem corpo. O cliente não recebe (e não precisa de) o resultado.

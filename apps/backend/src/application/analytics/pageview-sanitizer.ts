@@ -165,3 +165,52 @@ export function detectarCliente(userAgent: string): Cliente {
 
   return { browser, os, device };
 }
+
+/**
+ * IP do visitante, pronto para gravar.
+ *
+ * Vem de `req.ip`, que só é confiável porque `trust proxy` está ligado (main.ts) —
+ * sem isso o valor seria o IP do nginx em todas as visitas. IPv6 mapeado
+ * (`::ffff:1.2.3.4`) é reduzido à forma v4 para o mesmo visitante não aparecer com
+ * dois IPs diferentes conforme a rota da requisição.
+ *
+ * ⚠️ Isto é DADO PESSOAL. Só existe porque foi pedido explicitamente em 10/08/2026;
+ * antes o IP era usado apenas para montar o hash diário e descartado.
+ */
+export function ipParaGravar(ip: string | undefined | null): string | null {
+  const cru = (ip ?? '').trim();
+  if (!cru) return null;
+  const semPrefixo = cru.replace(/^::ffff:/i, '');
+  // 45 = maior IPv6 textual possível. Cortar evita header forjado gigante na coluna.
+  return semPrefixo.slice(0, 45) || null;
+}
+
+/**
+ * País e região a partir dos headers que um CDN coloca na requisição.
+ *
+ * NÃO deriva de IP: isso exigiria uma base GeoIP (dependência nova, atualização
+ * mensal, licença) que continua não decidida. Sem CDN na frente, os dois voltam
+ * nulos — e coluna nula é honesta, enquanto localização chutada viraria decisão
+ * comercial tomada em cima de invenção.
+ *
+ * Cobre os headers dos CDNs usuais. `cf-ipcountry` é o do Cloudflare, que é o
+ * caminho mais provável se um dia entrar um na frente do hipertms.com.br.
+ */
+export function localizacaoDoHeader(
+  headers: Record<string, string | string[] | undefined>,
+): { country: string | null; region: string | null } {
+  const ler = (nome: string): string | null => {
+    const v = headers[nome] ?? headers[nome.toLowerCase()];
+    const s = Array.isArray(v) ? v[0] : v;
+    const limpo = (s ?? '').trim();
+    // 'XX' e 'T1' são o que o Cloudflare devolve para desconhecido e para Tor.
+    if (!limpo || limpo === 'XX' || limpo === 'T1') return null;
+    return limpo.slice(0, 60);
+  };
+
+  return {
+    country:
+      ler('cf-ipcountry') ?? ler('x-vercel-ip-country') ?? ler('x-geo-country') ?? null,
+    region: ler('x-vercel-ip-country-region') ?? ler('x-geo-region') ?? null,
+  };
+}
