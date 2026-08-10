@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { identidadeDoMercado } from './email-market-identity';
+
+const ENVS = [
+  'EMAIL_SIGNATURE_NAME', 'EMAIL_SIGNATURE_ROLE', 'EMAIL_SIGNATURE_COMPANY',
+  'EMAIL_SIGNATURE_PHONE', 'EMAIL_SIGNATURE_EMAIL', 'EMAIL_SIGNATURE_SITE',
+];
+afterEach(() => ENVS.forEach((k) => delete process.env[k]));
 
 /**
  * O furo que este arquivo prende (10/08/2026): a prévia da tela Mensagens
@@ -65,5 +71,63 @@ describe('identidadeDoMercado', () => {
     const id = identidadeDoMercado(MERCADO);
     expect(id.signature?.phoneDigits).toBeUndefined();
     expect(id.signature?.phoneLabel).toBeUndefined();
+  });
+});
+
+/**
+ * Pessoa configurada > mercado. A marca continua sendo do mercado (é o produto de
+ * que o e-mail fala), mas quem assina é gente — prospecção fria assinada por pessoa
+ * é aberta e respondida mais, e recebe menos reclamação de spam.
+ */
+describe('identidadeDoMercado — remetente humano configurado', () => {
+  function configurarMateus() {
+    process.env.EMAIL_SIGNATURE_NAME = 'Mateus Gomes';
+    process.env.EMAIL_SIGNATURE_ROLE = 'Comercial';
+    process.env.EMAIL_SIGNATURE_COMPANY = 'HiperTMS';
+    process.env.EMAIL_SIGNATURE_PHONE = '+55 11 99432-7713';
+    process.env.EMAIL_SIGNATURE_EMAIL = 'mateus.gomes@hipertms.com.br';
+  }
+
+  it('a pessoa assina e aparece no "De:", no lugar da Lia do mercado', () => {
+    configurarMateus();
+
+    const id = identidadeDoMercado(MERCADO);
+
+    expect(id.fromName).toBe('Mateus Gomes');
+    expect(id.signature).toMatchObject({
+      name: 'Mateus Gomes',
+      role: 'Comercial',
+      company: 'HiperTMS',
+      email: 'mateus.gomes@hipertms.com.br',
+    });
+  });
+
+  // Os dois papéis não competem: a marca é do produto, a assinatura é de quem fala.
+  it('mas a MARCA continua sendo a do mercado', () => {
+    configurarMateus();
+
+    expect(identidadeDoMercado(MERCADO).brand).toEqual({
+      name: 'Pneus Brasil',
+      color: '#0057B8',
+      tagline: 'O pneu certo para a sua frota.',
+    });
+  });
+
+  it('sem mercado, a pessoa assina do mesmo jeito (marca padrão)', () => {
+    configurarMateus();
+
+    const id = identidadeDoMercado(null);
+
+    expect(id.brand).toBeUndefined();
+    expect(id.fromName).toBe('Mateus Gomes');
+    expect(id.signature?.name).toBe('Mateus Gomes');
+  });
+
+  // Mesmo interruptor da assinatura: sem nome, nada é lido — meia assinatura é
+  // pior que nenhuma.
+  it('sem EMAIL_SIGNATURE_NAME, volta a valer o mercado', () => {
+    process.env.EMAIL_SIGNATURE_ROLE = 'Comercial'; // sozinho não liga nada
+
+    expect(identidadeDoMercado(MERCADO).fromName).toBe('Ana Pneus Brasil');
   });
 });

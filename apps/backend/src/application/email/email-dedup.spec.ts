@@ -30,7 +30,9 @@ function makeService(overrides: any = {}) {
     {} as any,                                   // contacts
     conversations as any,
     agent as any,
-    {} as any,                                   // notifications
+    // notifications: com a autonomia OFF (abaixo), o process() avisa que existe
+    // resposta esperando atendimento humano — ver email-manual-mode.spec.ts.
+    { create: vi.fn().mockResolvedValue({}) } as any,
     {} as any,                                   // emailReply
     { isEnabled: () => false } as any,           // autonomy OFF: isola o teste do agente
     { link: vi.fn().mockResolvedValue(null) } as any,

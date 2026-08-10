@@ -241,7 +241,27 @@ export class EmailService {
     //    no inbox para um humano responder — não dispara resposta automática.
     if (!this.autonomy.isEnabled('email')) {
       this.logger.log(`Autonomia de e-mail OFF — mensagem de ${n.fromAddress} salva, SEM resposta automática.`);
-      return { ok: true, email: n.fromAddress, autonomy: 'email_off' as const };
+
+      // AVISA. Sem isto, "a Lia está desligada, a gente responde na mão" é o mesmo
+      // que não responder: a mensagem entra no Inbox e ninguém fica sabendo que
+      // ela chegou. Lead de prospecção que responde e leva dois dias para ser
+      // atendido é pior do que lead que nunca foi abordado — ele já demonstrou
+      // interesse, e o silêncio depois disso é o que vira reclamação de spam.
+      //
+      // Best-effort: falhar em avisar não pode desfazer a mensagem já gravada.
+      const trecho = n.bodyText.replace(/\s+/g, ' ').slice(0, 160);
+      await this.notifications
+        .create(tenantId, {
+          type: 'info',
+          title: `📧 Resposta de e-mail para responder à mão`,
+          body: `${n.from} — "${n.subject}"\n${trecho}${n.bodyText.length > 160 ? '…' : ''}`,
+          link: `/inbox/${conv.id}`,
+        })
+        .catch((e: any) =>
+          this.logger.warn(`Falha ao notificar resposta de ${n.fromAddress}: ${e?.message}`),
+        );
+
+      return { ok: true, email: n.fromAddress, autonomy: 'email_off' as const, conversationId: conv.id };
     }
 
     // 6) Processa com a Lia (mesmo pipeline do WhatsApp).

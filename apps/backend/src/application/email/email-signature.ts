@@ -48,6 +48,19 @@ function esc(s: string): string {
 }
 
 /**
+ * Existe uma PESSOA configurada assinando os e-mails?
+ *
+ * É a mesma chave que liga a assinatura (`EMAIL_SIGNATURE_NAME`), exposta à parte
+ * porque ela decide mais do que o rodapé: quando há uma pessoa configurada, ela
+ * também é o nome no "De:" e ganha da identidade do mercado. Ver
+ * email-market-identity.ts — prospecção fria assinada por gente responde mais que
+ * assinada por assistente, e o provedor também confia mais.
+ */
+export function assinaturaConfigurada(): boolean {
+  return !!process.env.EMAIL_SIGNATURE_NAME?.trim();
+}
+
+/**
  * Lê a assinatura do ambiente.
  *
  * `EMAIL_SIGNATURE_NAME` é o interruptor: sem ele, tudo é ignorado e vale o padrão.
