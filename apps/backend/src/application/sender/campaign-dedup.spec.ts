@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dedupWindowDays, dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
+import { dedupWindowDays, dedupSentAtFilter, dedupWindowLabel, podeIgnorarDedup } from './campaign-dedup';
 
 const AGORA = new Date('2026-08-08T12:00:00Z');
 
@@ -50,5 +50,35 @@ describe('dedupWindowLabel', () => {
   it('diz a regra em português para o log', () => {
     expect(dedupWindowLabel({} as any)).toBe('sem janela (nunca reenviar)');
     expect(dedupWindowLabel({ CAMPAIGN_DEDUP_DAYS: '45' } as any)).toBe('últimos 45 dia(s)');
+  });
+});
+
+// ── Ignorar o "já enviado" numa campanha (10/08/2026) ───────────────────────
+// Sem isto, testar o fluxo ponta a ponta com um endereço real é impossível depois do
+// primeiro envio: o dedup bloqueia para sempre e a campanha nasce sem sair. Aconteceu
+// duas vezes em dois dias.
+describe('podeIgnorarDedup', () => {
+  const LIGADO = { CAMPAIGN_RESEND_ALL_ENABLED: 'true' } as any;
+
+  it('pedido + ambiente liberado = ignora', () => {
+    expect(podeIgnorarDedup(true, LIGADO)).toBe(true);
+  });
+
+  // Produção nasce protegida: pedir sem a variável não fura a proteção anti-spam,
+  // simplesmente não faz nada.
+  it('pedido SEM o ambiente liberado = não ignora', () => {
+    expect(podeIgnorarDedup(true, {} as any)).toBe(false);
+    expect(podeIgnorarDedup(true, { CAMPAIGN_RESEND_ALL_ENABLED: 'false' } as any)).toBe(false);
+  });
+
+  it('sem pedido, o ambiente liberado não muda nada', () => {
+    expect(podeIgnorarDedup(false, LIGADO)).toBe(false);
+    expect(podeIgnorarDedup(undefined, LIGADO)).toBe(false);
+  });
+
+  // Mesmo interruptor do reenvio total: uma variável só para desligar quando o teste
+  // acabar, em vez de duas para alguém esquecer uma.
+  it('usa o mesmo interruptor do reenvio total', () => {
+    expect(podeIgnorarDedup(true, { CAMPAIGN_RESEND_ALL_ENABLED: 'TRUE' } as any)).toBe(true);
   });
 });

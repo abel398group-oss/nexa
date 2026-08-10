@@ -91,6 +91,8 @@ class EmailTargetDto {
   @IsOptional() @IsString() name?: string;
 }
 
+// TESTE: ignora o "já enviado" nesta campanha. Só vale com
+// CAMPAIGN_RESEND_ALL_ENABLED ligado — ver podeIgnorarDedup.
 class CreateEmailCampaignDto {
   @IsString() @MinLength(2) name!: string;
   @IsString() @MinLength(1) subject!: string;
@@ -104,6 +106,14 @@ class CreateEmailCampaignDto {
   @IsOptional() @IsBoolean() sendLinkOnFirst?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
   @IsOptional() @IsString() scheduledAt?: string;
+  /**
+   * TESTE: ignora o "já enviado" NESTA campanha, para reenviar ao mesmo endereço.
+   *
+   * Só tem efeito com `CAMPAIGN_RESEND_ALL_ENABLED` ligado (ver podeIgnorarDedup) —
+   * pedir isto em produção com a variável desligada simplesmente não faz nada, em vez
+   * de furar a proteção anti-spam.
+   */
+  @IsOptional() @IsBoolean() ignoreDedup?: boolean;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

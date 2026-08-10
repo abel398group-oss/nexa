@@ -59,3 +59,26 @@ export function dedupWindowLabel(env: NodeJS.ProcessEnv = process.env): string {
   const dias = dedupWindowDays(env);
   return dias === null ? 'sem janela (nunca reenviar)' : `últimos ${dias} dia(s)`;
 }
+
+/**
+ * Esta campanha pode IGNORAR o "já enviado"?
+ *
+ * Ferramenta de TESTE: sem isto, validar o fluxo ponta a ponta com um endereço real é
+ * impossível depois do primeiro envio — o dedup bloqueia para sempre e o operador fica
+ * criando campanha que não sai (aconteceu duas vezes em 08–10/08/2026).
+ *
+ * Atrás do MESMO interruptor do reenvio total (`CAMPAIGN_RESEND_ALL_ENABLED`), e não de
+ * um novo: são a mesma intenção — "estou testando, deixa eu repetir" — e uma variável
+ * só significa um lugar só para desligar quando o teste acabar.
+ *
+ * Não apaga nada. O histórico continua intacto: o alvo antigo segue `sent`, o
+ * engajamento das campanhas anteriores continua valendo. Só ESTA campanha deixa de
+ * consultar o passado.
+ */
+export function podeIgnorarDedup(
+  pedido: boolean | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!pedido) return false;
+  return (env.CAMPAIGN_RESEND_ALL_ENABLED ?? 'false').toLowerCase() === 'true';
+}

@@ -44,7 +44,7 @@ import { looksLikeCompetitor, isCompetitorEmail } from '@/application/sender/com
 // canais, sem duplicar. Import só de estáticos: não entra no grafo de DI.
 import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
-import { dedupSentAtFilter, dedupWindowLabel } from '@/application/sender/campaign-dedup';
+import { dedupSentAtFilter, dedupWindowLabel, podeIgnorarDedup } from '@/application/sender/campaign-dedup';
 import { precisaTrocarMercado } from '@/application/sender/conversation-market';
 import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 import { normalizarMessageId } from './campaign-reply-linker';
@@ -287,6 +287,8 @@ export class EmailCampaignSenderService {
       productCode?: string; // F8: de qual produto/parceiro esta campanha fala
       emails?: { email: string; name?: string }[]; // lista manual
       fromContacts?: boolean;                        // usa contatos com e-mail cadastrado
+      /** TESTE: ignora o "já enviado" nesta campanha (ver podeIgnorarDedup). */
+      ignoreDedup?: boolean;
       link?: string;
       sendLinkOnFirst?: boolean; // false (padrão) = só envia link após resposta do lead
       sendLimit?: number;
@@ -417,8 +419,15 @@ export class EmailCampaignSenderService {
     // 'sent' em qualquer campanha anterior do tenant não recebe de novo.
     // Janela opcional via CAMPAIGN_DEDUP_DAYS — ver campaign-dedup.ts.
     const janelaDedup = dedupSentAtFilter();
+    // Ferramenta de teste: ignora o passado só nesta campanha. Ver podeIgnorarDedup.
+    const ignorarDedup = podeIgnorarDedup(dto.ignoreDedup);
+    if (ignorarDedup) {
+      this.logger.warn(
+        `Campanha "${dto.name}": DEDUP IGNORADO a pedido — endereços que já receberam vão receber de novo.`,
+      );
+    }
     let alreadySent = new Set<string>();
-    if (targets.length) {
+    if (targets.length && !ignorarDedup) {
       const prior = await this.prisma.campaignTarget.findMany({
         where: {
           tenantId,
