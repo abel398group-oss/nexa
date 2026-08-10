@@ -182,6 +182,10 @@ model Contact {
   // campo manual, não vem do TMS (não existe fonte automática pra isso hoje).
   // Editável direto no painel do Inbox, sem precisar da tela /contacts.
   accountOwner      String?  @map("account_owner")
+  /// Vendedor DONO deste contato (11/08/2026). NULL = sem dono, e sem dono todo
+  /// mundo vê — é o estado de toda a base anterior a este campo, e é o que o
+  /// admin distribui com o botão Transferir. Ver seller-scope.ts.
+  ownerSellerId     String?  @map("owner_seller_id")
   tags              String[]
   notes             String?
   optOutAt          DateTime? @map("opt_out_at")
@@ -210,6 +214,7 @@ model Contact {
   // Existe no banco desde a migration 20260809140000_email_hard_bounce, mas não
   // estava declarado aqui — o próximo `migrate dev` geraria um DROP silencioso.
   @@index([tenantId, emailBouncedAt])
+  @@index([tenantId, ownerSellerId])
   @@map("contacts")
 }
 
@@ -720,11 +725,16 @@ model Campaign {
   startedAt DateTime? @map("started_at")
   archivedAt DateTime? @map("archived_at") // arquivada (guardada) — escondida da lista padrão
   scheduledAt DateTime? @map("scheduled_at") // agendamento: só começa a enviar a partir desse horário
+  /// Vendedor DONO deste disparo (11/08/2026). O vendedor só enxerga os dele; o
+  /// admin vê todos. A conversa criada por esta campanha nasce com este vendedor
+  /// — sem isso a resposta do lead cairia sem dono e os três a veriam.
+  ownerSellerId String? @map("owner_seller_id")
 
   targets CampaignTarget[]
 
   @@index([tenantId])
   @@index([archivedAt])
+  @@index([tenantId, ownerSellerId])
   @@map("campaigns")
 }
 

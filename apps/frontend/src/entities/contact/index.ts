@@ -27,6 +27,7 @@ export {
   bulkBlockContacts,
   bulkUnblockContacts,
   importContacts,
+  transferContacts,
   getContactCampaigns,
   getContactTickets,
   listBannedContacts,

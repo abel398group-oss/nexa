@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { ContactsService } from '@/application/contacts/contacts.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
+import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
+import { escopoDeVendedor } from '@/shared/auth/seller-scope';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from '@/application/contacts/dto/create-contact.dto';
 
@@ -25,6 +26,11 @@ class RenameTagDto {
 class DeleteTagDto {
   @IsString() tag!: string;
 }
+// Transferência de carteira: `sellerId: null` devolve para o bolo sem dono.
+class TransferirDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+  @IsOptional() @IsString() sellerId?: string | null;
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('contacts')
@@ -32,13 +38,38 @@ class DeleteTagDto {
 export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
+  /**
+   * `owner` é o filtro da TELA (o admin escolhendo ver só os do Mateus, ou os
+   * sem dono). O escopo do vendedor é derivado do token e aplicado por dentro —
+   * mandar `?owner=` de outro vendedor não escapa da própria carteira.
+   */
   @Get()
   findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
     @Query() q: PaginationQueryDto,
     @Query('tag') tag?: string,
+    @Query('owner') owner?: string,
   ) {
-    return this.contacts.findAll(tenantId, q, tag);
+    return this.contacts.findAll(tenantId, q, tag, escopoDeVendedor(user), owner);
+  }
+
+  /**
+   * Passa contatos (e as conversas deles) para outro vendedor.
+   *
+   * Só admin: é a ferramenta de quem redistribui carteira, e um vendedor podendo
+   * transferir para si mesmo tornaria a separação decorativa.
+   */
+  @Post('transfer')
+  transferir(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Body() body: TransferirDto,
+  ) {
+    if (user?.role !== 'admin') {
+      throw new ForbiddenException('Só o administrador transfere carteira.');
+    }
+    return this.contacts.transferir(tenantId, body.ids ?? [], body.sellerId ?? null);
   }
 
   // distintas tags do tenant (definir ANTES de :id para não casar como id)
@@ -111,8 +142,17 @@ export class ContactsController {
   }
 
   @Post('import')
-  import(@CurrentTenant() tenantId: string, @Body() body: { contacts: CreateContactDto[] }) {
-    return this.contacts.importMany(tenantId, body.contacts ?? []);
+  import(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Body() body: { contacts: CreateContactDto[]; ownerSellerId?: string | null },
+  ) {
+    // Vendedor importando fica com a própria lista, escolha ou não: deixar o
+    // campo livre para ele permitiria empurrar contato para a carteira alheia.
+    // `__none__` (vendedor sem vínculo) não é dono de nada — entra sem dono.
+    const escopo = escopoDeVendedor(user);
+    const dono = escopo && escopo !== '__none__' ? escopo : escopo ? null : body.ownerSellerId ?? null;
+    return this.contacts.importMany(tenantId, body.contacts ?? [], dono);
   }
 
   // exclusão em lote (vários contatos numa única requisição)

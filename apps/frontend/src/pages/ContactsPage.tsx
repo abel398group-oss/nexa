@@ -28,8 +28,11 @@ import {
   bulkBlockContacts,
   bulkUnblockContacts,
   importContacts,
+  transferContacts,
   getContactCampaigns,
 } from '@/entities/contact';
+import { listSellersMini } from '@/entities/seller';
+import { useAuth } from '@/app/providers/AuthContext';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { StandardListPage } from '@/components/shared/StandardListPage';
@@ -112,6 +115,13 @@ export function ContactsPage() {
   const [histContact, setHistContact] = useState<Contact | null>(null);
   const [histList, setHistList] = useState<ContactCampaign[]>([]);
   const [histLoading, setHistLoading] = useState(false);
+  // Carteira (11/08/2026): filtro e transferência são do admin. O vendedor já
+  // está olhando a própria carteira — a coluna "Vendedor" repetiria o nome dele
+  // em toda linha, e o filtro não teria o que filtrar.
+  const { user } = useAuth();
+  const ehAdmin = user?.role === 'admin';
+  const [ownerFilter, setOwnerFilter] = useState<string>('');
+  const [importOwner, setImportOwner] = useState<string>('');
   const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
@@ -122,11 +132,25 @@ export function ContactsPage() {
     else { setSortKey(k); setSortDir('asc'); }
   }
 
+  // Vendedores para o filtro, a coluna e o seletor da importação. Só o admin
+  // precisa — para o vendedor a consulta nem sai.
+  const { data: vendedores = [] } = useQuery({
+    queryKey: ['sellers-mini'],
+    queryFn: listSellersMini,
+    enabled: ehAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const nomeDoVendedor = (id?: string | null) =>
+    id ? vendedores.find((v) => v.id === id)?.name ?? 'Vendedor removido' : null;
+
   const statusParam = filtro === 'ativos' ? 'active' : filtro === 'optout' ? 'opted_out' : undefined;
   const { data, isLoading: loading } = useQuery({
-    queryKey: ['contacts', appliedSearch, tagFilter, filtro, page],
+    queryKey: ['contacts', appliedSearch, tagFilter, filtro, page, ownerFilter],
     queryFn: () =>
-      listContacts({ search: appliedSearch, tag: tagFilter ?? undefined, status: statusParam, limit: PAGE, offset: page * PAGE }),
+      listContacts({
+        search: appliedSearch, tag: tagFilter ?? undefined, status: statusParam,
+        owner: ownerFilter || undefined, limit: PAGE, offset: page * PAGE,
+      }),
   });
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -312,6 +336,32 @@ export function ContactsPage() {
     }
   }
 
+  /**
+   * Passa a carteira para outro vendedor. As CONVERSAS vão junto — deixá-las com
+   * o dono antigo daria a ele o histórico de um lead que não é mais dele, e o
+   * novo dono começaria sem contexto.
+   */
+  async function transferirSelecionados(sellerId: string | null) {
+    const n = selected.size;
+    const nome = sellerId ? nomeDoVendedor(sellerId) : 'sem dono';
+    const ok = await confirm({
+      title: `Transferir ${n} contato(s)?`,
+      message: `Eles passam para ${nome}, com as conversas junto. O dono anterior deixa de vê-los.`,
+      confirmLabel: 'Transferir',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
+
+    try {
+      const r = await transferContacts([...selected], sellerId);
+      toast.success(`${r.transferidos} contato(s) e ${r.conversas} conversa(s) → ${nome}.`);
+      setSelected(new Set());
+      await invalidate();
+    } catch {
+      toast.error('Erro ao transferir os contatos.');
+    }
+  }
+
   async function deleteSelected() {
     const n = selected.size;
     const ok = await confirm({
@@ -371,9 +421,9 @@ export function ContactsPage() {
         })
         .filter((c) => c.phone.length >= 12);
       if (contacts.length === 0) { toast.error('Nenhum telefone valido (use 55+DDD+numero).'); setBusy(false); return; }
-      const r = await importContacts(contacts);
+      const r = await importContacts(contacts, importOwner || null);
       toast.success(`${r.imported} contatos importados.`);
-      setCsv(''); setImportTag(''); setShowImport(false);
+      setCsv(''); setImportTag(''); setImportOwner(''); setShowImport(false);
       await invalidate();
     } catch {
       toast.error('Erro ao importar contatos.');
@@ -481,6 +531,20 @@ export function ContactsPage() {
       mobileHidden: true,
       cell: (c) => <span className="text-xs text-base-content/50">{c.source || '—'}</span>,
     },
+    // Só na visão do admin: para o vendedor seria o nome dele repetido em toda linha.
+    ...(ehAdmin
+      ? [{
+          id: 'vendedor',
+          header: <>Vendedor</>,
+          mobileHidden: true,
+          cell: (c: Contact) =>
+            c.ownerSellerId ? (
+              <Badge variant="info">{nomeDoVendedor(c.ownerSellerId)}</Badge>
+            ) : (
+              <span className="text-xs text-base-content/40">sem dono</span>
+            ),
+        } as DataTableColumn<Contact>]
+      : []),
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -514,6 +578,19 @@ export function ContactsPage() {
               <option value="ativos">So ativos</option>
               <option value="optout">So descadastrados</option>
             </Select>
+            {/* Carteira: só o admin vê mais de uma. "Sem dono" é o que falta distribuir. */}
+            {ehAdmin && (
+              <Select
+                className="!w-auto"
+                value={ownerFilter}
+                onChange={(e) => { setOwnerFilter(e.target.value); setPage(0); }}
+                title="Filtrar por vendedor"
+              >
+                <option value="">Vendedor: todos</option>
+                {vendedores.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                <option value="sem-dono">Sem dono</option>
+              </Select>
+            )}
             <div className="flex items-center gap-1">
               <Input
                 className="!w-64"
@@ -563,6 +640,19 @@ export function ContactsPage() {
                     />
                     <Button variant="outline" size="sm" onClick={addTagToSelected}>+ Tag</Button>
                   </div>
+                  {ehAdmin && (
+                    <Select
+                      className="!w-44"
+                      value=""
+                      onChange={(e) => e.target.value && transferirSelecionados(
+                        e.target.value === 'sem-dono' ? null : e.target.value,
+                      )}
+                    >
+                      <option value="">Transferir para…</option>
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                      <option value="sem-dono">— deixar sem dono —</option>
+                    </Select>
+                  )}
                   <Button variant="outline" size="sm" onClick={blockSelected}>🚫 Bloquear</Button>
                   <Button variant="outline" size="sm" onClick={unblockSelected}>Desbloquear</Button>
                   <Button variant="destructive" size="sm" onClick={deleteSelected}>Excluir</Button>
@@ -687,6 +777,25 @@ export function ContactsPage() {
             </Button>
             <span className="text-[11px] text-base-content/40">ou cole abaixo</span>
           </div>
+          {/*
+            De quem é a lista. É o único lugar onde alguém decide isso — daí em
+            diante a campanha, a conversa e o que cada um enxerga saem sozinhos.
+            Só o admin escolhe: o vendedor importando fica com a própria lista.
+          */}
+          {ehAdmin && (
+            <div>
+              <Label className="mb-1 block text-xs text-base-content/60">Vendedor responsavel</Label>
+              <Select value={importOwner} onChange={(e) => setImportOwner(e.target.value)}>
+                <option value="">Sem dono (todos veem)</option>
+                {vendedores.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </Select>
+              <p className="mt-1 text-[11px] text-base-content/40">
+                {importOwner
+                  ? 'Só esse vendedor e você vao ver estes contatos.'
+                  : 'Sem dono, a lista fica visivel para todos os vendedores.'}
+              </p>
+            </div>
+          )}
           <div>
             <Label className="mb-1 block text-xs text-base-content/60">Tag desta importacao (opcional)</Label>
             <Input

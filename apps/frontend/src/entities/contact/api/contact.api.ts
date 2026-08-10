@@ -20,10 +20,26 @@ export async function listContacts(params: ContactListParams = {}): Promise<Cont
       search: params.search || undefined,
       tag: params.tag || undefined,
       status: params.status || undefined,
+      // Filtro de carteira do admin: id do vendedor, ou 'sem-dono' para achar
+      // quem ainda não foi distribuído. Vendedor não precisa mandar — o backend
+      // já o prende à carteira dele pelo token.
+      owner: params.owner || undefined,
       limit: params.limit ?? 100,
       offset: params.offset || undefined,
     },
   });
+  return r.data;
+}
+
+/**
+ * Passa contatos (e as conversas deles) para outro vendedor. Só admin.
+ * `sellerId: null` devolve para o bolo sem dono.
+ */
+export async function transferContacts(
+  ids: string[],
+  sellerId: string | null,
+): Promise<{ transferidos: number; conversas: number }> {
+  const r = await api.post('/contacts/transfer', { ids, sellerId });
   return r.data;
 }
 
@@ -82,8 +98,12 @@ export async function deleteContact(id: string): Promise<void> {
   await api.delete(`/contacts/${id}`);
 }
 
-export async function importContacts(contacts: ImportContactInput[]): Promise<{ imported: number }> {
-  const r = await api.post('/contacts/import', { contacts });
+/** `ownerSellerId` = de quem é a lista. Vazio entra sem dono, visível a todos. */
+export async function importContacts(
+  contacts: ImportContactInput[],
+  ownerSellerId?: string | null,
+): Promise<{ imported: number }> {
+  const r = await api.post('/contacts/import', { contacts, ownerSellerId: ownerSellerId || null });
   return r.data;
 }
 

@@ -12,6 +12,12 @@ export interface Contact {
   notes?: string | null;
   // F16: dono da conta no CRM interno — manual, não vem do TMS.
   accountOwner?: string | null;
+  /**
+   * Vendedor DONO deste contato (11/08/2026). Vazio = sem dono, e sem dono todo
+   * mundo vê. A coluna "Vendedor" só aparece para o admin — o vendedor já está
+   * olhando a própria carteira, e a coluna seria a mesma resposta em toda linha.
+   */
+  ownerSellerId?: string | null;
   createdAt: string;
 }
 
@@ -51,6 +57,8 @@ export interface ContactListParams {
   offset?: number;
   tag?: string;
   status?: string; // 'active' | 'opted_out'
+  /** Carteira: id do vendedor, ou 'sem-dono' para os ainda não distribuídos. */
+  owner?: string;
 }
 
 // Tag com contagem de contatos (para filtros e seletor de público).

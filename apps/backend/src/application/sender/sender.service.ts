@@ -21,6 +21,7 @@ import { precisaTrocarMercado } from './conversation-market';
 import { marcarLinkDaCampanha } from './campaign-link';
 import { resolveSignature } from '@/application/email/email-signature';
 import { NotificationsService } from '@/application/notifications/notifications.service';
+import { comEscopo } from '@/shared/auth/seller-scope';
 
 // Config anti-ban (env com defaults)
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
@@ -272,8 +273,11 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
       link?: string; sendLinkOnFirst?: boolean;
       mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
+      /** Vendedor dono. Vem do token quando quem cria é vendedor. */
+      ownerSellerId?: string | null;
     },
   ) {
+    const ownerSellerId = dto.ownerSellerId || null;
     const campaignType = dto.type === 'status' ? 'status' : 'message';
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
 
@@ -289,6 +293,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           mediaUrl: dto.mediaUrl || null,
           mediaName: dto.mediaName || null,
           scheduledAt,
+          ownerSellerId,
           ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         },
       });
@@ -489,6 +494,9 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
         mediaUrl: dto.mediaUrl || null,
         mediaName: dto.mediaName || null,
+        // Dono do disparo. A conversa que nascer daqui herda este vendedor —
+        // sem isso a resposta do lead cai sem dono e os três a enxergam.
+        ownerSellerId,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         // agendada já entra como running; o worker só dispara a partir de scheduledAt
         scheduledAt,
@@ -528,9 +536,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid, warnings };
   }
 
-  async listCampaigns(tenantId: string, archived = false) {
+  /** `escopo` = vendedor logado; `undefined` (admin e demais) vê todas. */
+  async listCampaigns(tenantId: string, archived = false, escopo?: string) {
     const camps = await this.prisma.campaign.findMany({
-      where: { tenantId, archivedAt: archived ? { not: null } : null },
+      where: comEscopo({ tenantId, archivedAt: archived ? { not: null } : null }, escopo),
       orderBy: { createdAt: 'desc' },
     });
 
@@ -566,9 +575,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async campaignDetail(
     tenantId: string,
     id: string,
-    opts: { limit?: number; offset?: number; status?: string; search?: string } = {},
+    opts: { limit?: number; offset?: number; status?: string; search?: string; escopo?: string } = {},
   ) {
-    const campaign = await this.prisma.campaign.findFirst({ where: { id, tenantId } });
+    // O escopo entra no WHERE, não numa checagem depois: assim a campanha de
+    // outro vendedor responde "não encontrada" em vez de vazar pelo id na URL.
+    const campaign = await this.prisma.campaign.findFirst({
+      where: comEscopo({ id, tenantId }, opts.escopo),
+    });
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
 
     // ── página de destinatários (filtro aplicado no banco) ────────────────────
@@ -1255,6 +1268,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             phone: target.phone,
             sourceChannel: 'whatsapp',
             productCode: (campaign as any).productCode ?? undefined,
+            // Quem disparou é quem atende a resposta (11/08/2026).
+            assignedSellerId: (campaign as any).ownerSellerId ?? undefined,
           });
         } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
           // reabre; se vinha de opt-out, limpa o outcome (voltou a ficar ativa).

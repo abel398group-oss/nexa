@@ -9,7 +9,20 @@ import { SenderService } from '@/application/sender/sender.service';
 import { EmailCampaignSenderService } from '@/application/email/email-campaign-sender.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
+import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
+import { escopoDeVendedor } from '@/shared/auth/seller-scope';
+
+/**
+ * Dono a gravar na campanha que está sendo criada.
+ *
+ * Vendedor vira dono da própria campanha, sempre — nunca do que o front mandar.
+ * Admin cria sem dono (a campanha é da empresa) e continua vendo todas.
+ * `__none__` é vendedor sem vínculo: não pode ser dono de nada.
+ */
+function donoDaCampanha(user: any): string | null {
+  const escopo = escopoDeVendedor(user);
+  return escopo && escopo !== '__none__' ? escopo : null;
+}
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads');
 // A base pública do anexo é montada no SERVICE, na hora do envio (MEDIA_PUBLIC_BASE).
@@ -126,8 +139,12 @@ export class SenderController {
   ) {}
 
   @Get('campaigns')
-  list(@CurrentTenant() tenantId: string, @Query('archived') archived?: string) {
-    return this.sender.listCampaigns(tenantId, archived === 'true');
+  list(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
+    @Query('archived') archived?: string,
+  ) {
+    return this.sender.listCampaigns(tenantId, archived === 'true', escopoDeVendedor(user));
   }
 
   // arquivar (guardar) campanhas selecionadas
@@ -153,6 +170,7 @@ export class SenderController {
   @Get('campaigns/:id')
   detail(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Query() q: CampaignDetailQueryDto,
   ) {
@@ -161,12 +179,15 @@ export class SenderController {
       offset: q.offset,
       status: q.status,
       search: q.search,
+      // Campanha de outro vendedor responde "não encontrada" em vez de abrir
+      // pelo id na URL.
+      escopo: escopoDeVendedor(user),
     });
   }
 
   @Post('campaigns')
-  create(@CurrentTenant() tenantId: string, @Body() dto: CreateCampaignDto) {
-    return this.sender.createCampaign(tenantId, dto);
+  create(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Body() dto: CreateCampaignDto) {
+    return this.sender.createCampaign(tenantId, { ...dto, ownerSellerId: donoDaCampanha(user) });
   }
 
   // editar campanha em rascunho (nome/mensagem/assunto/link/limite)
@@ -189,8 +210,11 @@ export class SenderController {
   }
 
   @Post('campaigns/email')
-  createEmail(@CurrentTenant() tenantId: string, @Body() dto: CreateEmailCampaignDto) {
-    return this.emailCampaign.createEmailCampaign(tenantId, dto);
+  createEmail(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Body() dto: CreateEmailCampaignDto) {
+    return this.emailCampaign.createEmailCampaign(tenantId, {
+      ...dto,
+      ownerSellerId: donoDaCampanha(user),
+    });
   }
 
   // upload do anexo (PDF/Word) — retorna a URL pública p/ usar na campanha

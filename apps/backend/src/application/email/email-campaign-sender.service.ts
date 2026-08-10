@@ -118,7 +118,7 @@ export class EmailCampaignSenderService {
    * que já saiu, nem impedir o alvo de ser marcado como enviado.
    */
   private async registrarNaConversa(
-    campaign: { id: string; tenantId: string; productCode?: string | null },
+    campaign: { id: string; tenantId: string; productCode?: string | null; ownerSellerId?: string | null },
     email: string,
     contactId: string,
     corpo: string,
@@ -145,6 +145,9 @@ export class EmailCampaignSenderService {
         // WhatsApp já fazia isso na criação; o de e-mail não passava nada, então a
         // Lia respondia todo lead de e-mail com o conhecimento do produto padrão.
         productCode: campaign.productCode ?? undefined,
+        // E o VENDEDOR da campanha (11/08/2026): quem disparou é quem atende a
+        // resposta. Sem isto a conversa nascia sem dono e os três a enxergavam.
+        assignedSellerId: campaign.ownerSellerId ?? undefined,
       }));
 
     // E na conversa REAPROVEITADA, o mercado passa a ser o desta campanha — é o caso
@@ -293,6 +296,8 @@ export class EmailCampaignSenderService {
       sendLinkOnFirst?: boolean; // false (padrão) = só envia link após resposta do lead
       sendLimit?: number;
       scheduledAt?: string; // agendamento: só começa a enviar a partir desse horário
+      /** Vendedor dono. Vem do token quando quem cria é vendedor. */
+      ownerSellerId?: string | null;
     },
   ) {
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
@@ -469,6 +474,9 @@ export class EmailCampaignSenderService {
         template: dto.template,
         link: dto.link?.trim() || null,
         sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
+        // Dono do disparo (11/08/2026). A conversa que nascer daqui herda este
+        // vendedor — ver registrarNaConversa.
+        ownerSellerId: dto.ownerSellerId || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         // agendada já entra como running; o worker só dispara a partir de scheduledAt
         scheduledAt,

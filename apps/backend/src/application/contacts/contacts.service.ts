@@ -4,6 +4,7 @@ import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/create-contact.dto';
 import { normalizePhone } from '@/shared/utils/phone.util';
 import { OptOutRegistryService } from './opt-out-registry.service';
+import { comEscopo } from '@/shared/auth/seller-scope';
 
 @Injectable()
 export class ContactsService {
@@ -14,7 +15,21 @@ export class ContactsService {
     private readonly optOutRegistry: OptOutRegistryService,
   ) {}
 
-  async findAll(tenantId: string, q: PaginationQueryDto, tag?: string): Promise<Paginated<any>> {
+  /**
+   * `escopo` = vendedor logado (ver seller-scope.ts). `undefined` para admin e
+   * demais papéis, que continuam vendo o tenant inteiro.
+   *
+   * `donoFiltro` é diferente: é o FILTRO que o admin escolhe na tela ("ver só os
+   * do Mateus"). Um é trava de segurança, o outro é conveniência — e por isso o
+   * escopo é aplicado por último, onde nenhum parâmetro de query o alcança.
+   */
+  async findAll(
+    tenantId: string,
+    q: PaginationQueryDto,
+    tag?: string,
+    escopo?: string,
+    donoFiltro?: string,
+  ): Promise<Paginated<any>> {
     const where: any = { tenantId };
     if (q.search) {
       where.OR = [
@@ -24,16 +39,64 @@ export class ContactsService {
       ];
     }
     if (tag) where.tags = { has: tag };
+    // 'sem-dono' é a opção da tela para achar quem ainda não foi distribuído.
+    if (donoFiltro) {
+      where.ownerSellerId = donoFiltro === 'sem-dono' ? null : donoFiltro;
+    }
+
+    const comTrava = comEscopo(where, escopo);
     const [items, total] = await Promise.all([
       this.prisma.contact.findMany({
-        where,
+        where: comTrava,
         take: q.limit,
         skip: q.offset,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.contact.count({ where }),
+      this.prisma.contact.count({ where: comTrava }),
     ]);
     return { items, total };
+  }
+
+  /**
+   * Passa contatos de um vendedor para outro. Só o admin chega aqui.
+   *
+   * `null` devolve para o bolo sem dono, que é o caminho quando alguém sai da
+   * empresa e ainda não se decidiu quem assume.
+   *
+   * As CONVERSAS vão junto: separar o contato e deixar a conversa com o vendedor
+   * antigo daria a ele acesso ao histórico de um lead que não é mais dele — e
+   * deixaria o novo dono sem o contexto do que já foi conversado.
+   */
+  async transferir(tenantId: string, ids: string[], sellerId: string | null) {
+    if (!ids?.length) return { transferidos: 0, conversas: 0 };
+
+    if (sellerId) {
+      const vendedor = await this.prisma.seller.findFirst({ where: { id: sellerId, tenantId } });
+      if (!vendedor) throw new NotFoundException('Vendedor não encontrado');
+    }
+
+    const contatos = await this.prisma.contact.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true, phone: true },
+    });
+    if (!contatos.length) return { transferidos: 0, conversas: 0 };
+
+    const [alterados, conversas] = await this.prisma.$transaction([
+      this.prisma.contact.updateMany({
+        where: { id: { in: contatos.map((c) => c.id) }, tenantId },
+        data: { ownerSellerId: sellerId },
+      }),
+      this.prisma.aiConversation.updateMany({
+        where: { tenantId, phone: { in: contatos.map((c) => c.phone) } },
+        data: { assignedSellerId: sellerId, assignedAt: sellerId ? new Date() : null },
+      }),
+    ]);
+
+    this.logger.log(
+      `Transferência: ${alterados.count} contato(s) e ${conversas.count} conversa(s) → ` +
+      `${sellerId ?? 'sem dono'}`,
+    );
+    return { transferidos: alterados.count, conversas: conversas.count };
   }
 
   // Lista as tags distintas do tenant com a contagem de contatos (para filtros e seletor de público).
@@ -304,7 +367,12 @@ export class ContactsService {
    *
    * Uma query para o lote inteiro — não uma por contato.
    */
-  async importMany(tenantId: string, contacts: CreateContactDto[]) {
+  /**
+   * `ownerSellerId` é escolhido na tela de importação — é o único lugar onde
+   * alguém decide de quem a lista é, e o que faz todo o resto funcionar sozinho
+   * depois. Vazio = entra sem dono, visível para todos, para o admin distribuir.
+   */
+  async importMany(tenantId: string, contacts: CreateContactDto[], ownerSellerId?: string | null) {
     if (!contacts?.length) return { imported: 0, blocked: 0 };
 
     const bloqueados = await this.optOutRegistry
@@ -319,12 +387,16 @@ export class ContactsService {
       if (estaBloqueado) blocked++;
       await this.prisma.contact.upsert({
         where: { tenantId_phone: { tenantId, phone } },
-        update: {}, // já existe: preserva o status atual (inclusive opted_out)
+        // Já existe: preserva o status atual (inclusive opted_out) E o dono. Uma
+        // lista reimportada em nome de outro vendedor não pode roubar o contato
+        // de quem já vinha trabalhando nele.
+        update: {},
         create: {
           tenantId,
           ...c,
           phone,
           tags: c.tags ?? [],
+          ...(ownerSellerId ? { ownerSellerId } : {}),
           ...(estaBloqueado ? { status: 'opted_out', optOutAt: new Date() } : {}),
         },
       });

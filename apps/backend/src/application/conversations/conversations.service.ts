@@ -826,7 +826,21 @@ export class ConversationsService {
   // Cria conversa (correlationId nasce aqui — rastreio ponta a ponta)
   async create(
     tenantId: string,
-    dto: { contactId: string; phone: string; productCode?: string; sourceChannel?: string; agentType?: string },
+    dto: {
+      contactId: string;
+      phone: string;
+      productCode?: string;
+      sourceChannel?: string;
+      agentType?: string;
+      /**
+       * Vendedor dono, quando a conversa nasce de um disparo (11/08/2026).
+       *
+       * Sem isto a conversa nascia sem dono e aparecia para os três vendedores —
+       * o lead que respondeu ao Mateus ficava visível para o João. Quem dispara
+       * é quem atende a resposta.
+       */
+      assignedSellerId?: string | null;
+    },
   ) {
     return this.prisma.aiConversation.create({
       data: {
@@ -838,6 +852,9 @@ export class ConversationsService {
         sourceChannel: (dto.sourceChannel as any) ?? 'whatsapp',
         agentType: (dto.agentType as any) ?? 'router',
         customerStage: 'lead',
+        ...(dto.assignedSellerId
+          ? { assignedSellerId: dto.assignedSellerId, assignedAt: new Date() }
+          : {}),
       },
     });
   }
