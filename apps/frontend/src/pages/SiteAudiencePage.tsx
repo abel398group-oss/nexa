@@ -212,10 +212,17 @@ export function SiteAudiencePage() {
               itens={data.topPaginas}
               vazio="Nenhuma página registrada."
             />
+            {/* Por campanha vem ANTES de utm_source: "qual disparo trouxe gente?" é a
+                pergunta que se faz aqui; utm_source é sempre "nexa" nos nossos links. */}
+            <TopLista
+              titulo="Qual campanha trouxe"
+              itens={data.topCampanhas}
+              vazio="Nenhuma visita vinda de campanha ainda. O link do disparo é marcado automaticamente; só aparece depois de alguém clicar."
+            />
             <TopLista
               titulo="Origens (utm_source)"
               itens={data.topOrigens}
-              vazio="Nenhuma visita com utm_source. Links de campanha precisam da tag para aparecer aqui."
+              vazio="Nenhuma visita com utm_source."
             />
             <TopLista
               titulo="Vieram de"

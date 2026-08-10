@@ -27,6 +27,8 @@ export interface VisaoGeralSite {
   serie: PontoDiario[];
   topPaginas: ItemContado[];
   topOrigens: ItemContado[];
+  /** Visitas por campanha de disparo (utm_campaign do link marcado). */
+  topCampanhas: ItemContado[];
   topReferrers: ItemContado[];
   dispositivos: ItemContado[];
 }

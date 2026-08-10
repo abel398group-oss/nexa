@@ -42,6 +42,8 @@ export interface VisaoGeral {
   serie: PontoDiario[];
   topPaginas: ItemContado[];
   topOrigens: ItemContado[];
+  /** Por campanha do disparo — vem do utm_campaign que o link leva (ADR: campaign-link.ts). */
+  topCampanhas: ItemContado[];
   topReferrers: ItemContado[];
   dispositivos: ItemContado[];
 }
@@ -53,10 +55,13 @@ export class PageviewStatsService {
   async visaoGeral(tenantId: string, p: Periodo): Promise<VisaoGeral> {
     // Uma ida ao banco por recorte, todas em paralelo — são queries independentes
     // e serializá-las só somaria latência.
-    const [serie, topPaginas, topOrigens, topReferrers, dispositivos] = await Promise.all([
+    const [serie, topPaginas, topOrigens, topCampanhas, topReferrers, dispositivos] = await Promise.all([
       this.serieDiaria(tenantId, p),
       this.topPor(tenantId, p, 'path'),
       this.topPor(tenantId, p, 'utm_source'),
+      // Por CAMPANHA: a pergunta que o disparo faz é 'qual campanha trouxe gente ao
+      // site?'. O índice (tenant, utm_campaign, created_at) já existia esperando.
+      this.topPor(tenantId, p, 'utm_campaign'),
       this.topPor(tenantId, p, 'referrer_domain'),
       this.topPor(tenantId, p, 'device'),
     ]);
@@ -67,6 +72,7 @@ export class PageviewStatsService {
       serie,
       topPaginas,
       topOrigens,
+      topCampanhas,
       topReferrers,
       dispositivos,
     };
@@ -109,10 +115,10 @@ export class PageviewStatsService {
   private async topPor(
     tenantId: string,
     p: Periodo,
-    coluna: 'path' | 'utm_source' | 'referrer_domain' | 'device',
+    coluna: 'path' | 'utm_source' | 'utm_campaign' | 'referrer_domain' | 'device',
     limite = 10,
   ): Promise<ItemContado[]> {
-    const COLUNAS = ['path', 'utm_source', 'referrer_domain', 'device'] as const;
+    const COLUNAS = ['path', 'utm_source', 'utm_campaign', 'referrer_domain', 'device'] as const;
     if (!COLUNAS.includes(coluna)) throw new Error(`coluna não permitida: ${coluna}`);
 
     const rows = await this.prisma.$queryRawUnsafe<{ rotulo: string | null; visitas: bigint }[]>(

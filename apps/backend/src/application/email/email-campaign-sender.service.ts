@@ -46,6 +46,7 @@ import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
 import { dedupSentAtFilter, dedupWindowLabel } from '@/application/sender/campaign-dedup';
 import { precisaTrocarMercado } from '@/application/sender/conversation-market';
+import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 import { normalizarMessageId } from './campaign-reply-linker';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { normalizeEmail, isSendableEmail } from './email-address';
@@ -668,7 +669,15 @@ export class EmailCampaignSenderService {
       // Padrão (false): 1º e-mail sem link → lead responde → Lia envia na conversa.
       // Emails frios sem link têm score de spam menor e maior taxa de resposta.
       if (campaign.link && campaign.sendLinkOnFirst) {
-        body += `\n\n🔗 ${campaign.link}`;
+        // Link MARCADO com a origem: sem isto o clique chega no site como visita
+        // direta e "a campanha trouxe gente?" não tem resposta. Clique de e-mail
+        // quase nunca traz referrer (o Gmail abre por proxy). Ver campaign-link.ts.
+        const comOrigem = marcarLinkDaCampanha(campaign.link, {
+          canal: 'email',
+          campanhaId: campaign.id,
+          campanhaNome: campaign.name,
+        });
+        body += `\n\n🔗 ${comOrigem}`;
       }
       // O assunto também passa pelo render: `{{nome}}` nele já era esperado por quem
       // escreve a campanha (e antes saía literal), e o spintax importa AINDA MAIS aqui —

@@ -18,6 +18,7 @@ import { firstName, tidyMissingName } from './name-render';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
 import { precisaTrocarMercado } from './conversation-market';
+import { marcarLinkDaCampanha } from './campaign-link';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 
 // Config anti-ban (env com defaults)
@@ -1206,7 +1207,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       // Link na 1ª mensagem só com opt-in explícito (sendLinkOnFirst) — antes era
       // incondicional. Default: mensagem fria sem link (anti-ban); o lead que
       // responder recebe o link da Lia na conversa (sales-agent, signupUrl).
-      if (campaign.link && campaign.sendLinkOnFirst) text += `\n\n${campaign.link}`;
+      // Link MARCADO com a origem (ver campaign-link.ts): sem isto o clique entra no
+      // rastreio do site como visita direta, e a campanha não recebe o crédito.
+      if (campaign.link && campaign.sendLinkOnFirst) {
+        text += `\n\n${marcarLinkDaCampanha(campaign.link, {
+          canal: 'whatsapp',
+          campanhaId: campaign.id,
+          campanhaNome: campaign.name,
+        })}`;
+      }
       // Public attachment link. mediaUrl is stored as a relative path (/uploads/filename)
       // since the controller was updated (BUG-010). Legacy campaigns may still carry an
       // absolute URL — we extract the /uploads/ segment in both cases.
