@@ -17,16 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '20'
-
+      # pnpm ANTES do Node, e a ordem não é estética: o setup-node lê o
+      # `packageManager` do package.json e precisa encontrar o pnpm já no PATH.
+      # Invertido, ele falha com "Unable to locate executable file: pnpm".
       - name: Setup pnpm
         # Sem `version:` de propósito. O v4 recusa quando a versão aparece nos dois
         # lugares (aqui e no `packageManager` do package.json) — e o package.json é a
         # fonte certa, porque é o mesmo valor que a máquina do dev usa.
         uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
 
       - name: Get pnpm store directory
         id: pnpm-cache

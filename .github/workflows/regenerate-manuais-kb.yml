@@ -35,6 +35,12 @@ jobs:
           sparse-checkout: |
             docs/manuais tecnicos
 
+      # Este job roda só `node`, sem instalar dependências — mas o setup-node lê o
+      # `packageManager` do package.json e procura o pnpm no PATH de qualquer jeito.
+      # Sem este passo antes, ele falha com "Unable to locate executable file: pnpm".
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
