@@ -1259,7 +1259,7 @@ export function CampaignsPage() {
                         'done' não há o que cancelar, e em 'draft' o botão Excluir
                         já resolve. */}
                     {!archivedView && (c.status === 'running' || c.status === 'paused') && (
-                      <Button onClick={(e) => { e.stopPropagation(); cancel(c); }} variant="outline" size="sm" title="Retira da fila quem ainda não recebeu e encerra a campanha"><Icon name="x" className="h-3.5 w-3.5" /> Cancelar</Button>
+                      <Button onClick={(e) => { e.stopPropagation(); cancel(c); }} variant="outline" size="sm" title="Retira da fila quem ainda não recebeu e encerra a campanha"><Icon name="close" className="h-3.5 w-3.5" /> Cancelar</Button>
                     )}
                     {!archivedView && (
                       <Button onClick={(e) => {
