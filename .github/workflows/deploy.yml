@@ -28,9 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Sem `version:` — a versão vem do `packageManager` do package.json. O v4 falha
+      # se ela estiver nos dois lugares.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
           node-version: '22'

@@ -23,9 +23,10 @@ jobs:
           node-version: '20'
 
       - name: Setup pnpm
+        # Sem `version:` de propósito. O v4 recusa quando a versão aparece nos dois
+        # lugares (aqui e no `packageManager` do package.json) — e o package.json é a
+        # fonte certa, porque é o mesmo valor que a máquina do dev usa.
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Get pnpm store directory
         id: pnpm-cache
