@@ -1214,6 +1214,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           canal: 'whatsapp',
           campanhaId: campaign.id,
           campanhaNome: campaign.name,
+          contatoId: contact.id, // QUEM recebeu — é o que permite dizer depois quem clicou
         })}`;
       }
       // Public attachment link. mediaUrl is stored as a relative path (/uploads/filename)

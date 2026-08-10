@@ -45,9 +45,28 @@ export function slugDeCampanha(nome: string, id: string): string {
  * Link vazio/inválido volta como veio: é melhor mandar o link do operador intacto do
  * que mandar um link remendado que não abre.
  */
+/**
+ * Identificador curto do contato, para viajar no link como `ref`.
+ *
+ * 12 hex do uuid: curto o bastante para não inchar o link (link longo pontua pior em
+ * spam) e específico o bastante para achar UMA pessoa. Quem resolve confere se o
+ * prefixo casa com exatamente um contato — se casar com dois, não atribui a ninguém,
+ * porque atribuir errado faria o vendedor ligar para a pessoa errada.
+ */
+export function refDoContato(contatoId: string | null | undefined): string | null {
+  const limpo = (contatoId ?? '').replace(/-/g, '');
+  return limpo.length >= 12 ? limpo.slice(0, 12) : null;
+}
+
 export function marcarLinkDaCampanha(
   link: string | null | undefined,
-  ctx: { canal: 'email' | 'whatsapp'; campanhaId: string; campanhaNome: string },
+  ctx: {
+    canal: 'email' | 'whatsapp';
+    campanhaId: string;
+    campanhaNome: string;
+    /** Contato que está recebendo. Sem ele o clique é anônimo. */
+    contatoId?: string | null;
+  },
 ): string {
   const cru = (link ?? '').trim();
   if (!cru) return cru;
@@ -67,6 +86,12 @@ export function marcarLinkDaCampanha(
   porFora('utm_source', UTM_SOURCE);
   porFora('utm_medium', ctx.canal);
   porFora('utm_campaign', slugDeCampanha(ctx.campanhaNome, ctx.campanhaId));
+
+  // `ref` = QUEM recebeu. É o que transforma '7 visitas da campanha' em 'o Carlos
+  // clicou às 14h' — a informação com que o vendedor liga. Já está na allowlist do
+  // rastreio e é gravada em page_views.click_id.
+  const ref = refDoContato(ctx.contatoId);
+  if (ref) porFora('ref', ref);
 
   return u.toString();
 }

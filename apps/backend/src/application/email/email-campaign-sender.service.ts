@@ -676,6 +676,8 @@ export class EmailCampaignSenderService {
           canal: 'email',
           campanhaId: campaign.id,
           campanhaNome: campaign.name,
+          // QUEM recebeu: é o que permite dizer depois "o Carlos clicou".
+          contatoId: upsertedContact.id,
         });
         body += `\n\n🔗 ${comOrigem}`;
       }

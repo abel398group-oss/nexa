@@ -23,6 +23,15 @@ class PeriodoDto {
 /** Teto de 366 dias: período aberto viraria varredura da tabela inteira. */
 const MAX_DIAS = 366;
 
+// REGRA 2: query param não declarado aqui é derrubado com 400 pelo
+// `forbidNonWhitelisted` global.
+class CliquesDto {
+  /** Janela em dias. Ausente → 30. */
+  @IsOptional() @IsString() @Matches(/^\d{1,3}$/, { message: 'dias deve ser número' }) dias?: string;
+  /** Filtra por uma campanha (o slug de utm_campaign). Ausente → todas. */
+  @IsOptional() @IsString() campanha?: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('analytics')
 export class AnalyticsController {
@@ -48,5 +57,21 @@ export class AnalyticsController {
       : from;
 
     return this.stats.visaoGeral(tenantId, { from: inicio, to: fimExclusivo });
+  }
+
+  /**
+   * QUEM clicou no link da campanha — nome, e-mail, telefone e hora.
+   *
+   * Separado de `/site` de propósito: aquele devolve contagem agregada e anônima;
+   * este devolve pessoa identificada, que é dado pessoal e serve para o vendedor
+   * ligar. Coisas diferentes merecem rotas diferentes.
+   */
+  @Get('site/cliques')
+  cliques(@CurrentTenant() tenantId: string, @Query() q: CliquesDto) {
+    const dias = Math.min(Number(q.dias ?? 30) || 30, MAX_DIAS);
+    return this.stats.quemClicou(tenantId, {
+      desde: new Date(Date.now() - dias * 24 * 3600 * 1000),
+      campanha: q.campanha,
+    });
   }
 }

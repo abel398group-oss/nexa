@@ -112,6 +112,77 @@ export class PageviewStatsService {
    * (o Postgres não aceita identificador parametrizado), então aceitar string de fora
    * aqui seria injeção de SQL.
    */
+  /**
+   * QUEM clicou — a pergunta que gera ação.
+   *
+   * O painel de audiência responde "quantos vieram da campanha". Isso não serve para
+   * ligar para ninguém. Aqui o `ref` que o link carregou (gravado em
+   * `page_views.click_id`) é resolvido de volta no contato, e o vendedor recebe nome,
+   * e-mail, telefone e a hora.
+   *
+   * O `ref` é um PREFIXO do id do contato (12 hex — ver refDoContato). Se o prefixo
+   * casar com mais de um contato, aquele clique NÃO é atribuído a ninguém: fazer o
+   * vendedor ligar para a pessoa errada é pior que não avisar.
+   */
+  async quemClicou(
+    tenantId: string,
+    opts: { desde?: Date; campanha?: string; limite?: number } = {},
+  ): Promise<CliqueDeLead[]> {
+    const desde = opts.desde ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const cliques = await this.prisma.pageView.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: desde },
+        clickId: { not: null },
+        ...(opts.campanha ? { utmCampaign: opts.campanha } : {}),
+      },
+      select: { clickId: true, path: true, createdAt: true, utmCampaign: true },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(opts.limite ?? 200, 500),
+    });
+    if (cliques.length === 0) return [];
+
+    // Um contato por ref, resolvido pelo PREFIXO do id. Buscar de uma vez em memória:
+    // são no máximo algumas centenas de refs distintos, e uma query por clique seria
+    // dezenas de idas ao banco para montar uma lista.
+    const refs = [...new Set(cliques.map((c) => c.clickId!).filter(Boolean))];
+    const contatos = await this.prisma.contact.findMany({
+      where: { tenantId, OR: refs.map((r) => ({ id: { startsWith: r } })) },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+
+    // Prefixo ambíguo (dois contatos) => descarta. Ver o comentário do método.
+    const porRef = new Map<string, { nome: string | null; email: string | null; telefone: string | null } | null>();
+    for (const r of refs) {
+      const casam = contatos.filter((c) => c.id.replace(/-/g, '').startsWith(r));
+      porRef.set(r, casam.length === 1 ? { nome: casam[0].name, email: casam[0].email, telefone: casam[0].phone } : null);
+    }
+
+    const vezes = new Map<string, number>();
+    for (const c of cliques) vezes.set(c.clickId!, (vezes.get(c.clickId!) ?? 0) + 1);
+
+    // Uma linha por PESSOA, no clique mais recente dela — o vendedor liga uma vez,
+    // não uma por pageview.
+    const vistos = new Set<string>();
+    const saida: CliqueDeLead[] = [];
+    for (const c of cliques) {
+      const ref = c.clickId!;
+      if (vistos.has(ref)) continue;
+      const quem = porRef.get(ref);
+      if (!quem) continue; // ref anônimo (gclid/fbclid) ou prefixo ambíguo
+      vistos.add(ref);
+      saida.push({
+        ...quem,
+        campanha: c.utmCampaign,
+        pagina: c.path,
+        quando: c.createdAt,
+        visitas: vezes.get(ref) ?? 1,
+      });
+    }
+    return saida;
+  }
+
   private async topPor(
     tenantId: string,
     p: Periodo,
@@ -178,4 +249,18 @@ export interface ResumoDiario {
   visitasDiaAnterior: number;
   topPagina: ItemContado | null;
   topOrigem: ItemContado | null;
+}
+
+/** Um clique com nome e telefone — é com isto que o vendedor liga. */
+export interface CliqueDeLead {
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  /** Slug da campanha que trouxe (utm_campaign). */
+  campanha: string | null;
+  /** Página onde caiu. */
+  pagina: string;
+  quando: Date;
+  /** Quantas vezes essa pessoa voltou ao site. */
+  visitas: number;
 }
