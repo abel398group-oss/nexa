@@ -51,6 +51,15 @@ function maiorUidExistente(box: any): number | null {
 const NOMES_DE_ENVIADOS = ['INBOX.Sent', 'Sent', 'INBOX.Sent Items', 'Sent Items', 'Sent Messages'];
 
 interface ImapConfig {
+  /**
+   * Id da linha em `email_channels`.
+   *
+   * A marca d'água é gravada POR CAIXA. Enquanto havia uma caixa por tenant dava
+   * para escrever por tenantId; com o tenant tendo a caixa da Lia e a do vendedor
+   * (perfis de remetente, 10/08/2026), isso passaria o UID de uma para a outra e
+   * cada poll esconderia as mensagens novas da outra caixa.
+   */
+  id: string | null;
   host: string;
   port: number;
   user: string;
@@ -119,6 +128,7 @@ export class EmailImapService implements OnModuleInit {
     const fromDb: ImapConfig[] = channels
       .filter((c: any) => c.imapUser && c.imapPass)
       .map((c: any) => ({
+        id: c.id,
         host: c.imapHost,
         port: c.imapPort,
         user: c.imapUser,
@@ -141,6 +151,9 @@ export class EmailImapService implements OnModuleInit {
     if (!host || !user || !pass) return [];
 
     return [{
+      // Sem linha no banco não há marca d'água para gravar — este caminho é
+      // fallback de dev e segue por UNSEEN.
+      id: null,
       host,
       port: Number(process.env.EMAIL_IMAP_PORT ?? 993),
       user,
@@ -185,9 +198,11 @@ export class EmailImapService implements OnModuleInit {
    * poll reprocessar a partir da marca anterior, o que é o lado seguro do erro.
    */
   private async salvarMarca(cfg: ImapConfig, uid: number | null, uidValidity: number | null) {
+    if (!cfg.id) return; // fallback .env: não há linha onde gravar
     await this.prisma.emailChannel
       .updateMany({
-        where: { tenantId: cfg.tenantId },
+        // Por CAIXA, não por tenant — ver o campo `id` em ImapConfig.
+        where: { id: cfg.id },
         data: {
           lastPollAt: new Date(),
           ...(uid !== null && uid > 0 ? { lastSeenUid: uid, uidValidity } : {}),
@@ -351,10 +366,10 @@ export class EmailImapService implements OnModuleInit {
 
   /** Marca d'água da pasta de enviados. Nunca lança — igual à da entrada. */
   private async salvarMarcaEnviados(cfg: ImapConfig, uid: number | null, uidValidity: number | null) {
-    if (uid === null || uid <= 0) return;
+    if (uid === null || uid <= 0 || !cfg.id) return;
     await this.prisma.emailChannel
       .updateMany({
-        where: { tenantId: cfg.tenantId },
+        where: { id: cfg.id }, // por CAIXA — ver o campo `id` em ImapConfig
         data: { sentLastSeenUid: uid, sentUidValidity: uidValidity } as any,
       })
       .catch((e: any) =>

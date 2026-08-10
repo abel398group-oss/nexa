@@ -79,8 +79,11 @@ export class AdminAlertService {
     let secure = true;
     let fromName = 'Nexa Monitor';
 
+    // A caixa REMETENTE (perfis de remetente, 10/08/2026). Alerta de admin sai
+    // pelo mesmo endereço que o resto — é interno, e ter o alerta chegando de um
+    // endereço diferente do que o time conhece só atrapalha na hora do incidente.
     const ch = await this.prisma.emailChannel
-      .findFirst({ orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }] })
+      .findFirst({ orderBy: [{ isSender: 'desc' }, { isActive: 'desc' }, { updatedAt: 'desc' }] })
       .catch(() => null);
     if (ch?.smtpHost && ch.smtpUser && ch.smtpPass) {
       host = ch.smtpHost;

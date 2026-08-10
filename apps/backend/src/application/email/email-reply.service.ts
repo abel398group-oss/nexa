@@ -100,9 +100,13 @@ export class EmailReplyService {
 
   /** Resolve configuração SMTP: banco (por tenant) ou fallback .env. */
   private async resolveConfig(tenantId: string): Promise<SmtpConfig | null> {
-    // Tenta buscar configuração do tenant no banco
-    const ch = await this.prisma.emailChannel.findUnique({
-      where: { tenantId },
+    // A caixa REMETENTE do tenant. Podem existir várias cadastradas — todas as
+    // ativas são lidas, só esta envia (ver EmailChannelService). `isSender` desc
+    // como ordenação, e não filtro, para que uma base sem nenhuma marcada ainda
+    // ache uma caixa em vez de parar de enviar em silêncio.
+    const ch = await this.prisma.emailChannel.findFirst({
+      where: { tenantId, isActive: true },
+      orderBy: [{ isSender: 'desc' }, { createdAt: 'asc' }],
     }).catch(() => null);
 
     if (ch?.isActive && ch.smtpUser && ch.smtpPass) {

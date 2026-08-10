@@ -1,12 +1,25 @@
 /**
- * EmailChannelService — CRUD do canal de e-mail por tenant.
- * Usado pelo painel de configurações.
+ * EmailChannelService — caixas de e-mail do tenant. Usado pelo painel.
+ *
+ * PERFIS DE REMETENTE (10/08/2026)
+ * ───────────────────────────────
+ * Era uma caixa por tenant. Quando a prospecção passou a sair do endereço do
+ * vendedor em vez do da Lia, isso virou um problema: trocar significava
+ * sobrescrever a única linha, e a resposta a qualquer disparo antigo cairia numa
+ * caixa que ninguém mais lê.
+ *
+ * Agora convivem várias. TODAS as ativas são LIDAS (o histórico não se perde na
+ * troca); só a marcada com `isSender` ENVIA. Trocar o remetente é um clique, e a
+ * senha de cada caixa é digitada uma vez, no cadastro dela.
  */
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 
 export interface UpsertEmailChannelDto {
+  /** Ausente = cria uma caixa nova. Presente = edita aquela. */
+  id?: string;
+  label?: string;
   fromEmail: string;
   fromName?: string;
   replyTo?: string;
@@ -20,13 +33,18 @@ export interface UpsertEmailChannelDto {
   imapUser: string;
   imapPass?: string;
   imapMailbox?: string;
+  imapSentMailbox?: string;
   isActive?: boolean;
+  /** Marca esta caixa como a remetente já no salvamento. */
+  isSender?: boolean;
 }
 
 // Campos que NUNCA voltam para o frontend (senhas)
 const SAFE_SELECT = {
   id: true,
   tenantId: true,
+  label: true,
+  isSender: true,
   provider: true,
   fromEmail: true,
   fromName: true,
@@ -39,6 +57,7 @@ const SAFE_SELECT = {
   imapPort: true,
   imapUser: true,
   imapMailbox: true,
+  imapSentMailbox: true,
   isActive: true,
   lastPollAt: true,
   createdAt: true,
@@ -53,15 +72,26 @@ export class EmailChannelService {
     private readonly crypto: EmailCryptoService,
   ) {}
 
-  async get(tenantId: string) {
-    return this.prisma.emailChannel.findUnique({
+  /** Todas as caixas do tenant, a remetente primeiro. */
+  async list(tenantId: string) {
+    return this.prisma.emailChannel.findMany({
       where: { tenantId },
+      orderBy: [{ isSender: 'desc' }, { createdAt: 'asc' }],
       select: SAFE_SELECT,
     });
   }
 
+  /** A caixa que envia hoje. `null` quando o tenant ainda não configurou nenhuma. */
+  async getSender(tenantId: string) {
+    const caixas = await this.list(tenantId);
+    return caixas.find((c: any) => c.isSender && c.isActive) ?? caixas[0] ?? null;
+  }
+
   async upsert(tenantId: string, dto: UpsertEmailChannelDto) {
-    const existing = await this.prisma.emailChannel.findUnique({ where: { tenantId } });
+    const existing = dto.id
+      ? await this.prisma.emailChannel.findFirst({ where: { id: dto.id, tenantId } })
+      : null;
+    if (dto.id && !existing) throw new NotFoundException('Caixa de e-mail não encontrada');
 
     // Senha vazia/ausente = "manter a senha atual" (só faz sentido no update).
     const smtpPass = dto.smtpPass && dto.smtpPass.length > 0 ? dto.smtpPass : undefined;
@@ -70,11 +100,12 @@ export class EmailChannelService {
     // Na PRIMEIRA configuração as senhas são obrigatórias — avisa em vez de quebrar (500).
     if (!existing && (!smtpPass || !imapPass)) {
       throw new BadRequestException(
-        'Na primeira configuração do canal, informe a senha SMTP e a senha IMAP.',
+        'Ao cadastrar uma caixa, informe a senha SMTP e a senha IMAP.',
       );
     }
 
     const base = {
+      label: dto.label?.trim() || dto.fromEmail.split('@')[0] || 'Principal',
       fromEmail: dto.fromEmail,
       fromName: dto.fromName ?? 'Lia HiperTMS',
       replyTo: dto.replyTo ?? null,
@@ -86,38 +117,98 @@ export class EmailChannelService {
       imapPort: dto.imapPort ?? 993,
       imapUser: dto.imapUser,
       imapMailbox: dto.imapMailbox ?? 'INBOX',
+      // Vazio = descoberta automática pelo atributo \Sent. Ver EmailImapService.
+      imapSentMailbox: dto.imapSentMailbox?.trim() || null,
       isActive: dto.isActive ?? true,
     };
 
-    const result = await this.prisma.emailChannel.upsert({
-      where: { tenantId },
-      // update: só troca a senha se uma nova foi enviada (vazio mantém a atual)
-      update: {
-        ...base,
-        ...(smtpPass ? { smtpPass: this.crypto.encrypt(smtpPass) } : {}),
-        ...(imapPass ? { imapPass: this.crypto.encrypt(imapPass) } : {}),
-      },
-      create: {
-        tenantId,
-        provider: 'smtp',
-        ...base,
-        smtpPass: this.crypto.encrypt(smtpPass as string),
-        imapPass: this.crypto.encrypt(imapPass as string),
-      },
-      select: SAFE_SELECT,
-    });
+    const salvo = existing
+      ? await this.prisma.emailChannel.update({
+          where: { id: existing.id },
+          data: {
+            ...base,
+            ...(smtpPass ? { smtpPass: this.crypto.encrypt(smtpPass) } : {}),
+            ...(imapPass ? { imapPass: this.crypto.encrypt(imapPass) } : {}),
+          },
+          select: SAFE_SELECT,
+        })
+      : await this.prisma.emailChannel.create({
+          data: {
+            tenantId,
+            provider: 'smtp',
+            ...base,
+            // A primeira caixa do tenant já nasce remetente: um tenant com caixa
+            // cadastrada e nenhuma remetente não manda e-mail nenhum, e o motivo
+            // não apareceria em lugar nenhum da tela.
+            isSender: false,
+            smtpPass: this.crypto.encrypt(smtpPass as string),
+            imapPass: this.crypto.encrypt(imapPass as string),
+          },
+          select: SAFE_SELECT,
+        });
 
-    return result;
+    const primeira = (await this.prisma.emailChannel.count({ where: { tenantId } })) === 1;
+    if (dto.isSender || primeira) return this.setSender(tenantId, salvo.id);
+    return salvo;
   }
 
-  async setActive(tenantId: string, isActive: boolean) {
-    const ch = await this.prisma.emailChannel.findUnique({ where: { tenantId } });
-    if (!ch) throw new NotFoundException('Canal de e-mail não configurado');
+  /**
+   * Troca quem envia. É o seletor da tela.
+   *
+   * Numa transação porque o estado "duas remetentes" produziria envios saindo de
+   * endereços diferentes conforme a ordem da consulta — o tipo de coisa que só
+   * aparece dias depois, no e-mail de um lead.
+   */
+  async setSender(tenantId: string, id: string) {
+    const alvo = await this.prisma.emailChannel.findFirst({ where: { id, tenantId } });
+    if (!alvo) throw new NotFoundException('Caixa de e-mail não encontrada');
+    if (!alvo.isActive) {
+      throw new BadRequestException('Ative a caixa antes de torná-la a remetente.');
+    }
+
+    const [, atualizada] = await this.prisma.$transaction([
+      this.prisma.emailChannel.updateMany({
+        where: { tenantId, id: { not: id } },
+        data: { isSender: false },
+      }),
+      this.prisma.emailChannel.update({
+        where: { id },
+        data: { isSender: true },
+        select: SAFE_SELECT,
+      }),
+    ]);
+    return atualizada;
+  }
+
+  async setActive(tenantId: string, id: string, isActive: boolean) {
+    const ch = await this.prisma.emailChannel.findFirst({ where: { id, tenantId } });
+    if (!ch) throw new NotFoundException('Caixa de e-mail não encontrada');
+    // Desativar a remetente deixaria o tenant sem quem envie, e o disparo pararia
+    // com "smtp_not_configured" — erro cujo motivo real (alguém desligou a caixa)
+    // não aparece em lugar nenhum.
+    if (!isActive && ch.isSender) {
+      throw new BadRequestException(
+        'Esta é a caixa que envia. Escolha outra como remetente antes de desativá-la.',
+      );
+    }
     return this.prisma.emailChannel.update({
-      where: { tenantId },
+      where: { id },
       data: { isActive },
       select: SAFE_SELECT,
     });
+  }
+
+  /** Remove uma caixa. A remetente não sai sem alguém assumir o lugar. */
+  async remove(tenantId: string, id: string) {
+    const ch = await this.prisma.emailChannel.findFirst({ where: { id, tenantId } });
+    if (!ch) throw new NotFoundException('Caixa de e-mail não encontrada');
+    if (ch.isSender) {
+      throw new BadRequestException(
+        'Esta é a caixa que envia. Escolha outra como remetente antes de excluí-la.',
+      );
+    }
+    await this.prisma.emailChannel.delete({ where: { id } });
+    return { ok: true };
   }
 
   // ── Support e-mail routing — SupportEmailRoute table ──────────────────────
