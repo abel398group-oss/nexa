@@ -37,6 +37,11 @@ const GRAFITE = '#16181D';
 const FUNDO = '#FFF3ED';
 const TEXTO = '#2B2F36';
 const SUAVE = '#8A9099';
+// Borda do cartão. Existe porque box-shadow NÃO renderiza em boa parte dos clientes
+// de e-mail (Outlook, Gmail em várias combinações): sem uma borda de verdade o cartão
+// branco encostava no fundo claro e o escuro no fundo escuro, e o e-mail chegava sem
+// contorno nenhum — visto nos dois temas em 10/08/2026.
+const BORDA = '#E8DFD6';
 
 // Paleta do tema escuro. Não é a clara invertida: o fundo é quente (puxa para o
 // laranja da marca) e o texto para de ser branco puro, que "vibra" sobre escuro.
@@ -212,6 +217,11 @@ function estiloTemaEscuro(cor: string): string {
     .c-suave  { color:${D_SUAVE} !important; }
     .c-accent { color:${corClara} !important; }
     .c-linha  { border-color:${D_LINHA} !important; }
+    /* A borda do cartão precisa de um tom PRÓPRIO no escuro: a borda clara
+       (#E8DFD6) sobre fundo escuro viraria um contorno branco gritando, e o
+       #322C25 das divisórias internas desapareceria contra o cartão. Este fica
+       entre os dois — visível, sem chamar atenção. */
+    .c-borda  { border-color:#3A332B !important; }
   }`;
 }
 
@@ -305,8 +315,9 @@ function layoutSimples(input: EmailTemplateInput, marca: EmailBrand, cor: string
     <td align="center">
 
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
-             class="c-card"
+             class="c-card c-borda"
              style="width:100%;max-width:600px;background:#FFFFFF;border-radius:14px;overflow:hidden;
+                    border:1px solid ${BORDA};
                     box-shadow:0 1px 3px rgba(22,24,29,.08);font-family:${FONTE};">
 
         <!-- Faixa da marca -->

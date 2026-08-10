@@ -110,3 +110,27 @@ describe('renderEmailHtml — preheader', () => {
     expect(html.slice(0, html.indexOf('<table'))).not.toContain('<script>');
   });
 });
+
+// ── Contorno do cartão (10/08/2026) ────────────────────────────────────────
+// O e-mail chegou "cru" nos DOIS temas: o cartão branco encostando no fundo claro e
+// o escuro no fundo escuro, sem contorno. A causa é box-shadow, que boa parte dos
+// clientes de e-mail simplesmente descarta — sombra não é borda.
+describe('renderEmailHtml — o cartão tem borda de verdade', () => {
+  const OPT = 'https://exemplo/optout?token=t';
+
+  it('borda no inline, que é o que sobrevive ao Gmail removendo <style>', () => {
+    const html = renderEmailHtml({ body: 'Oi', optOutUrl: OPT });
+    expect(html).toContain('border:1px solid #E8DFD6');
+  });
+
+  it('e um tom próprio no tema escuro', () => {
+    const html = renderEmailHtml({ body: 'Oi', optOutUrl: OPT });
+    expect(html).toMatch(/\.c-borda\s+\{ border-color:#3A332B/);
+  });
+
+  // Sem a classe no elemento, a regra do tema escuro não alcança nada.
+  it('o cartão carrega a classe que a regra escura mira', () => {
+    const html = renderEmailHtml({ body: 'Oi', optOutUrl: OPT });
+    expect(html).toContain('class="c-card c-borda"');
+  });
+});
