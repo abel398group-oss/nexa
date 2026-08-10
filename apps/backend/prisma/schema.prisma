@@ -825,7 +825,15 @@ model SalesPlaybook {
 // Configuração do canal de e-mail por tenant.
 model EmailChannel {
   id           String   @id @default(uuid())
-  tenantId     String   @unique @map("tenant_id")
+  // Deixou de ser único por tenant (10/08/2026): o tenant tem mais de uma caixa
+  // — a da Lia e a do vendedor que prospecta. Todas as ATIVAS são lidas (para a
+  // resposta a um disparo antigo não se perder quando o remetente muda), mas só
+  // a marcada em `isSender` envia. Ver EmailReplyService.resolveConfig.
+  tenantId     String   @map("tenant_id")
+  /// Rótulo na tela de configuração: "Lia", "Mateus", "Comercial".
+  label        String   @default("Principal")
+  /// Quem envia. Exatamente uma por tenant — trocar é o seletor da tela.
+  isSender     Boolean  @default(true) @map("is_sender")
   provider     String   @default("smtp") // smtp | mailgun
   // Remetente
   fromEmail    String   @map("from_email")    // ex: lia@hipertms.com.br
@@ -868,6 +876,7 @@ model EmailChannel {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@map("email_channels")
 }
 
@@ -1310,6 +1319,12 @@ model Website {
 ///
 /// O `visitorHash` continua sendo sha256(salt do dia + ip + userAgent) e segue útil
 /// para contar únicos sem depender do IP cru.
+///
+/// RETENÇÃO: indefinida, por decisão do Abel em 10/08/2026 — não há expurgo. Foi
+/// apresentado que prazo indefinido é o mais difícil de justificar numa fiscalização,
+/// e a decisão foi mantida. Se um prazo for adotado depois, o índice
+/// (tenant_id, ip) já existe para viabilizar o expurgo e o pedido de exclusão.
+/// A política de privacidade ainda NÃO menciona a coleta (pendente com o time do TMS).
 ///
 /// LIMITE QUE ISSO IMPÕE, e é de propósito: o hash não atravessa a meia-noite.
 /// "Visitantes únicos" num período de 30 dias é a SOMA dos únicos diários, não
