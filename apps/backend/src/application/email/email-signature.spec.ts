@@ -75,3 +75,37 @@ describe('assinatura de e-mail', () => {
     expect(signatureHtml()).not.toContain(' · ');
   });
 });
+
+// ── Link da assinatura marcado (10/08/2026) ────────────────────────────────
+// Teste real: o e-mail frio saiu sem link no corpo (anti-spam, é o padrão), então o
+// ÚNICO link era o da assinatura — e foi nele que o Abel clicou. O clique entrou como
+// visita direta: campanha sem crédito, lead anônimo.
+describe('signatureHtml — siteHref (marcação de campanha)', () => {
+  const BASE = { name: 'Mateus Gomes', role: 'Comercial', site: 'hipertms.com.br' };
+
+  it('sem siteHref, o link é o domínio limpo (resposta de conversa)', () => {
+    const html = signatureHtml(BASE);
+    expect(html).toContain('href="https://hipertms.com.br"');
+  });
+
+  it('com siteHref, o href é o link MARCADO', () => {
+    const marcado = 'https://hipertms.com.br/?utm_source=nexa&utm_medium=email&ref=c8f3a91b4d2e';
+    const html = signatureHtml({ ...BASE, siteHref: marcado });
+    expect(html).toContain('ref=c8f3a91b4d2e');
+  });
+
+  // Ninguém quer ler utm_campaign no rodapé de um e-mail.
+  it('o RÓTULO continua o domínio limpo, sem os parâmetros', () => {
+    const marcado = 'https://hipertms.com.br/?utm_source=nexa&ref=abc123def456';
+    const html = signatureHtml({ ...BASE, siteHref: marcado });
+    expect(html).toContain('>hipertms.com.br</a>');
+    expect(html).not.toContain('>https://hipertms.com.br/?utm');
+  });
+
+  // O fallback de texto puro não tem href; o domínio limpo é o certo lá.
+  it('a versão texto segue mostrando só o domínio', () => {
+    const txt = signatureText({ ...BASE, siteHref: 'https://hipertms.com.br/?ref=x' });
+    expect(txt).toContain('hipertms.com.br');
+    expect(txt).not.toContain('ref=');
+  });
+});

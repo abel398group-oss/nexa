@@ -38,6 +38,17 @@ export interface Signature {
   email?: string;
   /** Domínio exibido, sem protocolo, ex.: "hipertms.com.br". */
   site?: string;
+  /**
+   * URL de DESTINO do link do site, quando diferente de https://<site>.
+   *
+   * Existe para o link da assinatura carregar a marcação de campanha. Em e-mail
+   * FRIO o corpo costuma sair sem link (anti-spam), então a assinatura é o único
+   * link — e é nele que a pessoa clica. Sem isto o clique entrava como visita
+   * direta e o lead ficava anônimo, o que foi observado num teste real em
+   * 10/08/2026. O RÓTULO continua sendo o domínio limpo: ninguém quer ver
+   * utm_campaign no rodapé do e-mail.
+   */
+  siteHref?: string;
 }
 
 /** Assinatura anterior — usada quando nada está configurado. */
@@ -123,7 +134,9 @@ export function signatureHtml(s: Signature = resolveSignature(), cor: string = L
     contatos.push(`<a href="mailto:${esc(s.email)}" class="c-suave" style="color:${SUAVE};text-decoration:none;">${esc(s.email)}</a>`);
   }
   if (s.site) {
-    const url = /^https?:\/\//i.test(s.site) ? s.site : `https://${s.site}`;
+    // `siteHref` manda quando existe: é a URL marcada com a campanha. O RÓTULO segue
+    // sendo o domínio limpo — ninguém quer ler utm_campaign no rodapé do e-mail.
+    const url = s.siteHref || (/^https?:\/\//i.test(s.site) ? s.site : `https://${s.site}`);
     const rotulo = s.site.replace(/^https?:\/\//i, '');
     contatos.push(`<a href="${esc(url)}" class="c-accent" style="color:${cor};text-decoration:none;">${esc(rotulo)}</a>`);
   }

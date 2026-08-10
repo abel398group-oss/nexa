@@ -742,6 +742,16 @@ export class EmailCampaignSenderService {
           // ver email-market-identity.ts. Sem isto a prévia mostrava a marca do
           // mercado e o envio real saía HiperTMS.
           productCode: campaign.productCode,
+          // Marca o link da ASSINATURA com a campanha e o contato. Em e-mail frio o
+          // corpo sai sem link, então a assinatura é o único link — e é nele que a
+          // pessoa clica. Sem isto o clique entra como visita direta e o lead fica
+          // anônimo, o que aconteceu num teste real em 10/08/2026.
+          tracking: {
+            canal: 'email',
+            campanhaId: campaign.id,
+            campanhaNome: campaign.name,
+            contatoId: upsertedContact.id,
+          },
           // Discreto no primeiro contato, com a marca depois que a pessoa respondeu.
           layout,
           ctaUrl,

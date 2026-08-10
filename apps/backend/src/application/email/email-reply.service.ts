@@ -21,6 +21,7 @@ import { renderEmailHtml, type EmailLayout } from './email-template';
 import { resolveSignature, signatureText } from './email-signature';
 import { identidadeDoMercado } from './email-market-identity';
 import { normalizarMessageId } from './campaign-reply-linker';
+import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 
 // Assinatura configurável — ver email-signature.ts. A versão texto e a versão HTML
 // vêm da MESMA fonte, para não existir a situação de o destinatário ver um nome no
@@ -74,6 +75,12 @@ export interface SendEmailOptions {
    * sempre. Ver email-market-identity.ts — inclusive por que é tudo ou nada.
    */
   productCode?: string | null;
+  /**
+   * Campanha que originou o envio. Presente → o link da assinatura sai marcado, o
+   * que é o que permite saber QUEM clicou quando o corpo vai sem link (e-mail frio).
+   * Ausente (resposta de conversa) → assinatura com link limpo.
+   */
+  tracking?: { canal: 'email'; campanhaId: string; campanhaNome: string; contatoId?: string | null };
   /**
    * Layout. Padrão `simples` (primeiro contato). `marca` só para quem já te
    * conhece — ver o cabeçalho de email-template.ts.
@@ -212,7 +219,27 @@ export class EmailReplyService {
     const base = identidade.signature ?? resolveSignature();
     const mesmoEndereco =
       !!base.email && base.email.trim().toLowerCase() === config.fromEmail.trim().toLowerCase();
-    const assinatura = mesmoEndereco ? { ...base, email: undefined } : base;
+    const semEmailRepetido = mesmoEndereco ? { ...base, email: undefined } : base;
+
+    // O link da ASSINATURA também leva a marcação da campanha.
+    //
+    // Em e-mail frio o corpo sai sem link de propósito (anti-spam), então a assinatura
+    // é o ÚNICO link — e é nele que a pessoa clica. Num teste real em 10/08/2026 o
+    // clique veio por aqui e entrou como visita direta: campanha sem crédito, lead
+    // anônimo. Só marca quando o chamador informa a campanha; resposta de conversa
+    // segue com o link limpo.
+    const assinatura =
+      opts.tracking && semEmailRepetido.site
+        ? {
+            ...semEmailRepetido,
+            siteHref: marcarLinkDaCampanha(
+              /^https?:\/\//i.test(semEmailRepetido.site)
+                ? semEmailRepetido.site
+                : `https://${semEmailRepetido.site}`,
+              opts.tracking,
+            ),
+          }
+        : semEmailRepetido;
 
     // Alternativa em texto puro (multipart) — para cliente sem HTML e para o score
     // de spam: e-mail só-HTML pontua pior nos filtros.
