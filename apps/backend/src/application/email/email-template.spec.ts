@@ -30,12 +30,15 @@ describe('renderEmailHtml', () => {
     expect(html).toContain('&amp;');
   });
 
-  it('transforma link do corpo em âncora com rótulo encurtado', () => {
+  it('transforma link do corpo em âncora, mostrando o endereço sem o rastreio', () => {
     const longa = 'https://hipertms.com.br/demonstracao/agendar?utm_source=email&utm_campaign=prospeccao-agosto-2026';
     const html = renderEmailHtml({ body: `Agende aqui: ${longa}`, optOutUrl: OPTOUT });
 
+    // o href leva tudo — o rastreio não muda
     expect(html).toContain(`href="${longa.replace(/&/g, '&amp;')}"`);
-    expect(html).toContain('…</a>'); // rótulo truncado, não a URL inteira
+    // o que o leitor vê é um endereço reconhecível, não um pedaço de string
+    expect(html).toContain('>hipertms.com.br/demonstracao/agendar</a>');
+    expect(html).not.toContain('utm_campaign</a>');
   });
 
   it('quebra parágrafos e preserva quebras simples de linha', () => {

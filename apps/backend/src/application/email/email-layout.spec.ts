@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderEmailHtml, clarear } from './email-template';
+import { renderEmailHtml, clarear, rotuloDeLink } from './email-template';
 
 /**
  * Dois layouts, e a escolha entre eles é de entregabilidade, não de gosto.
@@ -101,6 +101,46 @@ describe('tema escuro', () => {
       brand: { name: 'Pneus Brasil', color: '#0057B8', tagline: null },
     });
     expect(pneus).toContain(clarear('#0057B8'));
+  });
+});
+
+/**
+ * O link da campanha sai marcado com utm_medium, utm_campaign e ref — necessário
+ * para saber quem clicou, e o deixa com uns 110 caracteres. Cortar a URL no meio
+ * produzia `https://hipertms.com.br/planos?utm_medium=email&utm_camp…`, que não é
+ * endereço nenhum: é um pedaço de string que ninguém reconhece nem confere.
+ */
+describe('rotuloDeLink — o que o leitor vê', () => {
+  it('mostra domínio e caminho, sem o rastreio', () => {
+    expect(rotuloDeLink('https://hipertms.com.br/planos?utm_medium=email&ref=7f3a9b2c1d4e'))
+      .toBe('hipertms.com.br/planos');
+  });
+
+  it('tira o www e a barra final', () => {
+    expect(rotuloDeLink('https://www.hipertms.com.br/')).toBe('hipertms.com.br');
+    expect(rotuloDeLink('https://hipertms.com.br/planos/')).toBe('hipertms.com.br/planos');
+  });
+
+  it('site sem caminho fica só no domínio', () => {
+    expect(rotuloDeLink('https://hipertms.com.br')).toBe('hipertms.com.br');
+  });
+
+  // Regra de segurança: rótulo que mostrasse um domínio e levasse a outro é a
+  // definição de link enganoso — o motivo pelo qual encurtador público é bloqueado.
+  it('quando estoura, corta o CAMINHO e nunca o domínio', () => {
+    const r = rotuloDeLink('https://hipertms.com.br/uma/trilha/muito/longa/de/verdade/mesmo/aqui');
+    expect(r.startsWith('hipertms.com.br')).toBe(true);
+    expect(r.endsWith('…')).toBe(true);
+    expect(r.length).toBeLessThanOrEqual(42);
+  });
+
+  it('domínio maior que o teto sai inteiro, sem caminho', () => {
+    const r = rotuloDeLink('https://um-dominio-absurdamente-comprido-de-teste.com.br/planos');
+    expect(r).toBe('um-dominio-absurdamente-comprido-de-teste.com.br');
+  });
+
+  it('o que não é URL volta como veio (curto) ou cortado (longo)', () => {
+    expect(rotuloDeLink('nao-e-url')).toBe('nao-e-url');
   });
 });
 

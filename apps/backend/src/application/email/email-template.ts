@@ -82,10 +82,43 @@ export function clarear(hex: string, fator = 0.18): string {
 }
 
 /**
- * Corpo em texto → parágrafos HTML.
+ * Como o link APARECE no corpo — o endereço, sem o rastreio pendurado.
  *
- * URLs viram link clicável com o texto encurtado: um link cru de 80 caracteres
- * quebra o layout no mobile e ainda pesa no score de spam.
+ * O link da campanha sai marcado com `utm_medium`, `utm_campaign` e `ref`, o que é
+ * necessário para saber quem clicou (ver campaign-link.ts) e o deixa com uns 110
+ * caracteres. Cortar a URL no caractere 45 produzia coisas como
+ * `https://hipertms.com.br/planos?utm_medium=email&utm_camp…`, que não é endereço
+ * nenhum: é um pedaço de string que o leitor não reconhece e não consegue conferir.
+ *
+ * O rótulo passa a ser DOMÍNIO + CAMINHO — `hipertms.com.br/planos`. O `href`
+ * continua levando tudo, então o rastreio não muda.
+ *
+ * Regra de segurança que dita o resto do desenho: o rótulo SEMPRE começa pelo
+ * domínio real do destino, e o que se corta é o fim do caminho. Um rótulo que
+ * pudesse mostrar um domínio e levar a outro é a definição de link enganoso — o
+ * mesmo motivo pelo qual encurtador público é bloqueado pelos provedores.
+ */
+export function rotuloDeLink(url: string, max = 42): string {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url.length > max ? `${url.slice(0, max - 1)}…` : url;
+  }
+
+  const host = u.hostname.replace(/^www\./, '');
+  const caminho = u.pathname === '/' ? '' : u.pathname.replace(/\/$/, '');
+  const inteiro = `${host}${caminho}`;
+  if (inteiro.length <= max) return inteiro;
+
+  // Estoura: corta o CAMINHO, nunca o domínio. Domínio pela metade seria pior que
+  // o corte antigo — daria a entender outro destino.
+  const sobra = max - host.length - 1;
+  return sobra > 3 ? `${host}${caminho.slice(0, sobra - 1)}…` : host;
+}
+
+/**
+ * Corpo em texto → parágrafos HTML.
  */
 function corpoParaHtml(texto: string, cor: string = LARANJA): string {
   const URL_RE = /https?:\/\/[^\s<]+/g;
@@ -100,8 +133,7 @@ function corpoParaHtml(texto: string, cor: string = LARANJA): string {
     for (const m of linha.matchAll(URL_RE)) {
       const url = m[0];
       out += esc(linha.slice(cursor, m.index));
-      const rotulo = url.length > 48 ? `${url.slice(0, 45)}…` : url;
-      out += `<a href="${esc(url)}" class="c-accent" style="color:${cor};text-decoration:underline;">${esc(rotulo)}</a>`;
+      out += `<a href="${esc(url)}" class="c-accent" style="color:${cor};text-decoration:underline;">${esc(rotuloDeLink(url))}</a>`;
       cursor = (m.index ?? 0) + url.length;
     }
     return out + esc(linha.slice(cursor));
