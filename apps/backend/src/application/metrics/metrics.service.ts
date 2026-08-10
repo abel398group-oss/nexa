@@ -561,9 +561,6 @@ export class MetricsService {
       select: { id: true, status: true, contactId: true },
     });
     const convIds = convs.map((c: any) => c.id);
-    const asMap = (rows: any[], key: string) =>
-      rows.reduce((acc, r) => ({ ...acc, [r[key] ?? 'null']: r._count }), {} as Record<string, number>);
-
     const [msgByDirection, aiMessages, complaintsTotal, activityBySeller] = await Promise.all([
       convIds.length ? this.prisma.aiMessage.groupBy({ by: ['direction'], where: { conversationId: { in: convIds } }, _count: true }) : [],
       convIds.length ? this.prisma.aiMessage.count({ where: { conversationId: { in: convIds }, direction: 'outbound', metadata: { path: ['aiGenerated'], equals: true } } }) : 0,

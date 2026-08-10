@@ -58,7 +58,6 @@ import {
   effectiveDelivery,
   cashViewIsOn,
   type ContactRecipient,
-  type ContactSendTime,
 } from './contact-recipient.types';
 import {
   isWithinSendWindow,

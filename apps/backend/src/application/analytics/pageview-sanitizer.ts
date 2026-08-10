@@ -63,7 +63,7 @@ function limitar(v: string | null | undefined, max: number): string | null {
  * `/` é normalizado — nunca confiar no formato que o cliente mandou.
  */
 export function higienizarUrl(url: string): UrlHigienizada {
-  let bruto = (url ?? '').trim();
+  const bruto = (url ?? '').trim();
   // URL absoluta: descarta esquema e host, sobra o path. Base fictícia porque o
   // construtor exige uma; o host dela nunca é usado.
   let u: URL;

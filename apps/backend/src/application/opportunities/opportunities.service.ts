@@ -260,7 +260,7 @@ export class OpportunitiesService {
   async update(tenantId: string, id: string, dto: Record<string, any>, sellerScope?: string) {
     await this.findOne(tenantId, id, sellerScope);
     // mudanca de estagio so pelo endpoint /stage (gera historico) — aqui e ignorada
-    const { stage, ...rest } = dto;
+    const { stage: _stage, ...rest } = dto;
     return this.prisma.opportunity.update({ where: { id }, data: rest });
   }
 

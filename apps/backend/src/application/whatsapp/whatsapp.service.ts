@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ContactsService } from '@/application/contacts/contacts.service';
@@ -378,8 +380,8 @@ export class WhatsappService {
       // salva uma cópia .ogg em uploads/audio (servido em /uploads) p/ tocar no inbox
       let audioUrl: string | null = null;
       try {
-        const fs = require('node:fs');
-        const path = require('node:path');
+        // fs/path vêm do import no topo. `require()` aqui era proibido pelo lint e
+        // ainda sombreava os imports, deixando os dois "não usados".
         const dir = path.join(process.cwd(), 'uploads', 'audio');
         fs.mkdirSync(dir, { recursive: true });
         const baseName = (path.basename(new URL(dlUrl).pathname).replace(/\.[^.]+$/, '') || String(Date.now()));

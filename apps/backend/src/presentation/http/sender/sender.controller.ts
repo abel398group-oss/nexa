@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -12,8 +12,9 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads');
-// base que o container do WAHA consegue acessar p/ baixar o anexo
-const PUBLIC_BASE = process.env.WAHA_REACHABLE_BASE ?? 'http://host.docker.internal:3001';
+// A base pública do anexo é montada no SERVICE, na hora do envio (MEDIA_PUBLIC_BASE).
+// A constante que existia aqui ficou órfã quando o upload passou a gravar só o
+// caminho relativo.
 
 class CreateCampaignDto {
   @IsString() @MinLength(2) name!: string;

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AnthropicService, AI_MODEL } from '@/shared/ai/anthropic.service';
+import { AnthropicService } from '@/shared/ai/anthropic.service';
 
 // Categorias canônicas (ADR 016 D1)
 export type TicketCategory =

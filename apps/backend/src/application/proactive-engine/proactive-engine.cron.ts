@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { Redis } from 'ioredis';
 import { createRedisClient } from '@/shared/redis/redis.factory';
 import { ProactiveDetectorService } from './proactive-detector.service';

@@ -1174,7 +1174,9 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
     ];
   }
 
-  async createPaymentRequest(input: {
+  // O parâmetro fica com _ porque o método é STUB: a assinatura precisa existir
+  // (é a do Connector), mas nada aqui lê o input até a integração real sair.
+  async createPaymentRequest(_input: {
     planCode: string;
     externalTenantId?: string;
     correlationId: string;

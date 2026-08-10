@@ -13,7 +13,7 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { looksLikeCompetitor } from './competitor-names.const';
 import { canReceiveCampaign, rejectionReason } from './phone-eligibility';
-import { spin, spinVariants, lowVariationWarning } from './spintax';
+import { spin, lowVariationWarning } from './spintax';
 import { firstName, tidyMissingName } from './name-render';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';

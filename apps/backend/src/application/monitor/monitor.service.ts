@@ -74,7 +74,9 @@ const IMMEDIATE_SEVERITY_DEFAULT = 'CRITICAL';
 // STANDBY (2026-07-20): immediate alerts flag lives in monitor-flags.const.ts
 // (shared with ConsolidationService — the same flag decides whether the
 // scheduled digest carries CRITICAL). Imported at the top of this file.
-const IMMEDIATE_ALL_SEVERITIES = new Set(['CRITICAL', 'OVERDUE', 'DUE_SOON', 'INFO']);
+//
+// O Set de severidades que existia aqui saiu junto: a decisão passou a ser da flag
+// compartilhada, e a constante ficou órfã desde então.
 
 /**
  * T6: shape de entrada de `contacts` antes de `sanitizeContacts()` normalizar —
