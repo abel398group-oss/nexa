@@ -309,6 +309,10 @@ export class WahaClientService {
       const buf = Buffer.from(await res.arrayBuffer());
       return { status, qr: `data:image/png;base64,${buf.toString('base64')}` };
     } catch (e: any) {
+      // REGRA 3: nenhum caminho de erro sai calado. Sem isto, "não aparece o QR"
+      // chegava ao suporte sem nada no log para dizer se foi rede, timeout ou
+      // sessão — e o único sintoma era a tela em branco.
+      this.logger.warn(`WAHA getQr falhou (status=${status}): ${e?.message}`);
       return { status, reason: 'erro_rede' };
     }
   }

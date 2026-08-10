@@ -201,7 +201,10 @@ documentado como risco aceito, não só um comentário de código.
 | DISP-007 | ✅ corrigido | `email-campaign-sender.service.ts` reusa `firstName`/`tidyMissingName`/`greeting` do canal WhatsApp. |
 | DISP-008 | ✅ corrigido | `EmailTargetDto` com `@IsEmail()` + `@ValidateNested()`. |
 | DISP-012 | ✅ corrigido | `connectionTimeout`/`greetingTimeout`/`socketTimeout` nos **4** pontos que abrem SMTP (`email-reply.service.ts` ×2, `admin-alert.service.ts`, `waha-health.service.ts`). Teto ~30s, abaixo do TTL de 60s do lock. |
-| DISP-004, 006, 009, 010, 011, 013 | ⬜ em aberto | Não implementados. |
+| DISP-004 | ✅ corrigido (2026-08-09) | `cancelCampaign()` + `POST /campaigns/:id/cancel` + botão "Cancelar" (running/paused). Zera `queued` **e** `sending` — sem o `sending`, a recuperação de travados devolvia o alvo à fila 5-10min depois e a campanha "cancelada" mandava mais uma. Alvos viram `skipped`/`cancelado` (o relatório precisa mostrar quem não recebeu). 9 testes. |
+| DISP-006 | ✅ corrigido (2026-08-09) | `sender.service.ts` — o retorno de `sendFile` deixou de ser descartado. O alvo **continua** `sent` (o texto já saiu; falhar aqui geraria reenvio e mensagem duplicada) mas grava `anexo_nao_enviado: <motivo>` no campo de erro. |
+| DISP-009 | ✅ corrigido (2026-08-09) | `campaignDetail` devolve `deliveryConfirmed` por alvo e `deliveryUnconfirmed` da campanha; a tela mostra o chip "Sem confirmação: N" junto do engajamento. Número alto = sessão do WAHA instável (o disparo "funcionou" e pode não ter chegado a ninguém). |
+| DISP-010, 011, 013 | ⬜ em aberto | Não implementados. O DISP-010 (sessão WAHA por tenant) segue sendo a limitação estrutural mais séria do módulo. |
 
 ### Achados posteriores (2026-08-02/03) — durante o teste em produção
 
@@ -236,18 +239,18 @@ própria. O caso grave (polling) está resolvido.
 
 ## Plano de implementação sugerido (ordem)
 
-Concluído: DISP-001, 002, 003, 005, 007, 008, 012, 014 a 020.
+Concluído: DISP-001 a 009, 012, 014 a 020.
 
 **Restam:**
 
-1. **DISP-004** (botão Cancelar campanha) e **DISP-009** (coluna "confirmado pelo WhatsApp")
-   — pequenos, independentes, sem urgência.
-2. **DISP-006** (falha do anexo ignorada — alvo vira `sent` mesmo se o arquivo não foi).
-3. **DISP-013** — documentar o `rejectUnauthorized: false` como risco aceito.
-4. **DISP-010** (sessão WAHA por tenant) e **DISP-011** (bounce de e-mail) — ficam fora até
-   decisão de produto: não são bugs pontuais, são arquitetura/infraestrutura. O DISP-010
-   segue sendo a limitação estrutural mais séria do módulo (um tenant com campanha grande
-   mata o throughput dos outros, e todos disparam pelo mesmo número).
+1. **DISP-013** — documentar o `rejectUnauthorized: false` como risco aceito.
+2. **DISP-011** (bounce de e-mail) — pode ter sido resolvido pela migration
+   `20260809140000_email_hard_bounce` de outra frente; conferir antes de reabrir.
+3. **DISP-010** (sessão WAHA por tenant) — fica fora até decisão de produto: não é um bug
+   pontual, é arquitetura. Segue sendo a limitação estrutural mais séria do módulo (um
+   tenant com campanha grande mata o throughput dos outros, e todos disparam pelo mesmo
+   número). Ganhou peso em 2026-08-09: o `NumberBudgetService` passou a contar TODOS os
+   caminhos de envio do chip, e o teto que ele mede é de um número único e compartilhado.
 
 ---
 
