@@ -82,6 +82,15 @@ export interface SendEmailOptions {
   /** Botão de ação. Ignorado no layout `simples`: e-mail frio não leva botão. */
   ctaUrl?: string;
   ctaLabel?: string;
+  /**
+   * Message-ID da mensagem que estamos respondendo (forma canônica, sem `<>`).
+   *
+   * É o que faz o cliente do lead ENCADEAR a nossa resposta embaixo da mensagem
+   * dele, em vez de abrir um fio novo. Sem isto, uma troca de quatro mensagens
+   * vira quatro conversas soltas na caixa dele — foi o que apareceu no teste de
+   * 10/08/2026. Assunto igual ajuda, mas quem de fato encadeia é este cabeçalho.
+   */
+  inReplyTo?: string;
 }
 
 // Configuração SMTP resolvida (banco ou .env)
@@ -262,6 +271,12 @@ export class EmailReplyService {
         text: bodyText,
         html: bodyHtml,
         replyTo: config.replyTo,
+        // Encadeamento RFC 5322 §3.6.4 — ver `inReplyTo` em SendEmailOptions.
+        // Os sinais `<>` são obrigatórios no cabeçalho; guardamos a forma canônica
+        // sem eles porque é assim que o dedup e o linker comparam.
+        ...(opts.inReplyTo
+          ? { inReplyTo: `<${opts.inReplyTo}>`, references: [`<${opts.inReplyTo}>`] }
+          : {}),
         // Descadastro também no cabeçalho: Gmail e Outlook mostram um botão nativo
         // "Cancelar inscrição" no topo quando ele existe, e a presença do header
         // melhora a reputação de envio. Complementa o link do rodapé, não substitui.

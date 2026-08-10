@@ -28,6 +28,7 @@ import { ConversationsService } from '@/application/conversations/conversations.
 import { emailToPhone } from './email.service';
 import { normalizeEmail, isSendableEmail } from './email-address';
 import { normalizarMessageId } from './campaign-reply-linker';
+import { stripQuotedReply } from '@/shared/ai/untrusted-input';
 
 export interface SentEmail {
   /** Destinatário (cabeçalho To). Pode vir como "Nome <a@b.com>". */
@@ -62,7 +63,11 @@ export class EmailSentIngestService {
     const para = primeiroDestinatario(msg.to);
     if (!isSendableEmail(para)) return { ignored: true, reason: 'sem_destinatario' };
 
-    const corpo = (msg.bodyText ?? '').trim();
+    // Sem o histórico citado, pelo mesmo motivo da entrada: o cliente de e-mail
+    // devolve a mensagem anterior inteira embaixo da resposta, e no fio ela já
+    // está logo acima. `bodyCompleto` guarda o original.
+    const bruto = (msg.bodyText ?? '').trim();
+    const corpo = stripQuotedReply(bruto);
     if (!corpo) return { ignored: true, reason: 'sem_corpo' };
 
     // Trava de duplicata: o INSERT é a prova. Falha = ou o Nexa mandou este e-mail
@@ -103,6 +108,7 @@ export class EmailSentIngestService {
       metadata: {
         channel: 'email',
         subject: msg.subject,
+        ...(corpo !== bruto ? { bodyCompleto: bruto } : {}),
         // De onde veio: distingue, no histórico, o que foi escrito fora do Nexa.
         // Quando formos treinar a Lia com estas conversas, é a marca que diz
         // "isto aqui é resposta humana de verdade".

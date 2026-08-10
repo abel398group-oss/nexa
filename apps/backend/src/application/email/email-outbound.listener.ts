@@ -74,10 +74,11 @@ export class EmailOutboundListener {
       return;
     }
 
-    // Assunto do thread: o do chamado, senão o da última mensagem recebida (o
-    // EmailService grava em metadata.subject). Sem nenhum dos dois, um genérico —
-    // o send() prefixa "Re:" quando é resposta.
-    const subject = conv.subject?.trim() || (await this.assuntoDoThread(conversationId)) || 'HiperTMS';
+    // Assunto E identidade da última mensagem recebida, na mesma leitura. O assunto
+    // sozinho não encadeia: o cliente do lead junta as mensagens pelo In-Reply-To,
+    // e sem ele cada resposta nossa abre um fio novo na caixa dele.
+    const ultima = await this.ultimaRecebida(conversationId);
+    const subject = conv.subject?.trim() || ultima.subject || 'HiperTMS';
 
     const r = await this.emailReply.send({
       to,
@@ -86,6 +87,7 @@ export class EmailOutboundListener {
       tenantId,
       contactId: conv.contactId,
       inReplyToSubject: subject,
+      inReplyTo: ultima.messageId,
       productCode: (conv as any).productCode,
     });
 
@@ -111,8 +113,20 @@ export class EmailOutboundListener {
     this.logger.log(`E-mail enviado p/ ${to} (conv=${conversationId.slice(0, 8)})`);
   }
 
-  /** Assunto da última mensagem recebida na conversa (gravado em metadata.subject). */
-  private async assuntoDoThread(conversationId: string): Promise<string | null> {
+  /**
+   * Assunto e Message-ID da última mensagem RECEBIDA na conversa.
+   *
+   * Os dois vêm de `metadata`, gravados pelo EmailService. Uma consulta só porque
+   * são a mesma linha — e porque servem à mesma coisa: fazer a nossa resposta
+   * aparecer dentro do fio que o lead já tem aberto.
+   *
+   * `messageId` fica indefinido em conversa antiga (o campo passou a ser gravado
+   * em 10/08/2026) e em conversa que ainda não recebeu nada. Nos dois casos o
+   * e-mail sai sem encadeamento, como saía antes — nunca deixa de sair.
+   */
+  private async ultimaRecebida(
+    conversationId: string,
+  ): Promise<{ subject: string | null; messageId: string | undefined }> {
     const ultima = await this.prisma.aiMessage
       .findFirst({
         where: { conversationId, direction: 'inbound' },
@@ -120,7 +134,10 @@ export class EmailOutboundListener {
         select: { metadata: true },
       })
       .catch(() => null);
-    const s = (ultima?.metadata as any)?.subject;
-    return typeof s === 'string' && s.trim() ? s.trim() : null;
+
+    const meta = (ultima?.metadata ?? {}) as any;
+    const s = typeof meta.subject === 'string' && meta.subject.trim() ? meta.subject.trim() : null;
+    const mid = typeof meta.messageId === 'string' && meta.messageId.trim() ? meta.messageId.trim() : undefined;
+    return { subject: s, messageId: mid };
   }
 }

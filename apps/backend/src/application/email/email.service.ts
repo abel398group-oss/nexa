@@ -216,14 +216,30 @@ export class EmailService {
       references: n.references,
     });
 
-    // 4) Grava mensagem inbound
+    // 4) Grava mensagem inbound — SEM o histórico citado.
+    //
+    // O cliente de e-mail devolve a mensagem anterior inteira embaixo da resposta,
+    // com ">" na frente de cada linha. Uma resposta de duas palavras chegava ao
+    // Inbox como quarenta linhas de citação — incluindo o nosso rodapé e o link de
+    // descadastro com token, que não têm por que ficar dentro da conversa.
+    //
+    // O que foi cortado vai para `bodyCompleto`: nada se perde, só sai da frente.
+    // O fio já tem a mensagem anterior logo acima — é justamente o que a citação
+    // repete.
+    const limpo = stripQuotedReply(n.bodyText);
+
     await this.conversations.addMessage(tenantId, conv.id, {
       direction: 'inbound',
-      content: n.bodyText,
+      content: limpo,
       metadata: {
         channel: 'email',
         subject: n.subject,
         from: n.from,
+        // Identidade da mensagem: é o que permite responder DENTRO da thread do
+        // lead (cabeçalho In-Reply-To). Sem isto, cada resposta nossa abre um fio
+        // novo no cliente dele. Ver EmailOutboundListener.
+        ...(dedupeId ? { messageId: dedupeId } : {}),
+        ...(limpo !== n.bodyText ? { bodyCompleto: n.bodyText } : {}),
         // Contexto do disparo: o analista precisa saber o que foi perguntado antes
         // desta resposta, e quando ela chega de outro endereço não há como deduzir.
         ...(campanha
@@ -249,12 +265,15 @@ export class EmailService {
       // interesse, e o silêncio depois disso é o que vira reclamação de spam.
       //
       // Best-effort: falhar em avisar não pode desfazer a mensagem já gravada.
-      const trecho = n.bodyText.replace(/\s+/g, ' ').slice(0, 160);
+      // Do texto LIMPO: um aviso que mostrasse a citação diria "> HiperTMS > bom
+      // dia" e não o que a pessoa acabou de escrever, que é a única coisa que
+      // interessa para decidir se vale correr.
+      const trecho = limpo.replace(/\s+/g, ' ').slice(0, 160);
       await this.notifications
         .create(tenantId, {
           type: 'info',
           title: `📧 Resposta de e-mail para responder à mão`,
-          body: `${n.from} — "${n.subject}"\n${trecho}${n.bodyText.length > 160 ? '…' : ''}`,
+          body: `${n.from} — "${n.subject}"\n${trecho}${limpo.length > 160 ? '…' : ''}`,
           link: `/inbox/${conv.id}`,
         })
         .catch((e: any) =>
@@ -271,7 +290,7 @@ export class EmailService {
     // o trecho citado é texto que o remetente controla por inteiro e pode forjar
     // ("nossa mensagem anterior" concedendo desconto). Ver shared/ai/untrusted-input.ts.
     const agentResult = await this.agent.handle(tenantId, {
-      message: stripQuotedReply(n.bodyText),
+      message: limpo,
       conversationId: conv.id,
     });
 
