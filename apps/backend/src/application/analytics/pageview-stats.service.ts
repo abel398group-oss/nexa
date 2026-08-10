@@ -147,15 +147,37 @@ export class PageviewStatsService {
     // são no máximo algumas centenas de refs distintos, e uma query por clique seria
     // dezenas de idas ao banco para montar uma lista.
     const refs = [...new Set(cliques.map((c) => c.clickId!).filter(Boolean))];
-    const contatos = await this.prisma.contact.findMany({
-      where: { tenantId, OR: refs.map((r) => ({ id: { startsWith: r } })) },
-      select: { id: true, name: true, email: true, phone: true },
-    });
+
+    // `replace(id,'-','')` no SQL, e não `startsWith` do Prisma.
+    //
+    // O ref é o uuid SEM os traços (`bca3707d4445`), e o id no banco tem traços
+    // (`bca3707d-4445-…`). Comparar prefixo direto nunca casa — o clique chegava
+    // certo, a campanha era atribuída, e o nome do lead simplesmente não aparecia.
+    // Visto em produção em 10/08/2026, com o ref presente na URL.
+    //
+    // Só hex minúsculo entra na consulta: o valor vem de query string, e query string
+    // é entrada hostil mesmo indo por parâmetro.
+    const refsLimpos = refs.filter((r) => /^[0-9a-f]{6,32}$/i.test(r)).map((r) => r.toLowerCase());
+    const contatos = refsLimpos.length
+      ? await this.prisma.$queryRawUnsafe<
+          { id: string; name: string | null; email: string | null; phone: string | null }[]
+        >(
+          `SELECT id, name, email, phone
+             FROM contacts
+            WHERE tenant_id = $1
+              AND replace(lower(id::text), '-', '') LIKE ANY ($2::text[])`,
+          tenantId,
+          refsLimpos.map((r) => `${r}%`),
+        )
+      : [];
 
     // Prefixo ambíguo (dois contatos) => descarta. Ver o comentário do método.
     const porRef = new Map<string, { nome: string | null; email: string | null; telefone: string | null } | null>();
     for (const r of refs) {
-      const casam = contatos.filter((c) => c.id.replace(/-/g, '').startsWith(r));
+      // Mesma normalização dos dois lados: sem traços e minúsculo. Foi a divergência
+      // entre as duas formas que fez o nome nunca aparecer.
+      const alvo = r.toLowerCase();
+      const casam = contatos.filter((c) => c.id.replace(/-/g, '').toLowerCase().startsWith(alvo));
       porRef.set(r, casam.length === 1 ? { nome: casam[0].name, email: casam[0].email, telefone: casam[0].phone } : null);
     }
 

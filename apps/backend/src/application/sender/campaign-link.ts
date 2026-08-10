@@ -19,8 +19,9 @@
  *    par resolve os dois, e o id no fim é o que permite casar com a campanha.
  */
 
-/** Só o que o rastreio aceita na allowlist (ver pageview-sanitizer.ts). */
-const UTM_SOURCE = 'nexa';
+// utm_source SAIU do link (10/08/2026): era sempre 'nexa' e custava 17 caracteres
+// em todo link. O que a gente quer saber está em utm_medium (e-mail ou zap) e em
+// utm_campaign. Link curto pontua melhor em spam e não vira uma parede no WhatsApp.
 
 /** Vira `pneus-toque-1-a3f9c1e8`: legível no painel e único. */
 export function slugDeCampanha(nome: string, id: string): string {
@@ -34,7 +35,7 @@ export function slugDeCampanha(nome: string, id: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
+    .slice(0, 20);
   const curto = (id ?? '').replace(/-/g, '').slice(0, 8);
   return [base, curto].filter(Boolean).join('-') || 'campanha';
 }
@@ -83,7 +84,6 @@ export function marcarLinkDaCampanha(
     if (!u.searchParams.has(chave)) u.searchParams.set(chave, valor);
   };
 
-  porFora('utm_source', UTM_SOURCE);
   porFora('utm_medium', ctx.canal);
   porFora('utm_campaign', slugDeCampanha(ctx.campanhaNome, ctx.campanhaId));
 

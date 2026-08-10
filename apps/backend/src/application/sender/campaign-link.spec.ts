@@ -35,14 +35,14 @@ describe('slugDeCampanha', () => {
   it('nome enorme é cortado, mas o id sobrevive', () => {
     const s = slugDeCampanha('a'.repeat(120), 'cccccccc');
     expect(s.endsWith('-cccccccc')).toBe(true);
-    expect(s.length).toBeLessThan(60);
+    // Link curto: 20 do nome + 8 do id. Link longo pontua pior em spam.
+    expect(s.length).toBeLessThanOrEqual(29);
   });
 });
 
 describe('marcarLinkDaCampanha', () => {
-  it('acrescenta origem, canal e campanha', () => {
+  it('acrescenta canal e campanha', () => {
     const u = new URL(marcarLinkDaCampanha('https://hipertms.com.br/signup', CTX));
-    expect(u.searchParams.get('utm_source')).toBe('nexa');
     expect(u.searchParams.get('utm_medium')).toBe('email');
     expect(u.searchParams.get('utm_campaign')).toBe('pneus-toque-1-a3f9c1e8');
   });
@@ -55,7 +55,7 @@ describe('marcarLinkDaCampanha', () => {
   it('preserva a query que já existia no link', () => {
     const u = new URL(marcarLinkDaCampanha('https://x.com/a?plano=basico', CTX));
     expect(u.searchParams.get('plano')).toBe('basico');
-    expect(u.searchParams.get('utm_source')).toBe('nexa');
+    expect(u.searchParams.get('utm_campaign')).toBeTruthy();
   });
 
   // Se o operador colou um link com utm próprio, foi decisão dele — provavelmente
@@ -63,14 +63,13 @@ describe('marcarLinkDaCampanha', () => {
   it('NÃO sobrescreve utm que o operador já pôs', () => {
     const u = new URL(marcarLinkDaCampanha('https://x.com/a?utm_campaign=feira2026&utm_source=parceiro', CTX));
     expect(u.searchParams.get('utm_campaign')).toBe('feira2026');
-    expect(u.searchParams.get('utm_source')).toBe('parceiro');
     // o que faltava, ele completa
     expect(u.searchParams.get('utm_medium')).toBe('email');
   });
 
   it('não duplica parâmetro', () => {
     const marcado = marcarLinkDaCampanha('https://x.com/a', CTX);
-    expect(marcado.match(/utm_source=/g)).toHaveLength(1);
+    expect(marcado.match(/utm_campaign=/g)).toHaveLength(1);
   });
 
   it('preserva o fragmento', () => {
