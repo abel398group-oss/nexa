@@ -19,6 +19,7 @@ import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
 import { precisaTrocarMercado } from './conversation-market';
 import { marcarLinkDaCampanha } from './campaign-link';
+import { resolveSignature } from '@/application/email/email-signature';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 
 // Config anti-ban (env com defaults)
@@ -1394,6 +1395,20 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   static firstName = firstName;
   static tidyMissingName = tidyMissingName;
 
+  /**
+   * Primeiro nome de quem assina, para o `{{remetente}}` do template.
+   *
+   * Sai da MESMA fonte da assinatura do e-mail (`resolveSignature`), que é o ponto
+   * inteiro: o corpo e o rodapé param de poder discordar. Só o primeiro nome —
+   * "Aqui é o Mateus Gomes, do HiperTMS" soa a crachá, não a pessoa.
+   *
+   * Sem assinatura configurada volta vazio, e a limpeza de placeholder ausente
+   * (`tidyMissingName`) recompõe a frase em vez de deixar vírgula órfã.
+   */
+  static primeiroNomeDoRemetente(): string {
+    return firstName(resolveSignature().name);
+  }
+
   // opt-out footer (LGPD §4/§8). Disabled by setting LGPD_OPT_OUT_FOOTER=false in .env.
   // Warning: disabling removes the legally-recommended opt-out notice for Brazilian law.
   static OPT_OUT_FOOTER = '\n\n_Responda SAIR para não receber mais mensagens._';
@@ -1415,8 +1430,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     opts: { optOutFooter?: boolean } = {},
   ): string {
     const first = SenderService.firstName(name);
+    // `{{remetente}}` = quem assina, da MESMA fonte da assinatura do e-mail.
+    //
+    // O nome do remetente aparecia em dois lugares independentes: o operador digitava
+    // no corpo e a assinatura vinha da configuração. Em 10/08/2026 saiu um e-mail
+    // dizendo "Aqui é a Lia" e assinado "Mateus Gomes" — duas pessoas na mesma
+    // mensagem, do ponto de vista do lead. Com o placeholder, trocar de vendedor
+    // passa a ser um lugar só.
+    const remetente = SenderService.primeiroNomeDoRemetente();
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
+      .replace(/\{\{\s*remetente\s*\}\}/gi, remetente)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
     txt = spin(txt);
     if (!first) txt = SenderService.tidyMissingName(txt);
