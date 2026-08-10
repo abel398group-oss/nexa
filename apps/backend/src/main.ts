@@ -104,7 +104,13 @@ async function bootstrap() {
   );
   app.setGlobalPrefix('api'); // todas as rotas sob /api
   // CORS restrito: permite apenas origens explícitas definidas em CORS_ORIGINS (dev + produção)
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',');
+  // `.trim()` e `.filter()` porque o CORS compara a origem por IGUALDADE EXATA: um
+  // espaço depois da vírgula em `CORS_ORIGINS=a, b` produz " https://b", que nunca
+  // casa — e o navegador só mostra "bloqueado por CORS", sem dizer o porquê.
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.enableCors({ origin: allowedOrigins, credentials: true }); // cookie HttpOnly (auth)
 
   // Swagger / OpenAPI (E7 — padrão TMS). Desabilita em produção.
