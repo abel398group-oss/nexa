@@ -24,6 +24,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailService } from './email.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { EmailBounceService } from './email-bounce.service';
+import { EmailSentIngestService } from './email-sent-ingest.service';
 
 const POLL_INTERVAL_SEC = Number(process.env.EMAIL_POLL_INTERVAL_SEC ?? 60);
 
@@ -40,6 +41,15 @@ function maiorUidExistente(box: any): number | null {
   return uidNext > 1 ? uidNext - 1 : null;
 }
 
+/**
+ * Nomes usuais da pasta de enviados, na ordem em que valem a tentativa.
+ *
+ * É o último recurso: primeiro vale o que estiver configurado, depois o atributo
+ * `\Sent` que o próprio servidor anuncia (RFC 6154). Esta lista existe para o
+ * servidor antigo que não anuncia nada — o Dovecot do cPanel usa `INBOX.Sent`.
+ */
+const NOMES_DE_ENVIADOS = ['INBOX.Sent', 'Sent', 'INBOX.Sent Items', 'Sent Items', 'Sent Messages'];
+
 interface ImapConfig {
   host: string;
   port: number;
@@ -51,6 +61,11 @@ interface ImapConfig {
   lastSeenUid: number | null;
   /** UIDVALIDITY registrado junto com a marca — invalida a marca se mudar. */
   uidValidity: number | null;
+  /** Pasta de enviados; vazio = descobre pelo servidor. Ver resolverPastaEnviados. */
+  sentMailbox: string | null;
+  /** Marca d'água própria da pasta de enviados — UID é numerado por pasta. */
+  sentLastSeenUid: number | null;
+  sentUidValidity: number | null;
 }
 
 @Injectable()
@@ -76,6 +91,7 @@ export class EmailImapService implements OnModuleInit {
     private readonly emailService: EmailService,
     private readonly crypto: EmailCryptoService,
     private readonly bounce: EmailBounceService,
+    private readonly sentIngest: EmailSentIngestService,
   ) {}
 
   onModuleInit() {
@@ -111,6 +127,9 @@ export class EmailImapService implements OnModuleInit {
         tenantId: c.tenantId,
         lastSeenUid: c.lastSeenUid ?? null,
         uidValidity: c.uidValidity ?? null,
+        sentMailbox: c.imapSentMailbox ?? null,
+        sentLastSeenUid: c.sentLastSeenUid ?? null,
+        sentUidValidity: c.sentUidValidity ?? null,
       }));
 
     if (fromDb.length > 0) return fromDb;
@@ -132,6 +151,9 @@ export class EmailImapService implements OnModuleInit {
       // por UNSEEN. É fallback de dev; em produção o canal vem do banco.
       lastSeenUid: null,
       uidValidity: null,
+      sentMailbox: process.env.EMAIL_IMAP_SENT_MAILBOX ?? null,
+      sentLastSeenUid: null,
+      sentUidValidity: null,
     }];
   }
 
@@ -188,6 +210,160 @@ export class EmailImapService implements OnModuleInit {
     });
 
     try {
+      await this.varrerEntrada(connection, cfg);
+      // A pasta de enviados vem DEPOIS e na MESMA conexão: é a metade humana do
+      // histórico, e falhar nela não pode impedir a entrada de ser lida. Ver
+      // EmailSentIngestService.
+      await this.varrerEnviados(connection, cfg).catch((e: any) =>
+        this.logger.warn(`IMAP ${cfg.user}: falha ao ler a pasta de enviados — ${e?.message}`),
+      );
+    } finally {
+      connection.end();
+    }
+  }
+
+  /**
+   * Qual é a pasta de enviados desta caixa.
+   *
+   * Ordem: o que estiver configurado → o que o servidor anuncia como `\Sent`
+   * (RFC 6154) → os nomes usuais. Errar o nome é uma falha silenciosa das ruins:
+   * o poller não acha nada, não reclama, e o histórico segue pela metade sem
+   * ninguém perceber. Por isso a descoberta é automática e o resultado é logado.
+   */
+  private async resolverPastaEnviados(connection: any, cfg: ImapConfig): Promise<string | null> {
+    if (cfg.sentMailbox?.trim()) return cfg.sentMailbox.trim();
+
+    const caixas = await connection.getBoxes().catch(() => null);
+    if (!caixas) return null;
+
+    // A árvore vem aninhada, com o delimitador do servidor entre os níveis.
+    const achatar = (nivel: any, prefixo = ''): Array<{ nome: string; attribs: string[] }> =>
+      Object.entries(nivel ?? {}).flatMap(([nome, info]: [string, any]) => {
+        const completo = `${prefixo}${nome}`;
+        return [
+          { nome: completo, attribs: (info?.attribs ?? []) as string[] },
+          ...achatar(info?.children, `${completo}${info?.delimiter ?? '.'}`),
+        ];
+      });
+
+    const todas = achatar(caixas);
+    const especial = todas.find((b) => b.attribs.some((a) => String(a).toLowerCase() === '\\sent'));
+    if (especial) return especial.nome;
+
+    const porNome = NOMES_DE_ENVIADOS.find((n) =>
+      todas.some((b) => b.nome.toLowerCase() === n.toLowerCase()),
+    );
+    return porNome ?? null;
+  }
+
+  /**
+   * Lê a pasta de enviados e devolve ao histórico o que foi escrito FORA do Nexa.
+   *
+   * O que o Nexa mesmo mandou já está gravado na conversa desde o envio e é
+   * barrado pelo Message-ID (ver EmailReplyService.send). O que sobra aqui é
+   * exatamente a resposta que a pessoa do comercial escreveu no webmail ou no
+   * celular — a metade que faltava.
+   *
+   * Sem marca d'água (primeira execução) NÃO varre o passado: a caixa pode ter
+   * anos de mensagem, e ingerir tudo de uma vez encheria o Inbox de conversa
+   * antiga. Planta a marca no topo e passa a valer daqui para a frente.
+   */
+  private async varrerEnviados(connection: any, cfg: ImapConfig) {
+    const pasta = await this.resolverPastaEnviados(connection, cfg);
+    if (!pasta) {
+      this.logger.warn(
+        `IMAP ${cfg.user}: pasta de enviados não encontrada — as respostas escritas fora do Nexa ` +
+        'NÃO entram no histórico. Configure imapSentMailbox no canal de e-mail.',
+      );
+      return;
+    }
+
+    const box: any = await connection.openBox(pasta);
+    const uidValidity = Number(box?.uidvalidity ?? box?.uidValidity ?? 0) || null;
+    const marcaValida =
+      cfg.sentLastSeenUid !== null &&
+      (cfg.sentUidValidity === null || uidValidity === null || cfg.sentUidValidity === uidValidity);
+
+    if (!marcaValida) {
+      const topo = maiorUidExistente(box);
+      this.logger.log(`IMAP ${cfg.user}: pasta de enviados "${pasta}" — marca inicial no UID ${topo ?? 0}`);
+      await this.salvarMarcaEnviados(cfg, topo, uidValidity);
+      return;
+    }
+
+    const messages = await connection.search([['UID', `${cfg.sentLastSeenUid! + 1}:*`]], {
+      bodies: [''],
+      markSeen: false,
+    });
+
+    // `UID n:*` devolve sempre a última mensagem mesmo quando o UID dela é menor
+    // que n — o servidor normaliza a faixa. Sem este filtro, a última mensagem
+    // seria reprocessada a cada poll (o dedup por Message-ID barraria, mas ao
+    // custo de baixar a mensagem inteira de 60 em 60 segundos).
+    const novas = (messages ?? [])
+      .filter((m: any) => Number(m.attributes?.uid ?? 0) > cfg.sentLastSeenUid!)
+      .sort((a: any, b: any) => Number(a.attributes?.uid ?? 0) - Number(b.attributes?.uid ?? 0));
+
+    if (novas.length === 0) {
+      await this.salvarMarcaEnviados(cfg, cfg.sentLastSeenUid, uidValidity);
+      return;
+    }
+
+    let maiorUid = cfg.sentLastSeenUid!;
+    let registradas = 0;
+
+    for (const msg of novas) {
+      const uid = Number(msg.attributes?.uid ?? 0);
+      try {
+        const raw = msg.parts.find((p: any) => p.which === '')?.body ?? '';
+        const parsed = await simpleParser(raw);
+
+        // `to` vem como objeto ou ARRAY de objetos conforme o cabeçalho — o
+        // mailparser não normaliza. Ler `.text` direto do array devolve undefined
+        // e o destinatário se perde em silêncio.
+        const paraTexto = Array.isArray(parsed.to)
+          ? parsed.to.map((a: any) => a?.text).filter(Boolean).join(', ')
+          : parsed.to?.text ?? '';
+
+        const r = await this.sentIngest.ingest(cfg.tenantId, {
+          to: paraTexto,
+          subject: parsed.subject ?? '(sem assunto)',
+          bodyText: (parsed.text ?? '').trim(),
+          messageId: parsed.messageId,
+          sentAt: parsed.date ?? undefined,
+        });
+        if ('ok' in r) registradas++;
+      } catch (err: any) {
+        // Uma mensagem problemática não pode travar a pasta — mesma regra da INBOX.
+        this.logger.warn(`IMAP ${cfg.user}: falha ao ler enviado uid=${uid} — ${err?.message}`);
+      }
+      if (uid > maiorUid) maiorUid = uid;
+    }
+
+    if (registradas > 0) {
+      this.logger.log(
+        `IMAP ${cfg.user}: ${registradas} resposta(s) escrita(s) fora do Nexa entraram no histórico ` +
+        `(de ${novas.length} mensagem(ns) na pasta de enviados)`,
+      );
+    }
+    await this.salvarMarcaEnviados(cfg, maiorUid, uidValidity);
+  }
+
+  /** Marca d'água da pasta de enviados. Nunca lança — igual à da entrada. */
+  private async salvarMarcaEnviados(cfg: ImapConfig, uid: number | null, uidValidity: number | null) {
+    if (uid === null || uid <= 0) return;
+    await this.prisma.emailChannel
+      .updateMany({
+        where: { tenantId: cfg.tenantId },
+        data: { sentLastSeenUid: uid, sentUidValidity: uidValidity } as any,
+      })
+      .catch((e: any) =>
+        this.logger.warn(`IMAP ${cfg.user}: falha ao gravar a marca dos enviados — ${e?.message}`),
+      );
+  }
+
+  private async varrerEntrada(connection: any, cfg: ImapConfig) {
+    {
       const box: any = await connection.openBox(cfg.mailbox);
       const uidValidity = Number(box?.uidvalidity ?? box?.uidValidity ?? 0) || null;
 
@@ -324,8 +500,6 @@ export class EmailImapService implements OnModuleInit {
       }
 
       await this.salvarMarca(cfg, maiorUidProcessado, uidValidity);
-    } finally {
-      connection.end();
     }
   }
 }

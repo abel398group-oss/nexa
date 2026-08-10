@@ -8,6 +8,7 @@ import { EmailCampaignSenderService } from './email-campaign-sender.service';
 import { SupportEscalationListener } from './support-escalation.listener';
 import { EmailOutboundListener } from './email-outbound.listener';
 import { EmailBounceService } from './email-bounce.service';
+import { EmailSentIngestService } from './email-sent-ingest.service';
 import { CampaignReplyLinker } from './campaign-reply-linker';
 import { SellerHandoffListener } from './seller-handoff.listener';
 import { ContactsModule } from '@/application/contacts/contacts.module';
@@ -32,6 +33,7 @@ import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
     SupportEscalationListener, // P2: e-mail ao suporte no evento 'support.escalated'
     EmailOutboundListener,     // entrega SMTP das mensagens de saída do canal e-mail
     EmailBounceService,        // devolução/DSN e resposta automática nunca chegam à Lia
+    EmailSentIngestService,    // a resposta escrita fora do Nexa também entra no histórico
     CampaignReplyLinker,       // liga a resposta ao disparo por Message-ID (troca de endereço)
     SellerHandoffListener,     // aviso por e-mail do lead atribuído (via evento — sem ciclo de módulo)
   ],

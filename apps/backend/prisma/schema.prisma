@@ -843,6 +843,16 @@ model EmailChannel {
   imapUser     String   @map("imap_user")
   imapPass     String   @map("imap_pass")
   imapMailbox  String   @default("INBOX") @map("imap_mailbox")
+  // Pasta de ENVIADOS. É o que captura a resposta que o vendedor escreveu no
+  // webmail/celular, fora do Nexa — sem isto o histórico fica com as perguntas
+  // dos leads e sem as respostas, que é justamente a metade que serve de treino.
+  // Vazio = descoberta automática pelo atributo \Sent (RFC 6154). Ver
+  // EmailImapService.resolverPastaEnviados.
+  imapSentMailbox String? @map("imap_sent_mailbox")
+  // Marca d'água PRÓPRIA da pasta de enviados — os UIDs são por pasta, então
+  // reaproveitar a da INBOX faria uma esconder as mensagens da outra.
+  sentLastSeenUid Int?    @map("sent_last_seen_uid")
+  sentUidValidity Int?    @map("sent_uid_validity")
   // Controle
   isActive     Boolean  @default(true) @map("is_active")
   lastPollAt   DateTime? @map("last_poll_at")

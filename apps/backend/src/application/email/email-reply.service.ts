@@ -20,6 +20,7 @@ import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { renderEmailHtml } from './email-template';
 import { resolveSignature, signatureText } from './email-signature';
 import { identidadeDoMercado } from './email-market-identity';
+import { normalizarMessageId } from './campaign-reply-linker';
 
 // Assinatura configurável — ver email-signature.ts. A versão texto e a versão HTML
 // vêm da MESMA fonte, para não existir a situação de o destinatário ver um nome no
@@ -244,6 +245,20 @@ export class EmailReplyService {
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
       });
+
+      // Registra o Message-ID do que NÓS mandamos.
+      //
+      // O poller agora lê a pasta de enviados, e tudo que sai daqui vai parar lá
+      // também. Sem este registro, a mensagem que o disparo já gravou na conversa
+      // seria reencontrada e gravada de novo — cada e-mail apareceria duas vezes no
+      // fio. Mesma tabela e mesmo prefixo do dedup de entrada: um Message-ID é um
+      // só, tanto faz por qual porta ele apareça. Ver EmailSentIngestService.
+      const mid = normalizarMessageId(info?.messageId);
+      if (mid) {
+        await this.prisma.processedMessage
+          .create({ data: { messageId: `email:${mid}` } })
+          .catch(() => null); // já existe = já estava travado; não é erro
+      }
 
       this.logger.log(`E-mail enviado via SMTP para ${opts.to} (tenant=${opts.tenantId})`);
       return { sent: true, messageId: info?.messageId };
