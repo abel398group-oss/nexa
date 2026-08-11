@@ -10,6 +10,7 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { getRoteiro } from '@/entities/sales-script';
 import {
   descartarLead,
   listClosers,
@@ -132,7 +133,12 @@ export function SdrWorkbenchPage() {
           onSelecionar={setSelecionado}
         />
         {lead ? (
-          <FichaDoLead lead={lead} />
+          // Roteiro à esquerda e maior: é o que ele lê enquanto fala. Ficha e histórico
+          // são consulta; o roteiro é o trabalho.
+          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <RoteiroDoMercado productCode={lead.productCode} lead={lead} />
+            <FichaDoLead lead={lead} />
+          </div>
         ) : (
           <Card className="flex items-center justify-center p-10 text-sm text-base-content/60">
             {isLoading ? 'Carregando sua fila…' : 'Sua fila está vazia por hoje.'}
@@ -249,6 +255,143 @@ function Fila({
           );
         })}
       </ul>
+    </Card>
+  );
+}
+
+/// Troca `{{nome}}`, `{{remetente}}` e `{{saudacao}}` no texto do roteiro.
+///
+/// Sem nome, a saudação sai sem ele — "Bom dia!" e não "Bom dia, !". É a mesma regra do
+/// backend: o fallback existe pra ninguém ler vírgula solta em voz alta no telefone.
+function preencher(texto: string, lead: ItemDaFila): string {
+  const hora = new Date().getHours();
+  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = (lead.contact?.name ?? lead.name ?? '').trim().split(/\s+/)[0] ?? '';
+
+  return texto
+    .replace(/\{\{\s*saudacao\s*\}\}/gi, saudacao)
+    .replace(/\{\{\s*remetente\s*\}\}/gi, '')
+    .replace(/\{\{\s*nome\s*\}\}/gi, nome)
+    // Sobrou vírgula ou espaço antes da pontuação porque o nome era vazio: limpa, senão
+    // o SDR lê "Bom dia, ! Aqui é o".
+    .replace(/,\s*([!?.])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function Secao({
+  titulo,
+  texto,
+  lead,
+  aberta = false,
+}: {
+  titulo: string;
+  texto: string | null;
+  lead: ItemDaFila;
+  aberta?: boolean;
+}) {
+  const [abre, setAbre] = useState(aberta);
+  if (!texto) return null;
+  return (
+    <div className="border-b border-base-200 last:border-0">
+      <button
+        type="button"
+        onClick={() => setAbre(!abre)}
+        className="flex w-full items-center justify-between gap-2 py-2 text-left text-sm font-medium"
+      >
+        {titulo}
+        <span className={'text-base-content/40 transition-transform ' + (abre ? 'rotate-180' : '')}>
+          ▾
+        </span>
+      </button>
+      {abre && (
+        <p className="whitespace-pre-wrap pb-3 text-sm leading-relaxed text-base-content/90">
+          {preencher(texto, lead)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O roteiro do mercado deste lead.
+ *
+ * Coluna própria com scroll próprio: se ele precisar rolar a página inteira pra achar a
+ * resposta de "quanto custa?", ele improvisa — e evitar isso é o motivo de o módulo 1
+ * existir. A abertura já vem aberta; as objeções ficam fechadas até precisar.
+ */
+function RoteiroDoMercado({
+  productCode,
+  lead,
+}: {
+  productCode: string | null;
+  lead: ItemDaFila;
+}) {
+  const { data: roteiro, isLoading } = useQuery({
+    queryKey: ['sales-script', productCode],
+    queryFn: () => getRoteiro(productCode as string),
+    enabled: !!productCode,
+  });
+
+  if (!productCode) {
+    return (
+      <Card className="p-5 text-sm text-base-content/60">
+        Este lead não tem mercado, então não há roteiro para mostrar.
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return <Card className="p-5 text-sm text-base-content/60">Carregando roteiro…</Card>;
+  }
+
+  if (!roteiro) {
+    return (
+      <Card className="p-5">
+        <p className="text-sm text-amber-700">
+          Não existe roteiro para <b>{productCode}</b> ainda.
+        </p>
+        <p className="mt-1 text-xs text-base-content/60">
+          Quem monta a operação precisa escrever em Roteiro do SDR. Ligar sem roteiro é
+          exatamente o que este módulo existe para evitar.
+        </p>
+      </Card>
+    );
+  }
+
+  const objecoes = roteiro.objecoes ?? [];
+
+  return (
+    <Card className="max-h-[calc(100vh-14rem)] overflow-y-auto p-5">
+      <div className="mb-2 flex items-baseline justify-between">
+        <p className="text-sm font-semibold">Roteiro</p>
+        <span className="text-xs text-base-content/40">
+          {productCode} · v{roteiro.version}
+        </span>
+      </div>
+
+      <Secao titulo="Abertura da ligação" texto={roteiro.aberturaCall} lead={lead} aberta />
+      <Secao titulo="Abertura do WhatsApp" texto={roteiro.aberturaWhatsapp} lead={lead} />
+      <Secao
+        titulo={
+          roteiro.assuntoEmail
+            ? `Abertura do e-mail — assunto: ${roteiro.assuntoEmail}`
+            : 'Abertura do e-mail'
+        }
+        texto={roteiro.aberturaEmail}
+        lead={lead}
+      />
+
+      {objecoes.length > 0 && (
+        <div className="mt-3 border-t border-base-300 pt-2">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-base-content/50">
+            Se ele disser…
+          </p>
+          {objecoes.map((o, i) => (
+            <Secao key={i} titulo={o.situacao} texto={o.resposta} lead={lead} />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
