@@ -6,6 +6,7 @@ import {
   contarLote,
   podeForcar,
   preencherSemSobrescrever,
+  vereditoDeBanco,
   violaProtecao,
   type ContadoresLote,
   type LinhaAvaliada,
@@ -190,38 +191,29 @@ export class LeadImportService {
         (linha.phone ? porFone.get(linha.phone) : undefined) ??
         (linha.email ? porEmail.get(linha.email) : undefined);
 
-      // Ordem de precedência, e ela importa: `cliente` ganha de `já na base` porque
-      // é mais informativo e, ao contrário dele, não é forçável. Reportar o motivo
-      // frouxo deixaria o operador achar que dá pra forçar.
-      const ehCliente =
-        !!existente?.customerSince ||
-        (!!linha.phone && noTms.has(TmsLookupService.normalize(linha.phone)));
-      if (ehCliente) {
-        linha.descarte = 'cliente';
-        continue;
-      }
+      // A decisão em si vive em `vereditoDeBanco` (puro, testado). Aqui só se junta
+      // os fatos: o que o banco respondeu e o que o TMS respondeu.
+      const veredito = vereditoDeBanco({
+        temFone: !!linha.phone,
+        temEmail: !!linha.email,
+        existente: existente
+          ? {
+              optOutAt: existente.optOutAt,
+              status: existente.status,
+              emailBouncedAt: existente.emailBouncedAt,
+              customerSince: existente.customerSince,
+            }
+          : null,
+        // A chave do Map do TMS é o telefone SEM o 55 — por isso normaliza de novo
+        // com o mesmo método que o `batchLookup` usou internamente. Duas
+        // normalizações diferentes aqui e a peneira erra em silêncio: ou nenhum
+        // cliente é pego, ou a lista inteira é descartada como cliente.
+        estaNoTms: !!linha.phone && noTms.has(TmsLookupService.normalize(linha.phone)),
+        forcarJaNaBase,
+      });
 
-      if (existente?.optOutAt || existente?.status === 'opted_out') {
-        linha.descarte = 'opt_out'; // LGPD, e `podeForcar` recusa
-        continue;
-      }
-
-      // Hard bounce NÃO descarta o lead: endereço morto não invalida o WhatsApp do
-      // mesmo contato (ver comentário de `emailBouncedAt` no schema). Só apaga o
-      // e-mail desta importação — e se o e-mail era o único canal, a linha cai.
-      if (existente?.emailBouncedAt && linha.email) {
-        linha.email = null;
-        if (!linha.phone) {
-          linha.descarte = 'email_invalido';
-          continue;
-        }
-      }
-
-      if (existente) {
-        if (!forcarJaNaBase || !podeForcar('ja_na_base')) {
-          linha.descarte = 'ja_na_base';
-        }
-      }
+      if (veredito.descartarEmail) linha.email = null;
+      linha.descarte = veredito.descarte;
     }
   }
 

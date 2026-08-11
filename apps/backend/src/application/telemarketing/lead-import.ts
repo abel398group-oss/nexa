@@ -90,6 +90,59 @@ export function violaProtecao<T extends Record<string, unknown>>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Veredito que depende do banco — puro, recebendo os fatos já consultados
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// O que o banco sabe sobre um contato que já existe. `null` = não existe.
+export interface FatosDoContato {
+  optOutAt: Date | null;
+  status: string;
+  emailBouncedAt: Date | null;
+  customerSince: Date | null;
+}
+
+export interface VereditoDeBanco {
+  descarte: MotivoDescarte | null;
+  /// Verdadeiro quando o e-mail deve ser descartado mas o lead continua. Hard bounce
+  /// mata o endereço, não a pessoa: o mesmo contato segue alcançável no WhatsApp
+  /// (ver o comentário de `emailBouncedAt` no schema).
+  descartarEmail: boolean;
+}
+
+export function vereditoDeBanco(args: {
+  temFone: boolean;
+  temEmail: boolean;
+  existente: FatosDoContato | null;
+  estaNoTms: boolean;
+  forcarJaNaBase: boolean;
+}): VereditoDeBanco {
+  const { temFone, temEmail, existente, estaNoTms, forcarJaNaBase } = args;
+
+  // Precedência, e ela importa: `cliente` ganha de `já na base` porque é mais
+  // informativo e, ao contrário dele, não é forçável. Reportar o motivo frouxo
+  // deixaria o operador achar que dá pra forçar a entrada de um cliente.
+  if (existente?.customerSince || estaNoTms) {
+    return { descarte: 'cliente', descartarEmail: false };
+  }
+
+  if (existente?.optOutAt || existente?.status === 'opted_out') {
+    return { descarte: 'opt_out', descartarEmail: false }; // LGPD
+  }
+
+  const descartarEmail = !!existente?.emailBouncedAt && temEmail;
+  // Só cai se o e-mail queimado era o único canal.
+  if (descartarEmail && !temFone) {
+    return { descarte: 'email_invalido', descartarEmail: true };
+  }
+
+  if (existente && !(forcarJaNaBase && podeForcar('ja_na_base'))) {
+    return { descarte: 'ja_na_base', descartarEmail };
+  }
+
+  return { descarte: null, descartarEmail };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Contadores do lote
 // ─────────────────────────────────────────────────────────────────────────────
 
