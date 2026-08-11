@@ -6,6 +6,14 @@ export interface Seller {
   active: boolean;
   /** ADR 034 ("Estou fora"): true → handoff também notifica no WhatsApp do vendedor. */
   outOfOffice?: boolean;
+  /**
+   * "Ausente até" (módulo 1): férias, atestado, afastamento. Enquanto a data não passa,
+   * não entra na distribuição de lote nem na lista de closers.
+   *
+   * Data e não booleano porque ausência tem fim — quem voltou ontem volta a receber hoje
+   * sem ninguém precisar desmarcar. Não confundir com `outOfOffice` acima.
+   */
+  awayUntil?: string | null;
   assignedCount: number;
   loginEmail?: string | null;
 }

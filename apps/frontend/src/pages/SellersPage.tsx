@@ -19,7 +19,92 @@ import {
   deleteSeller,
   bulkDeleteSellers,
 } from '@/entities/seller';
+import { setSellerAway } from '@/entities/seller';
 import { StandardListPage } from '@/components/shared/StandardListPage';
+
+/**
+ * "Ausente até" — férias, atestado, afastamento (módulo 1).
+ *
+ * Enquanto a data não passa, o vendedor fica fora da distribuição de lote e da lista de
+ * closers. Data e não caixinha: ausência tem fim, e um booleano depende de alguém
+ * lembrar de desmarcar — quem volta na segunda passaria a semana sem receber nada.
+ *
+ * Coluna separada do "Estou fora" (ADR 034), que está do lado e significa outra coisa:
+ * aquele decide se o handoff também avisa no WhatsApp dele.
+ */
+function CelulaAusente({ seller, onMudou }: { seller: Seller; onMudou: () => void | Promise<unknown> }) {
+  const toast = useToast();
+  const [editando, setEditando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+
+  const ausente = !!seller.awayUntil && new Date(seller.awayUntil).getTime() > Date.now();
+
+  async function gravar(valor: string | null) {
+    setSalvando(true);
+    try {
+      await setSellerAway(seller.id, valor);
+      toast.success(
+        valor
+          ? `${seller.name} não recebe lead até ${new Date(valor).toLocaleDateString('pt-BR')}.`
+          : `${seller.name} voltou a receber lead.`,
+      );
+      setEditando(false);
+      await onMudou();
+    } catch {
+      toast.error('Não foi possível salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (editando) {
+    return (
+      <input
+        type="date"
+        autoFocus
+        disabled={salvando}
+        // Grava ao escolher, sem botão: é uma data só, e um "salvar" ao lado seria um
+        // clique a mais para a informação mais simples da tela.
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v) void gravar(new Date(`${v}T23:59:59`).toISOString());
+        }}
+        onBlur={() => setEditando(false)}
+        className="h-7 rounded-md border border-base-300 bg-white px-2 text-xs outline-none focus:border-brand-500"
+      />
+    );
+  }
+
+  if (ausente) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">
+          até {new Date(seller.awayUntil as string).toLocaleDateString('pt-BR')}
+        </Badge>
+        {/* "Voltou" existe porque volta antecipada é comum — sem ele, quem voltou antes
+            teria de esperar a data para receber lead de novo. */}
+        <button
+          type="button"
+          disabled={salvando}
+          onClick={() => void gravar(null)}
+          className="text-xs text-base-content/40 underline hover:text-base-content/70"
+        >
+          voltou
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditando(true)}
+      className="text-xs text-base-content/40 underline hover:text-base-content/70"
+    >
+      marcar
+    </button>
+  );
+}
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
 
 const sellerSchema = z.object({
@@ -273,6 +358,12 @@ export function SellersPage() {
           <Switch checked={s.outOfOffice !== false} onCheckedChange={() => toggleOutOfOffice(s)} />
         </div>
       ),
+    },
+    {
+      id: 'away',
+      header: 'Ausente',
+      mobileLabel: 'Ausente',
+      cell: (s) => <CelulaAusente seller={s} onMudou={invalidate} />,
     },
     {
       id: 'toggle',

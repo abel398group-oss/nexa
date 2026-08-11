@@ -38,6 +38,17 @@ export async function toggleSellerOutOfOffice(id: string, outOfOffice: boolean):
   await api.patch(`/sellers/${id}/out-of-office`, { outOfOffice });
 }
 
+/**
+ * "Ausente até" (módulo 1) — férias, atestado, afastamento. Enquanto durar, o vendedor
+ * fica fora da distribuição de lote e da lista de closers. `null` marca a volta.
+ *
+ * NÃO é `toggleSellerOutOfOffice` acima: aquele é da ADR 034 e decide se o handoff
+ * também avisa no WhatsApp dele.
+ */
+export async function setSellerAway(id: string, awayUntil: string | null): Promise<void> {
+  await api.patch(`/sellers/${id}/away`, { awayUntil });
+}
+
 export async function deleteSeller(id: string): Promise<void> {
   await api.delete(`/sellers/${id}`);
 }
