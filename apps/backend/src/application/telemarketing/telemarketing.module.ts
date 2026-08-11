@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { LeadImportService } from './lead-import.service';
 import { SdrService } from './sdr.service';
+import { CloserService } from './closer.service';
 import { LeadBatchesController } from '@/presentation/http/telemarketing/lead-batches.controller';
 import { SdrController } from '@/presentation/http/telemarketing/sdr.controller';
+import { CloserController } from '@/presentation/http/telemarketing/closer.controller';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 
 /**
@@ -14,7 +16,7 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
  * compilação (aconteceu em 11/08 com SellersModule → EmailModule → AgentsModule).
  */
 @Module({
-  controllers: [LeadBatchesController, SdrController],
-  providers: [LeadImportService, SdrService, TmsLookupService],
+  controllers: [LeadBatchesController, SdrController, CloserController],
+  providers: [LeadImportService, SdrService, CloserService, TmsLookupService],
 })
 export class TelemarketingModule {}
