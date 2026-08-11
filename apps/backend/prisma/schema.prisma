@@ -713,6 +713,46 @@ model LeadBatch {
   @@map("lead_batches")
 }
 
+/// ROTEIRO do SDR por mercado (módulo 1, itens 3-6). É o que ele lê enquanto fala.
+///
+/// Uma LINHA POR VERSÃO, e a matriz inteira congelada junta — nunca versão por campo.
+/// Versionar campo a campo custaria rastreio real para responder uma pergunta que
+/// ninguém faz; o que se quer saber é "o roteiro novo converteu melhor que o velho".
+/// Por isso salvar cria uma linha nova e apaga o `active` da anterior, em vez de
+/// sobrescrever: a ligação de ontem precisa continuar apontando para o texto que estava
+/// na tela ontem.
+///
+/// Item 7 (material de consulta) NÃO mora aqui: é a base de conhecimento que já existe,
+/// filtrada por `productCode` — construir um segundo acervo seria a duplicação que a
+/// ADR 037 evitou para mercado.
+model SalesScript {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  productCode String   @map("product_code")
+  version     Int      @default(1)
+  /// Versão vigente do mercado. Só uma por mercado — as outras ficam para leitura.
+  active      Boolean  @default(true)
+
+  /// Aberturas: diferentes por canal por motivo técnico, não por estilo. O WhatsApp
+  /// mostra asterisco literal, e o e-mail precisa de assunto.
+  aberturaCall     String? @map("abertura_call")
+  aberturaWhatsapp String? @map("abertura_whatsapp")
+  aberturaEmail    String? @map("abertura_email")
+  assuntoEmail     String? @map("assunto_email")
+
+  /// Respostas por situação: `[{ situacao, resposta }]`. Compartilhadas pelos três
+  /// canais de propósito — objeção é a mesma no telefone e no e-mail, e duas cópias
+  /// divergem no primeiro ajuste.
+  objecoes Json?
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdByUserId String?  @map("created_by_user_id")
+
+  @@unique([productCode, version])
+  @@index([tenantId, productCode, active])
+  @@map("sales_scripts")
+}
+
 /// Quais mercados um vendedor pode trabalhar. Substitui o `SegmentMember` do PRD
 /// original: mercado é `productCode`, não entidade nova (ADR 037). Sem esta tabela
 /// não existe como dizer "o fulano vende os dois".
