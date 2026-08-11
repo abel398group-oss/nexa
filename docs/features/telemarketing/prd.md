@@ -9,8 +9,8 @@ status: draft
 
 | Campo | Valor |
 |------|-------|
-| **Status** | Rascunho — aguardando aprovação do Abel |
-| **Data** | 2026-08-04 |
+| **Status** | Módulo 1 aprovado por Abel em 2026-08-11 — restante segue rascunho |
+| **Data** | 2026-08-04 · revisado 2026-08-11 (ver §Revisão 2026-08-11) |
 | **Dono** | (a definir) |
 | **Domínio** | contacts / opportunities / sellers |
 
@@ -18,6 +18,203 @@ status: draft
 > **proactive alert monitoring**. This feature touches the **sales leads** pillar
 > only. Every design decision below is subordinate to one constraint: the other
 > two pillars must not change behaviour, not even by accident.
+
+---
+
+## Revisão 2026-08-11 — módulo 1 e mercados
+
+This section is authoritative where it disagrees with the rest of the document.
+It was written after a design round with Abel on 2026-08-11 and after checking
+the current `schema.prisma`, which already contains several things this PRD
+describes as new.
+
+### Two premises changed
+
+**1. A human SDR makes first contact in this round.** The original PRD assumed
+Lia opens, converses and qualifies every lead, with the seller only closing.
+Decided 2026-08-11: Lia stays out of this round entirely. A human SDR opens the
+lead using a script the manager wrote. Where Lia fits comes later.
+
+Consequence: §Per-segment sales brain stops being a blocking prerequisite for
+going live — a market can be worked by an SDR before Lia can talk about it. It
+remains a prerequisite for *outbound by Lia*, and the sequencing rule still
+holds for that path.
+
+**2. `LeadSegment` is dropped. The concept already exists as "mercado".** ADR
+037 named it and the schema implements it as `products` / `productCode`. The
+comment at `schema.prisma:546` is explicit: a parallel `marketId` would give the
+same concept two keys, so it must not be created. Every mention of
+`LeadSegment` / `SegmentMember` below is superseded by mercado, with one
+exception noted in §What must be created.
+
+### What already exists (do not re-create)
+
+Checked against `schema.prisma` on 2026-08-11:
+
+| Concept | Where it already lives |
+|---|---|
+| Mercado | `products` + `productCode` (ADR 037) |
+| Which mercado holds the WhatsApp thread | `AiConversation.productCode` — no `currentSegmentId` needed |
+| Message template per mercado | `MessageTemplate` (schema.prisma:574) |
+| Playbook per mercado | playbook keyed by `productCode` (schema.prisma:829) |
+| Campaign belongs to a mercado | `Campaign.productCode` |
+| Manual call / e-mail / note log | `SellerActivity` (`type`, `result`) — this is the SDR's outcome record |
+| Immutable ownership + stage timeline | `OpportunityStageHistory` |
+| "Lead parado" alert | `Opportunity.staleNotifiedAt` |
+| "Call me back on X" | `Opportunity.pausedUntil` |
+| Lead ownership | `Opportunity.assignedSellerId` and `Contact.ownerSellerId` |
+| Opt-out / hard bounce (hygiene inputs) | `Contact.optOutAt`, `Contact.status`, `Contact.emailBouncedAt` |
+
+### What must be created
+
+Additive only, `migrate deploy`:
+
+1. **`LeadBatch`** — as specified in §New tables. Still does not exist.
+2. **`Opportunity.productCode`** (nullable) — the mercado of the work unit.
+   `Opportunity` has no product column today.
+3. **Seller ↔ mercado link** — the only part of `SegmentMember` with no
+   equivalent. `Seller` carries no product relation, so "which markets may this
+   SDR work" cannot be expressed today.
+
+`LeadAttempt` stays as specified, but see §Attempt vs SellerActivity below.
+
+### Ownership — single source of truth
+
+Two ownership fields exist and they overlap. Left undeclared, a seller sees a
+lead on one screen and not on the other, and nobody can explain why.
+
+| Field | Authority |
+|---|---|
+| `Opportunity.assignedSellerId` | **source of truth** for the SDR/closer workflow |
+| `Contact.ownerSellerId` (added 2026-08-11) | filters the contacts/inbox screen only |
+
+Distribution writes **both, in one `$transaction`**, from a single place in the
+code. Two write sites is how they drift.
+
+**Credit is not the same as the current worker.** `assignedSellerId` moves from
+the SDR to the closer; the SDR who sourced the lead must not lose the record of
+having sourced it, or nobody will ever pass a lead forward. The SDR's claim is
+read from `OpportunityStageHistory` plus the `SellerActivity` rows they wrote —
+both already immutable, both already dated.
+
+**No commission column.** Percentage, tier and split are undecided as of
+2026-08-11 and stay out of the schema until the rule exists. Money is out of
+scope for Nexa by design (see §Business context). What matters is that the
+*event* is recorded — every ownership change is already dated in
+`OpportunityStageHistory`, and history cannot be reconstructed later, while a
+nullable column can be added in one additive migration.
+
+### Mercado sits on `Opportunity`, not on `Contact`
+
+Unchanged from the original decision, and the reason still holds: one phone is
+one WhatsApp thread. A transportadora may be a lead for TMS *and* for pneus —
+two opportunities, two owners, one conversation at a time, enforced by
+`AiConversation.productCode`.
+
+**Consequence for import:** bringing a list into a mercado creates one
+`Opportunity` per lead at `stage = 'new'`, carrying that mercado's
+`productCode`. Without those rows the per-batch funnel has nothing to count, and
+"which list is worth buying again" cannot be answered.
+
+### Módulo 1 — "Preparar o trabalho do SDR"
+
+One screen per mercado. Seven items. Single click on the chevron opens a short
+summary (click target ~32px, larger than the glyph); double click on the row
+opens an edit popup; `Esc` closes. Same interaction already used on
+`CampaignsPage.tsx`.
+
+| # | Item | Notes |
+|---|---|---|
+| 1 | Lista de leads | CSV upload + manual add. Hygiene runs **at import** |
+| 2 | Distribuir entre SDRs | split across active / all to one / hold |
+| 3 | Abertura da ligação | |
+| 4 | Abertura do WhatsApp | |
+| 5 | Abertura do e-mail | the only one with a subject line |
+| 6 | Respostas por situação | shared across all three channels |
+| 7 | Material de consulta | uses the existing knowledge base, **not** a PDF viewer |
+
+**Only item 2 blocks.** Without an owner a lead exists for nobody. The other six
+make the SDR work worse, not impossible — and a missing script means he
+improvises, which is the outcome the module exists to prevent.
+
+**Hygiene moves from send-time to import-time.** The filter already exists in
+`email-campaign-sender.service.ts` and runs when a campaign fires. Running it at
+import instead surfaces list quality before the operator commits to it, with a
+report: how many arrived, how many were duplicates, already TMS customers,
+invalid, competitors, opted out — and how many arrived **with no name**, since
+that drives the greeting fallback.
+
+**Override is allowed for one reason only: "já na base".** The other four stay
+hard-blocked, each for a different non-negotiable reason:
+
+| Motivo | Why it cannot be overridden |
+|---|---|
+| Opted out | LGPD. Not a preference |
+| Invalid e-mail | burns sender-domain reputation for every later campaign |
+| TMS customer | pitching what they already pay for is the worst possible call |
+| Competitor | hands them the sales script |
+
+A generic "force selected" button is exactly how an opt-out returns to a list.
+
+**Script lives on the mercado, not on the list.** Therefore a list must declare
+its mercado at import. Openings differ per channel for technical reasons
+(WhatsApp renders literal asterisks, e-mail needs a subject); objection
+responses are shared so the three channels cannot drift apart.
+
+`{{nome}}`, `{{remetente}}` and `{{saudacao}}` already work (`sender.service.ts`).
+**Fallback with no name: `Bom dia! Aqui é o Mateus`** — never a dangling comma,
+never a literal `null` read out loud on a call.
+
+**Script versioning is per mercado, whole matrix at once** — one frozen version
+of all seven items together, never per field. Per-field history costs real
+tracking complexity to answer a question nobody asks.
+
+For versioning to measure anything, the **call record must stamp the script
+version that was on screen at that moment**. That belongs to the SDR module, but
+it is named here because it cannot be reconstructed afterwards: without it the
+version history is decoration.
+
+**The SDR reads content and decides logistics.** Pass to closer, schedule a
+callback with a date, book a meeting, mark no-answer, discard. He never edits
+price, promise or script.
+
+**Batch label.** Every lead carries the batch it came from, so months later the
+list can be judged by outcome (`Feira agosto — 3 ganhos` vs `Lista comprada — 0`).
+
+**Leads sitting idle: visible, not automatic.** A banner — *"Mateus: 40 leads
+untouched for 5 days"* — plus manual redistribution. `staleNotifiedAt` already
+exists to keep the same lead from re-alerting daily. Automatic return to the
+pool is deliberately **not** built: with a two-SDR team it creates a race (he
+called at 20:00, the job returned it at 20:01) and teaches the SDR to fake a
+touch to reset the clock. Revisit when the operation is large enough that a
+human cannot watch it.
+
+**"Ausente" sellers receive nothing.** Vacation, sick leave, departure; their
+leads fall back to the general pool. This is a **new** concept and must not be
+confused with `Seller.outOfOffice` (ADR 034), which controls whether handoff
+also pings WhatsApp — a different question with an inverted default.
+
+### Import must never overwrite what Lia learned
+
+Already the highest-severity risk in this PRD (R-1/R2) and it applies verbatim
+to módulo 1: a re-imported lead fills **empty fields only**. A spreadsheet whose
+`frota` column is blank must not erase the fleet size the lead stated in
+conversation. The loss is silent and only surfaces later, when Lia re-asks
+something already answered.
+
+### Attempt vs SellerActivity
+
+`SellerActivity` already records a manual call/e-mail/note with a result code,
+and `LeadAttempt` as specified overlaps it. Before creating `LeadAttempt`,
+decide whether the funnel can be read from `SellerActivity` plus
+`OpportunityStageHistory`. Two tables recording "what happened on this lead" is
+the same duplication this revision removed for mercado.
+
+### Still open (not blocking módulo 1)
+
+- Commission rule — percentage, tier, SDR/closer split. Deferred by Abel on
+  2026-08-11. Blocks nothing in módulo 1 because no commission column is created.
+- O2 (LGPD basis per batch) and O3 (leads per seller) remain as recorded below.
 
 ---
 
@@ -230,23 +427,23 @@ playbook and at least one knowledge article for its product.
 ### New tables (additive only)
 
 ```
-LeadSegment                           -- carteira / seção
-  id, tenantId
-  name                                -- "TMS", "Insumos"
-  productCode?                        -- set only when the segment sells a
-                                      -- distinct product (see O4)
-  active, createdAt
+-- SUPERSEDED 2026-08-11: LeadSegment and SegmentMember are NOT created.
+-- Mercado already exists as `products` / `productCode` and ADR 037 forbids a
+-- parallel key (schema.prisma:546). Read "segment" as "mercado" throughout this
+-- document. The only surviving piece of SegmentMember is the seller<->mercado
+-- link below, which has no equivalent in the schema today.
 
-SegmentMember
-  id, tenantId, segmentId
+SellerMarket                          -- replaces SegmentMember
+  id, tenantId
   sellerId                            -- reuses the existing Seller record
+  productCode                         -- the mercado this seller may work
   role                                -- seller | lead  (drives telemarketing
                                       -- vs telemarketing_segment scope)
-  @@unique([segmentId, sellerId])
+  @@unique([sellerId, productCode])
 
 LeadBatch
   id, tenantId
-  segmentId                           -- planning delivers INTO a segment
+  productCode                         -- planning delivers INTO a mercado
   name, source, sourceDetail          -- "feira intermodal", "lista sintegra sp"
   consentBasis                        -- LGPD basis; see Riscos R-3
   uploadedByUserId
@@ -279,22 +476,21 @@ Phase 3 experience shows a real need (see §Phase 3).
 ```
 Contact
   + batchId String?                   -- NULLABLE. Existing rows stay null.
-                                      -- NOTE: no segmentId here, on purpose.
+                                      -- NOTE: no productCode here, on purpose —
+                                      -- the mercado lives on the opportunity.
 
 Opportunity
-  + segmentId String?                 -- NULLABLE. Existing rows stay null and
-                                      -- behave exactly as today (no segment =
+  + productCode String?               -- NULLABLE. Existing rows stay null and
+                                      -- behave exactly as today (no mercado =
                                       -- visible under the legacy own/all rule).
 
-AiConversation
-  + currentSegmentId String?          -- NULLABLE. Which segment holds the
-                                      -- thread right now (one at a time).
-```
+AiConversation                        -- NOTHING TO ADD (revised 2026-08-11):
+                                      -- `productCode` already exists and already
+                                      -- records which mercado holds the thread.
 
-```
-Campaign
-  + segmentId String?                 -- NULLABLE. Which segment this disparo
-                                      -- belongs to; replies inherit it (R8).
+Campaign                              -- NOTHING TO ADD (revised 2026-08-11):
+                                      -- `productCode` already exists; replies
+                                      -- inherit it (R8).
 ```
 
 Nothing else changes. No column is renamed, retyped or dropped. Every added
@@ -312,12 +508,12 @@ same file family involved in the 2026-07-09 handoff incident. It changes under
 one rule:
 
 ```
-pickAndClaimSeller(tenantId, segmentId?)
+pickAndClaimSeller(tenantId, productCode?)      -- revised 2026-08-11
 
-  segmentId == null  ->  query is unchanged, literally the current SQL
-  segmentId != null  ->  same query + AND id IN (
-                           SELECT seller_id FROM segment_members
-                           WHERE segment_id = $segmentId)
+  productCode == null  ->  query is unchanged, literally the current SQL
+  productCode != null  ->  same query + AND id IN (
+                             SELECT seller_id FROM seller_markets
+                             WHERE product_code = $productCode)
 ```
 
 Legacy conversations carry no segment, so they keep taking the current path.
@@ -426,7 +622,9 @@ Three levels, resolved server-side in this order:
 | `segment` | `Opportunity.segmentId IN (segments where I am a member)` |
 | `all` | no segment filter |
 
-Segment membership comes from `SegmentMember`, keyed by the user's `sellerId`.
+Mercado membership comes from `SellerMarket` (revised 2026-08-11), keyed by the
+user's `sellerId`, and `Opportunity.segmentId` above reads
+`Opportunity.productCode`.
 A user with no membership and only `telemarketing` sees `own` — which is
 exactly today's behaviour, so existing users are unaffected by the new layer.
 
@@ -462,9 +660,10 @@ missing from a DTO is a 400 (REGRA 1, the 2026-07-09 incident).
 | `POST /lead-batches` | `lead_batches` | upload; returns hygiene counters |
 | `GET /lead-batches` | `lead_batches` | list with funnel per batch |
 | `GET /lead-batches/:id/performance` | `lead_batches` | funnel + attempt curve |
-| `GET /segments` | `telemarketing` | segments the caller may see |
-| `POST /segments` · `PATCH /segments/:id` | `admin` | create / rename / deactivate |
-| `POST /segments/:id/members` · `DELETE .../members/:sellerId` | `admin` | grants "vende os dois" (R9) |
+| ~~`GET /segments`~~ | — | dropped: mercado is already served by the markets module (ADR 037) |
+| ~~`POST /segments` · `PATCH /segments/:id`~~ | — | dropped: same |
+| `POST /markets/:productCode/sellers` · `DELETE .../sellers/:sellerId` | `admin` | grants "vende os dois" (R9), via `SellerMarket` |
+| `POST /lead-batches/:id/distribute` | `lead_batches` | módulo 1 item 2 — writes both ownership fields in one `$transaction` |
 | `POST /opportunities/:id/attempts/:attemptId/disposition` | `telemarketing` | closes the attempt on the existing seller screen (R4) |
 | `GET /telemarketing/supervisor` | `telemarketing_supervisor` | funnel panel |
 
@@ -502,9 +701,14 @@ Three migrations, all additive, all applied with `migrate deploy`. Never
 `migrate dev`, `reset` or `db push` — the local `.env` points at the production
 database (REGRA 5).
 
-1. `LeadSegment` + `SegmentMember`
-2. `LeadBatch` + `LeadAttempt`
-3. nullable columns on `Contact`, `Opportunity`, `AiConversation`, `Campaign`
+Revised 2026-08-11 — three became two, because mercado already exists:
+
+1. `SellerMarket` + `LeadBatch` (+ `LeadAttempt`, if §Attempt vs SellerActivity
+   concludes it is still needed)
+2. nullable columns: `Contact.batchId`, `Opportunity.productCode`
+
+`AiConversation` and `Campaign` need no migration — both already carry
+`productCode`. No `marketId` is created, ever (ADR 037, `schema.prisma:546`).
 
 **Backfill: none.** Existing contacts, opportunities and conversations keep
 `segmentId = null` and `batchId = null`, which resolves to today's behaviour by
