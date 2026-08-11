@@ -203,6 +203,12 @@ export function LeadBatchesPage() {
             <>
               <span className="font-medium text-base-content">{arquivo}</span> carregado
             </>
+          ) : csv ? (
+            // Sem isso, quem acrescenta na mão digita, clica e não vê nada mudar —
+            // e acha que não entrou.
+            <span className="font-medium text-base-content">
+              {Math.max(0, csv.trim().split('\n').length - 1)} lead(s) digitado(s)
+            </span>
           ) : (
             'Arraste o CSV aqui, ou escolha o arquivo'
           )}
@@ -236,6 +242,19 @@ export function LeadBatchesPage() {
         </p>
       </Card>
 
+      <AdicionarNaMao
+        onAdicionar={(linhas) =>
+          // Vira CSV e entra pelo MESMO caminho do arquivo: prévia, peneira, confirmação.
+          // Um atalho que gravasse direto pularia a peneira, e aí o lead digitado à mão
+          // seria o único que entra sem checagem de opt-out e de cliente.
+          setCsv((atual) => {
+            const cabecalho = 'nome;empresa;telefone;email';
+            const corpo = linhas.join('\n');
+            return atual ? `${atual}\n${corpo}` : `${cabecalho}\n${corpo}`;
+          })
+        }
+      />
+
       {relatorio && (
         <Relatorio
           relatorio={relatorio}
@@ -249,6 +268,77 @@ export function LeadBatchesPage() {
 
       <Historico lotes={lotes} />
     </PageContainer>
+  );
+}
+
+/**
+ * Acrescentar um lead na mão (módulo 1, item 1).
+ *
+ * Não é um caminho paralelo: vira linha de CSV e entra pela mesma prévia. Se gravasse
+ * direto, o lead digitado à mão seria o único a escapar da peneira — justamente o que
+ * costuma ser digitado com pressa, no meio de uma ligação.
+ */
+function AdicionarNaMao({ onAdicionar }: { onAdicionar: (linhas: string[]) => void }) {
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState('');
+  const [empresa, setEmpresa] = useState('');
+  const [fone, setFone] = useState('');
+  const [email, setEmail] = useState('');
+
+  // Ponto-e-vírgula é o separador; se o operador digitar um no nome da empresa, a linha
+  // quebra em duas células. Trocar por vírgula é mais honesto que recusar o texto dele.
+  const limpo = (v: string) => v.replace(/;/g, ',').trim();
+
+  function acrescentar() {
+    onAdicionar([[limpo(nome), limpo(empresa), limpo(fone), limpo(email)].join(';')]);
+    setNome('');
+    setEmpresa('');
+    setFone('');
+    setEmail('');
+  }
+
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        className="self-start text-sm text-brand-600 underline-offset-4 hover:underline"
+        onClick={() => setAberto(true)}
+      >
+        Acrescentar um lead na mão
+      </button>
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <p className="mb-3 text-sm font-medium">Acrescentar na mão</p>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Input placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+        <Input
+          placeholder="Empresa"
+          value={empresa}
+          onChange={(e) => setEmpresa(e.target.value)}
+        />
+        <Input placeholder="Telefone" value={fone} onChange={(e) => setFone(e.target.value)} />
+        <Input placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <Button
+          size="sm"
+          // Telefone OU e-mail: um canal utilizável basta, e é a mesma regra da peneira.
+          disabled={!fone.trim() && !email.trim()}
+          onClick={acrescentar}
+        >
+          Acrescentar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setAberto(false)}>
+          Fechar
+        </Button>
+        <span className="text-xs text-base-content/50">
+          Entra na mesma prévia do arquivo — clique em “Ver o que entra” depois.
+        </span>
+      </div>
+    </Card>
   );
 }
 
