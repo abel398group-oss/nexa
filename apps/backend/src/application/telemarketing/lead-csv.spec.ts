@@ -89,7 +89,13 @@ describe('parse', () => {
 });
 
 describe('veredito da linha', () => {
-  const base = { linha: 2, name: null, company: null, fleetSize: null };
+  const base = {
+    linha: 2,
+    name: null,
+    company: null,
+    fleetSize: null,
+    foneInvalido: false,
+  };
 
   it('lead só com e-mail é válido', () => {
     // Descartar por não ter telefone jogaria fora lead de formulário do site.
@@ -109,6 +115,25 @@ describe('veredito da linha', () => {
   it('e-mail torto mas telefone bom continua válido', () => {
     const r = avaliarLinha({ ...base, phone: '5511999887766', email: 'sem-arroba' }, new Set());
     expect(r).toBeNull();
+  });
+
+  it('lixo no telefone é reportado como telefone_invalido, não como e-mail', () => {
+    // "abc" some na normalização (vira null), então antes desta regra o relatório
+    // acusava o e-mail e mandava o operador conferir a coluna errada.
+    const r = avaliarLinha(
+      { ...base, foneInvalido: true, phone: null, email: 'sem-arroba' },
+      new Set(),
+    );
+    expect(r).toBe('telefone_invalido');
+  });
+
+  it('célula de telefone vazia não é erro do operador', () => {
+    // Sem telefone e com e-mail torto: o que ele preencheu errado foi o e-mail.
+    const r = avaliarLinha(
+      { ...base, foneInvalido: false, phone: null, email: 'sem-arroba' },
+      new Set(),
+    );
+    expect(r).toBe('email_invalido');
   });
 
   it('linha sem nada aproveitável é descartada', () => {

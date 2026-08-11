@@ -30,6 +30,11 @@ export interface LinhaCsv {
   phone: string | null; // canônico "55..." ou null
   email: string | null; // NULL, nunca string vazia (ADR 021)
   fleetSize: number | null;
+  /// A célula de telefone tinha conteúdo mas não sobrou telefone utilizável — "abc",
+  /// "não tem", um ramal. Diferente de célula vazia, e o relatório precisa distinguir:
+  /// sem isso, lixo na coluna de telefone desaparece e o operador não sabe que
+  /// preencheu errado.
+  foneInvalido: boolean;
 }
 
 export interface ResultadoCsv {
@@ -124,8 +129,10 @@ export function avaliarLinha(
   if (temFone || temEmail) return null;
 
   // Nada aproveitável: reporta o campo que o operador preencheu e está errado, que é
-  // o que ele consegue corrigir na planilha.
-  if (linha.phone) return 'telefone_invalido';
+  // o que ele consegue corrigir na planilha. Telefone vem primeiro porque é o canal
+  // principal do SDR — e porque lixo no telefone (`abc`) some na normalização, então
+  // sem esta ordem o relatório acusaria o e-mail e a coluna errada seria conferida.
+  if (linha.foneInvalido || linha.phone) return 'telefone_invalido';
   if (linha.email) return 'email_invalido';
   return 'telefone_invalido';
 }
@@ -162,6 +169,11 @@ export function parseCsvDeLeads(conteudo: string): ResultadoCsv {
       phone: foneNormalizado.length > 0 ? foneNormalizado : null,
       email: emailNormalizado.length > 0 ? emailNormalizado : null,
       fleetSize: numeroOuNulo(campos.fleetSize ?? null),
+      // Célula preenchida que não virou telefone válido. `!!campos.phone` distingue
+      // de célula vazia, que não é erro do operador — é dado que ele não tinha.
+      foneInvalido:
+        !!campos.phone &&
+        (foneNormalizado.length === 0 || !isValidBrazilPhone(foneNormalizado)),
     };
 
     linhas.push({
