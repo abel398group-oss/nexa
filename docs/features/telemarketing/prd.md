@@ -72,11 +72,12 @@ Additive only, `migrate deploy`:
 1. **`LeadBatch`** — as specified in §New tables. Still does not exist.
 2. **`Opportunity.productCode`** (nullable) — the mercado of the work unit.
    `Opportunity` has no product column today.
-3. **Seller ↔ mercado link** — the only part of `SegmentMember` with no
-   equivalent. `Seller` carries no product relation, so "which markets may this
-   SDR work" cannot be expressed today.
+3. **`Contact.batchId`** (nullable) — which list the lead came from.
+4. **Seller ↔ mercado link** (`SellerMarket`) — the only part of `SegmentMember`
+   with no equivalent. `Seller` carries no product relation, so "which markets
+   may this SDR work" cannot be expressed today.
 
-`LeadAttempt` stays as specified, but see §Attempt vs SellerActivity below.
+That is the whole list. `LeadAttempt` is **not** created — see below.
 
 ### Ownership — single source of truth
 
@@ -202,13 +203,40 @@ to módulo 1: a re-imported lead fills **empty fields only**. A spreadsheet whos
 conversation. The loss is silent and only surfaces later, when Lia re-asks
 something already answered.
 
-### Attempt vs SellerActivity
+### `LeadAttempt` is not created — decided 2026-08-11
 
-`SellerActivity` already records a manual call/e-mail/note with a result code,
-and `LeadAttempt` as specified overlaps it. Before creating `LeadAttempt`,
-decide whether the funnel can be read from `SellerActivity` plus
-`OpportunityStageHistory`. Two tables recording "what happened on this lead" is
-the same duplication this revision removed for mercado.
+**Every mention of `LeadAttempt` below is superseded. Read `SellerActivity`.**
+
+`SellerActivity` (schema.prisma:650) already records what the original PRD wanted
+a new table for. Two tables answering "what happened on this lead" is the same
+duplication this revision removed for mercado, one level down: the day someone
+writes the call in one and the report reads the other, the funnel lies without
+warning.
+
+What the funnel needs, and where it already is:
+
+| Need | Already available |
+|---|---|
+| channel | `SellerActivity.type` — `call \| email \| note`, free string, so `whatsapp` is a code change, not a migration |
+| outcome | `SellerActivity.result` — same, so the SDR's codes (`passou_closer`, `sem_interesse`, `numero_errado`, `nao_e_decisor`) are additive text |
+| "call me back Tuesday" | `Opportunity.pausedUntil` |
+| which try is this | `COUNT` of the lead's activity rows |
+| call duration | `SellerActivity.durationSec` |
+| which batch | join through `Opportunity` → `Contact.batchId` |
+| ownership/stage timeline | `OpportunityStageHistory` |
+
+**The one real objection, and its answer.** R6 requires that nothing assume the
+actor is human, so Lia can later be an operator. `SellerActivity.sellerId` is
+required, so Lia cannot write there. That is not a gap — it is the split the
+schema already makes: Lia's activity lives in `AiConversation` / `AiMessage`, and
+`metrics.service.ts` already reads her side from there. The funnel reads both
+sources; it does not need one table pretending to hold both. R6 is satisfied by
+recording dispositions **through a service method** rather than only from the UI,
+which costs nothing here.
+
+Net effect: the activity log needs **no migration at all** — only new string
+values. Módulo 1 comes down to one new table (`LeadBatch`), one new link
+(`SellerMarket`) and two nullable columns.
 
 ### Still open (not blocking módulo 1)
 
@@ -254,8 +282,9 @@ so a tyre-partner lead can land on a seller who only sells HiperTMS.
   allowed to work it.
 - `LeadBatch` — the delivery unit from planning, scoped to a segment, with
   dedup/hygiene counters.
-- `LeadAttempt` — one row per contact attempt, with disposition and callback,
-  written both by Lia's conversations and by the seller's own contact.
+- ~~`LeadAttempt`~~ — **dropped 2026-08-11.** The attempt log is the existing
+  `SellerActivity` for humans and `AiConversation` / `AiMessage` for Lia. See
+  §`LeadAttempt` is not created.
 - Segment-aware handoff — a hot lead only reaches a seller who is a member of
   its segment (R8, Phase 3).
 - Disposition bar added to the existing seller screen — no new place to work
@@ -703,9 +732,11 @@ database (REGRA 5).
 
 Revised 2026-08-11 — three became two, because mercado already exists:
 
-1. `SellerMarket` + `LeadBatch` (+ `LeadAttempt`, if §Attempt vs SellerActivity
-   concludes it is still needed)
+1. `SellerMarket` + `LeadBatch`
 2. nullable columns: `Contact.batchId`, `Opportunity.productCode`
+
+No `LeadAttempt` migration: the activity log is `SellerActivity`, which already
+exists, and its `type` / `result` are free strings — new codes are a code change.
 
 `AiConversation` and `Campaign` need no migration — both already carry
 `productCode`. No `marketId` is created, ever (ADR 037, `schema.prisma:546`).
