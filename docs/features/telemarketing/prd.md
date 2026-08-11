@@ -246,6 +246,132 @@ values. Módulo 1 comes down to one new table (`LeadBatch`), one new link
 
 ---
 
+## Módulo 2 — Mesa de trabalho do SDR (aprovado 2026-08-11)
+
+Where the SDR spends the day: one screen, one lead at a time, dozens of calls.
+Módulo 1 prepares the work; this is the work. Approved on 2026-08-11 as layout
+and rules; not implemented.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Transportes Silva · Carlos Mendes            HiperTMS · Lote: Feira ago  │
+│ (12) 98807-3788                                                          │
+│ [ WhatsApp ]  [ Ligar ]  [ Copiar e-mail ]              lead 4 de 37 ▸   │
+└──────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────┬──────────────────────────────┐
+│ ROTEIRO — HiperTMS v3                     │ FICHA                        │
+│                                           │ Frota      12 caminhões      │
+│ ▸ Abertura da ligação                     │ E-mail     carlos@silva.com  │
+│   "Bom dia, Carlos! Aqui é o Mateus..."   │ Origem     Feira Intermodal  │
+│                                           │ Etapa      novo              │
+│ ▾ Respostas por situação                  ├──────────────────────────────┤
+│   ▸ "Já tenho sistema"                    │ HISTÓRICO                    │
+│   ▸ "Quanto custa?"                       │ 09/08  Lia · e-mail aberto   │
+│                                           ├──────────────────────────────┤
+│                                           │ MATERIAL                     │
+│                                           │ ▸ Tabela de planos           │
+└───────────────────────────────────────────┴──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Anotação: [_______________________________________________________]      │
+│ [Passar pro closer] [Ligar depois ▾] [Não atendeu] [Descartar ▾] [Próximo]│
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Layout rules, each with its reason
+
+| Rule | Why |
+|---|---|
+| The script owns the largest column and scrolls **independently** | it is what he reads while talking. If he has to scroll to find "quanto custa?", he improvises — the exact outcome módulo 1 exists to prevent |
+| The action bar is **fixed** to the footer | five buttons used dozens of times a day; a constant position is muscle memory |
+| The ficha is **read-only** here | correcting a phone or e-mail carries the overwrite risk of R2 and belongs to another screen |
+| `[ Próximo ]` advances the queue and **writes nothing** | auto-advance after an action hijacks the screen while he is still editing a note |
+| One timeline, two sources | human rows from `SellerActivity`, Lia's from `AiConversation` / `AiMessage`. The SDR must not have to know which system spoke |
+
+### Actions
+
+Every action writes one `SellerActivity` row and stamps the `roteiroVersaoId`
+that was on screen at that moment. Without the stamp, módulo 1's script
+versioning measures nothing and cannot be reconstructed afterwards.
+
+| Button | Effect |
+|---|---|
+| Passar pro closer | `$transaction`: `assignedSellerId` **and** `ownerSellerId` → closer, `SellerActivity(result: passou_closer)`, row in `OpportunityStageHistory` |
+| Ligar depois ▾ | asks date/time → `Opportunity.pausedUntil`; leaves the active queue until then |
+| Não atendeu | `SellerActivity(result: nao_atendeu)` and nothing else |
+| Descartar ▾ | asks the reason → `Opportunity.stage = 'discarded'` + `discardReason` |
+| Próximo | advances only |
+
+**Attempt count is `COUNT` of the lead's `SellerActivity` rows.** No counter
+column — a stored counter can diverge from the rows it summarises, and one day
+it will.
+
+### Ownership on hand-off — revises the módulo 1 wording
+
+Both ownership fields move to the closer, together, in one `$transaction`.
+
+The earlier proposal froze `Contact.ownerSellerId` on the SDR so his "Passados"
+tab would still find the lead. That breaks two ways: `ownerSellerId` filters the
+**inbox**, so the lead's WhatsApp reply would keep landing on the SDR while the
+closer — who now owns the deal — sees nothing; and the moment a manager
+redistributes the lead, the frozen field is gone and the tab empties with no
+explanation.
+
+**The SDR's claim is history, not a frozen field.** The "Passados" tab lists
+opportunities where the SDR has `SellerActivity` rows and is no longer the
+assignee. Immutable, dated, auditable, and immune to any later redistribution.
+
+### Closer role
+
+No new entity. A closer is a `Seller`; what distinguishes them is permission and
+`SellerMarket` membership, not a table.
+
+### Channels — what each button actually does
+
+| Button | Mechanism | Why |
+|---|---|---|
+| Ligar | native `tel:` | the PRD excludes telephony (no dialer, no recording). A protocol link is not an integration |
+| WhatsApp | `wa.me` prefilled with the módulo 1 opening, from the **SDR's own** WhatsApp | the Nexa number is the campaign number. A Meta ban on it has no undo and would kill outbound for everyone (R-2). Trade-off: the text is not stored in Nexa, so the click writes `SellerActivity(type: whatsapp)` and the funnel still counts the touch |
+| Copiar e-mail | `mailto:` with `subject` and `body` prefilled; the copy button takes the address alone | the clipboard is a single blob — subject and body copied together end up pasted into the body |
+
+### One aggregated endpoint
+
+`GET /sdr/next` (and `/sdr/lead/:id`) returns lead + script + ficha + timeline +
+material in **one** payload. Five requests per lead, forty leads a day, is half a
+second of dead time at every switch — and that is where the SDR starts keeping a
+spreadsheet on the side.
+
+Queue order respects `pausedUntil` (a lead waiting for its callback date is not
+offered) and excludes sellers marked "Ausente".
+
+### Structure
+
+```
+apps/frontend/src/pages/SdrWorkbenchPage.tsx          route /sdr
+  components/sdr/
+    LeadHeaderBar.tsx        name, company, phone, channel buttons, "4 de 37"
+    ScriptPanel.tsx          script — left column, own scroll
+    LeadCard.tsx             ficha, read-only
+    LeadTimeline.tsx         SellerActivity + AiMessage in one timeline
+    KnowledgeQuickList.tsx   material — reuses the existing knowledge search
+    ActionBar.tsx            fixed footer: note + five buttons
+    DispositionDialog.tsx    the ▾ of "Ligar depois" and "Descartar"
+  entities/sdr/api/sdr.api.ts
+
+apps/backend/src/application/sdr/
+  sdr-queue.service.ts         next lead; respects pausedUntil and "Ausente"
+  sdr-disposition.service.ts   the five actions, each in its own $transaction
+apps/backend/src/presentation/http/sdr/
+  sdr.controller.ts            @RequirePerm('telemarketing'), scoped by assignedSellerId
+```
+
+### Deliberately not built
+
+Dialer and call recording · automatic advance to the next lead · editing the
+ficha on this screen · sending WhatsApp or e-mail through the Nexa number ·
+operator available/paused state.
+
+---
+
 ## Problem
 
 Lead supply and lead conversion are becoming two different teams. Planning
