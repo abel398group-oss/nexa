@@ -31,6 +31,7 @@ const SiteAudiencePage = lazy(() => import('@/pages/SiteAudiencePage').then((m) 
 const MarketsPage = lazy(() => import('@/pages/MarketsPage').then((m) => ({ default: m.MarketsPage })));
 const MessageTemplatesPage = lazy(() => import('@/pages/MessageTemplatesPage').then((m) => ({ default: m.MessageTemplatesPage })));
 const LeadBatchesPage = lazy(() => import('@/pages/LeadBatchesPage').then((m) => ({ default: m.LeadBatchesPage })));
+const SdrWorkbenchPage = lazy(() => import('@/pages/SdrWorkbenchPage').then((m) => ({ default: m.SdrWorkbenchPage })));
 const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
@@ -103,6 +104,7 @@ export default function App() {
                     <Route path="/messages" element={<Perm perm="campaigns"><MessageTemplatesPage /></Perm>} />
                     {/* Importar lista cria contatos e oportunidades — perm própria, não `campaigns`. */}
                     <Route path="/lead-batches" element={<Perm perm="lead_batches"><LeadBatchesPage /></Perm>} />
+                    <Route path="/sdr" element={<Perm perm="telemarketing"><SdrWorkbenchPage /></Perm>} />
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
