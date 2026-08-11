@@ -43,9 +43,28 @@ export class RegistrarAtividadeDto {
   @IsInt()
   @Min(0)
   durationSec?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Versão do roteiro que estava na tela. Obrigatório na prática (a mesa sempre manda quando há roteiro) — opcional no contrato porque nem toda ação acontece com roteiro na tela.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  scriptVersion?: number;
 }
 
-export class PausarDto {
+/// Herda só o carimbo — os três diálogos da mesa (pausar/descartar/transferir) mandam a
+/// mesma versão que a atividade avulsa.
+class ComCarimboDto {
+  @ApiPropertyOptional({ description: 'Versão do roteiro na tela no momento da ação.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  scriptVersion?: number;
+}
+
+export class PausarDto extends ComCarimboDto {
   @ApiProperty({ description: 'Quando voltar a ligar (ISO). Sai da fila até essa data.' })
   @IsDateString()
   retornoEm!: string;
@@ -57,7 +76,7 @@ export class PausarDto {
   notes?: string;
 }
 
-export class TransferirDto {
+export class TransferirDto extends ComCarimboDto {
   /// `Seller.id` do closer, não id de usuário. O SDR escolhe na lista de
   /// `GET /api/sdr/closers?productCode=` — e o service revalida, porque API não
   /// confia no cliente.
@@ -86,7 +105,7 @@ export class TransferirDto {
   notes?: string;
 }
 
-export class DescartarDto {
+export class DescartarDto extends ComCarimboDto {
   /// Obrigatório de propósito: descarte sem motivo é dado perdido. Depois ninguém
   /// sabe se a lista era ruim ou se a abordagem era.
   @ApiProperty({ description: 'sem_fit | sem_resposta | concorrente | numero_errado | outro' })

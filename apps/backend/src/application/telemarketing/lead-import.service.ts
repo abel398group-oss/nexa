@@ -301,6 +301,18 @@ export class LeadImportService {
       existentes.filter((c) => c.email).map((c) => [c.email as string, c]),
     );
 
+    // A3 da auditoria: o unique de contacts é (tenantId, phone) e phone não é nullable,
+    // então só existe UMA vaga para contato novo sem telefone ('' como chave). Antes, o
+    // segundo lead só-de-e-mail estourava o unique e sumia num log de servidor — o
+    // relatório dizia que ele tinha entrado. Agora a vaga é checada aqui e o excedente
+    // vira descarte visível ('sem_telefone').
+    const vagaSemFoneLivre =
+      (await this.prisma.contact.findUnique({
+        where: { tenantId_phone: { tenantId, phone: '' } },
+        select: { id: true },
+      })) === null;
+    let vagaConsumida = false;
+
     // TMS: 2 queries pro lote inteiro, e Map indexado por telefone SEM o 55.
     const noTms = await this.tms
       .batchLookup(fones)
@@ -339,6 +351,16 @@ export class LeadImportService {
 
       if (veredito.descartarEmail) linha.email = null;
       linha.descarte = veredito.descarte;
+
+      // Lead válido sem telefone que NÃO atualiza um contato existente precisa da vaga
+      // única de phone ''. O primeiro consome; os demais caem com motivo visível.
+      if (!linha.descarte && !linha.phone && !existente) {
+        if (vagaSemFoneLivre && !vagaConsumida) {
+          vagaConsumida = true;
+        } else {
+          linha.descarte = 'sem_telefone';
+        }
+      }
     }
   }
 
@@ -355,11 +377,16 @@ export class LeadImportService {
     const phone = linha.phone ?? '';
 
     await this.prisma.$transaction(async (tx) => {
+      // Sem telefone, a chave de reencontro é o e-mail: sem esta busca, reimportar um
+      // lead só-de-e-mail (ex.: com forcarJaNaBase) tentaria CRIAR de novo e estouraria
+      // o unique de phone '' — o caso A3 da auditoria.
       const atual = phone
         ? await tx.contact.findUnique({
             where: { tenantId_phone: { tenantId, phone } },
           })
-        : null;
+        : linha.email
+          ? await tx.contact.findFirst({ where: { tenantId, email: linha.email } })
+          : null;
 
       let contactId: string;
 

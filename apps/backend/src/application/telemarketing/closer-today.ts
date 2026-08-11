@@ -18,12 +18,20 @@ export const DIAS_PROPOSTA_PARADA = 7;
 
 const ENCERRADAS = ['won', 'lost', 'discarded'];
 
+// "Hoje" é o dia EM BRASÍLIA, não o do relógio do servidor. Em produção o container
+// roda em UTC: reunião das 21h BRT é 00h UTC do dia seguinte, e com getDate() puro ela
+// cairia em ESPERANDO no próprio dia da reunião — só apareceria em AGORA depois das 21h.
+// A operação é brasileira; se um dia houver closer em outro fuso, o fuso vira parâmetro.
+const FUSO_DA_OPERACAO = 'America/Sao_Paulo';
+const diaEmBrasilia = new Intl.DateTimeFormat('en-CA', {
+  timeZone: FUSO_DA_OPERACAO,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 function mesmoDia(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  return diaEmBrasilia.format(a) === diaEmBrasilia.format(b);
 }
 
 /**

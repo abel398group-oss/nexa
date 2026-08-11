@@ -25,6 +25,12 @@ describe('AGORA — o que tem hora marcada hoje', () => {
     expect(blocoDe(n({ id: 'a', meetingAt: d('2026-08-11T09:00:00Z') }), AGORA)).toBe('agora');
   });
 
+  it('reunião das 21h de Brasília é HOJE, mesmo sendo amanhã em UTC', () => {
+    // A4 da auditoria: 2026-08-12T00:30Z = 21:30 de 11/08 em Brasília. Com getDate()
+    // puro num servidor UTC, esta reunião só apareceria em AGORA depois de acontecer.
+    expect(blocoDe(n({ id: 'a', meetingAt: d('2026-08-12T00:30:00Z') }), AGORA)).toBe('agora');
+  });
+
   it('reunião amanhã fica em ESPERANDO', () => {
     expect(blocoDe(n({ id: 'a', meetingAt: d('2026-08-12T09:00:00Z') }), AGORA)).toBe(
       'esperando',

@@ -678,6 +678,12 @@ model SellerActivity {
   opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   type          String // call | email | note
   result        String? // atendeu | nao_atendeu | agendou_retorno | enviado | respondido | outro
+  /// Versão do roteiro (sales_scripts.version) que estava NA TELA quando a ação foi
+  /// registrada (módulo 2, 11/08/2026). É o que permite responder "o texto novo
+  /// converteu melhor?" — sem o carimbo, o versionamento do roteiro não mede nada, e
+  /// o dado não se reconstrói depois. NULL = ação sem roteiro na tela (closer, admin,
+  /// registros antigos).
+  scriptVersion Int?    @map("script_version")
   durationSec   Int?     @map("duration_sec") // so faz sentido pra type=call
   notes         String?
   createdAt     DateTime @default(now()) @map("created_at")
@@ -759,7 +765,9 @@ model SalesScript {
   createdAt       DateTime @default(now()) @map("created_at")
   createdByUserId String?  @map("created_by_user_id")
 
-  @@unique([productCode, version])
+  // Com tenantId: dois tenants podem ter o MESMO productCode (ex.: 'hipertms'), e sem
+  // o tenant no unique o segundo a salvar a versão N colidiria com o primeiro.
+  @@unique([tenantId, productCode, version])
   @@index([tenantId, productCode, active])
   @@map("sales_scripts")
 }

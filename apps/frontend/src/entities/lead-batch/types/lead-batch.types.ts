@@ -12,7 +12,8 @@ export type MotivoDescarte =
   | 'telefone_invalido'
   | 'email_invalido'
   | 'concorrente'
-  | 'opt_out';
+  | 'opt_out'
+  | 'sem_telefone';
 
 export interface ContadoresLote {
   received: number;
@@ -76,6 +77,7 @@ export const ROTULO_MOTIVO: Record<MotivoDescarte, string> = {
   email_invalido: 'E-mail inválido',
   concorrente: 'Concorrente',
   opt_out: 'Pediu para não receber',
+  sem_telefone: 'Sem telefone (limite atual)',
 };
 
 /// Por que cada motivo não pode ser forçado. Mostrado no lugar do botão — operador que
@@ -87,4 +89,5 @@ export const PORQUE_TRAVADO: Partial<Record<MotivoDescarte, string>> = {
   concorrente: 'Receberia o roteiro de vendas',
   telefone_invalido: 'Sem canal para contato',
   duplicado: 'Já entrou por outra linha desta lista',
+  sem_telefone: 'A base aceita um lead novo sem telefone por vez — acrescente o telefone na planilha',
 };

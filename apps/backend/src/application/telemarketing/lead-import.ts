@@ -14,7 +14,13 @@ export type MotivoDescarte =
   | 'telefone_invalido'
   | 'email_invalido'
   | 'concorrente'
-  | 'opt_out';
+  | 'opt_out'
+  /// Limitação atual, não regra de negócio: o unique de `contacts` é (tenantId, phone)
+  /// e phone não é nullable, então só cabe UM contato novo sem telefone por tenant.
+  /// Este motivo torna a perda VISÍVEL no relatório — antes o lead sumia com um log de
+  /// servidor que o operador nunca vê. O conserto de verdade (phone nullable) mexe em
+  /// WhatsApp/disparo/inbox e é tarefa própria.
+  | 'sem_telefone';
 
 /// Único motivo que o gestor pode forçar. Os outros quatro seguem travados, cada um
 /// por uma razão diferente e nenhuma delas negociável: opt-out é LGPD; e-mail morto

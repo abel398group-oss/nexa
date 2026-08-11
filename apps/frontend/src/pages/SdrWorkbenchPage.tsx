@@ -10,6 +10,7 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { useAuth } from '@/app/providers/AuthContext';
 import { getRoteiro } from '@/entities/sales-script';
 import {
   descartarLead,
@@ -54,6 +55,16 @@ export function SdrWorkbenchPage() {
     [fila, selecionado],
   );
 
+  // A versão do roteiro na tela — o CARIMBO. Toda ação manda ela junto; sem o carimbo
+  // na atividade, "o texto novo converteu melhor?" nunca terá resposta (A1 da
+  // auditoria). Mesma queryKey do painel do roteiro, então o react-query deduplica.
+  const { data: roteiroDaTela } = useQuery({
+    queryKey: ['sales-script', lead?.productCode],
+    queryFn: () => getRoteiro(lead?.productCode as string),
+    enabled: !!lead?.productCode,
+  });
+  const scriptVersion = roteiroDaTela?.version;
+
   // Primeira carga: já abre no primeiro da fila. Tela vazia com lista cheia do lado
   // faz o SDR clicar antes de começar a trabalhar, todo dia.
   useEffect(() => {
@@ -81,6 +92,7 @@ export function SdrWorkbenchPage() {
         type: dados.type ?? 'call',
         result: dados.result,
         notes: dados.notes,
+        scriptVersion,
       }),
     onSuccess: () => {
       toast.success('Registrado.');
@@ -93,7 +105,7 @@ export function SdrWorkbenchPage() {
 
   const pausar = useMutation({
     mutationFn: (d: { retornoEm: string; notes?: string }) =>
-      pausarLead(lead!.id, d.retornoEm, d.notes),
+      pausarLead(lead!.id, d.retornoEm, d.notes, scriptVersion),
     onSuccess: () => {
       toast.success('Volta pra sua fila na data marcada.');
       setDialogo(null);
@@ -104,7 +116,7 @@ export function SdrWorkbenchPage() {
 
   const descartar = useMutation({
     mutationFn: (d: { motivo: string; notes?: string }) =>
-      descartarLead(lead!.id, d.motivo, d.notes),
+      descartarLead(lead!.id, d.motivo, d.notes, scriptVersion),
     onSuccess: () => {
       toast.info('Descartado.');
       setDialogo(null);
@@ -115,7 +127,7 @@ export function SdrWorkbenchPage() {
 
   const transferir = useMutation({
     mutationFn: (d: { closerId: string; meetingAt?: string; meetingUrl?: string; notes?: string }) =>
-      transferirParaCloser(lead!.id, d),
+      transferirParaCloser(lead!.id, { ...d, scriptVersion }),
     onSuccess: () => {
       toast.success('Passado pro closer. Continua no seu histórico.');
       setDialogo(null);
@@ -264,14 +276,17 @@ function Fila({
 ///
 /// Sem nome, a saudação sai sem ele — "Bom dia!" e não "Bom dia, !". É a mesma regra do
 /// backend: o fallback existe pra ninguém ler vírgula solta em voz alta no telefone.
-function preencher(texto: string, lead: ItemDaFila): string {
+function preencher(texto: string, lead: ItemDaFila, remetente: string): string {
   const hora = new Date().getHours();
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (lead.contact?.name ?? lead.name ?? '').trim().split(/\s+/)[0] ?? '';
+  // Primeiro nome de quem está logado. Vazio era o bug A5: "Aqui é o {{remetente}}"
+  // virava "Aqui é o ," na tela — lido em voz alta no telefone.
+  const primeiroNome = remetente.trim().split(/\s+/)[0] ?? '';
 
   return texto
     .replace(/\{\{\s*saudacao\s*\}\}/gi, saudacao)
-    .replace(/\{\{\s*remetente\s*\}\}/gi, '')
+    .replace(/\{\{\s*remetente\s*\}\}/gi, primeiroNome)
     .replace(/\{\{\s*nome\s*\}\}/gi, nome)
     // Sobrou vírgula ou espaço antes da pontuação porque o nome era vazio: limpa, senão
     // o SDR lê "Bom dia, ! Aqui é o".
@@ -292,6 +307,7 @@ function Secao({
   aberta?: boolean;
 }) {
   const [abre, setAbre] = useState(aberta);
+  const { user } = useAuth();
   if (!texto) return null;
   return (
     <div className="border-b border-base-200 last:border-0">
@@ -307,7 +323,7 @@ function Secao({
       </button>
       {abre && (
         <p className="whitespace-pre-wrap pb-3 text-sm leading-relaxed text-base-content/90">
-          {preencher(texto, lead)}
+          {preencher(texto, lead, user?.name ?? '')}
         </p>
       )}
     </div>

@@ -43,7 +43,14 @@ export class SdrController {
     @Param('id') id: string,
     @Body() dto: PausarDto,
   ) {
-    return this.sdr.pausar(tenantId, user, id, new Date(dto.retornoEm), dto.notes);
+    return this.sdr.pausar(
+      tenantId,
+      user,
+      id,
+      new Date(dto.retornoEm),
+      dto.notes,
+      dto.scriptVersion,
+    );
   }
 
   @Patch('opportunities/:id/discard')
@@ -54,7 +61,7 @@ export class SdrController {
     @Param('id') id: string,
     @Body() dto: DescartarDto,
   ) {
-    return this.sdr.descartar(tenantId, user, id, dto.motivo, dto.notes);
+    return this.sdr.descartar(tenantId, user, id, dto.motivo, dto.notes, dto.scriptVersion);
   }
 
   /// Closers elegíveis para um mercado — é a lista que o SDR escolhe na tela.
@@ -97,6 +104,7 @@ export class SdrController {
       meetingAt: dto.meetingAt ? new Date(dto.meetingAt) : undefined,
       meetingUrl: dto.meetingUrl,
       notes: dto.notes,
+      scriptVersion: dto.scriptVersion,
     });
   }
 }

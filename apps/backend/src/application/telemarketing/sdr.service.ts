@@ -93,6 +93,10 @@ export class SdrService {
       result?: string;
       notes?: string;
       durationSec?: number;
+      /// Versão do roteiro que estava NA TELA no momento da ação. Sem o carimbo, o
+      /// versionamento não responde "o texto novo converteu melhor?" — e ligação
+      /// registrada sem ele é dado perdido para sempre.
+      scriptVersion?: number;
     },
   ) {
     const oportunidade = await this.doEscopo(tenantId, user, dados.opportunityId);
@@ -116,6 +120,7 @@ export class SdrService {
         result: dados.result ?? null,
         notes: dados.notes ?? null,
         durationSec: dados.durationSec ?? null,
+        scriptVersion: dados.scriptVersion ?? null,
       },
     });
   }
@@ -128,6 +133,7 @@ export class SdrService {
     opportunityId: string,
     retornoEm: Date,
     notes?: string,
+    scriptVersion?: number,
   ) {
     await this.doEscopo(tenantId, user, opportunityId);
     await this.registrarAtividade(tenantId, user, {
@@ -135,6 +141,7 @@ export class SdrService {
       type: 'call',
       result: 'agendou_retorno',
       notes,
+      scriptVersion,
     });
     return this.prisma.opportunity.update({
       where: { id: opportunityId },
@@ -150,6 +157,7 @@ export class SdrService {
     opportunityId: string,
     motivo: string,
     notes?: string,
+    scriptVersion?: number,
   ) {
     const atual = await this.doEscopo(tenantId, user, opportunityId);
     await this.registrarAtividade(tenantId, user, {
@@ -157,6 +165,7 @@ export class SdrService {
       type: 'call',
       result: 'sem_interesse',
       notes,
+      scriptVersion,
     });
 
     // Transação: etapa e histórico juntos. Etapa sem histórico deixa o funil sem
@@ -252,7 +261,13 @@ export class SdrService {
     tenantId: string,
     user: UsuarioComEscopo & { sellerId?: string | null },
     opportunityId: string,
-    dados: { closerId: string; meetingAt?: Date; meetingUrl?: string; notes?: string },
+    dados: {
+      closerId: string;
+      meetingAt?: Date;
+      meetingUrl?: string;
+      notes?: string;
+      scriptVersion?: number;
+    },
   ) {
     const atual = await this.doEscopo(tenantId, user, opportunityId);
 
@@ -276,6 +291,7 @@ export class SdrService {
       type: 'call',
       result: 'passou_closer',
       notes: dados.notes,
+      scriptVersion: dados.scriptVersion,
     });
 
     return this.prisma.$transaction(async (tx) => {

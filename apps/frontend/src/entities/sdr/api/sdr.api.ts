@@ -27,30 +27,58 @@ export async function listMaterial(
   return r.data;
 }
 
+// `scriptVersion` em toda ação: é o carimbo da versão do roteiro que estava na tela.
+// Sem ele, o versionamento do roteiro não mede conversão — e ligação registrada sem o
+// carimbo é dado perdido para sempre.
 export async function registrarAtividade(dados: {
   opportunityId: string;
   type: 'call' | 'whatsapp' | 'email' | 'note';
   result?: string;
   notes?: string;
   durationSec?: number;
+  scriptVersion?: number;
 }) {
   const r = await api.post('/sdr/activity', dados);
   return r.data;
 }
 
-export async function pausarLead(id: string, retornoEm: string, notes?: string) {
-  const r = await api.patch(`/sdr/opportunities/${id}/pause`, { retornoEm, notes });
+export async function pausarLead(
+  id: string,
+  retornoEm: string,
+  notes?: string,
+  scriptVersion?: number,
+) {
+  const r = await api.patch(`/sdr/opportunities/${id}/pause`, {
+    retornoEm,
+    notes,
+    scriptVersion,
+  });
   return r.data;
 }
 
-export async function descartarLead(id: string, motivo: string, notes?: string) {
-  const r = await api.patch(`/sdr/opportunities/${id}/discard`, { motivo, notes });
+export async function descartarLead(
+  id: string,
+  motivo: string,
+  notes?: string,
+  scriptVersion?: number,
+) {
+  const r = await api.patch(`/sdr/opportunities/${id}/discard`, {
+    motivo,
+    notes,
+    scriptVersion,
+  });
   return r.data;
 }
 
 export async function transferirParaCloser(
   id: string,
-  dados: { closerId: string; meetingAt?: string; meetingUrl?: string; notes?: string },
+  dados: {
+    closerId: string;
+    meetingAt?: string;
+    meetingUrl?: string;
+    notes?: string;
+    scriptVersion?: number;
+  },
 ) {
   const r = await api.patch(`/sdr/opportunities/${id}/transfer`, dados);
   return r.data;
