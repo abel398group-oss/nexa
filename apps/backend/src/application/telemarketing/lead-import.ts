@@ -152,12 +152,19 @@ export interface ContadoresLote {
   invalid: number;
   valid: number;
   noName: number;
+  /// Entraram, mas com lixo na coluna de telefone — "abc", um ramal, "não tem". Entram
+  /// porque o e-mail salvou a linha; contam aqui porque um lead sem telefone é um lead
+  /// que o SDR não liga, e isso precisa ser visível ANTES da importação, não descoberto
+  /// na fila dele.
+  foneLixo: number;
   porMotivo: Record<string, number>;
 }
 
 export interface LinhaAvaliada {
   descarte: MotivoDescarte | null;
   temNome: boolean;
+  /// Célula de telefone preenchida que não virou telefone utilizável.
+  foneInvalido?: boolean;
 }
 
 /// Toda taxa se calcula sobre `valid`, nunca sobre `received` — senão lista suja se
@@ -169,6 +176,7 @@ export function contarLote(linhas: readonly LinhaAvaliada[]): ContadoresLote {
   let invalid = 0;
   let valid = 0;
   let noName = 0;
+  let foneLixo = 0;
 
   for (const linha of linhas) {
     if (linha.descarte) {
@@ -184,7 +192,8 @@ export function contarLote(linhas: readonly LinhaAvaliada[]): ContadoresLote {
 
     valid += 1;
     if (!linha.temNome) noName += 1; // decide o fallback da saudação
+    if (linha.foneInvalido) foneLixo += 1; // entrou, mas o SDR não vai poder ligar
   }
 
-  return { received: linhas.length, duplicate, invalid, valid, noName, porMotivo };
+  return { received: linhas.length, duplicate, invalid, valid, noName, foneLixo, porMotivo };
 }

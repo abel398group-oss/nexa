@@ -297,6 +297,17 @@ function Relatorio({
         </p>
       )}
 
+      {contadores.foneLixo > 0 && (
+        // Aviso, não descarte: a linha entra porque o e-mail vale. Mas sem dizer isso
+        // aqui, o SDR descobre na fila que não tem número pra ligar.
+        <p className="mt-2 text-xs text-amber-700">
+          {contadores.foneLixo}{' '}
+          {contadores.foneLixo === 1 ? 'lead entra' : 'leads entram'} com a coluna de
+          telefone preenchida errada — o SDR não vai conseguir ligar, só mandar e-mail.
+          Vale corrigir na planilha antes.
+        </p>
+      )}
+
       {colunasIgnoradas.length > 0 && (
         <p className="mt-3 text-xs text-base-content/60">
           Colunas ignoradas: {colunasIgnoradas.join(', ')}. Nada foi perdido do que a

@@ -180,12 +180,17 @@ export class SdrService {
   /// Closers elegíveis para um mercado. É a lista que o SDR escolhe — e a mesma que
   /// valida a escolha no `transferir`, senão um lead de pneus cai num closer que só
   /// vende TMS (R8).
-  async closersDoMercado(tenantId: string, productCode: string) {
+  async closersDoMercado(tenantId: string, productCode: string, excluirSellerId?: string | null) {
     const vinculos = await this.prisma.sellerMarket.findMany({
       where: { tenantId, productCode },
       select: { sellerId: true, role: true },
     });
-    const ids = vinculos.map((v) => v.sellerId);
+    // Ele mesmo fora da lista: ninguém passa lead pra si próprio, e ver o próprio nome
+    // ali sugere que passar pra si é uma jogada válida. Não se filtra por `role` porque
+    // `seller | lead` não distingue SDR de closer — esse conceito não existe no banco.
+    const ids = vinculos
+      .map((v) => v.sellerId)
+      .filter((id) => !excluirSellerId || id !== excluirSellerId);
     if (!ids.length) return [];
 
     return this.prisma.seller.findMany({
@@ -217,8 +222,10 @@ export class SdrService {
 
     // Mercado do lead manda: closer fora dele não recebe. Sem esta checagem, a
     // separação por mercado do módulo 1 vira decoração.
+    // Mesma exclusão da lista que a tela mostrou: se ele não pode se ver na lista, não
+     // pode passar pra si mandando o próprio id na mão.
     const elegiveis = atual.productCode
-      ? await this.closersDoMercado(tenantId, atual.productCode)
+      ? await this.closersDoMercado(tenantId, atual.productCode, user.sellerId)
       : [];
     if (atual.productCode && !elegiveis.some((c) => c.id === dados.closerId)) {
       throw new ForbiddenException(

@@ -18,19 +18,27 @@
   --color-sidebar-text:        rgba(255, 255, 255, 0.56);
   --color-sidebar-text-hover:  rgba(255, 255, 255, 0.93);
   --color-sidebar-text-active: #f4f4f8;
-  --color-sidebar-accent:      #ff7a47;
+  --color-sidebar-accent:      #6da3ff;
 
-  /* ─── Brand — Laranja Ignição ────────────────────────────────────── */
-  --color-brand-50:  #fff3ed;
-  --color-brand-100: #ffe2d1;
-  --color-brand-200: #ffd0b3;
-  --color-brand-300: #ffb089;
-  --color-brand-400: #ff8a5c;
-  --color-brand-500: #ff5a1f;
-  --color-brand-600: #ed4708;
-  --color-brand-700: #c23a0a;
-  --color-brand-800: #9a2e08;
-  --color-brand-900: #7a2406;
+  /* ─── Brand — Azul Elétrico ──────────────────────────────────────────
+     Substituiu o Laranja Ignição (#ff5a1f) em 11/08/2026. O laranja fazia
+     vizinhança com o âmbar de "aviso": botão de marca e alerta disputavam o
+     olho na mesma tela. O azul de marca é mais FUNDO e mais SATURADO que o
+     azul-céu usado nos chips de informação ("Lido", "Entregue"), então os dois
+     continuam lendo como coisas diferentes — se um dia clarear este 500, essa
+     separação se perde.
+     500 é a cor da marca (botão); 600 é o hover. Branco sobre o 500 dá 5.1:1,
+     acima do mínimo AA. */
+  --color-brand-50:  #ebf3ff;
+  --color-brand-100: #d1e3ff;
+  --color-brand-200: #a8c8ff;
+  --color-brand-300: #6da3ff;
+  --color-brand-400: #2b78ff;
+  --color-brand-500: #0b5fff;
+  --color-brand-600: #0a51db;
+  --color-brand-700: #0842b0;
+  --color-brand-800: #073689;
+  --color-brand-900: #06296b;
 
   /* ─── Base — superfícies e conteúdo ──────────────────────────────── */
   --color-base-100:     #fafaf9;
@@ -63,7 +71,7 @@
   --shadow-elevated:     0 10px 40px -10px rgb(0 0 0 / 0.15), 0 4px 12px -4px rgb(0 0 0 / 0.08);
   --shadow-inner-soft:   inset 0 2px 4px 0 rgb(0 0 0 / 0.04);
   --shadow-up:           0 -2px 10px rgb(0 0 0 / 0.06);
-  --shadow-glow-brand:   0 0 26px -4px rgb(255 90 31 / 0.30);
+  --shadow-glow-brand:   0 0 26px -4px rgb(11 95 255 / 0.30);
   --shadow-glow-danger:  0 0 20px -4px rgb(220 38 38 / 0.30);
   --shadow-glow-success: 0 0 20px -4px rgb(22 163 74 / 0.30);
 
@@ -97,7 +105,7 @@
   --sidebar-hover:        rgba(255, 255, 255, 0.07);
   --sidebar-active:       rgba(255, 255, 255, 0.13);
   --sidebar-active-hover: rgba(255, 255, 255, 0.16);
-  --sidebar-icon-accent:  #ff7a47;
+  --sidebar-icon-accent:  #2b78ff;
   --sidebar-text:         rgba(255, 255, 255, 0.56);
   --sidebar-text-hover:   rgba(255, 255, 255, 0.93);
   --sidebar-text-active:  #f4f4f8;
@@ -133,7 +141,7 @@
   --border-input: #d4d4d8;
 
   /* Accent */
-  --accent-brand: #ff5a1f;
+  --accent-brand: #0b5fff;
   --accent-amber: #d97706;
   --accent-red:   #dc2626;
   --accent-green: #059669;
@@ -144,7 +152,7 @@
   --shadow-elevated:   0 10px 40px -10px rgb(0 0 0 / 0.15), 0 4px 12px -4px rgb(0 0 0 / 0.08);
   --shadow-inner-soft: inset 0 2px 4px 0 rgb(0 0 0 / 0.04);
   --shadow-up:         0 -2px 10px rgb(0 0 0 / 0.06);
-  --shadow-glow-brand: 0 0 26px -4px rgb(255 90 31 / 0.30);
+  --shadow-glow-brand: 0 0 26px -4px rgb(11 95 255 / 0.30);
 
   /* ===== Tokens herdados do HiperTMS (paridade visual completa) ===== */
   /* Secundário navy — gráficos e gradiente assinatura */
@@ -185,7 +193,7 @@ html.dark {
   --sidebar-hover:        rgba(255, 255, 255, 0.065);
   --sidebar-active:       rgba(255, 255, 255, 0.12);
   --sidebar-active-hover: rgba(255, 255, 255, 0.15);
-  --sidebar-icon-accent:  #ff8a5c;
+  --sidebar-icon-accent:  #6da3ff;
   --sidebar-text:         rgba(255, 255, 255, 0.54);
   --sidebar-text-hover:   rgba(255, 255, 255, 0.91);
   --sidebar-text-active:  #f4f4f8;
@@ -214,7 +222,7 @@ html.dark {
   --border:       #2a2f3c;   /* border visível sobre --surface #1f222a */
   --border-input: #353b4e;
 
-  --accent-brand: #ff8a5c;
+  --accent-brand: #6da3ff;
   --accent-amber: #fbbf24;
   --accent-red:   #f87171;
   --accent-green: #34d399;
@@ -240,9 +248,12 @@ html.dark {
   --neutral-tint: #1f222a;                  --neutral-ink: #a1a1aa;
 }
 
-/* Gradiente assinatura do design system: 135° ignição → brasa → navy (igual TMS) */
+/* Gradiente assinatura do design system: 135° marca → profundo → navy.
+   Era ignição→brasa→navy, herdado do TMS; acompanhou a troca da marca para
+   azul em 11/08/2026. O TMS segue laranja — se a paridade visual com ele
+   voltar a ser requisito, é aqui que se decide. */
 .bg-signature {
-  background-image: linear-gradient(135deg, #ff5a1f 0%, #ed4708 50%, #1e3a5f 100%);
+  background-image: linear-gradient(135deg, #0b5fff 0%, #0842b0 50%, #1e3a5f 100%);
 }
 
 /* ===== BASE LAYOUT — igual ao TMS ===== */
@@ -482,8 +493,8 @@ html.dark textarea::placeholder { color: var(--text-muted) !important; }
 .dark textarea::placeholder { color: var(--text-muted); }
 
 /* badges coloridos dark */
-.dark .bg-brand-50    { background-color: rgba(255, 90, 31, 0.15); }
-.dark .text-brand-700 { color: #ff8a5c; }
+.dark .bg-brand-50    { background-color: rgba(11, 95, 255, 0.18); }
+.dark .text-brand-700 { color: #6da3ff; }
 .dark .bg-red-100     { background-color: rgba(220, 38, 38, 0.15); }
 .dark .text-red-700   { color: #fca5a5; }
 .dark .bg-amber-100   { background-color: rgba(217, 119, 6, 0.15); }
@@ -514,17 +525,17 @@ html.dark textarea::placeholder { color: var(--text-muted) !important; }
 .ob-step-enter { animation: ob-step-in 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) { .ob-step-enter { animation: none; } }
 
-/* Tour highlight — laranja (cor primária TMS) */
+/* Tour highlight — cor da marca */
 .tour-highlight {
   position: relative;
   z-index: 70 !important;
   border-radius: 8px;
-  box-shadow: 0 0 0 3px #ff5a1f, 0 0 0 9999px rgba(0, 0, 0, 0.001);
+  box-shadow: 0 0 0 3px #0b5fff, 0 0 0 9999px rgba(0, 0, 0, 0.001);
   animation: tourPulse 1.4s ease-in-out infinite;
 }
 @keyframes tourPulse {
-  0%,100% { box-shadow: 0 0 0 3px #ff5a1f; }
-  50%     { box-shadow: 0 0 0 6px rgba(255, 90, 31, 0.45); }
+  0%,100% { box-shadow: 0 0 0 3px #0b5fff; }
+  50%     { box-shadow: 0 0 0 6px rgba(11, 95, 255, 0.45); }
 }
 
 /* Slide */

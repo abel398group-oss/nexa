@@ -60,8 +60,12 @@ export class SdrController {
   /// Closers elegíveis para um mercado — é a lista que o SDR escolhe na tela.
   @Get('closers')
   @RequirePerm('telemarketing')
-  closers(@CurrentTenant() tenantId: string, @Query('productCode') productCode: string) {
-    return this.sdr.closersDoMercado(tenantId, productCode);
+  closers(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Query('productCode') productCode: string,
+  ) {
+    return this.sdr.closersDoMercado(tenantId, productCode, user?.sellerId);
   }
 
   /// Passa pro closer: escolha direta pelo SDR (decidido 11/08), sem round-robin —

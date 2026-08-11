@@ -109,6 +109,18 @@ describe('contadores do lote', () => {
     expect(contarLote([])).toMatchObject({ received: 0, valid: 0, noName: 0 });
   });
 
+  it('conta quem entrou com lixo no telefone', () => {
+    // Entra porque o e-mail vale, mas o SDR não vai poder ligar — e isso precisa aparecer
+    // ANTES da importação, não na fila dele.
+    const c = contarLote([
+      { descarte: null, temNome: true, foneInvalido: true },
+      { descarte: null, temNome: true },
+      { descarte: 'duplicado', temNome: true, foneInvalido: true }, // descartado não conta
+    ]);
+    expect(c.foneLixo).toBe(1);
+    expect(c.valid).toBe(2);
+  });
+
   it('descartado não conta como sem nome', () => {
     // Senão o aviso "120 leads sem nome" incluiria gente que nem entrou.
     const c = contarLote([{ descarte: 'opt_out', temNome: false }]);

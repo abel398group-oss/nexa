@@ -49,9 +49,7 @@ export class MarketsService {
         where: { tenantId, productCode: code, approved: true, requiresSource: true } as any,
       }),
       this.prisma.messageTemplate.count({ where: { tenantId, productCode: code, active: true } }),
-      // Com um único número de WhatsApp o time é um só — não há vínculo por mercado
-      // nesta fase (ADR 037).
-      this.prisma.seller.count({ where: { tenantId, active: true } }),
+      this.contarVendedores(tenantId, code),
     ]);
 
     const counts: MarketCounts = {
@@ -65,15 +63,34 @@ export class MarketsService {
   }
 
   /**
+   * Quantos vendedores contam para a trava de liberação.
+   *
+   * Conta os VINCULADOS a este mercado — é quem de fato pode receber lead dele. Mas com
+   * uma escada: enquanto o tenant não tiver nenhum vínculo em `seller_markets`, cai no
+   * comportamento antigo (vendedor ativo do tenant).
+   *
+   * A escada não é gentileza, é sequência. `vendedores === 0` BLOQUEIA liberar, então
+   * trocar direto trancaria todo mercado que está no ar hoje — inclusive o HiperTMS — só
+   * porque o vínculo é mais novo que eles. Assim que o primeiro vínculo existe, a regra
+   * passa a valer de verdade e sozinha.
+   */
+  private async contarVendedores(tenantId: string, code: string): Promise<number> {
+    const [doMercado, totalDeVinculos] = await Promise.all([
+      this.prisma.sellerMarket.count({ where: { tenantId, productCode: code } }),
+      this.prisma.sellerMarket.count({ where: { tenantId } }),
+    ]);
+    if (totalDeVinculos === 0) {
+      return this.prisma.seller.count({ where: { tenantId, active: true } });
+    }
+    return doMercado;
+  }
+
+  /**
    * Quem trabalha este mercado, e quem ainda não.
    *
    * Devolve as duas listas de uma vez porque a tela precisa das duas: sem os "de fora"
    * não há o que escolher no botão de vincular.
    *
-   * ATENÇÃO — `readiness()` ainda conta vendedor ATIVO DO TENANT, não vinculado. Trocar
-   * para o vínculo é o passo seguinte, e não é seguro antes de existirem vínculos:
-   * `vendedores === 0` bloqueia a liberação, então a troca cega trancaria todo mercado
-   * já liberado hoje.
    */
   async vendedoresDoMercado(tenantId: string, code: string) {
     const market = await this.prisma.product.findUnique({ where: { code } });

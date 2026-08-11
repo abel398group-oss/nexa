@@ -22,6 +22,9 @@ export interface ContadoresLote {
   /// Quantos válidos chegaram sem nome — decide se a saudação vai sair sem o primeiro
   /// nome na ligação.
   noName: number;
+  /// Entraram com lixo na coluna de telefone ("abc", ramal, "não tem"): o e-mail salvou
+  /// a linha, mas o SDR não vai poder ligar pra eles.
+  foneLixo: number;
   porMotivo: Partial<Record<MotivoDescarte, number>>;
 }
 
