@@ -26,10 +26,15 @@ export interface ImportarLoteInput {
   /// autoridade, este flag só pede.
   forcarJaNaBase?: boolean;
   uploadedByUserId?: string;
+  /// Prévia: roda a peneira inteira e devolve o relatório sem escrever nada. É o
+  /// ponto do módulo 1 — o operador vê o que a lista vale ANTES de ela entrar. Sem
+  /// isso ele descobre que a lista era ruim depois que ela já está dentro.
+  dryRun?: boolean;
 }
 
 export interface RelatorioImportacao {
-  batchId: string;
+  /// `null` em prévia: não existe lote, porque nada foi gravado.
+  batchId: string | null;
   contadores: ContadoresLote;
   colunasIgnoradas: string[];
   /// Linhas descartadas com o número da linha no arquivo, pro operador achar no Excel.
@@ -59,6 +64,17 @@ export class LeadImportService {
     await this.peneiraDeBanco(tenantId, linhas, input.forcarJaNaBase === true);
 
     const contadores = contarLote(linhas);
+
+    // Prévia: sai aqui, antes da primeira escrita. Tudo acima é leitura — parser,
+    // consulta de contatos e lookup no TMS.
+    if (input.dryRun) {
+      return {
+        batchId: null,
+        contadores,
+        colunasIgnoradas,
+        descartes: this.descartesDe(linhas),
+      };
+    }
 
     // O lote nasce antes dos contatos: se a importação morrer no meio, o operador vê
     // um lote com contadores parciais em vez de nada — e sabe que precisa reimportar.
@@ -119,14 +135,20 @@ export class LeadImportService {
       batchId: batch.id,
       contadores: { ...contadores, valid: gravados },
       colunasIgnoradas,
-      descartes: linhas
-        .filter((l) => l.descarte)
-        .map((l) => ({
-          linha: l.linha,
-          motivo: l.descarte as MotivoDescarte,
-          forcavel: podeForcar(l.descarte as MotivoDescarte),
-        })),
+      descartes: this.descartesDe(linhas),
     };
+  }
+
+  /// Descartes com o número da linha no arquivo — é o que o operador vê no Excel. Sem
+  /// isso, "linha inválida" manda ele contar na mão.
+  private descartesDe(linhas: Linha[]) {
+    return linhas
+      .filter((l) => l.descarte)
+      .map((l) => ({
+        linha: l.linha,
+        motivo: l.descarte as MotivoDescarte,
+        forcavel: podeForcar(l.descarte as MotivoDescarte),
+      }));
   }
 
   /// Histórico de lotes com os contadores. É o que responde "qual lista presta" —

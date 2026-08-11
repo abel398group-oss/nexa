@@ -52,4 +52,12 @@ export class ImportarLoteDto {
   @IsOptional()
   @IsBoolean()
   forcarJaNaBase?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Prévia: roda a peneira e devolve o relatório sem gravar nada. A tela chama com true primeiro, e só depois com false, quando o operador confirma.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }
