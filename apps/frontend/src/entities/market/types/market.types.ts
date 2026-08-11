@@ -7,6 +7,20 @@ export interface MarketPendencia {
   bloqueia: boolean;
 }
 
+/// Vendedor no contexto de um mercado (`seller_markets`). `role` distingue quem
+/// trabalha de quem lidera; hoje só `seller` é usado na prática.
+export interface MarketSeller {
+  id: string;
+  name: string;
+  email: string | null;
+  role?: string;
+}
+
+export interface MarketSellers {
+  vinculados: MarketSeller[];
+  disponiveis: MarketSeller[];
+}
+
 export interface MarketReadiness {
   pronto: boolean;
   pendencias: MarketPendencia[];

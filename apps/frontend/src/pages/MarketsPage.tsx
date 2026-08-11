@@ -3,7 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
-import { listMarkets, releaseMarket, pauseMarket, type Market, type MarketPendencia } from '@/entities/market';
+import {
+  listMarkets,
+  releaseMarket,
+  pauseMarket,
+  getMarketSellers,
+  linkMarketSeller,
+  unlinkMarketSeller,
+  type Market,
+  type MarketPendencia,
+  type MarketSellers,
+} from '@/entities/market';
 
 /**
  * Mercados (ADR 037).
@@ -47,6 +57,125 @@ function LinhaPendencia({ p }: { p: MarketPendencia }) {
     <div className="flex items-start gap-2 py-1">
       <Icon name={(ICONE_PENDENCIA[p.campo] ?? 'alert') as any} className={`mt-0.5 h-4 w-4 shrink-0 ${cor}`} />
       <span className={`text-xs ${p.bloqueia ? 'text-base-content/70' : 'text-base-content/50'}`}>{p.motivo}</span>
+    </div>
+  );
+}
+
+/**
+ * Quem trabalha este mercado (`seller_markets`).
+ *
+ * É o vínculo que a transferência do SDR exige: closer sem vínculo é recusado pelo
+ * backend. Antes desta seção, montar a operação pedia INSERT na mão no banco.
+ *
+ * Fica dentro do painel expandido do mercado de propósito — é configuração de quem
+ * monta a operação, na mesma gaveta das outras pendências dele.
+ */
+function VendedoresDoMercado({ code }: { code: string }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [escolhido, setEscolhido] = useState('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['markets', code, 'sellers'],
+    queryFn: () => getMarketSellers(code),
+  });
+
+  // As duas mutações devolvem a lista nova, então o cache é escrito direto: refetch
+  // aqui piscaria a seção inteira a cada clique.
+  function aplicar(novo: MarketSellers) {
+    qc.setQueryData(['markets', code, 'sellers'], novo);
+    setEscolhido('');
+  }
+
+  const vincular = useMutation({
+    mutationFn: (sellerId: string) => linkMarketSeller(code, sellerId),
+    onSuccess: (novo) => {
+      aplicar(novo);
+      toast.success('Vendedor vinculado — já pode receber lead deste mercado.');
+    },
+    onError: () => toast.error('Não foi possível vincular.'),
+  });
+
+  const desvincular = useMutation({
+    mutationFn: (sellerId: string) => unlinkMarketSeller(code, sellerId),
+    onSuccess: (novo) => {
+      aplicar(novo);
+      // Diz o que NÃO aconteceu: sem isso o operador teme ter tirado lead da mão de
+      // alguém no meio de uma negociação.
+      toast.info('Desvinculado. Não recebe mais lead novo; o que está na mão dele fica.');
+    },
+    onError: () => toast.error('Não foi possível desvincular.'),
+  });
+
+  if (isLoading) {
+    return <p className="py-2 text-xs text-base-content/40">Carregando vendedores…</p>;
+  }
+
+  const vinculados = data?.vinculados ?? [];
+  const disponiveis = data?.disponiveis ?? [];
+
+  return (
+    <div className="mt-2 border-t border-base-200 pt-2">
+      <p className="mb-1.5 text-xs font-medium text-base-content/70">
+        Quem trabalha este mercado
+      </p>
+
+      {vinculados.length === 0 && (
+        <p className="mb-2 text-xs text-amber-700">
+          Ninguém vinculado — o SDR não consegue passar lead deste mercado pra ninguém.
+        </p>
+      )}
+
+      <ul className="mb-2 flex flex-col gap-1">
+        {vinculados.map((s) => (
+          <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
+            <span>
+              {s.name}
+              {s.email && <span className="ml-1.5 text-base-content/40">{s.email}</span>}
+            </span>
+            <button
+              type="button"
+              className="text-base-content/40 underline hover:text-base-content/70"
+              disabled={desvincular.isPending}
+              onClick={() => desvincular.mutate(s.id)}
+            >
+              tirar
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {disponiveis.length > 0 ? (
+        <div className="flex items-center gap-2">
+          <select
+            value={escolhido}
+            onChange={(e) => setEscolhido(e.target.value)}
+            className="h-8 rounded-md border border-base-300 bg-white px-2 text-xs text-base-content outline-none focus:border-brand-500"
+          >
+            <option value="">Adicionar vendedor…</option>
+            {disponiveis.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!escolhido}
+            loading={vincular.isPending}
+            onClick={() => vincular.mutate(escolhido)}
+          >
+            Vincular
+          </Button>
+        </div>
+      ) : (
+        vinculados.length > 0 && (
+          <p className="text-xs text-base-content/40">
+            Todos os vendedores ativos já trabalham este mercado.
+          </p>
+        )
+      )}
     </div>
   );
 }
@@ -192,6 +321,7 @@ export function MarketsPage() {
                   ) : (
                     pend.map((p, i) => <LinhaPendencia key={`${p.campo}-${i}`} p={p} />)
                   )}
+                  <VendedoresDoMercado code={m.code} />
                 </div>
               )}
             </Card>

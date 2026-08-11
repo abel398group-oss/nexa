@@ -1,8 +1,18 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { IsIn, IsOptional } from 'class-validator';
 import { MarketsService } from '@/application/markets/markets.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
+
+/// `role` distingue quem trabalha o mercado de quem lidera nele. Opcional: o padrão
+/// `seller` cobre o caso normal, e um DTO que exigisse o campo faria a tela mandar
+/// sempre o mesmo valor à mão.
+class LinkSellerDto {
+  @IsOptional()
+  @IsIn(['seller', 'lead'])
+  role?: 'seller' | 'lead';
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('markets')
@@ -38,5 +48,38 @@ export class MarketsController {
   @RequirePerm('settings')
   pause(@CurrentTenant() tenantId: string, @Param('code') code: string) {
     return this.markets.pause(tenantId, code);
+  }
+
+  /**
+   * Vendedores do mercado (`SellerMarket`) — vinculados e disponíveis.
+   *
+   * É o que decide quem pode receber lead deste mercado: a transferência do SDR só
+   * aceita closer vinculado. Sem esta lista, montar a operação exigia INSERT na mão.
+   */
+  @Get(':code/sellers')
+  @RequirePerm('settings')
+  sellers(@CurrentTenant() tenantId: string, @Param('code') code: string) {
+    return this.markets.vendedoresDoMercado(tenantId, code);
+  }
+
+  @Post(':code/sellers/:sellerId')
+  @RequirePerm('settings')
+  linkSeller(
+    @CurrentTenant() tenantId: string,
+    @Param('code') code: string,
+    @Param('sellerId') sellerId: string,
+    @Body() body: LinkSellerDto,
+  ) {
+    return this.markets.vincularVendedor(tenantId, code, sellerId, body.role);
+  }
+
+  @Delete(':code/sellers/:sellerId')
+  @RequirePerm('settings')
+  unlinkSeller(
+    @CurrentTenant() tenantId: string,
+    @Param('code') code: string,
+    @Param('sellerId') sellerId: string,
+  ) {
+    return this.markets.desvincularVendedor(tenantId, code, sellerId);
   }
 }

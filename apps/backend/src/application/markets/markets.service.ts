@@ -65,6 +65,73 @@ export class MarketsService {
   }
 
   /**
+   * Quem trabalha este mercado, e quem ainda não.
+   *
+   * Devolve as duas listas de uma vez porque a tela precisa das duas: sem os "de fora"
+   * não há o que escolher no botão de vincular.
+   *
+   * ATENÇÃO — `readiness()` ainda conta vendedor ATIVO DO TENANT, não vinculado. Trocar
+   * para o vínculo é o passo seguinte, e não é seguro antes de existirem vínculos:
+   * `vendedores === 0` bloqueia a liberação, então a troca cega trancaria todo mercado
+   * já liberado hoje.
+   */
+  async vendedoresDoMercado(tenantId: string, code: string) {
+    const market = await this.prisma.product.findUnique({ where: { code } });
+    if (!market) throw new NotFoundException('Mercado não encontrado');
+
+    const [vinculos, todos] = await Promise.all([
+      this.prisma.sellerMarket.findMany({
+        where: { tenantId, productCode: code },
+        select: { sellerId: true, role: true },
+      }),
+      this.prisma.seller.findMany({
+        where: { tenantId, active: true },
+        select: { id: true, name: true, email: true },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    const papelPor = new Map(vinculos.map((v) => [v.sellerId, v.role]));
+    return {
+      vinculados: todos
+        .filter((s) => papelPor.has(s.id))
+        .map((s) => ({ ...s, role: papelPor.get(s.id) as string })),
+      disponiveis: todos.filter((s) => !papelPor.has(s.id)),
+    };
+  }
+
+  /// Vincula vendedor ao mercado. Idempotente: o unique é (sellerId, productCode), e
+  /// clicar duas vezes não pode virar erro na cara de quem está montando a operação.
+  async vincularVendedor(tenantId: string, code: string, sellerId: string, role = 'seller') {
+    const [market, seller] = await Promise.all([
+      this.prisma.product.findUnique({ where: { code } }),
+      this.prisma.seller.findFirst({ where: { id: sellerId, tenantId } }),
+    ]);
+    if (!market) throw new NotFoundException('Mercado não encontrado');
+    // Checar o tenant aqui e não confiar no id do body: vínculo é o que decide quem
+    // recebe lead, então id de outro tenant não pode passar (ADR 005).
+    if (!seller) throw new NotFoundException('Vendedor não encontrado');
+
+    await this.prisma.sellerMarket.upsert({
+      where: { sellerId_productCode: { sellerId, productCode: code } },
+      create: { tenantId, sellerId, productCode: code, role },
+      update: { role },
+    });
+    this.logger.log(`vendedor ${sellerId} vinculado ao mercado ${code} (${role})`);
+    return this.vendedoresDoMercado(tenantId, code);
+  }
+
+  /// Desvincula. Não mexe em lead já atribuído — tirar o vínculo diz "não recebe mais",
+  /// não "perde o que está na mão", senão o negócio em andamento fica órfão.
+  async desvincularVendedor(tenantId: string, code: string, sellerId: string) {
+    await this.prisma.sellerMarket.deleteMany({
+      where: { tenantId, productCode: code, sellerId },
+    });
+    this.logger.log(`vendedor ${sellerId} desvinculado do mercado ${code}`);
+    return this.vendedoresDoMercado(tenantId, code);
+  }
+
+  /**
    * Libera o mercado para o disparo.
    *
    * Recusa quando a trava aponta bloqueio — e devolve o motivo, não um "não pode"
