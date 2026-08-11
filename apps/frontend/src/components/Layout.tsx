@@ -59,6 +59,13 @@ const NAV_GROUPS: NavGroup[] = [
     // monta a operação (perm settings).
     { to: '/messages',       label: 'Mensagens',         ic: 'mail',      perm: 'campaigns' },
     { to: '/markets',        label: 'Mercados',          ic: 'building',  perm: 'settings' },
+    // Prospecção ativa (módulos 1-3). A ordem é a da esteira — quem chega novo entende
+    // o fluxo lendo o menu de cima para baixo: sobe a lista, trabalha, fecha.
+    // Listas fica sob `lead_batches` e não `campaigns`: importar cria contatos e
+    // oportunidades, que é um poder diferente de disparar para quem já está na base.
+    { to: '/lead-batches',   label: 'Listas de lead',    ic: 'contacts',  perm: 'lead_batches' },
+    { to: '/sdr',            label: 'Mesa do SDR',       ic: 'sellers',   perm: 'telemarketing' },
+    { to: '/closer',         label: 'Hoje (closer)',     ic: 'zap',       perm: 'telemarketing' },
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
