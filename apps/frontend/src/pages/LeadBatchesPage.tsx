@@ -11,8 +11,9 @@ import {
   Switch,
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
-import { listMarkets, type Market } from '@/entities/market';
+import { getMarketSellers, listMarkets, type Market } from '@/entities/market';
 import {
+  distribuirLote,
   importarLote,
   listLeadBatches,
   simularImportacao,
@@ -392,6 +393,101 @@ function Relatorio({
   );
 }
 
+/**
+ * Distribuir o lote entre SDRs.
+ *
+ * Fica no histórico e não logo após a importação de propósito: distribuir é decisão de
+ * quem vai trabalhar, e nem sempre é na mesma hora que se sobe a lista — "guardar
+ * agora, liberar segunda" é caso real.
+ */
+function Distribuir({ lote }: { lote: LeadBatch }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [abertos, setAbertos] = useState<string[]>([]);
+  const [aberto, setAberto] = useState(false);
+
+  const { data } = useQuery({
+    queryKey: ['markets', lote.productCode, 'sellers'],
+    queryFn: () => getMarketSellers(lote.productCode),
+    enabled: aberto,
+  });
+
+  const distribuir = useMutation({
+    mutationFn: () => distribuirLote(lote.id, abertos),
+    onSuccess: (r) => {
+      if (r.distribuidos === 0) {
+        // Zero não é erro: normalmente é lote já distribuído. Dizer isso evita o
+        // operador clicar de novo achando que travou.
+        toast.info('Nada a distribuir — estes leads já têm dono.');
+      } else {
+        toast.success(`${r.distribuidos} leads divididos entre ${abertos.length}.`);
+      }
+      setAberto(false);
+      setAbertos([]);
+      qc.invalidateQueries({ queryKey: ['sdr', 'queue'] });
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não foi possível distribuir.'),
+  });
+
+  const elegiveis = data?.vinculados ?? [];
+
+  if (!aberto) {
+    return (
+      <Button size="xs" variant="outline" onClick={() => setAberto(true)}>
+        Distribuir
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {elegiveis.length === 0 ? (
+        <p className="text-xs text-amber-700">
+          Ninguém trabalha o mercado <b>{lote.productCode}</b> ainda — vincule alguém em
+          Mercados antes.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-3">
+            {elegiveis.map((s) => (
+              <label key={s.id} className="flex items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={abertos.includes(s.id)}
+                  onChange={(e) =>
+                    setAbertos((prev) =>
+                      e.target.checked ? [...prev, s.id] : prev.filter((x) => x !== s.id),
+                    )
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-base-content/50">
+            Divide em rodízio entre os marcados. Cada lead fica com um dono só — é o que
+            evita dois SDRs ligando pra mesma pessoa.
+          </p>
+        </>
+      )}
+      <div className="flex gap-2">
+        <Button
+          size="xs"
+          disabled={!abertos.length}
+          loading={distribuir.isPending}
+          onClick={() => distribuir.mutate()}
+        >
+          Dividir
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => setAberto(false)}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Historico({ lotes }: { lotes: LeadBatch[] }) {
   if (!lotes.length) return null;
 
@@ -413,11 +509,14 @@ function Historico({ lotes }: { lotes: LeadBatch[] }) {
                   {l.validCount} de {l.receivedCount}
                 </span>
               </summary>
-              <div className="flex flex-wrap gap-4 pb-3 text-xs text-base-content/60">
-                <span>repetidos: {l.duplicateCount}</span>
-                <span>inválidos: {l.invalidCount}</span>
-                <span>sem nome: {l.noNameCount}</span>
-                {l.source && <span>origem: {l.source}</span>}
+              <div className="flex flex-col gap-2 pb-3">
+                <div className="flex flex-wrap gap-4 text-xs text-base-content/60">
+                  <span>repetidos: {l.duplicateCount}</span>
+                  <span>inválidos: {l.invalidCount}</span>
+                  <span>sem nome: {l.noNameCount}</span>
+                  {l.source && <span>origem: {l.source}</span>}
+                </div>
+                <Distribuir lote={l} />
               </div>
             </details>
           </li>

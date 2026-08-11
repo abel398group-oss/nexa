@@ -1,9 +1,18 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { ArrayNotEmpty, IsArray, IsString } from 'class-validator';
 import { LeadImportService } from '@/application/telemarketing/lead-import.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { ImportarLoteDto } from './dto/importar-lote.dto';
+
+/// Um vendedor só já é "dar o lote inteiro pra ele" — por isso lista, não campo único.
+class DistribuirDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  sellerIds!: string[];
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('lead-batches')
@@ -39,5 +48,21 @@ export class LeadBatchesController {
   @RequirePerm('lead_batches')
   listar(@CurrentTenant() tenantId: string) {
     return this.importer.listar(tenantId);
+  }
+
+  /**
+   * Distribui o lote entre os SDRs escolhidos.
+   *
+   * Passo separado da importação, e obrigatório: lead sem dono não aparece na fila de
+   * ninguém. Importar sem distribuir deixa a lista dentro do sistema e fora do trabalho.
+   */
+  @Post(':id/distribute')
+  @RequirePerm('lead_batches')
+  distribuir(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: DistribuirDto,
+  ) {
+    return this.importer.distribuir(tenantId, id, dto.sellerIds);
   }
 }

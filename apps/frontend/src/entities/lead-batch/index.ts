@@ -12,6 +12,7 @@ export type {
 export { ROTULO_MOTIVO, PORQUE_TRAVADO } from './types/lead-batch.types';
 
 export {
+  distribuirLote,
   importarLote,
   listLeadBatches,
   simularImportacao,

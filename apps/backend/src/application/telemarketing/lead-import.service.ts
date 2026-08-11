@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { parseCsvDeLeads, type LinhaCsv } from './lead-csv';
@@ -149,6 +149,101 @@ export class LeadImportService {
         motivo: l.descarte as MotivoDescarte,
         forcavel: podeForcar(l.descarte as MotivoDescarte),
       }));
+  }
+
+  /**
+   * Distribui os leads do lote entre os SDRs escolhidos.
+   *
+   * Sem isso o lote fica sem dono, e lead sem dono **não aparece para ninguém** na fila
+   * do SDR — de propósito: dois SDRs no mesmo lead é briga de comissão e o lead achando
+   * que é call center. Então a importação sozinha não coloca ninguém para trabalhar; é
+   * este passo que faz isso.
+   *
+   * Reparte em rodízio pela ordem da lista. Não por "quem tem menos": no primeiro lote
+   * do dia todo mundo tem zero, e balancear carga histórica faria um SDR receber tudo
+   * porque estava de férias na semana passada.
+   */
+  async distribuir(
+    tenantId: string,
+    batchId: string,
+    sellerIds: string[],
+  ): Promise<{ distribuidos: number; porVendedor: Record<string, number> }> {
+    if (!sellerIds.length) {
+      throw new BadRequestException('Escolha ao menos um vendedor.');
+    }
+
+    const lote = await this.prisma.leadBatch.findFirst({ where: { id: batchId, tenantId } });
+    if (!lote) throw new NotFoundException('Lote não encontrado.');
+
+    // Só vendedor deste tenant, ativo, e vinculado ao mercado do lote: distribuir para
+    // quem não trabalha o mercado entrega lead de pneus para quem só vende TMS.
+    const vinculados = await this.prisma.sellerMarket.findMany({
+      where: { tenantId, productCode: lote.productCode, sellerId: { in: sellerIds } },
+      select: { sellerId: true },
+    });
+    const validos = await this.prisma.seller.findMany({
+      where: { id: { in: vinculados.map((v) => v.sellerId) }, tenantId, active: true },
+      select: { id: true },
+    });
+    if (!validos.length) {
+      throw new BadRequestException(
+        'Nenhum dos vendedores escolhidos trabalha o mercado deste lote.',
+      );
+    }
+    const alvos = validos.map((v) => v.id);
+
+    // `Opportunity` não declara relação com `Contact` — só guarda `contactId`. Então o
+    // recorte "leads deste lote" vem dos contatos, e a oportunidade é filtrada por id.
+    const contatosDoLote = await this.prisma.contact.findMany({
+      where: { tenantId, batchId },
+      select: { id: true },
+    });
+    if (!contatosDoLote.length) return { distribuidos: 0, porVendedor: {} };
+
+    // Só o que ainda não tem dono. Redistribuir por engano tiraria lead da mão de quem
+    // já começou a trabalhar nele.
+    const fila = await this.prisma.opportunity.findMany({
+      where: {
+        tenantId,
+        assignedSellerId: null,
+        stage: 'new',
+        contactId: { in: contatosDoLote.map((c) => c.id) },
+      },
+      select: { id: true, contactId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const porVendedor: Record<string, number> = Object.fromEntries(alvos.map((a) => [a, 0]));
+
+    // Uma transação por lead, como na importação: um $transaction único com centenas de
+    // leads estoura o timeout de 5s do Prisma e desfaz o que já tinha dado certo.
+    for (let i = 0; i < fila.length; i += 1) {
+      const dono = alvos[i % alvos.length];
+      const o = fila[i];
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.opportunity.update({
+            where: { id: o.id },
+            data: { assignedSellerId: dono },
+          });
+          // Os dois campos de posse juntos: sem isso a resposta do lead no WhatsApp cai
+          // num inbox e o trabalho fica em outro.
+          if (o.contactId) {
+            await tx.contact.update({
+              where: { id: o.contactId },
+              data: { ownerSellerId: dono },
+            });
+          }
+        });
+        porVendedor[dono] += 1;
+      } catch (e: any) {
+        this.logger.warn(`lead ${o.id} não distribuído: ${e?.message ?? e}`);
+      }
+    }
+
+    const distribuidos = Object.values(porVendedor).reduce((a, b) => a + b, 0);
+    this.logger.log(`lote ${batchId}: ${distribuidos} leads distribuídos entre ${alvos.length}`);
+    return { distribuidos, porVendedor };
   }
 
   /// Histórico de lotes com os contadores. É o que responde "qual lista presta" —

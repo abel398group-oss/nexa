@@ -31,3 +31,18 @@ export async function listLeadBatches(): Promise<LeadBatch[]> {
   const r = await api.get('/lead-batches');
   return r.data;
 }
+
+/**
+ * Reparte o lote entre os SDRs escolhidos, em rodízio.
+ *
+ * Passo obrigatório e separado da importação: lead sem dono não aparece na fila de
+ * ninguém, então lote importado e não distribuído está dentro do sistema e fora do
+ * trabalho.
+ */
+export async function distribuirLote(
+  batchId: string,
+  sellerIds: string[],
+): Promise<{ distribuidos: number; porVendedor: Record<string, number> }> {
+  const r = await api.post(`/lead-batches/${batchId}/distribute`, { sellerIds });
+  return r.data;
+}
