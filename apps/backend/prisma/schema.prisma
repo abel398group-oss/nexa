@@ -195,6 +195,16 @@ model Contact {
   // Preenchido = nunca mais entra em campanha de e-mail (reputação de remetente).
   emailBouncedAt    DateTime? @map("email_bounced_at")
   emailBounceReason String?   @map("email_bounce_reason")
+  /// Lote de importação que trouxe este lead (módulo 1, 11/08/2026). NULL = veio
+  /// de antes dos lotes, ou de conversa/inbound. É o que responde "qual lista
+  /// presta" meses depois — sem ele o funil por lote não tem de onde contar.
+  batchId           String?   @map("batch_id")
+  batch             LeadBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  /// Virou cliente (módulo 3, 11/08/2026). Preenchido na transação do `won`.
+  /// A peneira da importação exclui quem tem isto OU quem existe no TMS: um
+  /// contrato assinado hoje não está no TMS amanhã, e sem esta coluna o cliente
+  /// novo recebe campanha fria do produto que acabou de comprar.
+  customerSince     DateTime? @map("customer_since")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -635,6 +645,7 @@ model Seller {
 
   conversations AiConversation[]
   notifications SellerNotification[]
+  markets       SellerMarket[] // mercados que este vendedor pode trabalhar
   opportunities Opportunity[] // F6+ (seller-leads): leads atribuidos a este vendedor
   activities    SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
@@ -663,6 +674,60 @@ model SellerActivity {
   @@index([tenantId, sellerId])
   @@index([tenantId, opportunityId])
   @@map("seller_activities")
+}
+
+// ===================== TELEMARKETING (módulo 1, 11/08/2026) =====================
+// Ver docs/features/telemarketing/prd.md §Revisão 2026-08-11.
+
+/// Lote entregue pelo planejamento: uma lista importada, com os contadores da
+/// peneira. É a unidade que responde "qual lista presta" — sem ela, campanha boa
+/// e lista ruim ficam indistinguíveis no relatório.
+model LeadBatch {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  /// Mercado que recebe o lote (ADR 037). O roteiro do SDR vive no mercado, então
+  /// a lista precisa declarar o dela na importação.
+  productCode    String   @map("product_code")
+  name           String
+  source         String?  // "feira intermodal", "lista sintegra sp"
+  sourceDetail   String?  @map("source_detail")
+  /// Base legal LGPD deste lote (feira = consentimento; lista comprada = não).
+  /// Guardado por lote para a exposição ficar visível — ver Riscos R-3.
+  consentBasis   String?  @map("consent_basis")
+  uploadedByUserId String? @map("uploaded_by_user_id")
+  // Contadores da peneira, gravados na importação. Toda taxa se calcula sobre
+  // `valid`, nunca sobre `received`, ou lista suja se elogia sozinha.
+  receivedCount  Int      @default(0) @map("received_count")
+  duplicateCount Int      @default(0) @map("duplicate_count")
+  invalidCount   Int      @default(0) @map("invalid_count")
+  validCount     Int      @default(0) @map("valid_count")
+  /// Quantos chegaram sem nome — decide o fallback da saudação antes da ligação.
+  noNameCount    Int      @default(0) @map("no_name_count")
+  status         String   @default("draft") // draft | active | exhausted | archived
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  contacts       Contact[]
+
+  @@index([tenantId])
+  @@index([tenantId, productCode])
+  @@map("lead_batches")
+}
+
+/// Quais mercados um vendedor pode trabalhar. Substitui o `SegmentMember` do PRD
+/// original: mercado é `productCode`, não entidade nova (ADR 037). Sem esta tabela
+/// não existe como dizer "o fulano vende os dois".
+model SellerMarket {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  sellerId    String   @map("seller_id")
+  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  productCode String   @map("product_code")
+  role        String   @default("seller") // seller | lead
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([sellerId, productCode])
+  @@index([tenantId, productCode])
+  @@map("seller_markets")
 }
 
 model SellerNotification {
@@ -1027,6 +1092,16 @@ model Opportunity {
   // F7 (RevOps): ultimo aviso de "lead parado" — evita repetir o mesmo lead
   // todo dia no sino ate alguem mexer nele.
   staleNotifiedAt DateTime? @map("stale_notified_at")
+  /// MERCADO desta oportunidade (módulo 1, 11/08/2026). Mesmo `productCode` de
+  /// products/campaigns/playbook — NUNCA um marketId paralelo (ADR 037). Fica na
+  /// oportunidade e não no contato porque a mesma transportadora pode ser lead de
+  /// dois mercados: duas oportunidades, dois donos, e uma conversa só de WhatsApp
+  /// (quem detém a linha é AiConversation.productCode).
+  productCode     String?   @map("product_code")
+  /// Reunião agendada pelo closer (módulo 3). Só registro — sem integração com
+  /// Google Calendar/Outlook nesta versão.
+  meetingAt       DateTime? @map("meeting_at")
+  meetingUrl      String?   @map("meeting_url")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
