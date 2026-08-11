@@ -12,6 +12,7 @@ export { ROTULO_PRIORIDADE, ROTULO_RESULTADO } from './types/sdr.types';
 export {
   descartarLead,
   listClosers,
+  listMaterial,
   listQueue,
   pausarLead,
   registrarAtividade,

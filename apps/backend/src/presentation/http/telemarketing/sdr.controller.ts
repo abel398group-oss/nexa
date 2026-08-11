@@ -68,6 +68,19 @@ export class SdrController {
     return this.sdr.closersDoMercado(tenantId, productCode, user?.sellerId);
   }
 
+  /// Material de consulta do mercado — a base de conhecimento filtrada, só leitura.
+  /// Fica em `telemarketing` e não em `knowledge`: aquela permissão deixa editar o
+  /// acervo, e o SDR precisa consultar durante a ligação, não reescrever.
+  @Get('knowledge')
+  @RequirePerm('telemarketing')
+  material(
+    @CurrentTenant() tenantId: string,
+    @Query('productCode') productCode: string,
+    @Query('q') q?: string,
+  ) {
+    return this.sdr.materialDoMercado(tenantId, productCode, q);
+  }
+
   /// Passa pro closer: escolha direta pelo SDR (decidido 11/08), sem round-robin —
   /// `pickAndClaimSeller` foi o centro do incidente de 09/07 e não se mexe nele para
   /// atender uma tela nova.

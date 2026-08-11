@@ -14,6 +14,7 @@ import { getRoteiro } from '@/entities/sales-script';
 import {
   descartarLead,
   listClosers,
+  listMaterial,
   listQueue,
   pausarLead,
   registrarAtividade,
@@ -392,7 +393,68 @@ function RoteiroDoMercado({
           ))}
         </div>
       )}
+
+      <Material productCode={productCode} />
     </Card>
+  );
+}
+
+/**
+ * Material de consulta (módulo 1, item 7): a base de conhecimento do mercado.
+ *
+ * Fica no fim do roteiro e fechado, porque não é o que ele lê — é o que ele procura
+ * quando a conversa sai do script. Com busca, porque durante uma ligação ele tem uns
+ * quinze segundos para achar o preço, e rolar uma lista não cabe nesse tempo.
+ */
+function Material({ productCode }: { productCode: string | null }) {
+  const [busca, setBusca] = useState('');
+  const [abre, setAbre] = useState(false);
+
+  const { data: itens = [] } = useQuery({
+    queryKey: ['sdr', 'material', productCode, busca],
+    queryFn: () => listMaterial(productCode as string, busca),
+    enabled: !!productCode && abre,
+  });
+
+  if (!productCode) return null;
+
+  return (
+    <div className="mt-3 border-t border-base-300 pt-2">
+      <button
+        type="button"
+        onClick={() => setAbre(!abre)}
+        className="flex w-full items-center justify-between gap-2 py-1 text-left text-xs font-medium uppercase tracking-wide text-base-content/50"
+      >
+        Material de consulta
+        <span className={'transition-transform ' + (abre ? 'rotate-180' : '')}>▾</span>
+      </button>
+
+      {abre && (
+        <div className="pt-2">
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="preço, integração, prazo…"
+            className="h-8 text-xs"
+          />
+          {itens.length === 0 && (
+            <p className="mt-2 text-xs text-base-content/50">
+              {busca
+                ? 'Nada com esse termo neste mercado.'
+                : 'Este mercado ainda não tem material aprovado.'}
+            </p>
+          )}
+          {itens.map((k) => (
+            <details key={k.id} className="border-b border-base-200 py-1.5 last:border-0">
+              <summary className="cursor-pointer text-sm">{k.title}</summary>
+              <p className="whitespace-pre-wrap pt-1 text-xs leading-relaxed text-base-content/80">
+                {k.content}
+              </p>
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

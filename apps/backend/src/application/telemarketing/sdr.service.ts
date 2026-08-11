@@ -177,6 +177,39 @@ export class SdrService {
     });
   }
 
+  /**
+   * Material de consulta do mercado (módulo 1, item 7).
+   *
+   * É a base de conhecimento que já existe, filtrada por `productCode` — construir um
+   * segundo acervo seria a duplicação que a ADR 037 evitou para mercado.
+   *
+   * Rota própria e só leitura, em vez de mandar o SDR na API de conhecimento: aquela
+   * está atrás da permissão `knowledge`, que dá poder de EDITAR o acervo. Ele precisa
+   * consultar durante a ligação, não reescrever o que a Lia responde.
+   */
+  async materialDoMercado(tenantId: string, productCode: string, busca?: string) {
+    if (!productCode) return [];
+
+    const where: any = { tenantId, productCode, approved: true };
+    if (busca?.trim()) {
+      const q = busca.trim();
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { content: { contains: q, mode: 'insensitive' } },
+        { topic: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.aiKnowledgeBase.findMany({
+      where,
+      select: { id: true, title: true, content: true, category: true, topic: true },
+      orderBy: { title: 'asc' },
+      // Teto baixo de propósito: isto é consulta no meio de uma ligação. Cem resultados
+      // não ajudam quem tem quinze segundos para achar o preço.
+      take: 25,
+    });
+  }
+
   /// Closers elegíveis para um mercado. É a lista que o SDR escolhe — e a mesma que
   /// valida a escolha no `transferir`, senão um lead de pneus cai num closer que só
   /// vende TMS (R8).

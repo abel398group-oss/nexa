@@ -17,6 +17,16 @@ export async function listClosers(productCode: string): Promise<Closer[]> {
   return r.data;
 }
 
+/// Material de consulta do mercado: a base de conhecimento que já existe, filtrada.
+/// Só leitura — o SDR consulta durante a ligação, não edita o acervo.
+export async function listMaterial(
+  productCode: string,
+  q?: string,
+): Promise<{ id: string; title: string; content: string; category: string | null; topic: string | null }[]> {
+  const r = await api.get('/sdr/knowledge', { params: { productCode, q: q || undefined } });
+  return r.data;
+}
+
 export async function registrarAtividade(dados: {
   opportunityId: string;
   type: 'call' | 'whatsapp' | 'email' | 'note';
