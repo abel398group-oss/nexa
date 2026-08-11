@@ -108,7 +108,11 @@ export function NotificationBell() {
                 key={n.id}
                 onClick={() => clickItem(n)}
                 className={`flex w-full flex-col items-start gap-0.5 border-b border-base-100 px-4 py-2.5 text-left transition-colors hover:bg-base-100 ${
-                  n.read ? '' : 'bg-sky-50'
+                  // O destaque de "não lida" precisa das DUAS variantes. Só com
+                  // `bg-sky-50`, o dark mode pintava um fundo claro atrás de um
+                  // texto claro (`text-base-content`) e a notificação ficava
+                  // invisível até o hover trocar o fundo por `base-100`.
+                  n.read ? '' : 'bg-sky-50 dark:bg-sky-500/10'
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
