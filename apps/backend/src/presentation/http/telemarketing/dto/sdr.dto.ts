@@ -57,6 +57,35 @@ export class PausarDto {
   notes?: string;
 }
 
+export class TransferirDto {
+  /// `Seller.id` do closer, não id de usuário. O SDR escolhe na lista de
+  /// `GET /api/sdr/closers?productCode=` — e o service revalida, porque API não
+  /// confia no cliente.
+  @ApiProperty({ description: 'Seller.id do closer que vai receber o lead' })
+  @IsString()
+  @IsNotEmpty()
+  closerId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Reunião marcada, se houver. Passar sem reunião é permitido.',
+  })
+  @IsOptional()
+  @IsDateString()
+  meetingAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  meetingUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+}
+
 export class DescartarDto {
   /// Obrigatório de propósito: descarte sem motivo é dado perdido. Depois ninguém
   /// sabe se a lista era ruim ou se a abordagem era.

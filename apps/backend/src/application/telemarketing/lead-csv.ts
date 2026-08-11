@@ -86,7 +86,7 @@ function chaveDoCabecalho(bruto: string): string | null {
   const limpo = bruto
     .trim()
     .toLowerCase()
-    .replace(/^﻿/, '') // BOM do Excel
+    .replace(/^\uFEFF/, '') // BOM do Excel
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, ''); // acento: "razão" → "razao"
 
@@ -138,7 +138,7 @@ export function avaliarLinha(
 }
 
 export function parseCsvDeLeads(conteudo: string): ResultadoCsv {
-  const texto = conteudo.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const texto = conteudo.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const brutas = texto.split('\n').filter((l) => l.trim().length > 0);
   if (brutas.length === 0) return { linhas: [], colunasIgnoradas: [] };
 

@@ -177,6 +177,100 @@ export class SdrService {
     });
   }
 
+  /// Closers elegíveis para um mercado. É a lista que o SDR escolhe — e a mesma que
+  /// valida a escolha no `transferir`, senão um lead de pneus cai num closer que só
+  /// vende TMS (R8).
+  async closersDoMercado(tenantId: string, productCode: string) {
+    const vinculos = await this.prisma.sellerMarket.findMany({
+      where: { tenantId, productCode },
+      select: { sellerId: true, role: true },
+    });
+    const ids = vinculos.map((v) => v.sellerId);
+    if (!ids.length) return [];
+
+    return this.prisma.seller.findMany({
+      where: { id: { in: ids }, tenantId, active: true },
+      select: { id: true, name: true, phone: true, email: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * Passa o lead pro closer. Escolha direta: o SDR informa o `closerId`, e não há
+   * round-robin aqui — `pickAndClaimSeller` foi o centro do incidente de 09/07 e não
+   * se mexe nele para atender uma tela nova.
+   *
+   * Os DOIS campos de posse mudam juntos: `assignedSellerId` porque o trabalho é do
+   * closer agora, e `Contact.ownerSellerId` porque senão a resposta do lead no
+   * WhatsApp continua caindo no inbox do SDR e o closer fica cego no próprio negócio.
+   *
+   * O crédito do SDR não depende de campo congelado: fica no histórico de etapa e nas
+   * linhas de `SellerActivity` que ele escreveu — as duas coisas imutáveis e datadas.
+   */
+  async transferir(
+    tenantId: string,
+    user: UsuarioComEscopo & { sellerId?: string | null },
+    opportunityId: string,
+    dados: { closerId: string; meetingAt?: Date; meetingUrl?: string; notes?: string },
+  ) {
+    const atual = await this.doEscopo(tenantId, user, opportunityId);
+
+    // Mercado do lead manda: closer fora dele não recebe. Sem esta checagem, a
+    // separação por mercado do módulo 1 vira decoração.
+    const elegiveis = atual.productCode
+      ? await this.closersDoMercado(tenantId, atual.productCode)
+      : [];
+    if (atual.productCode && !elegiveis.some((c) => c.id === dados.closerId)) {
+      throw new ForbiddenException(
+        'Este closer não trabalha o mercado deste lead.',
+      );
+    }
+
+    // Atividade primeiro, enquanto o lead ainda é do SDR: depois da troca de posse o
+    // escopo dele não alcança mais a oportunidade.
+    await this.registrarAtividade(tenantId, user, {
+      opportunityId,
+      type: 'call',
+      result: 'passou_closer',
+      notes: dados.notes,
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      const atualizada = await tx.opportunity.update({
+        where: { id: opportunityId },
+        data: {
+          assignedSellerId: dados.closerId,
+          // `qualified`, não uma etapa nova: as definições do funil no PRD contam
+          // `qualified`, e inventar `meeting_scheduled` faria todo relatório que lê
+          // essa etapa perder esses leads. A reunião mora em `meetingAt`.
+          stage: 'qualified',
+          ...(dados.meetingAt ? { meetingAt: dados.meetingAt } : {}),
+          ...(dados.meetingUrl ? { meetingUrl: dados.meetingUrl } : {}),
+        },
+      });
+
+      if (atual.contactId) {
+        await tx.contact.update({
+          where: { id: atual.contactId },
+          data: { ownerSellerId: dados.closerId },
+        });
+      }
+
+      await tx.opportunityStageHistory.create({
+        data: {
+          opportunityId,
+          fromStage: atual.stage,
+          toStage: 'qualified',
+          // Quem saiu e pra quem foi, na própria linha: é o registro que sustenta
+          // comissão depois, e não dá para reconstruir se não for gravado agora.
+          reason: `passou_closer de ${atual.assignedSellerId ?? 'sem_dono'} para ${dados.closerId}`,
+        },
+      });
+
+      return atualizada;
+    });
+  }
+
   /// Carrega a oportunidade já aplicando o escopo. Vendedor não alcança lead de
   /// outro por adivinhar o id — a checagem é no service, não só na tela (R5).
   private async doEscopo(
@@ -191,7 +285,13 @@ export class SdrService {
         tenantId,
         ...(escopo ? { assignedSellerId: escopo } : {}),
       },
-      select: { id: true, stage: true, assignedSellerId: true },
+      select: {
+        id: true,
+        stage: true,
+        assignedSellerId: true,
+        contactId: true,
+        productCode: true,
+      },
     });
     if (!o) throw new NotFoundException('Oportunidade não encontrada.');
     return o;

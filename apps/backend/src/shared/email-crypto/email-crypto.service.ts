@@ -15,8 +15,10 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 12;   // 96 bits — recomendado para GCM
-const TAG_LEN = 16;  // 128 bits auth tag
 const PREFIX = 'ENC:';
+// A auth tag do GCM tem 16 bytes (128 bits) — é o que `cipher.getAuthTag()`
+// devolve e o que `decrypt` espera de volta. Existia aqui como constante
+// `TAG_LEN` que nunca era usada; o valor é do algoritmo, não uma escolha nossa.
 
 @Injectable()
 export class EmailCryptoService {

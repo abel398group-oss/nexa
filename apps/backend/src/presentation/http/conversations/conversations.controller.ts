@@ -3,7 +3,6 @@ import { IsArray, IsIn, IsString } from 'class-validator';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
-import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import {
   AddMessageDto,
   AssignAnalystDto,

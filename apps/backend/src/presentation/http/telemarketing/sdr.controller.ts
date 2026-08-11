@@ -1,9 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { SdrService } from '@/application/telemarketing/sdr.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
-import { DescartarDto, PausarDto, RegistrarAtividadeDto } from './dto/sdr.dto';
+import {
+  DescartarDto,
+  PausarDto,
+  RegistrarAtividadeDto,
+  TransferirDto,
+} from './dto/sdr.dto';
 
 type Usuario = { userId?: string; role?: string; sellerId?: string | null };
 
@@ -52,8 +57,29 @@ export class SdrController {
     return this.sdr.descartar(tenantId, user, id, dto.motivo, dto.notes);
   }
 
-  // FALTA: passar pro closer. Depende de uma decisão do Abel — o SDR escolhe o closer
-  // numa lista, ou o sistema distribui por round-robin entre os membros do mercado
-  // (`SellerMarket`)? Existe `pickAndClaimSeller` fazendo round-robin, e ele foi o
-  // centro do incidente de 09/07/2026, então não se mexe nele por palpite.
+  /// Closers elegíveis para um mercado — é a lista que o SDR escolhe na tela.
+  @Get('closers')
+  @RequirePerm('telemarketing')
+  closers(@CurrentTenant() tenantId: string, @Query('productCode') productCode: string) {
+    return this.sdr.closersDoMercado(tenantId, productCode);
+  }
+
+  /// Passa pro closer: escolha direta pelo SDR (decidido 11/08), sem round-robin —
+  /// `pickAndClaimSeller` foi o centro do incidente de 09/07 e não se mexe nele para
+  /// atender uma tela nova.
+  @Patch('opportunities/:id/transfer')
+  @RequirePerm('telemarketing')
+  transferir(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Param('id') id: string,
+    @Body() dto: TransferirDto,
+  ) {
+    return this.sdr.transferir(tenantId, user, id, {
+      closerId: dto.closerId,
+      meetingAt: dto.meetingAt ? new Date(dto.meetingAt) : undefined,
+      meetingUrl: dto.meetingUrl,
+      notes: dto.notes,
+    });
+  }
 }
