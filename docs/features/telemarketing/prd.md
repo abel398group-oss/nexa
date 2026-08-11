@@ -152,7 +152,7 @@ hard-blocked, each for a different non-negotiable reason:
 |---|---|
 | Opted out | LGPD. Not a preference |
 | Invalid e-mail | burns sender-domain reputation for every later campaign |
-| TMS customer | pitching what they already pay for is the worst possible call |
+| TMS customer | pitching what they already pay for is the worst possible call. Checks the TMS **or** `Contact.customerSince` — see §Módulo 3 |
 | Competitor | hands them the sales script |
 
 A generic "force selected" button is exactly how an opt-out returns to a list.
@@ -369,6 +369,134 @@ apps/backend/src/presentation/http/sdr/
 Dialer and call recording · automatic advance to the next lead · editing the
 ficha on this screen · sending WhatsApp or e-mail through the Nexa number ·
 operator available/paused state.
+
+---
+
+## Módulo 3 — Closer: reunião e fechamento (aprovado 2026-08-11)
+
+Starts exactly where módulo 2 ends: the lead the SDR handed over. Approved as
+layout and rules on 2026-08-11; not implemented.
+
+### The default view is the day, not a kanban
+
+Everyone builds a kanban for the closer. It is the wrong default. A kanban
+answers *"how is my pipeline"* — a closer with fifteen open deals does not wake
+up with that question, he wakes up with *"what do I do today?"*. A board forces
+him to sweep four columns to discover he has a meeting at 15:00 and a proposal
+that has been silent for eight days.
+
+So: **the day is the default tab. Pipeline is the second.**
+
+```
+  ┌ HOJE ┬ Pipeline ┬ Fechados ┐
+  │                                                                        │
+  │  AGORA                                                                 │
+  │  15:00  Transportes Silva · reunião          [Abrir] [Remarcar]        │
+  │                                                                        │
+  │  PRECISA DE VOCÊ                                                       │
+  │  Rodoviário Costa · proposta enviada há 8 dias, sem resposta           │
+  │  Log Minas · voltou hoje do "sem orçamento" (adiado em 12/05)          │
+  │  Expresso Sul · recebido do Mateus ontem, sem contato                  │
+  │                                                                        │
+  │  ESPERANDO                                                             │
+  │  4 propostas em análise · 2 reuniões esta semana                       │
+  └────────────────────────────────────────────────────────────────────────┘
+```
+
+| Block | Rule |
+|---|---|
+| AGORA | `meetingAt` falls today |
+| PRECISA DE VOCÊ | proposal with no movement past a threshold · `pausedUntil` reached today · assigned by the SDR with no closer activity yet |
+| ESPERANDO | everything else still open — future meetings, proposals inside the threshold |
+
+A deal in none of the three does not need him today, and that is information
+rather than an omission.
+
+### The deal
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Transportes Silva · Carlos Mendes · (12) 98807-3788                      │
+│ HiperTMS · Lote Feira ago · veio do Mateus em 10/08   proposta · R$ 1.200│
+│ [ WhatsApp ]  [ Ligar ]  [ E-mail ]                                      │
+└──────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────┬──────────────────────────────┐
+│ HISTÓRICO                                 │ O NEGÓCIO                    │
+│ 11/08  Mateus · ligou, agendou reunião    │ Valor      R$ 1.200/mês      │
+│ 11/08  Mateus · passou pro closer         │ Reunião    14/08 15:00       │
+│ 10/08  Mateus · ligou, não atendeu        │ Frota      12 caminhões      │
+│ 09/08  Lia · e-mail aberto                │ Etapa      proposta          │
+│                                           ├──────────────────────────────┤
+│                                           │ MATERIAL                     │
+└───────────────────────────────────────────┴──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ [Agendar reunião] [Registrar proposta] [Ganhou] [Perdeu ▾] [Devolver ▾]  │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**The timeline carries the SDR's work and Lia's, whole.** The closer joins the
+call already knowing what was said — the difference between "tell me again what
+you need" and "Mateus said you issue around 400 CT-e a month". Same three
+sources as módulo 2, same single list.
+
+Channel buttons behave exactly as in módulo 2 (`tel:`, `wa.me`, `mailto:`) and
+for the same reason: the Nexa number is the campaign number.
+
+### Actions
+
+| Button | Effect |
+|---|---|
+| Agendar reunião | `meetingAt` + `meetingUrl` (optional) → `stage='qualified'` |
+| Registrar proposta | asks the value → `Opportunity.value` → `stage='proposal'` |
+| Ganhou | `$transaction`: `stage='won'` + `Contact.customerSince = now()` |
+| Perdeu ▾ | **definitive** → `stage='lost'` + `discardReason` · **timing** → asks a return date → `stage='paused'` + `pausedUntil` |
+| Devolver ▾ | asks the reason → `$transaction`: **both** ownership fields back to the origin SDR + row in `OpportunityStageHistory` |
+
+**Return is not a rejection queue.** No acceptance step exists — the lead lands
+in the closer's list the moment the SDR hands it over. Return is the counterweight
+to that: it costs a mandatory reason, and the reason makes "return rate per SDR"
+readable. The returned lead reappears in the SDR's **active** list, not in his
+"Passados" tab, because it is his work again — the same ownership rule as módulo 2
+produces this for free.
+
+### `Contact.customerSince` — closing a real leak
+
+Módulo 1's hygiene filter excludes TMS customers by asking the TMS. A contract
+signed today may not be in the TMS for days: the lead signs on Monday and gets a
+cold prospecting campaign on Thursday, from a different SDR, for the product he
+just bought.
+
+So `won` stamps `Contact.customerSince` in the same transaction, and **módulo 1's
+filter checks both sources**: TMS lookup **OR** `customerSince IS NOT NULL`. This
+revises the hygiene list in §Módulo 1.
+
+### Meeting: recorded, not integrated
+
+Nexa stores date/time and an optional link. No Google Calendar or Outlook
+sync — invites, dynamic Meet links, time zones, cancellations and two-way
+reconciliation are a project of their own, and the CRM's job here is the stage,
+not the calendar.
+
+### Database
+
+Already exist, no migration: `Opportunity.value` (`Decimal(12,2)`), `stage`
+(already includes `qualified` · `proposal` · `paused` · `won` · `lost`),
+`pausedUntil`, `discardReason`, `OpportunityStageHistory`.
+
+Create (additive, `migrate deploy`): `Opportunity.meetingAt` (`DateTime?`),
+`Opportunity.meetingUrl` (`String?`), `Contact.customerSince` (`DateTime?`).
+
+Note on §Business context: `Opportunity.value` predates this module and holds an
+*estimated pipeline value*, not money owed. The boundary in that section still
+holds — no invoice, no payment, no commission split, no PDF. Without the value,
+a report can only say "three deals closed" and never whether they were R$ 200 or
+R$ 50.000 each.
+
+### Deliberately not built
+
+Calendar integration · proposal/PDF generation · invoicing, payment or
+commission · acceptance queue before the lead reaches the closer · kanban as the
+default view.
 
 ---
 
