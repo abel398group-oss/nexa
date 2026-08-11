@@ -64,6 +64,7 @@ const NAV_GROUPS: NavGroup[] = [
     // Listas fica sob `lead_batches` e não `campaigns`: importar cria contatos e
     // oportunidades, que é um poder diferente de disparar para quem já está na base.
     { to: '/lead-batches',   label: 'Listas de lead',    ic: 'contacts',  perm: 'lead_batches' },
+    { to: '/roteiro',        label: 'Roteiro do SDR',    ic: 'playbook',  perm: 'settings' },
     { to: '/sdr',            label: 'Mesa do SDR',       ic: 'sellers',   perm: 'telemarketing' },
     { to: '/closer',         label: 'Hoje (closer)',     ic: 'zap',       perm: 'telemarketing' },
   ] },

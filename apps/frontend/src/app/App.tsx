@@ -33,6 +33,7 @@ const MessageTemplatesPage = lazy(() => import('@/pages/MessageTemplatesPage').t
 const LeadBatchesPage = lazy(() => import('@/pages/LeadBatchesPage').then((m) => ({ default: m.LeadBatchesPage })));
 const SdrWorkbenchPage = lazy(() => import('@/pages/SdrWorkbenchPage').then((m) => ({ default: m.SdrWorkbenchPage })));
 const CloserTodayPage = lazy(() => import('@/pages/CloserTodayPage').then((m) => ({ default: m.CloserTodayPage })));
+const SalesScriptPage = lazy(() => import('@/pages/SalesScriptPage').then((m) => ({ default: m.SalesScriptPage })));
 const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
@@ -107,6 +108,8 @@ export default function App() {
                     <Route path="/lead-batches" element={<Perm perm="lead_batches"><LeadBatchesPage /></Perm>} />
                     <Route path="/sdr" element={<Perm perm="telemarketing"><SdrWorkbenchPage /></Perm>} />
                     <Route path="/closer" element={<Perm perm="telemarketing"><CloserTodayPage /></Perm>} />
+                    {/* Escrever roteiro é `settings`: o SDR lê na mesa dele, não edita. */}
+                    <Route path="/roteiro" element={<Perm perm="settings"><SalesScriptPage /></Perm>} />
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
