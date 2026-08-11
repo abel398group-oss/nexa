@@ -56,15 +56,15 @@ export function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#2b2e38] via-[#181a20] to-[#0b0c0f]" aria-hidden />
       {/* leve spotlight neutro no topo */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/[0.05] to-transparent" aria-hidden />
-      {/* brilho laranja embaixo do card (igual ao TMS) */}
+      {/* brilho da marca embaixo do card */}
       <div
         className="pointer-events-none absolute left-1/2 top-[60%] h-[24rem] w-[34rem] -translate-x-1/2 rounded-[50%] bg-brand-500/[0.20] blur-[110px]"
         aria-hidden
       />
 
       <div className="relative w-full max-w-[460px]">
-        {/* borda laranja em degradê = o "glow" do card */}
-        <div className="rounded-[1.35rem] bg-gradient-to-br from-[#FF5A1F] via-[#ED4708] to-[#FF8A5C] p-[1px] shadow-[0_24px_56px_-16px_rgb(255_90_31_/_0.33),0_12px_28px_-12px_rgb(30_58_95_/_0.18)]">
+        {/* borda da marca em degradê = o "glow" do card */}
+        <div className="rounded-[1.35rem] bg-gradient-to-br from-[#0B5FFF] via-[#0A51DB] to-[#6DA3FF] p-[1px] shadow-[0_24px_56px_-16px_rgb(11_95_255_/_0.33),0_12px_28px_-12px_rgb(30_58_95_/_0.18)]">
           <div className="rounded-[calc(1.35rem-1px)] bg-base-100 px-7 pb-9 pt-10 sm:px-9 sm:pb-10 sm:pt-11">
             {/* wordmark + título */}
             <div className="flex flex-col items-center text-center">

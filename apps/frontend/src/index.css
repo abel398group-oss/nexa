@@ -493,8 +493,19 @@ html.dark textarea::placeholder { color: var(--text-muted) !important; }
 .dark textarea::placeholder { color: var(--text-muted); }
 
 /* badges coloridos dark */
-.dark .bg-brand-50    { background-color: rgba(11, 95, 255, 0.18); }
-.dark .text-brand-700 { color: #6da3ff; }
+html.dark .bg-brand-50    { background-color: rgba(11, 95, 255, 0.18); }
+/* Marca no tema ESCURO — os tons 500/600/700 sao escuros demais para
+   superficie escura. Com o laranja o 600 ainda passava (#ed4708 e claro);
+   com o azul (#0a51db) cai para 2,7:1 e o texto some. Trocam pelo tom 300,
+   o mesmo que --accent-brand ja usa no dark. Cobrem os ~40 usos espalhados
+   sem exigir `dark:` em cada chamada — se algum dia um destes for parar
+   sobre um fundo CLARO fixo, a excecao tem de ser feita aqui. */
+/* `html.dark`, nao `.dark`: a tela de login forca um wrapper com classe
+   `dark` (LoginPage) mas as superficies so viram no <html>. Com o seletor
+   solto, no tema CLARO o link saia azul-claro sobre card claro (2,4:1). */
+html.dark .text-brand-500 { color: #6da3ff; }
+html.dark .text-brand-600 { color: #6da3ff; }
+html.dark .text-brand-700 { color: #6da3ff; }
 .dark .bg-red-100     { background-color: rgba(220, 38, 38, 0.15); }
 .dark .text-red-700   { color: #fca5a5; }
 .dark .bg-amber-100   { background-color: rgba(217, 119, 6, 0.15); }

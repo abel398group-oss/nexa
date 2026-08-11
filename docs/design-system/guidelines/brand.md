@@ -39,11 +39,23 @@ identidade própria como produto de relacionamento com cliente.
 
 ## Logo e símbolo
 
-- **Wordmark:** "Nexa" em Inter Semibold, laranja-ignição `#FF5A1F`
+- **Wordmark:** "Nexa" em Inter Semibold, azul-elétrico `#0B5FFF`
 - **Símbolo:** (a definir pela equipe de design) — usar temporariamente o
   wordmark completo em contextos que precisam de ícone
-- **Fundo claro:** logo em `#FF5A1F`
-- **Fundo escuro (sidebar):** logo em `#FFFFFF` ou `#FF7A47`
+- **Fundo claro:** logo em `#0B5FFF`
+- **Fundo escuro (sidebar):** logo em `#FFFFFF` ou `#6DA3FF`
+
+> **Trocado em 11/08/2026.** Era laranja-ignição `#FF5A1F`, herdado do HiperTMS.
+> Saiu por dois motivos: fazia vizinhança com o âmbar de "aviso" na interface, e
+> o TMS segue laranja — o Nexa passa a ter identidade própria.
+>
+> Duas regras que a cor nova traz junto:
+> - O azul da marca é **mais fundo e mais saturado** que o azul-céu dos chips de
+>   informação ("Lido", "Entregue"). Clarear o `brand-500` apaga essa distinção e
+>   marca vira informação.
+> - Em fundo escuro, use o tom **300** (`#6DA3FF`), nunca o 500/600 — o 600 sobre
+>   card escuro dá 2,7:1, abaixo do mínimo legível. O `index.css` já faz essa
+>   troca sozinho via `html.dark`.
 
 **Não fazer:**
 - Não deformar proporções
