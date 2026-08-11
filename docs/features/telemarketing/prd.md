@@ -9,8 +9,8 @@ status: draft
 
 | Campo | Valor |
 |------|-------|
-| **Status** | Módulo 1 aprovado por Abel em 2026-08-11 — restante segue rascunho |
-| **Data** | 2026-08-04 · revisado 2026-08-11 (ver §Revisão 2026-08-11) |
+| **Status** | Módulos 1, 2 e 3 construídos e em produção — ver §Estado da implementação |
+| **Data** | 2026-08-04 · revisado e implementado 2026-08-11 |
 | **Dono** | (a definir) |
 | **Domínio** | contacts / opportunities / sellers |
 
@@ -243,6 +243,88 @@ values. Módulo 1 comes down to one new table (`LeadBatch`), one new link
 - Commission rule — percentage, tier, SDR/closer split. Deferred by Abel on
   2026-08-11. Blocks nothing in módulo 1 because no commission column is created.
 - O2 (LGPD basis per batch) and O3 (leads per seller) remain as recorded below.
+
+---
+
+## Estado da implementação — 2026-08-11 (construído)
+
+Módulos 1, 2 e 3 estão no ar: banco, backend e telas. Esta seção registra **o que ficou
+diferente do especificado acima**, porque quem ler o resto do documento vai encontrar
+decisões que a construção revisou.
+
+### Rotas
+
+| Rota | Perm | Observação |
+|---|---|---|
+| `POST /api/lead-batches` | `lead_batches` | `dryRun: true` devolve o relatório sem gravar |
+| `POST /api/lead-batches/:id/distribute` | `lead_batches` | rodízio entre os escolhidos |
+| `GET /api/lead-batches` | `lead_batches` | histórico com contadores |
+| `GET /api/sdr/queue` | `telemarketing` | fila + ficha + lote + histórico numa chamada |
+| `GET /api/sdr/closers?productCode=` | `telemarketing` | exclui o próprio SDR |
+| `GET /api/sdr/knowledge?productCode=&q=` | `telemarketing` | material de consulta, só leitura |
+| `POST /api/sdr/activity` · `PATCH /api/sdr/opportunities/:id/{pause,discard,transfer}` | `telemarketing` | |
+| `GET /api/closer/today` | `telemarketing` | os 3 blocos agrupados |
+| `PATCH /api/closer/opportunities/:id/{proposal,reschedule,win,lose,postpone}` | `telemarketing` | |
+| `GET/PUT /api/sales-scripts/:productCode` | ler `telemarketing` · escrever `settings` | |
+| `GET/POST/DELETE /api/markets/:code/sellers[/:sellerId]` | `settings` | vínculo vendedor↔mercado |
+| `PATCH /api/sellers/:id/away` | `sellers` | ausente até |
+
+Telas: `/lead-batches` · `/roteiro` · `/sdr` · `/closer`, mais as seções em `/markets` e
+`/sellers`.
+
+### O que a construção decidiu diferente
+
+**Prévia antes de gravar (`dryRun`).** Não estava especificado. O endpoint importava e
+relatava depois, que é o contrário do ponto do módulo 1 — o operador descobriria que a
+lista era ruim com ela já dentro. O `return` da prévia fica antes da primeira escrita, de
+modo que a garantia é estrutural e não promessa.
+
+**`LeadAttempt` não existe.** `SellerActivity` já registrava o mesmo fato. Ver a seção
+dedicada acima.
+
+**Transferência: escolha direta, sem round-robin.** `pickAndClaimSeller` não foi tocado.
+O SDR nomeia o closer, o backend recusa quem não é do mercado, e recusa o próprio SDR —
+`SellerMarket.role` (`seller | lead`) não distingue SDR de closer, então filtrar por papel
+seria inventar um conceito que o banco não tem.
+
+**Etapa após transferência é `qualified`,** não uma etapa nova: as definições do funil
+contam `qualified`, e criar `meeting_scheduled` faria todo relatório que lê essa etapa
+perder esses leads. A reunião mora em `meetingAt`.
+
+**Distribuição é passo obrigatório e separado.** Lead sem dono não aparece na fila de
+ninguém, então importar sem distribuir deixa a lista dentro do sistema e fora do
+trabalho. Rodízio pela ordem escolhida, não por menor carga — no primeiro lote do dia
+todos têm zero.
+
+**"Ausente" é data (`Seller.awayUntil`), não booleano.** Ausência tem fim; booleano
+depende de alguém desmarcar, e quem volta na segunda passa a semana sem receber lead sem
+entender por quê. **Não é o `outOfOffice`** da ADR 034, que decide outra coisa.
+
+**Item 7 tem rota própria de leitura.** A API de conhecimento está atrás da permissão
+`knowledge`, que dá poder de editar o acervo; o SDR precisa consultar durante a ligação.
+Mesma tabela, filtrada por `productCode`.
+
+**Roteiro: uma linha por versão** (`sales_scripts`), matriz inteira congelada junta, e o
+salvamento herda o que não veio no payload — a tela edita um item por vez.
+
+**`readiness()` conta vendedor vinculado ao mercado,** com escada: enquanto o tenant não
+tiver nenhum vínculo, conta vendedor ativo como antes. Sem a escada, `vendedores === 0`
+trancaria todo mercado já liberado.
+
+### O que NÃO foi construído
+
+- **Teste de integração.** Os 79 testes são unitários puros. O `.env` local aponta para o
+  banco de produção, então teste que escreve precisa de um Postgres separado — decisão de
+  ambiente, ainda aberta.
+- **Verificação visual.** Nenhuma tela foi aberta em navegador; a prova foi typecheck,
+  build e boot.
+- **Módulo de gestão / dashboards.** Adiado de propósito: as definições do funil já estão
+  neste documento, e o resto se desenha melhor com dado real na tela.
+- **Telefone de DDD 55 sem DDI** é descartado como inválido (`normalizePhone` lê o DDD
+  como DDI). Pinado em teste, não corrigido — aquele utilitário é fonte única de verdade
+  de WhatsApp, disparo e inbox.
+- **Regra de comissão.** Nenhuma coluna criada. O evento de mudança de posse está datado
+  em `OpportunityStageHistory`, que é a parte que não se reconstrói depois.
 
 ---
 
