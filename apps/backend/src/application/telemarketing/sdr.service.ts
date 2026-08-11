@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { ordenarFila } from './sdr-queue';
+import { naoAusente } from './seller-availability';
 
 /// Etapas em que o lead ainda é trabalho do SDR. `qualified` em diante é do closer.
 const ETAPAS_DO_SDR = ['new'];
@@ -227,7 +228,9 @@ export class SdrService {
     if (!ids.length) return [];
 
     return this.prisma.seller.findMany({
-      where: { id: { in: ids }, tenantId, active: true },
+      // Ausente não recebe: passar um lead quente para quem está de férias é o lead
+      // esfriando duas semanas sem ninguém perceber.
+      where: { id: { in: ids }, tenantId, active: true, ...naoAusente() },
       select: { id: true, name: true, phone: true, email: true },
       orderBy: { name: 'asc' },
     });

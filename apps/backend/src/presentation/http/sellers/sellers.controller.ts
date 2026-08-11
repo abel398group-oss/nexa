@@ -1,5 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { SellersService } from '@/application/sellers/sellers.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -17,6 +24,16 @@ class ActiveDto {
 // ADR 034 ("Estou fora"): controla se o handoff notifica o WhatsApp do vendedor.
 class OutOfOfficeDto {
   @IsBoolean() outOfOffice!: boolean;
+}
+/// "Ausente" (módulo 1) — NÃO é o `outOfOffice` acima. Aquele decide se o handoff avisa
+/// no WhatsApp; este tira o vendedor da distribuição de lote e da lista de closers
+/// enquanto durar. Nomes parecidos, significados diferentes.
+///
+/// `null` marca a volta: quem voltou antes do previsto não precisa esperar a data.
+class AwayDto {
+  @IsOptional()
+  @IsDateString()
+  awayUntil?: string | null;
 }
 class BulkDeleteDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
@@ -59,6 +76,17 @@ export class SellersController {
   @Patch(':id/out-of-office')
   setOutOfOffice(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: OutOfOfficeDto) {
     return this.sellers.setOutOfOffice(tenantId, id, dto.outOfOffice);
+  }
+
+  /// Marca ausência (férias, atestado) ou a volta (`awayUntil: null`). Enquanto durar, o
+  /// vendedor não entra na distribuição de lote nem na lista de closers.
+  @Patch(':id/away')
+  setAway(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: AwayDto,
+  ) {
+    return this.sellers.setAway(tenantId, id, dto.awayUntil ? new Date(dto.awayUntil) : null);
   }
 
   @Patch(':id')

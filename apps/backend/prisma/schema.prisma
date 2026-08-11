@@ -640,6 +640,17 @@ model Seller {
   // vendedor (com deep link pro inbox); false → só sino do portal. Default
   // true preserva o comportamento pré-ADR (todo vendedor recebia WhatsApp).
   outOfOffice   Boolean  @default(true) @map("out_of_office")
+  /// AUSENTE até esta data (módulo 1, 11/08/2026). Férias, atestado, afastamento: não
+  /// recebe lead na distribuição nem aparece como closer enquanto durar.
+  ///
+  /// Data e não booleano de propósito — ausência tem fim, e um booleano depende de
+  /// alguém lembrar de desligar. Quem volta na segunda e ninguém desmarcou passa a
+  /// semana sem receber nada, e o motivo fica invisível. Com data, se cura sozinho.
+  ///
+  /// NÃO confundir com `outOfOffice` acima, que é da ADR 034 e significa outra coisa
+  /// (se o handoff também avisa no WhatsApp dele). Os nomes são parecidos e o
+  /// significado não é.
+  awayUntil     DateTime? @map("away_until")
   assignedCount Int      @default(0) @map("assigned_count") // round-robin balanceado
   createdAt     DateTime @default(now()) @map("created_at")
 

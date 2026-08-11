@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { parseCsvDeLeads, type LinhaCsv } from './lead-csv';
+import { naoAusente } from './seller-availability';
 import {
   contarLote,
   podeForcar,
@@ -182,12 +183,19 @@ export class LeadImportService {
       select: { sellerId: true },
     });
     const validos = await this.prisma.seller.findMany({
-      where: { id: { in: vinculados.map((v) => v.sellerId) }, tenantId, active: true },
+      // Ausente fica de fora: distribuir para quem está de férias é o lote inteiro
+      // parado na mão dele até voltar, e ninguém descobre até cobrarem o resultado.
+      where: {
+        id: { in: vinculados.map((v) => v.sellerId) },
+        tenantId,
+        active: true,
+        ...naoAusente(),
+      },
       select: { id: true },
     });
     if (!validos.length) {
       throw new BadRequestException(
-        'Nenhum dos vendedores escolhidos trabalha o mercado deste lote.',
+        'Nenhum dos vendedores escolhidos trabalha este mercado e está disponível hoje.',
       );
     }
     const alvos = validos.map((v) => v.id);

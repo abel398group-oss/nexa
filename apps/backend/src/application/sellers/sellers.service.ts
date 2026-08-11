@@ -73,6 +73,23 @@ export class SellersService {
     return this.prisma.seller.updateMany({ where: { id, tenantId }, data: { outOfOffice } as any });
   }
 
+  /**
+   * "Ausente até" — férias, atestado, afastamento (módulo 1).
+   *
+   * Enquanto durar, o vendedor não entra na distribuição de lote nem na lista de
+   * closers. `null` marca a volta, para quem voltou antes do previsto.
+   *
+   * NÃO confundir com `setOutOfOffice` logo acima: aquele é da ADR 034 e decide se o
+   * handoff também avisa no WhatsApp dele. Os dois nomes se parecem e fazem coisas
+   * diferentes — mexer no errado tira o vendedor do lugar errado.
+   */
+  setAway(tenantId: string, id: string, awayUntil: Date | null) {
+    return this.prisma.seller.updateMany({
+      where: { id, tenantId },
+      data: { awayUntil } as any,
+    });
+  }
+
   async update(
     tenantId: string,
     id: string,
