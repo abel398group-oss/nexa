@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { UsersService, AREAS } from '@/application/users/users.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -11,10 +12,22 @@ import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.dec
 // pista do motivo. Validando aqui, vira 400 dizendo exatamente o que é aceito.
 const ROLES = ['admin', 'gestor', 'operacional', 'financeiro', 'vendedor'] as const;
 
+// `@Trim()` antes do `@MinLength`: sem ele um nome de cinco espaços passava e
+// criava usuário sem nome visível na lista — mesmo furo já fechado em vendedor,
+// parceiro e base de conhecimento. Mensagens em português: o front joga
+// `message` direto no toast.
 class CreateUserDto {
-  @IsString() @MinLength(2) name!: string;
-  @IsEmail() email!: string;
-  @IsString() @MinLength(6) password!: string;
+  @Trim()
+  @IsString({ message: 'Informe o nome do usuário.' })
+  @MinLength(2, { message: 'O nome precisa de pelo menos 2 caracteres.' })
+  @MaxLength(NOME_MAX, { message: `O nome pode ter no máximo ${NOME_MAX} caracteres.` })
+  name!: string;
+
+  @Trim() @IsEmail({}, { message: 'E-mail inválido.' }) email!: string;
+
+  @IsString()
+  @MinLength(6, { message: 'A senha precisa de pelo menos 6 caracteres.' })
+  password!: string;
   @IsOptional() @IsIn(ROLES as unknown as string[]) role?: string;
   @IsOptional() @IsArray() permissions?: string[];
 }
