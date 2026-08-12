@@ -541,9 +541,20 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
         <>
           <div className="flex flex-wrap gap-3">
             {elegiveis.map((s) => (
-              <label key={s.id} className="flex items-center gap-1.5 text-xs">
+              <label
+                key={s.id}
+                className={
+                  'flex items-center gap-1.5 text-xs ' +
+                  (s.ausente ? 'text-base-content/40' : '')
+                }
+                title={s.ausente ? 'Está ausente — não recebe lead novo agora.' : undefined}
+              >
                 <input
                   type="checkbox"
+                  // Ausente entra desabilitado, não escondido: sumir com a pessoa faria
+                  // o gestor procurar por ela. O backend já recusaria — mas aí ele
+                  // marcaria, clicaria, e os leads iriam pros outros sem explicação.
+                  disabled={s.ausente}
                   checked={abertos.includes(s.id)}
                   onChange={(e) =>
                     setAbertos((prev) =>
@@ -552,6 +563,7 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
                   }
                 />
                 {s.name}
+                {s.ausente && <span className="text-amber-700">(ausente)</span>}
               </label>
             ))}
           </div>

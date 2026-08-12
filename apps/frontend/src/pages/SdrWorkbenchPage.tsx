@@ -424,11 +424,20 @@ function RoteiroDoMercado({
  */
 function Material({ productCode }: { productCode: string | null }) {
   const [busca, setBusca] = useState('');
+  const [buscaAtrasada, setBuscaAtrasada] = useState('');
   const [abre, setAbre] = useState(false);
 
+  // Espera 300ms depois da última tecla. Sem isso, "integração" dispara dez requisições
+  // e a resposta da penúltima pode chegar depois da última, mostrando resultado de
+  // "integraçã" — errado justamente no meio de uma ligação.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAtrasada(busca), 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
   const { data: itens = [] } = useQuery({
-    queryKey: ['sdr', 'material', productCode, busca],
-    queryFn: () => listMaterial(productCode as string, busca),
+    queryKey: ['sdr', 'material', productCode, buscaAtrasada],
+    queryFn: () => listMaterial(productCode as string, buscaAtrasada),
     enabled: !!productCode && abre,
   });
 

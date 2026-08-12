@@ -14,6 +14,10 @@ export interface MarketSeller {
   name: string;
   email: string | null;
   role?: string;
+  /** Data em que volta, se estiver afastado. */
+  awayUntil?: string | null;
+  /** Calculado no backend — a tela não recalcula a regra. */
+  ausente?: boolean;
 }
 
 export interface MarketSellers {

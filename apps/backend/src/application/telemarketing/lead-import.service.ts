@@ -256,9 +256,11 @@ export class LeadImportService {
 
   /// Histórico de lotes com os contadores. É o que responde "qual lista presta" —
   /// meses depois, comparando `Feira agosto` com `Lista comprada`.
-  async listar(tenantId: string) {
+  async listar(tenantId: string, productCode?: string) {
     return this.prisma.leadBatch.findMany({
-      where: { tenantId },
+      // Filtro por mercado: comparar "Feira agosto" (TMS) com uma lista de pneus não
+      // responde nada — listas de mercados diferentes têm taxas que não se comparam.
+      where: { tenantId, ...(productCode ? { productCode } : {}) },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

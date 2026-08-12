@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ArrayNotEmpty, IsArray, IsString } from 'class-validator';
 import { LeadImportService } from '@/application/telemarketing/lead-import.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -46,8 +46,11 @@ export class LeadBatchesController {
   /// lista presta" — por isso ordena do mais recente e devolve os contadores brutos.
   @Get()
   @RequirePerm('lead_batches')
-  listar(@CurrentTenant() tenantId: string) {
-    return this.importer.listar(tenantId);
+  listar(
+    @CurrentTenant() tenantId: string,
+    @Query('productCode') productCode?: string,
+  ) {
+    return this.importer.listar(tenantId, productCode);
   }
 
   /**

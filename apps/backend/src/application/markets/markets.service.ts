@@ -9,6 +9,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { avaliarMercado, type MarketCounts, type MarketReadiness } from './market-readiness';
+import { estaAusente } from '@/application/telemarketing/seller-availability';
 
 @Injectable()
 export class MarketsService {
@@ -103,7 +104,10 @@ export class MarketsService {
       }),
       this.prisma.seller.findMany({
         where: { tenantId, active: true },
-        select: { id: true, name: true, email: true },
+        // `awayUntil` vai junto para a tela poder DIZER que a pessoa está de férias.
+        // Sem isso, o gestor marca o ausente na distribuição, os leads dele vão para os
+        // outros por causa do filtro do backend, e nada na tela explica o porquê.
+        select: { id: true, name: true, email: true, awayUntil: true },
         orderBy: { name: 'asc' },
       }),
     ]);
@@ -112,7 +116,13 @@ export class MarketsService {
     return {
       vinculados: todos
         .filter((s) => papelPor.has(s.id))
-        .map((s) => ({ ...s, role: papelPor.get(s.id) as string })),
+        .map((s) => ({
+          ...s,
+          role: papelPor.get(s.id) as string,
+          // Calculado aqui e não na tela: a mesma regra vale para a lista de closers e
+          // para a distribuição, e três cópias divergem.
+          ausente: estaAusente(s.awayUntil),
+        })),
       disponiveis: todos.filter((s) => !papelPor.has(s.id)),
     };
   }

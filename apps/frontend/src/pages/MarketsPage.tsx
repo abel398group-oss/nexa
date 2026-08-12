@@ -131,6 +131,15 @@ function VendedoresDoMercado({ code }: { code: string }) {
           <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
             <span>
               {s.name}
+              {/* Ausente aparece aqui porque este é o lugar onde alguém decide contar
+                  com a pessoa. Vinculado e de férias não é o mesmo que vinculado. */}
+              {s.ausente && (
+                <span className="ml-1.5 text-amber-700">
+                  ausente
+                  {s.awayUntil &&
+                    ` até ${new Date(s.awayUntil).toLocaleDateString('pt-BR')}`}
+                </span>
+              )}
               {s.email && <span className="ml-1.5 text-base-content/40">{s.email}</span>}
             </span>
             <button
