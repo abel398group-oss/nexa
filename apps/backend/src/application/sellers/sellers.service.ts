@@ -58,9 +58,24 @@ export class SellersService {
     }
     // O e-mail vira o endereço de AVISO de handoff mesmo sem senha. Antes ele só
     // servia para criar login: cadastrar vendedor sem senha jogava o e-mail fora.
-    const seller = await this.prisma.seller.create({
-      data: { tenantId, name: dto.name, phone, email: dto.email?.trim() || null } as any,
-    });
+    let seller;
+    try {
+      seller = await this.prisma.seller.create({
+        data: { tenantId, name: dto.name, phone, email: dto.email?.trim() || null } as any,
+      });
+    } catch (e: any) {
+      // O índice único (tenant_id, phone) é quem de fato barra a corrida do duplo
+      // clique — a checagem acima não consegue, porque as duas requisições
+      // consultam antes de qualquer uma gravar. Este catch existe só para
+      // traduzir a recusa dele: sem ele o operador recebia 500 e não descobria
+      // que o vendedor já estava cadastrado. Mesmo tratamento de UsersService.
+      if (e?.code === 'P2002') {
+        throw new BadRequestException(
+          'Já existe um vendedor com este telefone. Edite o cadastro dele em vez de criar outro.',
+        );
+      }
+      throw e;
+    }
     if (dto.email && dto.password) {
       const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
       if (!exists) {
