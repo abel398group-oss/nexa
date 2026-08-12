@@ -39,6 +39,23 @@ export class SellersService {
   // cria vendedor; se vier email+senha, cria também o LOGIN (role=vendedor) vinculado
   async create(tenantId: string, dto: { name: string; phone: string; email?: string; password?: string }) {
     const phone = normalizePhone(dto.phone) || (dto.phone || '').replace(/\D/g, '');
+
+    // Dois cliques no "Salvar" criavam DOIS vendedores com o mesmo telefone, os
+    // dois com 201 (achado em 11/08/2026 disparando as duas requisições em
+    // paralelo). O estrago não é a linha repetida: é o handoff saindo duas vezes
+    // para a mesma pessoa, e a distribuição de lote contando o vendedor em dobro.
+    //
+    // O telefone é a chave natural — é por ele que o vendedor recebe. A checagem
+    // vive aqui, e não só no DTO, porque o DTO não consulta o banco.
+    const jaExiste = await this.prisma.seller.findFirst({
+      where: { tenantId, phone },
+      select: { id: true, name: true },
+    });
+    if (jaExiste) {
+      throw new BadRequestException(
+        `Já existe um vendedor com este telefone: "${jaExiste.name}". Edite o cadastro dele em vez de criar outro.`,
+      );
+    }
     // O e-mail vira o endereço de AVISO de handoff mesmo sem senha. Antes ele só
     // servia para criar login: cadastrar vendedor sem senha jogava o e-mail fora.
     const seller = await this.prisma.seller.create({
