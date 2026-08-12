@@ -428,7 +428,10 @@ function Relatorio({
         </div>
       )}
 
-      {temJaNaBase && (
+      {/* `|| forcar` porque o switch se apagava a si mesmo: ligado, ninguém mais fica em
+          "já na base", `temJaNaBase` virava falso e o controle desaparecia — sem como
+          desligar a não ser trocando o arquivo. */}
+      {(temJaNaBase || forcar) && (
         <div className="mt-5 flex items-start gap-3 border-t border-base-300 pt-4">
           <Switch id="forcar" checked={forcar} onCheckedChange={onForcar} disabled={simulando} />
           <div>
