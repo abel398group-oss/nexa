@@ -9,7 +9,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { IsBrazilPhone } from '@/shared/dto/is-brazil-phone.validator';
 import { SellersService } from '@/application/sellers/sellers.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -17,25 +17,24 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
 /**
- * `@Transform` com trim ANTES do `@MinLength`: sem ele, um nome só de espaços
+ * `@Trim()` ANTES do `@MinLength`: sem ele, um nome só de espaços
  * (`"     "`) passava no mínimo de 2 e virava um vendedor sem nome visível na
  * lista. As mensagens são em português porque o front repassa `message` do
  * backend direto para o toast — o texto daqui é o que o operador lê.
  */
-const trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
 
 class CreateSellerDto {
-  @trim()
+  @Trim()
   @IsString({ message: 'Informe o nome do vendedor.' })
   @MinLength(2, { message: 'O nome precisa de pelo menos 2 caracteres.' })
-  @MaxLength(120, { message: 'O nome pode ter no máximo 120 caracteres.' })
+  @MaxLength(NOME_MAX, { message: `O nome pode ter no máximo ${NOME_MAX} caracteres.` })
   name!: string;
 
   @IsBrazilPhone()
   phone!: string;
 
   // se vier, cria login do vendedor
-  @IsOptional() @trim() @IsEmail({}, { message: 'E-mail inválido.' }) email?: string;
+  @IsOptional() @Trim() @IsEmail({}, { message: 'E-mail inválido.' }) email?: string;
 
   @IsOptional()
   @IsString()
@@ -64,17 +63,17 @@ class BulkDeleteDto {
 }
 class UpdateSellerDto {
   @IsOptional()
-  @trim()
+  @Trim()
   @IsString({ message: 'Informe o nome do vendedor.' })
   @MinLength(2, { message: 'O nome precisa de pelo menos 2 caracteres.' })
-  @MaxLength(120, { message: 'O nome pode ter no máximo 120 caracteres.' })
+  @MaxLength(NOME_MAX, { message: `O nome pode ter no máximo ${NOME_MAX} caracteres.` })
   name?: string;
 
   // Mesma regra da criação: editar não pode ser a porta dos fundos para gravar
   // um telefone que a criação recusaria.
   @IsOptional() @IsBrazilPhone() phone?: string;
 
-  @IsOptional() @trim() @IsEmail({}, { message: 'E-mail inválido.' }) email?: string; // cria/troca o login
+  @IsOptional() @Trim() @IsEmail({}, { message: 'E-mail inválido.' }) email?: string; // cria/troca o login
 
   @IsOptional()
   @IsString()
