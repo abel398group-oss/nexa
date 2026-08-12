@@ -11,6 +11,7 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { podeDiscar } from '@/shared/lib/dialable';
 import {
   adiarNegocio,
   getPainelDeHoje,
@@ -236,7 +237,11 @@ function LinhaNegocio({
             </Button>
           </a>
         )}
-        {n.phone && (
+        {/* `podeDiscar` e não `n.phone`: o campo é texto livre e na base real guarda
+            coisa que não é telefone. Botão que abre o discador com lixo é pior que botão
+            ausente — o closer clica, não funciona, e não sabe se o problema é o número
+            ou o sistema. */}
+        {podeDiscar(n.phone) && (
           <a href={`tel:${n.phone}`}>
             <Button size="xs" variant="outline">
               Ligar

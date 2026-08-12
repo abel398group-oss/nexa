@@ -11,6 +11,7 @@ import {
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
+import { podeDiscar } from '@/shared/lib/dialable';
 import { getRoteiro } from '@/entities/sales-script';
 import {
   descartarLead,
@@ -498,7 +499,11 @@ function FichaDoLead({ lead }: { lead: ItemDaFila }) {
   const fone = c?.phone ?? lead.phone ?? null;
   // wa.me com o WhatsApp do próprio SDR: o número do Nexa é o número das campanhas, e
   // ban da Meta nele não tem volta.
-  const zap = fone ? `https://wa.me/${fone.replace(/\D/g, '')}` : null;
+  //
+  // Mesma checagem do `tel:`: sem ela, um campo de telefone com e-mail dentro abriria
+  // `wa.me/` com os dígitos que sobrassem — pior que não ter botão, porque pode cair na
+  // conversa de outra pessoa.
+  const zap = podeDiscar(fone) ? `https://wa.me/${(fone as string).replace(/\D/g, '')}` : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -513,9 +518,13 @@ function FichaDoLead({ lead }: { lead: ItemDaFila }) {
             </p>
           </div>
           <div className="flex gap-2">
-            {fone && (
+            {podeDiscar(fone) && (
               // `tel:` abre o discador do sistema ou o softphone. Sem telefonia dentro
               // do Nexa — é outro projeto, com regulação própria.
+              //
+              // `podeDiscar` e não `fone &&`: o campo é texto livre e guarda coisa que
+              // não é telefone na base real. No meio de uma ligação, botão que abre o
+              // discador com lixo custa o tempo que o SDR não tem.
               <a href={`tel:${fone}`}>
                 <Button variant="outline" size="sm">
                   Ligar
