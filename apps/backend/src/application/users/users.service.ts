@@ -40,19 +40,32 @@ export class UsersService {
 
   async create(tenantId: string, dto: { name: string; email: string; password: string; role?: string; permissions?: string[] }) {
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (exists) throw new BadRequestException('e-mail já cadastrado');
+    if (exists) throw new BadRequestException('Este e-mail já está cadastrado.');
     const role = (dto.role as any) ?? 'operacional';
-    return this.prisma.user.create({
-      data: {
-        tenantId,
-        email: dto.email,
-        passwordHash: await bcrypt.hash(dto.password, 10),
-        name: dto.name,
-        role,
-        permissions: role === 'admin' ? [] : (dto.permissions ?? []).filter((p) => (AREAS as readonly string[]).includes(p)),
-      },
-      select: SELECT,
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          tenantId,
+          email: dto.email,
+          passwordHash: await bcrypt.hash(dto.password, 10),
+          name: dto.name,
+          role,
+          permissions: role === 'admin' ? [] : (dto.permissions ?? []).filter((p) => (AREAS as readonly string[]).includes(p)),
+        },
+        select: SELECT,
+      });
+    } catch (e: any) {
+      // A checagem acima é check-then-act: em dois cliques no "Salvar", as duas
+      // requisições passam pelo `findUnique` antes de qualquer uma gravar, e a
+      // segunda bate no índice único do e-mail. Sem este catch o Prisma sobe
+      // P2002 sem tratamento e o operador recebe "Internal server error" — não
+      // descobre que só precisa usar outro e-mail (achado em 11/08/2026).
+      //
+      // Quem de fato impede a duplicata é o índice; o catch existe para traduzir
+      // a recusa dele. Mesmo tratamento que `SellersService.update` já fazia.
+      if (e?.code === 'P2002') throw new BadRequestException('Este e-mail já está cadastrado.');
+      throw e;
+    }
   }
 
   async update(tenantId: string, id: string, dto: { role?: string; permissions?: string[]; password?: string }) {
