@@ -23,7 +23,7 @@ Arquivo descartável: some quando a rodada acabar.
 - [ ] Setinha do mercado abre **"Quem trabalha este mercado"**
 - [ ] Select lista os vendedores disponíveis
 - [ ] Vincular → aparece na lista **sem recarregar a página**
-- [ ] Se algum vendedor estiver ausente, aparece **"ausente até <data>"**
+- ~~Ausente aparecendo aqui~~ → **pula, isso é a seção 7** (ninguém está ausente ainda)
 
 →
 
@@ -72,7 +72,7 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 - [ ] A lista aparece no **histórico** embaixo
 - [ ] Setinha do histórico mostra os contadores
 - [ ] **Distribuir** → marca vendedor → Dividir → toast com o número
-- [ ] Vendedor ausente aparece **desabilitado com "(ausente)"**
+- ~~Vendedor ausente desabilitado~~ → **pula, é a seção 7**
 
 →
 
@@ -127,14 +127,33 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 
 ---
 
-## 7. Ausente — `/sellers`
+## 7. Ausente — deixa pro fim, porque tira o vendedor de circulação
 
-- [ ] Tem a coluna **Ausente**
-- [ ] "marcar" → escolhi uma data futura → salvou sozinho (sem botão)
-- [ ] Aparece o badge com a data
-- [ ] Em `/sdr`, transferir: esse vendedor **desapareceu** do select
-- [ ] Em `/lead-batches`, distribuir: aparece **desabilitado**
-- [ ] **"voltou"** → ele volta a aparecer nos dois lugares
+**7a. Marcar — em `/sellers`**
+
+Na tabela de vendedores, a coluna **Ausente** é a **última antes do botão Desativar** —
+depois da coluna "Estou fora".
+
+- [ ] A coluna **Ausente** existe
+- [ ] Na linha do vendedor que você vinculou, aparece a palavra **"marcar"**
+- [ ] Clicar em "marcar" troca o texto por um **campo de data**
+- [ ] Escolher uma data de semana que vem → **salva sozinho**, sem botão de confirmar
+- [ ] Toast diz "não recebe lead até <data>"
+- [ ] No lugar do "marcar" agora tem um **badge amarelo com a data** e um link **"voltou"**
+
+**7b. Onde a ausência aparece** (é o que você não achou antes)
+
+- [ ] `/markets` → setinha do mercado → na linha dele, ao lado do nome, aparece
+      **"ausente até <data>"** em amarelo
+- [ ] `/lead-batches` → setinha de um lote → **Distribuir** → o nome dele aparece
+      **apagado, com "(ausente)"**, e a caixinha **não deixa marcar**
+- [ ] `/sdr` → escolhe um lead → **Passar pro closer** → ele **não está** no select
+
+**7c. Desmarcar**
+
+- [ ] Volta em `/sellers` → clica **"voltou"** → o badge vira "marcar" de novo
+- [ ] `/markets` → o "ausente até" desapareceu
+- [ ] `/sdr` → transferir → ele voltou a aparecer no select
 
 →
 
