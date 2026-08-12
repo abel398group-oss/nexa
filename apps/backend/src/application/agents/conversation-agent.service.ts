@@ -455,7 +455,14 @@ export class ConversationAgentService {
           // o texto traz o aviso de transbordo (ver support-agent.service.ts).
           if (route.agent === 'support' && escalacaoDecididaPeloAgente) transbordoAnunciadoNoTexto = true;
 
-          const guard = inspectOutbound(outbound, allowedFacts, { phone: ownPhone, email: ownEmail });
+          // `context` liga a trava de preço em venda (agosto/2026: a Lia não
+          // informa valor nenhum). Mesma expressão usada para a Supervisora.
+          const guard = inspectOutbound(
+            outbound,
+            allowedFacts,
+            { phone: ownPhone, email: ownEmail },
+            { context: route.agent === 'support' ? 'support' : 'sales' },
+          );
           if (!guard.safe) {
             outbound = SAFE_FALLBACK;
             needsHuman = true; // vale para vendas também: alguém precisa ver o que ela ia dizer

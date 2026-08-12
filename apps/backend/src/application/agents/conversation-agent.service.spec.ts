@@ -487,7 +487,11 @@ describe('ConversationAgentService.handle()', () => {
       expect(sentContent).not.toContain('70%');
     });
 
-    it('deixa passar preço que está no catálogo', async () => {
+    // Invertido em 12/08/2026 pelo reposicionamento comercial: preço saiu de todos
+    // os canais públicos e a Lia não informa valor NENHUM — nem o certo, nem o do
+    // catálogo. Antes este caso provava o contrário, porque o funil era
+    // self-service. Ver detectPrecoEmVenda() no output-guard.
+    it('barra preço em VENDA mesmo estando certo no catálogo', async () => {
       mockAutonomy.isEnabled.mockReturnValue(true);
       mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
       mockSupervisor.review.mockResolvedValue(okVerdict);
@@ -502,9 +506,29 @@ describe('ConversationAgentService.handle()', () => {
       const svc = makeService();
       const res = await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
 
-      expect(res.blockedReason).toBeUndefined();
+      expect(res.blockedReason).toMatch(/preço citado em venda/i);
       const sentContent = mockConversations.addMessage.mock.calls[0][2].content;
-      expect(sentContent).toBe('O Essencial custa R$ 199,00 por mês.');
+      expect(sentContent).not.toContain('199');
+    });
+
+    // O valor está certo, então não é tentativa de manipulação: quem se excedeu
+    // foi a Lia. Punir o lead com strike aqui banaria cliente legítimo.
+    it('preço certo em venda NÃO conta strike de abuso', async () => {
+      mockAutonomy.isEnabled.mockReturnValue(true);
+      mockRouter.route.mockResolvedValue(makeRoute({ agent: 'sales' }));
+      mockSupervisor.review.mockResolvedValue(okVerdict);
+      mockSales.sell.mockResolvedValue({
+        draft: 'O Essencial custa R$ 199,00 por mês.',
+        suggestedAction: 'none',
+        usedKnowledge: [],
+        allowedFacts: 'PLANOS:\nEssencial — R$ 199,00/mês',
+        confidence: 'high',
+      });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'quanto custa?', conversationId: 'conv1' });
+
+      expect(mockAbuseGuard.recordStrike).not.toHaveBeenCalled();
     });
 
     // Banimento "3 strikes" (2026-08-04) — o mesmo guard que barra preço/prompt/ofensa

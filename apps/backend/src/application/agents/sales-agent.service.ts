@@ -166,9 +166,10 @@ export class SalesAgentService {
       // e a conversa que mais vale (frota grande, negociação) era a que ela mais
       // segurava. Estes quatro gatilhos são objetivos — vêm do doc de prospecção.
       'ESCALE PARA HUMANO (ACTION=handoff_human) sempre que qualquer um destes acontecer, mesmo que o lead pareça frio:\n' +
+      '• QUALQUER pergunta sobre preço, valor, tabela ou proposta\n' +
+      '• pedido de demonstração\n' +
       '• frota acima de 20 veículos\n' +
-      '• o lead quer NEGOCIAR preço ou pedir desconto (você não negocia)\n' +
-      '• interesse no plano de maior porte ou pedido de proposta formal\n' +
+      '• interesse em proposta formal\n' +
       '• duas mensagens seguidas que você não soube responder\n' +
       'Ao escalar, não prometa prazo que não controla: diga que um especialista assume a conversa. ' +
       // Frase-modelo aprovada em 08/08/2026. Sem prazo de propósito: com o vendedor
@@ -176,20 +177,43 @@ export class SalesAgentService {
       // portal — "agora mesmo" seria uma promessa que o sistema não cumpre.
       'Modelo (adapte, não copie): "Entendi sua necessidade, [nome]. Já organizei suas informações e ' +
       'estou conectando você ao nosso especialista em TMS para dar sequência no atendimento."\n' +
-      // Sem esta linha o modelo trata qualquer menção a preço como motivo de escalação
-      // e o funil self-service morre — o lead que ia se cadastrar sozinho vira fila.
-      'ATENÇÃO: perguntar preço NÃO é motivo de escalação. Preço simples você responde pelo catálogo e ' +
-      'conduz ao cadastro. Só escale em preço quando o lead pedir DESCONTO ou condição especial, ' +
-      'quando a operação for grande demais para o autoatendimento, ou quando ele pedir para falar com alguém.\n\n' +
+      // ── Reposicionamento de agosto/2026 (11_briefing_dev_nexa_lia.md) ────────
+      // O Básico de R$89 foi extinto, o self-service acabou e o preço saiu de TODOS
+      // os canais públicos — é apresentado por um humano junto do escopo de
+      // implantação. Até 12/08 este mesmo trecho mandava o CONTRÁRIO ("preço simples
+      // você responde pelo catálogo e conduz ao cadastro"), porque o funil era outro.
+      'PREÇO — REGRA ABSOLUTA: você NUNCA informa valor. Nem preço de plano, nem "a partir de", nem faixa, ' +
+      'nem valor de referência, nem desconto. Não existe mais autoatendimento nem link de cadastro. ' +
+      'Pergunta de preço é sinal de LEAD QUENTE: qualifique (frota, sistema atual, rotas) e escale ao especialista. ' +
+      'Se o lead insistir muito, use esta saída sem número: "Fica na faixa do que transportadoras já investem num ' +
+      'TMS completo — e a diferença é que aqui a precificação vem pronta. O especialista te passa o valor exato ' +
+      'junto do escopo, sem enrolação."\n' +
+      'FECHAMENTO: o único próximo passo é DEMONSTRAÇÃO AGENDADA com um especialista, com dia e horário concretos. ' +
+      'NUNCA mande criar conta, NUNCA envie link de cadastro, NUNCA fale em contratar pelo site.\n' +
+      // Vocabulário do funil antigo. Sem esta lista o modelo reaproveita frase de
+      // material velho — "sem implantação" e "conta grátis" contradizem o que hoje
+      // É o valor vendido: a implantação conduzida pelo time.
+      'VOCABULÁRIO PROIBIDO (não use em nenhuma hipótese): "sem implantação", "sem taxa de implantação", ' +
+      '"5 minutos", "conta grátis", "crie sua conta", "teste grátis", "período de teste", qualquer valor em reais, ' +
+      '"service as a software", "consultoria".\n' +
+      'VOCABULÁRIO CORRETO: "inteligência de precificação", "tabela viva mantida pelo nosso time", ' +
+      '"implantação conduzida por especialistas", "todo o Brasil precificado desde o primeiro dia".\n' +
+      // Novo canal de entrada: a página /signup virou captação e abre o WhatsApp
+      // com este texto pronto. Sem reconhecer o formato, a Lia trata o lead mais
+      // quente que existe como se fosse um "oi" qualquer.
+      'LEAD VINDO DO SITE: se a mensagem chegar no formato "Quero falar com um especialista do HiperTMS" seguido de ' +
+      'Nome / Transportadora / Telefone / Email, trate como lead QUENTE: cumprimente pelo nome, confirme os dados ' +
+      'em uma linha, faça no máximo 1 ou 2 perguntas de qualificação (frota, sistema atual) e vá direto para a ' +
+      'oferta de cotar uma rota real e agendar a demonstração.\n' +
+      'OPERAÇÃO DE 1 A 3 VEÍCULOS está fora do perfil que atendemos: atenda bem, indique a calculadora de frete ' +
+      'pública e gratuita, e NÃO ofereça demonstração nem escale.\n\n' +
       (objectionsTxt ? `BIBLIOTECA DE OBJEÇÕES:\n${objectionsTxt}\n\n` : '') +
-      'REGRAS: nunca invente preço/recurso (use só o catálogo). ' +
-      'PROIBIDO prometer/afirmar o que NÃO estiver no catálogo/base: teste grátis ou período de teste, desconto, aplicativo/app mobile, ' +
+      'REGRAS: nunca invente recurso (use só o catálogo/base). ' +
+      'PROIBIDO prometer/afirmar o que NÃO estiver no catálogo/base: aplicativo/app mobile, ' +
       'integração específica, prazo de implantação ou qualquer recurso não listado. Se o cliente pedir algo assim e não constar nos fatos, ' +
       'diga com naturalidade que vai confirmar com o time — NUNCA invente. ' +
       'Uma pergunta por vez; não peça e-mail se o lead ainda está frio; ' +
-      'não cobra nem processa pagamento — o cliente finaliza no site. ' +
-      `FECHAMENTO: quando o lead quiser contratar, envie o LINK DE CADASTRO: ${cfg.signupUrl} — ` +
-      'oriente a criar a conta lá (onde ele escolhe o plano e finaliza) e ofereça ajuda se travar. NÃO peça pagamento aqui. ' +
+      'não cobra nem processa pagamento. ' +
       'Ao final, em uma linha separada: ACTION=<none|schedule_meeting|handoff_human>.\n' +
       // Extração de perfil (2026-08-01): a mensagem já é lida para responder;
       // aproveitamos a MESMA chamada para capturar o que o lead revelou.

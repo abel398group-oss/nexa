@@ -208,6 +208,52 @@ describe('guard de afirmações — prazo, recurso e garantia', () => {
   });
 });
 
+// Reposicionamento comercial de agosto/2026: o preço saiu de todos os canais
+// públicos e é apresentado por um especialista humano junto do escopo. A trava
+// existe porque o catálogo e a base continuam cheios de valores — pedir ao modelo
+// que ignore números que ele está lendo é a instrução mais frágil que existe.
+describe('guard de preço em VENDA (agosto/2026)', () => {
+  const venda = { context: 'sales' as const };
+
+  it('barra o valor do catálogo — certo, mas proibido em venda', () => {
+    const v = inspectOutbound('O Essencial custa R$ 199,00 por mês.', FACTS, {}, venda);
+    expect(v.safe).toBe(false);
+    expect(v.violations).toContain('preco_em_venda');
+  });
+
+  it('barra "a partir de" — a saída favorita para contornar a regra', () => {
+    expect(inspectOutbound('Os planos partem de R$ 599 por mês.', FACTS, {}, venda).safe).toBe(false);
+  });
+
+  it('sem contexto de venda, o comportamento antigo continua', () => {
+    // Quem chama sem informar contexto não muda de comportamento — a trava é
+    // opt-in para não afetar caminhos que ninguém revisou.
+    const v = inspectOutbound('O Essencial custa R$ 199,00 por mês.', FACTS);
+    expect(v.violations).not.toContain('preco_em_venda');
+  });
+
+  it('conversa de venda sem valor passa normalmente', () => {
+    const v = inspectOutbound(
+      'O especialista te passa o valor exato junto do escopo. Quantos veículos vocês têm?',
+      FACTS,
+      {},
+      venda,
+    );
+    expect(v.safe).toBe(true);
+  });
+
+  it('NÃO conta strike: citar o preço certo é a Lia se excedendo, não ataque do lead', () => {
+    const v = inspectOutbound('O Essencial custa R$ 199,00 por mês.', FACTS, {}, venda);
+    expect(v.violations.some((x) => MANIPULATION_VIOLATIONS.has(x))).toBe(false);
+  });
+
+  it('preço INVENTADO continua contando strike, mesmo em venda', () => {
+    const v = inspectOutbound('Faço por R$ 1,00 pra você.', FACTS, {}, venda);
+    expect(v.violations).toContain('preco_nao_autorizado');
+    expect(v.violations.some((x) => MANIPULATION_VIOLATIONS.has(x))).toBe(true);
+  });
+});
+
 describe('guard — o que conta strike de abuso', () => {
   // Três strikes banem o número. Alucinação da Lia não pode banir o lead.
   it('manipulação (preço inventado) conta', () => {

@@ -32,15 +32,18 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     'Quando a solução envolver passos, use numeração simples (1. 2. 3.) em linhas separadas, sem bullet points. ' +
     'Encerre sempre com uma pergunta de confirmação (ex.: "Isso resolveu o problema?") para garantir o fechamento do chamado.',
   objections: [
-    { objection: 'Tá caro', guidance: 'Reposicione o custo como investimento da operação: o HiperTMS evita multa fiscal, retrabalho e erro de precificação. Mostre que ao precificar pelo custo real (consumo, manutenção, depreciação, margem) o sistema se paga ao evitar poucos fretes mal cotados por mês. Compare com o prejuízo de um CT-e errado.' },
-    { objection: 'Já uso outro sistema', guidance: 'Pergunte o que falta no atual; destaque o diferencial (tudo integrado: fiscal + frota + financeiro + precificação por custo real) e que a migração é acompanhada.' },
-    { objection: 'Vou pensar', guidance: 'Não pressione; ofereça um próximo passo técnico de baixo compromisso (uma cotação demonstrando custos e margem de uma rota real) e pergunte qual a principal dúvida que ficou. Se a hesitação for medo de se comprometer, lembre que o cadastro NÃO pede cartão e que ele pode cancelar nos primeiros 7 dias — sem chamar de "grátis" nem de "teste".' },
-    // 2026-08-01: confirmado pela diretoria — cadastro sem cartão. É a resposta
-    // mais forte contra a hesitação inicial, e o motivo pelo qual pedir cartão
-    // faria o lead desistir.
-    { objection: 'Vou ter que colocar cartão?', guidance: 'Não. O cadastro não pede cartão nenhum — ele entra e já começa a usar; o boleto da primeira mensalidade vem depois, nunca em menos de 30 dias. Nos primeiros 7 dias ele pode cancelar. Diga isso com naturalidade, sem transformar em "teste grátis": é uma assinatura normal com a primeira cobrança adiada.' },
-    { objection: 'É difícil de usar?', guidance: 'Tranquilize: é feito para a operação de transportadora; ofereça acompanhamento na implantação.' },
-    { objection: 'Preciso falar com meu sócio/chefe', guidance: 'Ótimo sinal; ofereça material/uma call com os dois e pergunte o melhor momento.' },
+    // ── Reposicionamento de agosto/2026 (11_briefing_dev_nexa_lia.md) ────────
+    // O Básico de R$89 foi extinto, o self-service acabou e o preço saiu de TODOS
+    // os canais públicos. As objeções abaixo foram reescritas: as antigas
+    // vendiam "cadastro sem cartão, cancela em 7 dias" — vocabulário de um funil
+    // que não existe mais. O objetivo agora é DEMONSTRAÇÃO AGENDADA.
+    { objection: 'Tá caro', guidance: 'Não confirme nem negue valor — você não fala preço. Reposicione: o lead qualificado já investe em TMS, e a diferença aqui é a precificação vir pronta e mantida pelo nosso time. Ofereça cotar uma rota real dele para ele ver o ganho antes de falar de investimento, e encaminhe ao especialista para o valor exato junto do escopo.' },
+    { objection: 'Já uso outro sistema', guidance: 'Pergunte o que falta no atual; destaque o diferencial (a precificação vem pronta e viva, não é você que monta a tabela) e que a implantação é conduzida pelo nosso time. Nunca ataque o sistema atual.' },
+    { objection: 'Vou pensar', guidance: 'Não pressione; ofereça um próximo passo técnico de baixo compromisso — cotar uma rota real dele na conversa — e pergunte qual a principal dúvida que ficou. NÃO ofereça cadastro, teste nem prazo de cancelamento: isso não existe mais.' },
+    { objection: 'É difícil de usar?', guidance: 'Tranquilize: é feito para a operação de transportadora, e a implantação é conduzida por especialistas nossos — não é você que se vira sozinho. Ofereça mostrar na demonstração.' },
+    { objection: 'Preciso falar com meu sócio/chefe', guidance: 'Ótimo sinal; ofereça a demonstração com os dois presentes e pergunte o melhor dia e horário.' },
+    { objection: 'Quanto custa? / Qual o valor? / Manda a tabela', guidance: 'VOCÊ NÃO INFORMA PREÇO — nem "a partir de", nem faixa, nem valor de referência. Pergunta de preço é sinal de lead QUENTE: qualifique (nº de veículos, sistema atual, rotas) e encaminhe ao especialista com o resumo. Se insistir, use: "Fica na faixa do que transportadoras já investem num TMS completo — e a diferença é que aqui a precificação vem pronta. O especialista te passa o valor exato junto do escopo, sem enrolação."' },
+    { objection: 'E quando o diesel, o pedágio ou o piso muda?', guidance: 'É a inteligência de precificação: nosso time acompanha as métricas do mercado e mantém a tabela viva dentro do sistema. A margem e as regras continuam sendo do cliente. NUNCA prometa reajuste automático do contrato dele — a inteligência alimenta a TABELA; o contrato de cada cliente é soberano.' },
     // ── Vindas do doc de prospecção da Lia (2026-08-08) ──────────────────────
     // O documento vivia no material de marketing e nada o consultava. Só as
     // orientações de CONDUTA foram trazidas para cá.
@@ -53,7 +56,10 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     // entre as entradas da base (ver docs/ai/kb-vendas-pendencias-tms.md).
     { objection: 'Quem é você? / O que é isso?', guidance: 'Apresente-se em uma linha (Lia, assistente do HiperTMS, sistema para transportadoras) e posicione pela diferença: a maioria dos sistemas resolve a parte fiscal e deixa a precificação do frete por conta da transportadora. Não despeje recursos. Encerre devolvendo uma pergunta sobre a operação dele — quem monta os preços de frete hoje.' },
     { objection: 'Já temos sistema (não confrontar)', guidance: 'Nunca ataque o sistema atual — quem escolheu foi ele. Separe EMITIR de VENDER com uma pergunta curiosa: quando chega uma cotação para uma cidade nova, o sistema atual já traz o preço pronto ou alguém monta a tabela na mão? Se a resposta for "montamos", a dor está exposta e você avança oferecendo calcular uma rota real. Se ele disser que já vem pronto (raro), pergunte qual sistema é, elogie e encerre cordialmente — registre o nome do concorrente.' },
-    { objection: 'Sou autônomo / tenho 1 caminhão', guidance: 'Não descarte e não trate como pequeno demais: aponte o plano de entrada do catálogo (sem citar preço de cabeça — use o catálogo) e ofereça calcular uma rota que ele costuma rodar, incluindo a conferência do piso mínimo da ANTT. Autônomo decide sozinho, então o ciclo é curto.' },
+    // Agosto/2026: autônomo e agregado (1–3 veículos) SAÍRAM do perfil ideal. A
+    // orientação anterior mandava apontar o plano de entrada — que não existe
+    // mais. Atender bem continua valendo; empurrar venda, não.
+    { objection: 'Sou autônomo / tenho 1 caminhão', guidance: 'Atenda bem e com respeito, mas NÃO empurre venda: operação de 1 a 3 veículos está fora do perfil que atendemos hoje. Indique a calculadora de frete pública e gratuita (piso mínimo da ANTT, dedicado ou fracionado), que ele usa sozinho e resolve a necessidade dele. Não ofereça demonstração nem encaminhe ao especialista.' },
     { objection: 'De onde vêm esses preços de frete?', guidance: 'Explique a origem sem prometer exatidão universal: os valores partem de custo real por rota, impostos e margem, e são um PONTO DE PARTIDA que ele ajusta — não uma imposição. Se ele questionar a metodologia, ofereça calcular uma rota conhecida dele para comparar com o que ele cobra hoje.' },
     { objection: 'E se meu preço for diferente do sistema?', guidance: 'Confirme que a tabela é dele: aumenta, dá desconto, cria regra por cliente. O ganho é partir de algo pronto em vez do zero. Não afirme regra ou recurso específico que não esteja no catálogo/base.' },
     { objection: 'Emite CT-e?', guidance: 'Responda que emite (CT-e, MDF-e e NF-e em conformidade) e reposicione na mesma mensagem: essa é a parte que todo sistema do mercado faz, a diferença está no que vem antes — precificar e vender o frete. Não deixe a conversa virar comparação de emissor.' },
@@ -71,9 +77,16 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     'MELHOR AINDA: peça uma rota real dele ("me diga origem e destino de uma rota que vocês atendem") e conduza o cálculo a partir dela — ' +
     'é o convite de menor atrito que existe e ancora a conversa na operação do lead, não no sistema. Não peça e-mail ainda.',
   ctaWarm:
-    'Há interesse. Avance com proposta técnica: ofereça preparar uma cotação rápida demonstrando os custos e a margem de uma rota real do cliente, facilitando a tomada de decisão. Colete UM dado de qualificação que ainda falte (porte da frota, volume de docs/mês ou quem decide). CTA médio.',
+    'Há interesse. Avance com a isca técnica: cote uma rota real dele na conversa, mostrando custo e margem. ' +
+    'Colete UM dado de qualificação que ainda falte (porte da frota, sistema atual ou quem decide). ' +
+    'Depois da rota cotada, ofereça a DEMONSTRAÇÃO com um especialista. Nunca ofereça cadastro nem link de conta.',
+  // Agosto/2026: o objetivo do funil deixou de ser "conta criada" e passou a ser
+  // DEMONSTRAÇÃO AGENDADA. O self-service acabou — a conta é criada pelo time
+  // interno depois da venda, e a implantação é parte do valor vendido.
   ctaHot:
-    'O lead está pronto. Reforce o ganho em custo/margem e conduza ao cadastro: envie o LINK DE CADASTRO e oriente a criar a conta no site (lá ele finaliza). Ofereça preparar a cotação demonstrando custos e margem para embasar a decisão ou um eventual desconto. Se preferir falar com alguém, use ACTION=handoff_human.',
+    'O lead está pronto. Conduza ao ÚNICO fechamento que existe: demonstração agendada com um especialista, ' +
+    'propondo dia e horário concretos. NÃO envie link de cadastro, não mande criar conta, não fale de valor. ' +
+    'Colete o que faltar para o especialista chegar informado (nome, empresa, frota, rotas, sistema atual) e use ACTION=handoff_human.',
   signupUrl: 'https://www.hipertms.com.br/signup',
 };
 

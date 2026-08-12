@@ -85,19 +85,48 @@ describe('prompt de vendas — matriz de qualificação', () => {
   });
 });
 
-describe('prompt de vendas — self-service preservado', () => {
-  // Decisão de negócio de 08/08/2026: preço simples continua no autoatendimento.
-  // Sem esta trava o modelo trata qualquer menção a preço como escalação e o funil
-  // automático morre.
-  it('preço simples NÃO escala — só desconto/condição especial/pedido de humano', async () => {
+// Reposicionamento comercial de agosto/2026 (11_briefing_dev_nexa_lia.md).
+// Este bloco chamava-se "self-service preservado" e travava o oposto: preço
+// respondido pelo catálogo e fechamento no link de cadastro. O Básico de R$89 foi
+// extinto, o /signup virou captação de lead e o objetivo do funil passou a ser
+// demonstração agendada.
+describe('prompt de vendas — sem preço, fechamento em demonstração', () => {
+  it('proíbe informar valor, inclusive "a partir de"', async () => {
     const p = await promptDeVendas();
-    expect(p).toMatch(/perguntar preço NÃO é motivo de escalação/i);
-    expect(p).toMatch(/DESCONTO ou condição especial/);
+    expect(p).toMatch(/você NUNCA informa valor/i);
+    expect(p).toMatch(/a partir de/i);
   });
 
-  it('o fechamento continua sendo o link de cadastro', async () => {
+  it('pergunta de preço vira escalação, não resposta', async () => {
     const p = await promptDeVendas();
-    expect(p).toMatch(/LINK DE CADASTRO/);
+    expect(p).toMatch(/QUALQUER pergunta sobre preço, valor, tabela ou proposta/i);
+  });
+
+  it('o fechamento é demonstração agendada, nunca cadastro', async () => {
+    const p = await promptDeVendas();
+    expect(p).toMatch(/DEMONSTRAÇÃO AGENDADA/i);
+    expect(p).toMatch(/NUNCA envie link de cadastro/i);
+    // A URL de cadastro não pode mais chegar ao modelo por nenhum caminho.
+    expect(p).not.toMatch(/signup/i);
+  });
+
+  it('lista o vocabulário do funil antigo como proibido', async () => {
+    const p = await promptDeVendas();
+    for (const morto of ['sem implantação', '5 minutos', 'conta grátis', 'crie sua conta']) {
+      expect(p).toContain(morto);
+    }
+    expect(p).toMatch(/VOCABULÁRIO PROIBIDO/);
+  });
+
+  it('reconhece o lead estruturado vindo do site', async () => {
+    const p = await promptDeVendas();
+    expect(p).toMatch(/LEAD VINDO DO SITE/);
+    expect(p).toMatch(/Quero falar com um especialista do HiperTMS/);
+  });
+
+  it('tira operação de 1 a 3 veículos do perfil', async () => {
+    const p = await promptDeVendas();
+    expect(p).toMatch(/1 A 3 VEÍCULOS está fora do perfil/i);
   });
 
   it('a frase de bastão não promete prazo', async () => {

@@ -47,7 +47,10 @@ export type GuardViolation =
   | 'conselho_fiscal_ou_juridico'
   | 'promessa_de_prazo'
   | 'recurso_nao_confirmado'
-  | 'garantia_de_resultado';
+  | 'garantia_de_resultado'
+  // 2026-08-12: o reposicionamento tirou o preço de TODO canal público. Ver
+  // detectPrecoEmVenda().
+  | 'preco_em_venda';
 
 /**
  * Violações que indicam MANIPULAÇÃO — alguém tentando dobrar a Lia.
@@ -318,6 +321,33 @@ function detectClaims(text: string, allowedFacts: string): { issue: GuardViolati
   return achados;
 }
 
+// ── 6. PREÇO EM CONVERSA DE VENDA ─────────────────────────────────────────────
+
+/**
+ * Reposicionamento comercial de agosto/2026: **a Lia não informa preço nenhum**.
+ * Nem valor de plano, nem "a partir de", nem faixa. O preço é apresentado por um
+ * especialista humano junto do escopo de implantação.
+ *
+ * Por que isto é uma trava e não só uma regra de prompt: a regra anterior era o
+ * contrário — a Lia respondia preço pelo catálogo e mandava o link de cadastro.
+ * Material antigo, artigos da base e o próprio catálogo (que continua chegando no
+ * contexto por causa dos limites e recursos) estão cheios de valores. Pedir ao
+ * modelo que ignore números que ele está lendo é a instrução mais frágil que
+ * existe.
+ *
+ * Difere da trava 1: aquela pergunta "esse número é inventado?"; esta pergunta
+ * "podia sair um número?". Em venda, a resposta é não — mesmo que o valor esteja
+ * correto e no catálogo.
+ *
+ * NÃO conta manipulação (ver MANIPULATION_VIOLATIONS): citar o preço certo é a
+ * Lia se excedendo, não o lead atacando.
+ */
+function detectPrecoEmVenda(text: string): string[] {
+  const achados: string[] = [];
+  for (const m of text.matchAll(MONEY)) achados.push(m[0].trim());
+  return achados;
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -327,8 +357,16 @@ function detectClaims(text: string, allowedFacts: string): { issue: GuardViolati
  * @param allowedFacts catálogo + KB que o agente recebeu (fonte da verdade numérica)
  * @param own          telefone/e-mail do lead DESTA conversa — o único contato que a
  *                      Lia pode citar sem que conte como vazamento de terceiro
+ * @param opts.context  'sales' liga a trava de preço em venda (agosto/2026: a Lia
+ *                      não informa valor nenhum). Ausente = não liga, para não mudar
+ *                      o comportamento de quem chama sem saber do reposicionamento.
  */
-export function inspectOutbound(text: string, allowedFacts: string, own: OwnData = {}): GuardVerdict {
+export function inspectOutbound(
+  text: string,
+  allowedFacts: string,
+  own: OwnData = {},
+  opts: { context?: 'sales' | 'support' } = {},
+): GuardVerdict {
   const violations: GuardViolation[] = [];
   const detail: string[] = [];
 
@@ -373,6 +411,17 @@ export function inspectOutbound(text: string, allowedFacts: string, own: OwnData
   for (const c of detectClaims(text, allowedFacts)) {
     if (!violations.includes(c.issue)) violations.push(c.issue);
     detail.push(c.detail);
+  }
+
+  // 6. Preço em conversa de VENDA — proibido mesmo estando certo (agosto/2026).
+  //    Roda depois da trava 1 de propósito: se o valor também era inventado, as
+  //    duas violações aparecem, e só a primeira pontua abuso.
+  if (opts.context === 'sales') {
+    const valores = detectPrecoEmVenda(text);
+    if (valores.length) {
+      if (!violations.includes('preco_em_venda')) violations.push('preco_em_venda');
+      detail.push(`preço citado em venda (a Lia não informa valor): ${valores.join(', ')}`);
+    }
   }
 
   return { safe: violations.length === 0, violations, detail: detail.join(' | ') };
