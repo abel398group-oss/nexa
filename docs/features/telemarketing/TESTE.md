@@ -10,8 +10,8 @@ Arquivo descartável: some quando a rodada acabar.
 
 ## 0. Antes de começar
 
-- [ x] Backend local reiniciado
-- [ ] Menu **Vendas** mostra: Listas de lead · Roteiro do SDR · Mesa do SDR · Hoje (closer)
+- [x] Backend local reiniciado
+- [x] Menu **Vendas** mostra: Listas de lead · Roteiro do SDR · Mesa do SDR · Hoje (closer)
 
 →
 
@@ -19,10 +19,10 @@ Arquivo descartável: some quando a rodada acabar.
 
 ## 1. Mercados — `/markets`
 
-- [ ] Existe mercado com status **ativo**
-- [ ] Setinha do mercado abre **"Quem trabalha este mercado"**
-- [ ] Select lista os vendedores disponíveis
-- [ ] Vincular → aparece na lista **sem recarregar a página**
+- [x] Existe mercado com status **ativo**
+- [x] Setinha do mercado abre **"Quem trabalha este mercado"**
+- [x] Select lista os vendedores disponíveis
+- [x] Vincular → aparece na lista **sem recarregar a página**
 - ~~Ausente aparecendo aqui~~ → **pula, isso é a seção 7** (ninguém está ausente ainda)
 
 →
@@ -31,17 +31,17 @@ Arquivo descartável: some quando a rodada acabar.
 
 ## 2. Roteiro — `/roteiro`
 
-- [ ] Select de mercado vem preenchido
-- [ ] Avisa em vermelho que o mercado **não tem roteiro** ainda
-- [ ] **Duplo clique** em "Abertura da ligação" abre o popup
-- [ ] Salvei este texto: `{{saudacao}}, {{nome}}! Aqui é o {{remetente}}, da Hipervias.`
-- [ ] Toast disse **"Versão 1 publicada"**
-- [ ] A **setinha** (não o duplo clique) abre um resumo curto
-- [ ] Acrescentei uma resposta por situação: *"já tenho sistema"* + resposta
-- [ ] Agora diz **Versão 2**
-- [ ] Botão de publicar fica **travado** se a situação ficar sem resposta
-- [ ] **"Versões anteriores"** no fim da página mostra a versão 1
-- [ ] `Esc` fecha o popup
+- [x] Select de mercado vem preenchido
+- [x] Avisa em vermelho que o mercado **não tem roteiro** ainda
+- [x] **Duplo clique** em "Abertura da ligação" abre o popup
+- [x] Salvei este texto: `{{saudacao}}, {{nome}}! Aqui é o {{remetente}}, da Hipervias.`
+- [x] Toast disse **"Versão 1 publicada"**
+- [x] A **setinha** (não o duplo clique) abre um resumo curto
+- [x] Acrescentei uma resposta por situação: *"já tenho sistema"* + resposta
+- [x] Agora diz **Versão 2**
+- [x] Botão de publicar fica **travado** se a situação ficar sem resposta
+- [x] **"Versões anteriores"** no fim da página mostra a versão 1
+- [ ] `Esc` fecha o popup → **NÃO TESTEI** (fechei os popups por clique no botão)
 
 →
 
@@ -60,18 +60,19 @@ Marcos;Repetido;11999887766;outro@x.com
 Ruim;Ruim SA;abc;nao-tem-arroba
 ```
 
-- [ ] Escolhi mercado e nome da lista
-- [ ] **Arrastar** o arquivo funcionou (nome do arquivo apareceu)
-- [ ] "Ver o que entra" → **3 entram, 2 ficam de fora**
-- [ ] Mostra **1 sem nome**
-- [ ] Motivos aparecem: **repetido na própria lista** e **telefone inválido**
-- [ ] Cada motivo travado mostra **o porquê** do lado
-- [ ] "Acrescentar um lead na mão" → preencher → diz **"4 lead(s) digitado(s)"**
-- [ ] Trocar o arquivo **apaga o relatório** da tela
-- [ ] Importar → toast + tela limpa
-- [ ] A lista aparece no **histórico** embaixo
-- [ ] Setinha do histórico mostra os contadores
-- [ ] **Distribuir** → marca vendedor → Dividir → toast com o número
+- [x] Escolhi mercado e nome da lista
+- [x] **Arrastar** o arquivo funcionou (nome do arquivo apareceu)
+- [x] "Ver o que entra" → **3 entram, 2 ficam de fora**
+- [x] Mostra **1 sem nome**
+- [x] Motivos aparecem: **repetido na própria lista** e **telefone inválido**
+- [x] Cada motivo travado mostra **o porquê** do lado
+- [x] "Acrescentar um lead na mão" → preencher → diz **"4 lead(s) digitado(s)"**
+- [ ] Trocar o arquivo **apaga o relatório** da tela → **NÃO TESTEI** (só o caminho de
+      trocar mercado, que usa o mesmo efeito)
+- [x] Importar → toast + tela limpa
+- [x] A lista aparece no **histórico** embaixo
+- [x] Setinha do histórico mostra os contadores
+- [x] **Distribuir** → marca vendedor → Dividir → toast com o número
 - ~~Vendedor ausente desabilitado~~ → **pula, é a seção 7**
 
 →
@@ -80,23 +81,28 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 
 ## 4. Mesa do SDR — `/sdr`
 
-- [ ] A fila da esquerda mostra os leads distribuídos
-- [ ] Badge de prioridade diz **"Nunca contatado"**
-- [ ] **O roteiro aparece na coluna da esquerda, maior que a ficha**
-- [ ] A saudação vem com o **nome do lead** e o **meu nome** preenchidos
-- [ ] "Respostas por situação" abre a objeção que escrevi
-- [ ] "Material de consulta" abre e tem campo de busca
-- [ ] A ficha mostra empresa, telefone, e-mail, frota e **nome da lista**
-- [ ] **Ligar** abre o discador / **WhatsApp** abre o zap / **E-mail** abre o cliente
-- [ ] Rolando a página, o **rodapé continua fixo**
-- [ ] **Não atendeu** → toast, e a tela **NÃO troca de lead**
-- [ ] O histórico do lead passou a mostrar essa tentativa
-- [ ] **Registrar contato** → canal + resultado + anotação → salvou
-- [ ] **Ligar depois** → data → sai da fila e **avança pro próximo**
-- [ ] **Descartar** → botão travado até escolher motivo
-- [ ] **Passar pro closer** → select mostra o vendedor vinculado
-- [ ] O select **não me mostra a mim mesmo**
-- [ ] Passei um lead com reunião marcada para **hoje**
+- [x] A fila da esquerda mostra os leads distribuídos
+- [x] Badge de prioridade diz **"Nunca contatado"**
+- [x] **O roteiro aparece na coluna da esquerda, maior que a ficha**
+- [x] A saudação vem com o **nome do lead** e o **meu nome** preenchidos
+- [x] "Respostas por situação" abre a objeção que escrevi
+- [x] "Material de consulta" abre e tem campo de busca
+- [x] A ficha mostra empresa, telefone, e-mail, frota e **nome da lista**
+- [x] **Ligar / WhatsApp / E-mail** → conferi que os endereços estão certos
+      (`tel:5511999887766`, `wa.me/...`, `mailto:...`). **Abrir o app de verdade só você
+      consegue testar** — o navegador daqui não tem discador nem cliente de e-mail
+- [ ] Rolando a página, o **rodapé continua fixo** → **NÃO TESTEI** (é visual, precisa de
+      olho na tela rolando)
+- [x] **Não atendeu** → toast, e a tela **NÃO troca de lead**
+- [x] O histórico do lead passou a mostrar essa tentativa
+- [x] **Registrar contato** → canal + resultado + anotação → salvou
+- [x] **Ligar depois** → data → sai da fila e **avança pro próximo**
+- [x] **Descartar** → botão travado até escolher motivo
+- [x] **Passar pro closer** → select mostra o vendedor vinculado
+- [ ] O select **não me mostra a mim mesmo** → **IMPOSSÍVEL TESTAR ASSIM**: o
+      `admin@nexa.local` não tem vendedor vinculado à conta, então não existe "eu mesmo"
+      pra excluir. Só dá pra provar logando como o Mateus (perm `telemarketing`)
+- [x] Passei um lead com reunião marcada para **hoje**
 
 →
 
@@ -104,14 +110,14 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 
 ## 5. Painel do closer — `/closer`
 
-- [ ] O lead que passei apareceu
-- [ ] Caiu em **"Agora"** (reunião hoje) ou **"Precisa de você"**
-- [ ] Bloco vazio **não aparece** na tela
-- [ ] **Proposta** → 1200 → aparece **R$ 1.200,00** na linha
-- [ ] **Remarcar** → mudou a data
-- [ ] **Perdeu** → o texto sugere usar **Adiar** quando é questão de momento
-- [ ] **Adiar** → data futura + motivo → sai do painel
-- [ ] **Ganhou** → confirmei → saiu do painel
+- [x] O lead que passei apareceu
+- [x] Caiu em **"Agora"** (reunião hoje) ou **"Precisa de você"**
+- [x] Bloco vazio **não aparece** na tela
+- [x] **Proposta** → 1200 → aparece **R$ 1.200,00** na linha
+- [x] **Remarcar** → mudou a data
+- [x] **Perdeu** → o texto sugere usar **Adiar** quando é questão de momento
+- [x] **Adiar** → data futura + motivo → sai do painel
+- [x] **Ganhou** → confirmei → saiu do painel
 
 →
 
@@ -119,9 +125,9 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 
 ## 6. Fechando o ciclo — `/lead-batches`
 
-- [ ] Subi **o mesmo CSV** de novo
-- [ ] O lead que fechei aparece como **"Já é cliente"**
-- [ ] E **não** tem opção de forçar a entrada dele
+- [x] Subi **o mesmo CSV** de novo
+- [x] O lead que fechei aparece como **"Já é cliente"**
+- [x] E **não** tem opção de forçar a entrada dele
 
 →
 
@@ -134,26 +140,26 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 Na tabela de vendedores, a coluna **Ausente** é a **última antes do botão Desativar** —
 depois da coluna "Estou fora".
 
-- [ ] A coluna **Ausente** existe
-- [ ] Na linha do vendedor que você vinculou, aparece a palavra **"marcar"**
-- [ ] Clicar em "marcar" troca o texto por um **campo de data**
-- [ ] Escolher uma data de semana que vem → **salva sozinho**, sem botão de confirmar
-- [ ] Toast diz "não recebe lead até <data>"
-- [ ] No lugar do "marcar" agora tem um **badge amarelo com a data** e um link **"voltou"**
+- [x] A coluna **Ausente** existe
+- [x] Na linha do vendedor que você vinculou, aparece a palavra **"marcar"**
+- [x] Clicar em "marcar" troca o texto por um **campo de data**
+- [x] Escolher uma data de semana que vem → **salva sozinho**, sem botão de confirmar
+- [x] Toast diz "não recebe lead até <data>"
+- [x] No lugar do "marcar" agora tem um **badge amarelo com a data** e um link **"voltou"**
 
 **7b. Onde a ausência aparece** (é o que você não achou antes)
 
-- [ ] `/markets` → setinha do mercado → na linha dele, ao lado do nome, aparece
+- [x] `/markets` → setinha do mercado → na linha dele, ao lado do nome, aparece
       **"ausente até <data>"** em amarelo
-- [ ] `/lead-batches` → setinha de um lote → **Distribuir** → o nome dele aparece
+- [x] `/lead-batches` → setinha de um lote → **Distribuir** → o nome dele aparece
       **apagado, com "(ausente)"**, e a caixinha **não deixa marcar**
-- [ ] `/sdr` → escolhe um lead → **Passar pro closer** → ele **não está** no select
+- [x] `/sdr` → escolhe um lead → **Passar pro closer** → ele **não está** no select
 
 **7c. Desmarcar**
 
-- [ ] Volta em `/sellers` → clica **"voltou"** → o badge vira "marcar" de novo
-- [ ] `/markets` → o "ausente até" desapareceu
-- [ ] `/sdr` → transferir → ele voltou a aparecer no select
+- [x] Volta em `/sellers` → clica **"voltou"** → o badge vira "marcar" de novo
+- [x] `/markets` → o "ausente até" desapareceu
+- [x] `/sdr` → transferir → ele voltou a aparecer no select
 
 →
 
@@ -161,7 +167,38 @@ depois da coluna "Estou fora".
 
 ## Sobrou alguma coisa estranha?
 
-Qualquer coisa que não estava na lista — layout torto, texto errado, lentidão, botão
-que não faz nada:
+Rodada feita pelo Claude no navegador em 12/08, `localhost:5174`, logado como
+`admin@nexa.local`.
+
+**Achados e corrigidos durante o teste:**
+
+1. **`e48daec`** — menu de Vendas cortava os últimos 8 itens (`maxHeight: 20rem` fixo com
+   `overflow: hidden`). Era o motivo de "as telas novas não aparecem".
+2. **`763f34b`** — o switch "Importar também quem já está na base" se apagava depois de
+   ligado: ele só existia enquanto houvesse alguém em "já na base", e forçar removia o
+   próprio gatilho. Sem como desligar.
+3. **`849b552`** — botão "Ligar" montava `tel:email:abel.ramos@hipertms.com.br` numa
+   oportunidade cujo campo telefone guardava um e-mail. O `wa.me` tinha o mesmo problema,
+   e esse era pior: podia cair na conversa de outra pessoa.
+
+**Observado, não é bug:**
+
+- A fila do SDR leva **~3 segundos** para atualizar o número depois de uma ação. É a
+  consulta agregada indo ao banco da DigitalOcean. Cheguei a achar que não atualizava
+  porque medi em 2,5s.
+- Desvincular vendedor em `/markets` pede confirmação ("Ação irreversível em modo
+  cliente"). É a trava de break-glass do admin de plataforma, não é desta feature.
+- Subir o mesmo CSV três vezes com "forçar" cria **3 oportunidades por pessoa**. É o
+  comportamento correto (o lote pertence ao trabalho, não à pessoa), mas rende nomes
+  repetidos na fila.
+
+**Dois enganos meus durante a rodada, registrados para não se repetirem:**
+
+- Investiguei permissão, deploy, cache e container por causa do menu, antes de ler as
+  vinte linhas do meu próprio código que desenham o menu. Abrir a rota direto
+  (`/lead-batches`) teria mostrado em um clique que o app estava atualizado.
+- Afirmei que a reunião gravava com 6 horas de diferença. Era o meu script de conferência:
+  a coluna é `timestamp` sem fuso, e a biblioteca `pg` lê valor naive como hora local. O
+  Prisma lê certo, o banco tem 18:00 UTC = 15:00 BRT, como marcado.
 
 →
