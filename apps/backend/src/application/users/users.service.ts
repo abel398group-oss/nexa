@@ -12,6 +12,13 @@ export const AREAS = [
   'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
   'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
   'partners', // F7 (RevOps): cadastro de empresa parceira externa (ex.: pneus)
+  // Esta lista é um FILTRO, não só um catálogo: `create`/`update` descartam em silêncio
+  // o que não estiver aqui. Sem estas duas, as telas de telemarketing ficavam
+  // acessíveis só para admin — o SDR e o closer, que são o ponto do módulo, não podiam
+  // existir. Toda permissão nova de @RequirePerm precisa entrar aqui E no ALL_AREAS do
+  // UsersPage.
+  'telemarketing', // mesa do SDR e painel do closer (módulos 2 e 3)
+  'lead_batches', // subir e distribuir listas de lead (módulo 1)
 ] as const;
 
 const SELECT = { id: true, email: true, name: true, role: true, permissions: true, isActive: true, sellerId: true, createdAt: true };

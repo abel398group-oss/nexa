@@ -31,13 +31,15 @@ const AREA_LABEL: Record<string, string> = {
   sellers: 'Vendedores', campaigns: 'Disparo', opportunities: 'Leads / Funil',
   metrics: 'Metricas', ai_control: 'Controle da IA', users: 'Usuarios',
   partners: 'Parceiros (cross-sell)',
+  telemarketing: 'Mesa do SDR / Closer',
+  lead_batches: 'Listas de lead',
 };
 // Precisa espelhar AREAS do backend (users.service.ts) — o que nao estiver la e
 // descartado no create/update.
 const ALL_AREAS = [
   'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
   'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
-  'partners',
+  'partners', 'telemarketing', 'lead_batches',
 ];
 
 // Conjuntos prontos para os papeis do dia a dia — o admin ainda pode ajustar
@@ -49,6 +51,11 @@ const PRESETS: { id: string; label: string; hint: string; areas: string[] }[] = 
     areas: ['dashboard', 'inbox', 'contacts', 'campaigns', 'opportunities'] },
   { id: 'suporte_vendas', label: 'Suporte + Vendas', hint: 'As duas frentes',
     areas: ['dashboard', 'inbox', 'contacts', 'knowledge', 'campaigns', 'opportunities', 'metrics'] },
+  // Prospecção ativa: trabalha a fila e o funil, mas NÃO sobe nem distribui lista
+  // (`lead_batches`) — quem decide de quem é o lead é quem monta a operação, e essa
+  // separação é o que sustenta a regra de comissão.
+  { id: 'sdr', label: 'SDR / Closer', hint: 'Trabalha a fila de leads e fecha',
+    areas: ['dashboard', 'inbox', 'contacts', 'opportunities', 'telemarketing'] },
 ];
 
 export function UsersPage() {
