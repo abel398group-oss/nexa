@@ -1157,6 +1157,14 @@ model Opportunity {
   /// dois mercados: duas oportunidades, dois donos, e uma conversa só de WhatsApp
   /// (quem detém a linha é AiConversation.productCode).
   productCode     String?   @map("product_code")
+  /// Lote que gerou ESTA oportunidade (12/08/2026).
+  ///
+  /// O lote também existe em `Contact.batchId`, mas lá ele guarda a PRIMEIRA lista que
+  /// trouxe a pessoa e não muda mais. Uma pessoa pode voltar em várias listas ao longo
+  /// do tempo; cada oportunidade nasce de exatamente uma. Sem esta coluna, a segunda
+  /// aparição do mesmo contato gerava oportunidade que a distribuição do lote novo não
+  /// encontrava — ficava sem dono e invisível para todo SDR.
+  batchId         String?   @map("batch_id")
   /// Reunião agendada pelo closer (módulo 3). Só registro — sem integração com
   /// Google Calendar/Outlook nesta versão.
   meetingAt       DateTime? @map("meeting_at")

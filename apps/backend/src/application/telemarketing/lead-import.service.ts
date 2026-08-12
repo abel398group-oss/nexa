@@ -200,23 +200,15 @@ export class LeadImportService {
     }
     const alvos = validos.map((v) => v.id);
 
-    // `Opportunity` não declara relação com `Contact` — só guarda `contactId`. Então o
-    // recorte "leads deste lote" vem dos contatos, e a oportunidade é filtrada por id.
-    const contatosDoLote = await this.prisma.contact.findMany({
-      where: { tenantId, batchId },
-      select: { id: true },
-    });
-    if (!contatosDoLote.length) return { distribuidos: 0, porVendedor: {} };
-
+    // Filtra pelo lote DA OPORTUNIDADE, não pelo do contato. `Contact.batchId` guarda a
+    // primeira lista que trouxe a pessoa e não muda: procurar por ele fazia a segunda
+    // aparição do mesmo contato ficar de fora da distribuição do lote novo — sem dono e
+    // invisível para todo SDR.
+    //
     // Só o que ainda não tem dono. Redistribuir por engano tiraria lead da mão de quem
     // já começou a trabalhar nele.
     const fila = await this.prisma.opportunity.findMany({
-      where: {
-        tenantId,
-        assignedSellerId: null,
-        stage: 'new',
-        contactId: { in: contatosDoLote.map((c) => c.id) },
-      },
+      where: { tenantId, assignedSellerId: null, stage: 'new', batchId },
       select: { id: true, contactId: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -437,6 +429,10 @@ export class LeadImportService {
           tenantId,
           contactId,
           productCode,
+          // O lote fica AQUI, não só no contato: é esta coluna que a distribuição usa, e
+          // é o que faz a segunda aparição do mesmo contato ser encontrada pelo lote
+          // novo em vez de sumir.
+          batchId,
           phone: phone || null,
           name: linha.name,
           company: linha.company,
