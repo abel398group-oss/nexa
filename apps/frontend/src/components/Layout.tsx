@@ -67,6 +67,8 @@ const NAV_GROUPS: NavGroup[] = [
     { to: '/roteiro',        label: 'Roteiro do SDR',    ic: 'playbook',  perm: 'settings' },
     { to: '/sdr',            label: 'Mesa do SDR',       ic: 'sellers',   perm: 'telemarketing' },
     { to: '/closer',         label: 'Hoje (closer)',     ic: 'zap',       perm: 'telemarketing' },
+    // Fecha o bloco: é a leitura do que as outras quatro telas produziram.
+    { to: '/vendas/relatorio', label: 'Relatório comercial', ic: 'trophy', perm: 'metrics' },
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────

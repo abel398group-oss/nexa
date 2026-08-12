@@ -4,6 +4,8 @@ import { SdrService } from './sdr.service';
 import { CloserService } from './closer.service';
 import { SalesScriptService } from './sales-script.service';
 import { SalesScriptController } from '@/presentation/http/telemarketing/sales-script.controller';
+import { TelemarketingReportService } from './report.service';
+import { TelemarketingReportController } from '@/presentation/http/telemarketing/report.controller';
 import { LeadBatchesController } from '@/presentation/http/telemarketing/lead-batches.controller';
 import { SdrController } from '@/presentation/http/telemarketing/sdr.controller';
 import { CloserController } from '@/presentation/http/telemarketing/closer.controller';
@@ -23,12 +25,14 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
     SdrController,
     CloserController,
     SalesScriptController,
+    TelemarketingReportController,
   ],
   providers: [
     LeadImportService,
     SdrService,
     CloserService,
     SalesScriptService,
+    TelemarketingReportService,
     TmsLookupService,
   ],
 })

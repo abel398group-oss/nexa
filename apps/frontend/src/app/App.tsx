@@ -34,6 +34,7 @@ const LeadBatchesPage = lazy(() => import('@/pages/LeadBatchesPage').then((m) =>
 const SdrWorkbenchPage = lazy(() => import('@/pages/SdrWorkbenchPage').then((m) => ({ default: m.SdrWorkbenchPage })));
 const CloserTodayPage = lazy(() => import('@/pages/CloserTodayPage').then((m) => ({ default: m.CloserTodayPage })));
 const SalesScriptPage = lazy(() => import('@/pages/SalesScriptPage').then((m) => ({ default: m.SalesScriptPage })));
+const TelemarketingReportPage = lazy(() => import('@/pages/TelemarketingReportPage').then((m) => ({ default: m.TelemarketingReportPage })));
 const AbuseGuardPage = lazy(() => import('@/pages/AbuseGuardPage').then((m) => ({ default: m.AbuseGuardPage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaybookPage = lazy(() => import('@/pages/PlaybookPage').then((m) => ({ default: m.PlaybookPage })));
@@ -110,6 +111,8 @@ export default function App() {
                     <Route path="/closer" element={<Perm perm="telemarketing"><CloserTodayPage /></Perm>} />
                     {/* Escrever roteiro é `settings`: o SDR lê na mesa dele, não edita. */}
                     <Route path="/roteiro" element={<Perm perm="settings"><SalesScriptPage /></Perm>} />
+                    {/* `metrics` e não uma perm nova: quem vê número da operação já tem essa. */}
+                    <Route path="/vendas/relatorio" element={<Perm perm="metrics"><TelemarketingReportPage /></Perm>} />
                     <Route path="/users" element={<Perm perm="users"><UsersPage /></Perm>} />
                     <Route path="/playbook" element={<Perm perm="ai_control"><PlaybookPage /></Perm>} />
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
