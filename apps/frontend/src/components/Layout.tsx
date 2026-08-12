@@ -580,9 +580,23 @@ export function Layout() {
                   </button>
                 )}
                 {/* Items: sempre visíveis no rail, colapsáveis no modo expandido */}
+                {/* `maxHeight` só existe para a animação de abrir/fechar. Era `20rem`
+                    fixo — e quando o grupo Vendas passou de 9 para 17 itens, os últimos
+                    ficaram cortados por `overflow: hidden`: apareciam no rail (que não
+                    recebe este style) e desapareciam no modo expandido. Calcular pela
+                    quantidade de itens faz o teto acompanhar o menu; um número fixo volta
+                    a esconder item silenciosamente no dia que alguém acrescentar o
+                    próximo. */}
                 <div
                   className="overflow-hidden transition-all duration-200"
-                  style={isExpandedMode ? { maxHeight: isOpen ? '20rem' : '0', opacity: isOpen ? 1 : 0 } : undefined}
+                  style={
+                    isExpandedMode
+                      ? {
+                          maxHeight: isOpen ? `${g.items.length * 2.75 + 1}rem` : '0',
+                          opacity: isOpen ? 1 : 0,
+                        }
+                      : undefined
+                  }
                 >
                   {g.items.map((it) => (
                     <NavLink
