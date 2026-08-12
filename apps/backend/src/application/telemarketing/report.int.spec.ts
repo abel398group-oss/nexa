@@ -62,12 +62,19 @@ async function cenario() {
     });
   }
 
-  // 40 tentativas, 10 com "atendeu", todas carimbadas na versão 3.
+  // 40 tentativas, 10 com "atendeu", todas carimbadas na versão 3 e LIGADAS a uma
+  // oportunidade — como acontece de verdade (`registrarAtividade` exige a oportunidade).
+  // Sem esse vínculo, o filtro de mercado passa pela oportunidade e derruba a linha.
+  const alvo = await prisma.opportunity.findFirst({
+    where: { tenantId: TENANT, batchId: lote.id },
+    select: { id: true },
+  });
   for (let i = 0; i < 40; i += 1) {
     await prisma.sellerActivity.create({
       data: {
         tenantId: TENANT,
         sellerId: sdr.id,
+        opportunityId: alvo!.id,
         type: 'call',
         result: i < 10 ? 'atendeu' : 'nao_atendeu',
         scriptVersion: 3,
@@ -115,6 +122,35 @@ describe('relatório contra o banco', () => {
     expect(r.roteiros.comparaveis).toHaveLength(1);
     expect(r.roteiros.comparaveis[0]).toMatchObject({ versao: 3, acoes: 40, atendeu: 10 });
     expect(r.roteiros.comparaveis[0].percentual).toBeCloseTo(25);
+  });
+
+  it('atividade sem oportunidade: some com filtro de mercado, aparece sem filtro', async () => {
+    // A assimetria que o teste anterior expôs. Não é bug: sem oportunidade não existe
+    // mercado a que a atividade pertença, então filtrar por mercado a exclui. Mas o
+    // comportamento fica pinado, porque um dia alguém vai estranhar o número mudando ao
+    // trocar o filtro.
+    const { sdr } = await cenario();
+    await prisma.sellerActivity.create({
+      data: {
+        tenantId: TENANT,
+        sellerId: sdr.id,
+        type: 'call',
+        result: 'atendeu',
+        scriptVersion: 9, // versão que SÓ existe nesta atividade solta
+      },
+    });
+
+    const comFiltro = await service.relatorio(TENANT, MERCADO);
+    const semFiltro = await service.relatorio(TENANT);
+
+    const versoes = (r: Awaited<ReturnType<typeof service.relatorio>>) =>
+      r.roteiros.comparaveis.map((c) => c.versao).concat(
+        // a v9 tem 1 ação, então cai em "omitidas" — o que importa é o total considerado
+        r.roteiros.omitidasPorAmostra > 0 ? ['omitiu'] as unknown as number[] : [],
+      );
+
+    expect(versoes(comFiltro)).toEqual([3]); // v9 nem foi contada
+    expect(versoes(semFiltro)).toEqual([3, 'omitiu' as unknown as number]); // v9 contada e omitida
   });
 
   it('tenant sem dado devolve listas vazias, não erro', async () => {

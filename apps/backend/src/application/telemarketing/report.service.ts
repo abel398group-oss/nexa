@@ -81,9 +81,19 @@ export class TelemarketingReportService {
        ORDER BY count(a.id) DESC`;
   }
 
-  /// Por versão de roteiro. `script_version IS NOT NULL` de propósito: atividade sem
-  /// carimbo é de antes do carimbo existir, e entrar como "versão nula" criaria uma linha
-  /// fantasma competindo com as reais.
+  /**
+   * Por versão de roteiro.
+   *
+   * `script_version IS NOT NULL` de propósito: atividade sem carimbo é de antes do
+   * carimbo existir, e entrar como "versão nula" criaria uma linha fantasma competindo
+   * com as reais.
+   *
+   * ATENÇÃO ao filtro de mercado: ele passa pela oportunidade, então atividade SEM
+   * oportunidade fica de fora quando se filtra por mercado — e isso é correto, porque
+   * sem oportunidade não existe mercado a que ela pertença. Na prática toda atividade
+   * tem oportunidade (`registrarAtividade` exige), mas a assimetria é real: com filtro é
+   * `INNER JOIN` na prática, sem filtro é `LEFT`. Um teste pina os dois casos.
+   */
   private async porRoteiro(
     tenantId: string,
     productCode?: string,
