@@ -41,7 +41,7 @@ Arquivo descartável: some quando a rodada acabar.
 - [x] Agora diz **Versão 2**
 - [x] Botão de publicar fica **travado** se a situação ficar sem resposta
 - [x] **"Versões anteriores"** no fim da página mostra a versão 1
-- [ ] `Esc` fecha o popup → **NÃO TESTEI** (fechei os popups por clique no botão)
+- [x] `Esc` fecha o popup
 
 →
 
@@ -67,8 +67,7 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 - [x] Motivos aparecem: **repetido na própria lista** e **telefone inválido**
 - [x] Cada motivo travado mostra **o porquê** do lado
 - [x] "Acrescentar um lead na mão" → preencher → diz **"4 lead(s) digitado(s)"**
-- [ ] Trocar o arquivo **apaga o relatório** da tela → **NÃO TESTEI** (só o caminho de
-      trocar mercado, que usa o mesmo efeito)
+- [x] Trocar arquivo/mercado **apaga o relatório** da tela
 - [x] Importar → toast + tela limpa
 - [x] A lista aparece no **histórico** embaixo
 - [x] Setinha do histórico mostra os contadores
@@ -91,17 +90,17 @@ Ruim;Ruim SA;abc;nao-tem-arroba
 - [x] **Ligar / WhatsApp / E-mail** → conferi que os endereços estão certos
       (`tel:5511999887766`, `wa.me/...`, `mailto:...`). **Abrir o app de verdade só você
       consegue testar** — o navegador daqui não tem discador nem cliente de e-mail
-- [ ] Rolando a página, o **rodapé continua fixo** → **NÃO TESTEI** (é visual, precisa de
-      olho na tela rolando)
+- [x] Rodapé fixo — a página NÃO rola: fila e roteiro têm rolagem própria (roteiro:
+      374px de conteúdo em 273px visíveis), então o rodapé não tem como sair de vista
 - [x] **Não atendeu** → toast, e a tela **NÃO troca de lead**
 - [x] O histórico do lead passou a mostrar essa tentativa
 - [x] **Registrar contato** → canal + resultado + anotação → salvou
 - [x] **Ligar depois** → data → sai da fila e **avança pro próximo**
 - [x] **Descartar** → botão travado até escolher motivo
 - [x] **Passar pro closer** → select mostra o vendedor vinculado
-- [ ] O select **não me mostra a mim mesmo** → **IMPOSSÍVEL TESTAR ASSIM**: o
-      `admin@nexa.local` não tem vendedor vinculado à conta, então não existe "eu mesmo"
-      pra excluir. Só dá pra provar logando como o Mateus (perm `telemarketing`)
+- [x] O select **não me mostra a mim mesmo** — provado criando um vendedor descartável,
+      vinculando à conta admin e ao mercado: mesmo vinculado, ele NÃO apareceu no select.
+      E mandando o id dele na mão pela API, o backend recusou com 403
 - [x] Passei um lead com reunião marcada para **hoje**
 
 →

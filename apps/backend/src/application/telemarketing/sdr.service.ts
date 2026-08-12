@@ -273,8 +273,15 @@ export class SdrService {
 
     // Mercado do lead manda: closer fora dele não recebe. Sem esta checagem, a
     // separação por mercado do módulo 1 vira decoração.
+    // Passar para si mesmo tem mensagem PRÓPRIA. Sem ela, quem manda o próprio id (pela
+    // API ou por um select antigo em cache) recebe "não trabalha este mercado" — que é
+    // falso, e manda o suporte investigar vínculo de mercado por meia hora.
+    if (user.sellerId && dados.closerId === user.sellerId) {
+      throw new ForbiddenException('Você não pode passar o lead para você mesmo.');
+    }
+
     // Mesma exclusão da lista que a tela mostrou: se ele não pode se ver na lista, não
-     // pode passar pra si mandando o próprio id na mão.
+    // pode passar pra si mandando o próprio id na mão.
     const elegiveis = atual.productCode
       ? await this.closersDoMercado(tenantId, atual.productCode, user.sellerId)
       : [];
