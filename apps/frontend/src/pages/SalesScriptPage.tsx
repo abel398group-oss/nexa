@@ -14,6 +14,7 @@ import {
 import { useToast } from '@/app/providers/ToastContext';
 import { listMarkets, type Market } from '@/entities/market';
 import {
+  getHistoricoRoteiro,
   getRoteiro,
   salvarRoteiro,
   ITENS_DO_ROTEIRO,
@@ -147,6 +148,8 @@ export function SalesScriptPage() {
         <code>{'{{saudacao}}'}</code> bom dia / boa tarde conforme a hora.
       </p>
 
+      {productCode && <HistoricoDeVersoes productCode={productCode} />}
+
       {editando && editando !== 'objecoes' && (
         <EditorDeTexto
           productCode={productCode}
@@ -164,6 +167,85 @@ export function SalesScriptPage() {
         />
       )}
     </PageContainer>
+  );
+}
+
+/**
+ * Versões antigas do roteiro.
+ *
+ * O versionamento existe para responder "o texto novo converteu melhor?". Guardar as
+ * versões sem lugar para lê-las deixa a pergunta pela metade: dá para ver o número
+ * subindo e não dá para ver o que mudou.
+ *
+ * Fechado por padrão e no fim da página — é consulta ocasional, não trabalho do dia.
+ */
+function HistoricoDeVersoes({ productCode }: { productCode: string }) {
+  const [abre, setAbre] = useState(false);
+
+  const { data: versoes = [], isLoading } = useQuery({
+    queryKey: ['sales-script', productCode, 'history'],
+    queryFn: () => getHistoricoRoteiro(productCode),
+    enabled: abre,
+  });
+
+  // A vigente já está na tela inteira acima; repetir aqui só encompridaria a lista.
+  const antigas = versoes.filter((v) => !v.active);
+
+  return (
+    <Card className="p-5">
+      <button
+        type="button"
+        onClick={() => setAbre(!abre)}
+        className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+      >
+        Versões anteriores
+        <span className={'text-base-content/40 transition-transform ' + (abre ? 'rotate-180' : '')}>
+          ▾
+        </span>
+      </button>
+
+      {abre && (
+        <div className="pt-3">
+          {isLoading && <p className="text-xs text-base-content/50">Carregando…</p>}
+          {!isLoading && !antigas.length && (
+            <p className="text-xs text-base-content/50">
+              Só existe a versão atual — nada foi reescrito ainda.
+            </p>
+          )}
+          {antigas.map((v) => (
+            <details key={v.id} className="border-b border-base-200 py-2 last:border-0">
+              <summary className="cursor-pointer text-sm">
+                Versão {v.version}
+                <span className="ml-2 text-xs text-base-content/50">
+                  {new Date(v.createdAt).toLocaleDateString('pt-BR')}
+                </span>
+              </summary>
+              <div className="pt-2 text-xs leading-relaxed text-base-content/80">
+                <Trecho titulo="Ligação" texto={v.aberturaCall} />
+                <Trecho titulo="WhatsApp" texto={v.aberturaWhatsapp} />
+                <Trecho
+                  titulo={v.assuntoEmail ? `E-mail — ${v.assuntoEmail}` : 'E-mail'}
+                  texto={v.aberturaEmail}
+                />
+                {(v.objecoes ?? []).map((o, i) => (
+                  <Trecho key={i} titulo={o.situacao} texto={o.resposta} />
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Trecho({ titulo, texto }: { titulo: string; texto: string | null }) {
+  if (!texto) return null;
+  return (
+    <div className="mb-2">
+      <p className="font-medium text-base-content/60">{titulo}</p>
+      <p className="whitespace-pre-wrap">{texto}</p>
+    </div>
   );
 }
 

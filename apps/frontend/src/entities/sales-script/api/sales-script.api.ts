@@ -9,6 +9,8 @@ export async function getRoteiro(productCode: string): Promise<SalesScript | nul
   return r.data ?? null;
 }
 
+/// Versões antigas, da mais nova para a mais velha. Serve para comparar o que mudou —
+/// sem isso o versionamento guarda histórico que ninguém consegue ler.
 export async function getHistoricoRoteiro(productCode: string): Promise<SalesScript[]> {
   const r = await api.get(`/sales-scripts/${productCode}/history`);
   return r.data;
