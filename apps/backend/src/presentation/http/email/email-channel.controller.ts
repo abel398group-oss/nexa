@@ -16,9 +16,19 @@
 import { Controller, Get, Put, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { EmailChannelService, UpsertEmailChannelDto } from '@/application/email/email-channel.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
-@UseGuards(JwtAuthGuard)
+// Só `JwtAuthGuard` aqui deixava QUALQUER usuário autenticado do tenant trocar o
+// SMTP, escolher a caixa remetente, desativar ou APAGAR o canal de e-mail. A
+// rota estava escondida do menu (`<Perm perm="admin">` no App.tsx), mas esconder
+// não recusa — bastava digitar a URL. Achado em 12/08/2026.
+//
+// `'admin'` não está em `AREAS`, então nenhum usuário pode receber essa
+// permissão na lista: na prática só `role === 'admin'` passa, que é exatamente o
+// que a tela já prometia. Mesmo par usado por `support-email.controller`.
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePerm('admin')
 @Controller('settings/email-channel')
 export class EmailChannelController {
   constructor(private readonly service: EmailChannelService) {}
