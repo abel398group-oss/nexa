@@ -186,6 +186,12 @@ export class MarketsService {
    * apagar perderia a única pista de quando começou a prospecção daquele parceiro.
    */
   async pause(_tenantId: string, code: string) {
+    // Sem esta checagem, código inexistente virava P2025 do Prisma sem tratamento
+    // e o cliente recebia 500 "Internal server error" — quem chamou não fica
+    // sabendo se o mercado não existe ou se o servidor caiu.
+    const existe = await this.prisma.product.findUnique({ where: { code }, select: { code: true } });
+    if (!existe) throw new NotFoundException(`Mercado "${code}" não encontrado.`);
+
     const market = await this.prisma.product.update({ where: { code }, data: { status: 'paused' } });
     this.logger.warn(`Mercado "${market.name}" suspenso — sumiu do disparo`);
     return market;

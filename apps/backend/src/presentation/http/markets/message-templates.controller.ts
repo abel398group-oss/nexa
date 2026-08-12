@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Min, MaxLength, MinLength } from 'class-validator';
+import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { Type } from 'class-transformer';
 import { MessageTemplatesService } from '@/application/markets/message-templates.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -7,9 +8,17 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
 // REGRA 2: campo não declarado aqui é derrubado com 400 pelo forbidNonWhitelisted global.
+// `@Trim()` antes do `@MinLength`: sem ele um nome de cinco espacos passava e
+// virava template sem nome na lista — mesmo furo ja fechado em vendedor,
+// parceiro, base de conhecimento e usuario. Mensagens em portugues porque o
+// front joga `message` direto no toast.
 class CreateTemplateDto {
   @IsString() @MinLength(1) productCode!: string;
-  @IsString() @MinLength(2) name!: string;
+  @Trim()
+  @IsString({ message: 'Informe o nome do template.' })
+  @MinLength(2, { message: 'O nome precisa de pelo menos 2 caracteres.' })
+  @MaxLength(NOME_MAX, { message: `O nome pode ter no máximo ${NOME_MAX} caracteres.` })
+  name!: string;
   @IsIn(['email', 'whatsapp']) channel!: string;
   @IsOptional() @IsString() subject?: string;
   @IsString() @MinLength(1) body!: string;
@@ -17,7 +26,12 @@ class CreateTemplateDto {
 }
 
 class UpdateTemplateDto {
-  @IsOptional() @IsString() @MinLength(2) name?: string;
+  @IsOptional()
+  @Trim()
+  @IsString({ message: 'Informe o nome do template.' })
+  @MinLength(2, { message: 'O nome precisa de pelo menos 2 caracteres.' })
+  @MaxLength(NOME_MAX, { message: `O nome pode ter no máximo ${NOME_MAX} caracteres.` })
+  name?: string;
   @IsOptional() @IsString() subject?: string;
   @IsOptional() @IsString() @MinLength(1) body?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) step?: number;
