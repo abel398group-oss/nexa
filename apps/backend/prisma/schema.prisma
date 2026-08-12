@@ -660,6 +660,13 @@ model Seller {
   opportunities Opportunity[] // F6+ (seller-leads): leads atribuidos a este vendedor
   activities    SellerActivity[] // F7 (RevOps): ligacoes/e-mails/notas registrados manualmente
 
+  // Telefone é a chave natural do vendedor: é por ele que o handoff chega.
+  // Sem esta unicidade, dois cliques no "Salvar" criavam DOIS vendedores com o
+  // mesmo número — as duas requisições passam pela checagem do service antes de
+  // qualquer uma gravar, então só o banco arbitra a corrida (achado em
+  // 11/08/2026; a mesma prova apareceu em `users`, que já tinha índice único no
+  // e-mail e por isso saiu do teste em paralelo com UMA linha, não duas).
+  @@unique([tenantId, phone])
   @@index([tenantId])
   @@map("sellers")
 }
