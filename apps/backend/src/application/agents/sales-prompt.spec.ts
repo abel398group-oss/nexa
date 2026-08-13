@@ -95,11 +95,19 @@ describe('playbook — o que veio do documento de prospecção', () => {
     expect(PLAYBOOK_DEFAULTS.ctaCold).toMatch(/origem e destino/i);
   });
 
-  // O documento afirma "+5.500 municípios precificados" e "mais de 30 anos" — nada
-  // disso existe na base de conhecimento, e o próprio README da marca marca esses
-  // números como declaração da empresa. A Lia é proibida de afirmar o que não está no
-  // catálogo/base; deixar entrar aqui contornaria a proibição por dentro.
-  it('NÃO traz as afirmações numéricas não conferidas', () => {
+  // "+5.500 municípios" e "mais de 30 anos" DEIXARAM de ser não conferidas: o
+  // posicionamento de agosto/2026 do TMS as declara oficialmente. Mas o lugar
+  // delas continua não sendo aqui.
+  //
+  // A regra da Lia é afirmar só o que está no catálogo ou na BASE. Colar o número
+  // no playbook o transforma em fato por decreto — sem artigo, sem fonte, e fora
+  // do alcance da Supervisora, que audita contra o que foi recuperado da base.
+  // Elas entraram como artigo ("Inteligência de precificação — a tabela nacional
+  // viva"), que é recuperável, auditável e editável sem deploy.
+  //
+  // Ou seja: este teste continua guardando o mesmo princípio de sempre — número
+  // se prova pela base, não pelo playbook.
+  it('NÃO fixa as afirmações numéricas no playbook — o lugar delas é a base', () => {
     expect(texto).not.toMatch(/5\.?500/);
     expect(texto).not.toMatch(/30 anos/i);
   });

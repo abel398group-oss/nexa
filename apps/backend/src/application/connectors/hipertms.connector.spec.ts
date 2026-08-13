@@ -520,3 +520,51 @@ describe('HiperTmsConnector — getRejectionInfo() (F15)', () => {
     expect(info!.suggestedAction).toBeTruthy();
   });
 });
+
+// ── Posicionamento de agosto/2026 na base de vendas ──────────────────────────
+//
+// A Lia só pode afirmar o que está no catálogo ou na BASE. Estes artigos existem
+// para que as declarações oficiais do posicionamento sejam DELA por direito — em
+// vez de coladas no playbook, onde virariam fato por decreto e ficariam fora do
+// alcance da Supervisora, que audita contra o que foi recuperado.
+describe('HiperTmsConnector — getKnowledge(): posicionamento 2026-08', () => {
+  const artigo = async (titulo: string) => {
+    const kb = await makeConnector().getKnowledge();
+    return kb.find((k) => k.title === titulo);
+  };
+
+  it('a tabela nacional e os 30 anos estão na base, com fonte', async () => {
+    const a = await artigo('Inteligência de precificação — a tabela nacional viva');
+    expect(a, 'artigo de posicionamento sumiu da base').toBeDefined();
+    expect(a!.content).toMatch(/5\.500 munic/i);
+    expect(a!.content).toMatch(/30 anos/i);
+    expect(a!.content).toMatch(/O TMS feito para vender frete/i);
+  });
+
+  it('o artigo proíbe o que o posicionamento proíbe', async () => {
+    const a = await artigo('Inteligência de precificação — a tabela nacional viva');
+    expect(a!.content).toMatch(/service as a software/i); // citado como proibido
+    expect(a!.content).toMatch(/reajuste autom[áa]tico do contrato/i);
+  });
+
+  // O guard barra "aplicativo mobile". Sem este artigo a Lia fica sem a resposta
+  // certa para uma pergunta comum e pode tentar justamente a que é bloqueada.
+  it('a resposta de celular é navegador, e nega app explicitamente', async () => {
+    const a = await artigo('Funciona no celular? — navegador, sem instalar nada');
+    expect(a, 'artigo de acesso mobile sumiu da base').toBeDefined();
+    expect(a!.content).toMatch(/NAVEGADOR do celular, sem instalar/i);
+    expect(a!.content).toMatch(/N[ÃA]O existe aplicativo nativo/i);
+  });
+
+  it('os dois artigos são alcançáveis pela trilha de vendas', async () => {
+    const kb = await makeConnector().getKnowledge();
+    const vendas = new Set(['comercial', 'precificacao', 'vendas', 'produto', 'modulo', 'conceitos']);
+    for (const t of [
+      'Inteligência de precificação — a tabela nacional viva',
+      'Funciona no celular? — navegador, sem instalar nada',
+    ]) {
+      const a = kb.find((k) => k.title === t)!;
+      expect(vendas.has(a.category as string), `${t} está em categoria fora da trilha de vendas`).toBe(true);
+    }
+  });
+});

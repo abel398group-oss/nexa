@@ -197,7 +197,9 @@ export class SalesAgentService {
       '"5 minutos", "conta grátis", "crie sua conta", "teste grátis", "período de teste", qualquer valor em reais, ' +
       '"service as a software", "consultoria".\n' +
       'VOCABULÁRIO CORRETO: "inteligência de precificação", "tabela viva mantida pelo nosso time", ' +
-      '"implantação conduzida por especialistas", "todo o Brasil precificado desde o primeiro dia".\n' +
+      '"implantação conduzida por especialistas", "todo o Brasil precificado desde o primeiro dia", ' +
+      '"contratos que entendem cada cliente". A assinatura da marca é "O TMS feito para vender frete" — ' +
+      'use quando fizer sentido, sem repetir a cada mensagem.\n' +
       // Novo canal de entrada: a página /signup virou captação e abre o WhatsApp
       // com este texto pronto. Sem reconhecer o formato, a Lia trata o lead mais
       // quente que existe como se fosse um "oi" qualquer.

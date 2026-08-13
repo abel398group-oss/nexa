@@ -599,6 +599,51 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         tags: ['basico', 'viagens', 'roteirizacao', 'trip', 'limitacao', 'nao tem'],
       },
 
+      // ── POSICIONAMENTO (2026-08-13) ───────────────────────────────────────────
+      // Os dois artigos abaixo existem porque a Lia só pode afirmar o que está na
+      // BASE. "+5.500 municípios" e "mais de 30 anos" eram deliberadamente barrados
+      // do playbook em 08/08 — não estavam em lugar nenhum e teriam virado fato por
+      // decreto. Agora `marketing-social/00_posicionamento.md` (fonte da verdade do
+      // TMS) as declara oficialmente, então elas entram AQUI, onde a Supervisora
+      // consegue auditá-las, em vez de irem para o prompt. A regra não afrouxou; a
+      // base cresceu.
+      {
+        topic: 'posicionamento', category: 'comercial',
+        title: 'Inteligência de precificação — a tabela nacional viva',
+        content:
+          'O QUE O HIPERTMS É: um sistema de precificação e cotação de frete que embute as demais ' +
+          'funcionalidades de um TMS. A ordem importa — precificação é o núcleo; embarques, fiscal, ' +
+          'financeiro e frota vêm junto, mas são obrigação de qualquer TMS sério, não diferencial. ' +
+          'Assinatura da marca: "O TMS feito para vender frete."\n' +
+          'O DIFERENCIAL: todo concorrente vende emissor de CT-e e ensina o transportador a MONTAR a tabela ' +
+          'de frete. Só o HiperTMS entrega a tabela PRONTA — e MANTIDA. ' +
+          'Mais de 5.500 municípios já precificados, com generalidades, GRIS e piso ANTT.\n' +
+          'INTELIGÊNCIA DE PRECIFICAÇÃO (nome público da camada de serviço): nosso time de especialistas ' +
+          'acompanha as métricas do mercado — custos operacionais, insumos, pedágio, piso mínimo ANTT — e ' +
+          'elabora e mantém as tabelas dentro do sistema, com mais de 30 anos de gestão de transportadora. ' +
+          'O cliente não recebe software vazio para configurar: recebe uma tabela viva.\n' +
+          'O transportador ajusta margem, desconto e regra por cliente EM CIMA dessa inteligência — os valores ' +
+          'são ponto de partida qualificado, não imposição. É por isso que a implantação é conduzida pelo ' +
+          'nosso time: calibrar a inteligência para a operação do cliente é parte do serviço.\n' +
+          'COMO FALAR: "inteligência de precificação", "tabela viva", "mantida pelo nosso time", ' +
+          '"acompanhamos as métricas do mercado por você", "todo o Brasil precificado desde o primeiro dia".\n' +
+          'COMO NÃO FALAR: "service as a software" (jargão interno) e "consultoria" (somos produto com serviço ' +
+          'embutido). NUNCA prometa reajuste automático do contrato do cliente — a inteligência alimenta a ' +
+          'TABELA; o contrato de cada cliente é soberano.',
+        tags: ['posicionamento', 'diferencial', 'tabela nacional', 'municipios', '5500', 'inteligencia de precificacao', 'tabela viva', 'de onde vem os precos', 'vender frete', '30 anos'],
+      },
+      {
+        topic: 'acesso', category: 'produto',
+        title: 'Funciona no celular? — navegador, sem instalar nada',
+        content:
+          'O HiperTMS funciona no NAVEGADOR do celular, sem instalar nada. Basta abrir o endereço do sistema ' +
+          'e entrar com e-mail e senha, igual no computador.\n' +
+          'ATENÇÃO: NÃO existe aplicativo nativo (App Store / Google Play). Nunca prometa "app", "aplicativo ' +
+          'mobile" nem "baixar na loja" — a resposta certa é que roda no navegador, sem instalação. ' +
+          'Essa é uma pergunta comum de lead e a resposta acima é a única correta.',
+        tags: ['celular', 'mobile', 'aplicativo', 'app', 'navegador', 'instalar', 'funciona no celular', 'android', 'ios'],
+      },
+
       // ── FISCAL: módulos que faltavam na KB de vendas (2026-08-01) ─────────────
       {
         topic: 'gnre', category: 'produto',
