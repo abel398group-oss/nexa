@@ -173,16 +173,21 @@ export class FollowUpService {
         // A leitura é aqui, no instante antes do envio, e não no agendamento: é o
         // que torna a checagem imune à corrida. O estado pode ter mudado a
         // qualquer momento nas 24h/72h desde que o follow-up foi marcado.
+        // Sem `as any` no select: o cast apagava a inferência do Prisma e `conv` virava
+        // a união de todos os formatos possíveis, o que fazia `conv.status === 'closed'`
+        // não compilar ("os tipos não têm sobreposição"). O cast existia como contorno
+        // para um client desatualizado — `humanTakeoverAt` já está no schema desde a
+        // ADR 035, então ele só atrapalhava.
         const conv = await this.prisma.aiConversation.findUnique({
           where: { id: f.conversationId },
-          select: { status: true, humanTakeoverAt: true } as any,
+          select: { status: true, humanTakeoverAt: true },
         });
 
         // ADR 035: com takeover humano a Lia entra em modo rascunho e não fala
         // sozinha. O follow-up passava por fora disso: o vendedor escrevia de
         // próprio punho e, 24h depois, o MESMO número mandava um "ainda tem
         // interesse?" automático. Para o cliente, a empresa conversando sozinha.
-        if (conv && (conv as any).humanTakeoverAt) {
+        if (conv && conv.humanTakeoverAt) {
           await this.prisma.followUp.update({ where: { id: f.id }, data: { status: 'stopped' } });
           this.logger.log(`Follow-up parado p/ ${f.phone}: humano assumiu a conversa (ADR 035).`);
           continue;
