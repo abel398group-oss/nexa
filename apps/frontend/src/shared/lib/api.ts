@@ -107,8 +107,25 @@ api.interceptors.response.use(
       try {
         await doRefresh();
         return api(original);
-      } catch {
-        if (!location.pathname.startsWith('/login')) location.assign('/login');
+      } catch (falhaDoRefresh: any) {
+        // Só manda pro login quando o SERVIDOR recusou a renovação (401/403).
+        //
+        // Antes qualquer falha do refresh caía aqui e fazia `location.assign` —
+        // uma navegação dura, que atropela o estado do React. Com o backend
+        // reiniciando, o refresh volta 500 (proxy do Vite) ou 502 (nginx), e o
+        // usuário era expulso do app com a sessão perfeitamente válida.
+        //
+        // Foi o que sobrou depois de consertar o AuthContext: a tela de "sem
+        // conexão" aparecia certinho e, no instante em que o backend voltava,
+        // um refresh que pegou o servidor no meio da subida jogava tudo pro
+        // /login assim mesmo. Achado no teste manual de 13/08/2026.
+        //
+        // Servidor fora do ar: rejeita a chamada e pronto. Quem decide o que
+        // mostrar é o AuthContext, que sabe distinguir "deslogado" de
+        // "inacessível".
+        const s = falhaDoRefresh?.response?.status;
+        const recusado = s === 401 || s === 403;
+        if (recusado && !location.pathname.startsWith('/login')) location.assign('/login');
         return Promise.reject(error);
       }
     }
