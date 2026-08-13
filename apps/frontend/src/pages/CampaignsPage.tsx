@@ -91,6 +91,39 @@ const campaignSchema = z
 // validação real de e-mail (em vez de só checar '@')
 const isEmail = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
 
+/**
+ * Lê a lista colada no campo "Destinatários" e devolve os endereços que vão de
+ * fato virar alvo — a MESMA conta que o rodapé mostra e que vai no payload.
+ *
+ * Duas coisas mudaram aqui em 13/08/2026:
+ *
+ * O contador não desduplicava. Colar uma planilha com o mesmo endereço repetido
+ * (ou escrito "Joao@X.com" numa linha e "joao@x.com" noutra) mostrava "500
+ * detectados" e a campanha nascia com menos, sem explicação nenhuma na tela. O
+ * backend já normaliza e desduplica na entrada — a tela é que contava outra
+ * coisa. É o mesmo princípio que o próprio createEmailCampaign registra: a tela
+ * mostra quem vai receber e o envio tem que concordar com ela, senão a tela
+ * mente e o operador confia no número que viu.
+ *
+ * E só quebrava por `\n`. Copiar de Outlook ou de uma coluna de planilha traz
+ * "a@x.com; b@y.com" numa linha só, e o campo respondia "0 e-mail(s)
+ * detectado(s)" para uma lista visivelmente cheia — parece tela quebrada, não
+ * formato errado. Vírgula e ponto-e-vírgula agora separam igual à quebra de
+ * linha; o texto de ajuda embaixo do campo continua pedindo um por linha.
+ *
+ * O `toLowerCase` casa com o normalizeEmail do backend, que é quem decide se
+ * dois endereços são a mesma pessoa para opt-out e dedup.
+ */
+export function parseEmailList(texto: string): string[] {
+  const vistos = new Set<string>();
+  return texto
+    .split(/[\n,;]+/)
+    .map((l) => l.trim())
+    .filter(isEmail)
+    .map((e) => e.toLowerCase())
+    .filter((e) => (vistos.has(e) ? false : vistos.add(e)));
+}
+
 // ── Spintax: quantas mensagens diferentes o template gera ──────────────────────
 // Espelha spinVariants() do backend (application/sender/spintax.ts). Aqui é só
 // para o contador da tela; quem sorteia de verdade é o backend, no envio.
@@ -904,7 +937,7 @@ export function CampaignsPage() {
 
     // validação (Zod) — bloqueia o envio e mostra os erros, sem mexer no resto do fluxo
     const emailCount = channel === 'email' && !fromContacts
-      ? emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).length
+      ? parseEmailList(emailsText).length
       : 0;
     const recipientCount = manualSelected.size + avulsos.length;
     const check = campaignSchema.safeParse({
@@ -936,7 +969,7 @@ export function CampaignsPage() {
         };
         if (productCode.trim()) payload.productCode = productCode.trim();
         if (fromContacts) payload.fromContacts = true;
-        else payload.emails = emailsText.split('\n').map((l) => l.trim()).filter((l) => isEmail(l)).map((e) => ({ email: e }));
+        else payload.emails = parseEmailList(emailsText).map((e) => ({ email: e }));
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
@@ -1755,7 +1788,7 @@ export function CampaignsPage() {
                     recipients={
                       fromContacts
                         ? (activeCount ?? 0)
-                        : emailsText.split('\n').filter((l) => isEmail(l)).length
+                        : parseEmailList(emailsText).length
                     }
                   />
                   <p className="mt-1 text-[11px] text-base-content/35">
@@ -1875,7 +1908,7 @@ export function CampaignsPage() {
                         required={!fromContacts}
                       />
                       <p className="mt-1 text-[11px] text-base-content/40">
-                        Um e-mail por linha · <strong>{emailsText.split('\n').filter((l) => isEmail(l)).length}</strong> e-mail(s) detectado(s)
+                        Um e-mail por linha · <strong>{parseEmailList(emailsText).length}</strong> e-mail(s) detectado(s)
                       </p>
                     </>
                   ) : (
