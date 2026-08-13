@@ -85,7 +85,8 @@ describe('MonitorController — WA number gate', () => {
   // U6: N+1 únicos, de zero → 400
   it('U6: N+1 números únicos (sem config anterior) → 400', async () => {
     const prisma = makePrisma();
-    // basico = 1 (v2); 2 números únicos → excede limit=1 e previousCount=0
+    // basico = 3 desde o repricing de agosto/2026 (era 1); 4 números únicos →
+    // excede limit=3 com previousCount=0. O caso continua sendo "N+1 do zero".
     prisma.planLimit.findUnique.mockResolvedValue({ plan: 'basico', monitorExtraNumbers: 0 });
     prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
       monitorOverride: false, sectorConfig: null, notificationPhone: null,
@@ -94,8 +95,10 @@ describe('MonitorController — WA number gate', () => {
     const ctrl = makeController(prisma);
     const dto = {
       sectorConfig: {
-        fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
-        logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        fiscal:    { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
+        logistic:  { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:     { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+        finance:   { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
       },
     };
 
@@ -127,7 +130,7 @@ describe('MonitorController — WA number gate', () => {
   // U8: GET com config acima do limite → 200 (grandfathering no GET)
   it('U8: GET com config acima do limite → retorna sem erro (grandfathering)', async () => {
     const prisma = makePrisma();
-    // basico = 1, mas tem 2 números configurados (grandfathered)
+    // basico = 3 (repricing 2026-08), mas tem 4 números configurados (grandfathered)
     prisma.planLimit.findUnique.mockResolvedValue({ plan: 'basico', monitorExtraNumbers: 0 });
     prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
       enabled: true, sendHour: 8, sendMinute: 0, notificationPhone: null,
@@ -136,6 +139,8 @@ describe('MonitorController — WA number gate', () => {
       sectorConfig: {
         fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
         logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+        finance:  { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
       },
       monitorOverride: false,
     });
@@ -144,8 +149,8 @@ describe('MonitorController — WA number gate', () => {
     const result = await ctrl.getConfig(TENANT);
 
     expect(result).toBeDefined();
-    expect(result.waNumbersUsed).toBe(2);
-    expect(result.waNumbersLimit).toBe(1);
+    expect(result.waNumbersUsed).toBe(4);
+    expect(result.waNumbersLimit).toBe(3);
     expect(result.planAllowed).toBe(true);
   });
 
@@ -220,12 +225,16 @@ describe('MonitorController — WA number gate', () => {
   });
 
   // N2-d: tenant dentro do limite não consegue exceder
-  it('N2-d: tenant dentro do limite não pode exceder (basico: 1 → 2)', async () => {
+  it('N2-d: tenant dentro do limite não pode exceder (basico: 3 → 4)', async () => {
     const prisma = makePrisma();
-    prisma.planLimit.findUnique.mockResolvedValue({ plan: 'basico', monitorExtraNumbers: 0 }); // limit=1
+    prisma.planLimit.findUnique.mockResolvedValue({ plan: 'basico', monitorExtraNumbers: 0 }); // limit=3
     prisma.tenantNotificationConfig.findUnique.mockResolvedValue({
       monitorOverride: false,
-      sectorConfig: { fiscal: { recipients: [{ contact: '5511000000001', channel: 'whatsapp' }] } },
+      sectorConfig: {
+        fiscal:   { recipients: [{ contact: '5511000000001', channel: 'whatsapp' }] },
+        logistic: { recipients: [{ contact: '5511000000002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511000000003', channel: 'whatsapp' }] },
+      },
       notificationPhone: null,
     });
 
@@ -234,9 +243,11 @@ describe('MonitorController — WA number gate', () => {
       sectorConfig: {
         fiscal:   { recipients: [{ contact: '5511000000001', channel: 'whatsapp' }] },
         logistic: { recipients: [{ contact: '5511000000002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511000000003', channel: 'whatsapp' }] },
+        finance:  { recipients: [{ contact: '5511000000004', channel: 'whatsapp' }] },
       },
     };
-    // previousCount=1 (at limit), newCount=2 > limit=1 AND newCount=2 > previousCount=1 → 400
+    // previousCount=3 (no limite), newCount=4 > limit=3 E newCount > previousCount → 400
     await expect(ctrl.updateConfig(TENANT, dto)).rejects.toThrow(BadRequestException);
   });
 

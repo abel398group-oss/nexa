@@ -753,21 +753,23 @@ describe('MonitorService.getExternalConfig/updateExternalConfig — paridade TMS
 
   it('getExternalConfig com config acima do limite → 200 (grandfathering no GET)', async () => {
     const { svc } = makeExternalService({
-      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=1
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=3 (repricing 2026-08)
       config: {
         enabled: true, sendHour: 8, sendMinute: 0, sendWeekends: false,
         fiscalEnabled: true, logisticEnabled: true, frotaEnabled: true, financeEnabled: true,
         sectorConfig: {
           fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
           logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+          frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+          finance:  { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
         },
         notificationPhone: null,
         monitorOverride: false,
       },
     });
     const result = await svc.getExternalConfig(TMS_TENANT_ID);
-    expect(result.waNumbersUsed).toBe(2);
-    expect(result.waNumbersLimit).toBe(1);
+    expect(result.waNumbersUsed).toBe(4);
+    expect(result.waNumbersLimit).toBe(3);
   });
 
   it('getExternalConfig com monitorOverride=true → waNumbersLimit = 10 (cap técnico)', async () => {
@@ -811,15 +813,17 @@ describe('MonitorService.getExternalConfig/updateExternalConfig — paridade TMS
 
   // ── updateExternalConfig — Gate 2: limite de números WhatsApp ──────────────
 
-  it('Básico bloqueia no 2º número (limite=1)', async () => {
+  it('Básico bloqueia no 4º número (limite=3)', async () => {
     const { svc } = makeExternalService({
-      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=1
+      planLimit: { plan: 'basico', monitorExtraNumbers: 0 }, // limit=3 (repricing 2026-08)
       config: { monitorOverride: false, sectorConfig: null, notificationPhone: null },
     });
     const input = {
       sectorConfig: {
         fiscal:   { recipients: [{ contact: '5511999990001', channel: 'whatsapp' }] },
         logistic: { recipients: [{ contact: '5511999990002', channel: 'whatsapp' }] },
+        frota:    { recipients: [{ contact: '5511999990003', channel: 'whatsapp' }] },
+        finance:  { recipients: [{ contact: '5511999990004', channel: 'whatsapp' }] },
       },
     };
     await expect(svc.updateExternalConfig(TMS_TENANT_ID, input)).rejects.toThrow(BadRequestException);

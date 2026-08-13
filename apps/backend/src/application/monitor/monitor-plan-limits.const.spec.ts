@@ -8,9 +8,10 @@ import {
 } from './monitor-plan-limits.const';
 
 describe('monitorWaLimit — v2 matriz 2026-07-14', () => {
-  // U1: Básico inclui 1 (Monitor disponível no Básico)
-  it('U1: basico sem extras → 1', () => {
-    expect(monitorWaLimit('basico', 0, false)).toBe(1);
+  // U1: Básico inclui 3 desde o repricing de agosto/2026 — o Básico de R$89 foi
+  // extinto e o novo (R$599) herdou os limites do antigo Essencial. Era 1.
+  it('U1: basico sem extras → 3', () => {
+    expect(monitorWaLimit('basico', 0, false)).toBe(3);
   });
 
   // U1b: Essencial inclui 3
@@ -88,7 +89,7 @@ describe('MONITOR_WA_INCLUDED', () => {
 // PlanLimit.monitorNumbersIncluded manda; a tabela acima virou só fallback.
 describe('monitorWaIncluded — valor do TMS tem prioridade sobre a tabela local', () => {
   it('usa o valor do TMS mesmo quando diverge da tabela', () => {
-    // Tabela local diz 1 para basico; se o TMS passar a incluir 2, vale 2.
+    // Tabela local diz 3 para basico; se o TMS passar a incluir 2, vale 2.
     expect(monitorWaIncluded('basico', 2)).toBe(2);
     // E o contrário também: um plano que a tabela dá 5 pode ser reduzido no TMS.
     expect(monitorWaIncluded('profissional', 1)).toBe(1);

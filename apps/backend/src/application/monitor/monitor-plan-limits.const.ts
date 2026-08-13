@@ -15,10 +15,10 @@
  * rows, local dev). Do not treat it as the rule — changing a plan is done in
  * the TMS, never here.
  *
- * Fallback values (mirror the TMS catalogue as of 2026-08-03):
+ * Fallback values (mirror the TMS catalogue as of 2026-08-13):
  *   free / starter           → Monitor blocked (0 included)
- *   Básico                   → 1 included
- *   Essencial                → 3 included
+ *   Básico                   → 3 included (repricing 2026-08; was 1)
+ *   Essencial                → 3 included (out of new sales; existing subs live)
  *   Profissional / pro       → 5 included
  *   Corporativo / enterprise → unlimited in the TMS (-1), capped here at 10
  *   monitorOverride          → 10 (technical cap, platform-admin only)
@@ -39,7 +39,12 @@ import { MAX_SEND_TIMES_PER_CONTACT } from './contact-recipient.types';
 export const MONITOR_WA_INCLUDED: Readonly<Record<string, number>> = {
   free:         0,
   starter:      0,
-  basico:       1,
+  // Repricing de agosto/2026: o Básico de R$89 foi extinto e o novo Básico
+  // (R$599) herdou os limites do antigo Essencial — 3 números, 5 usuários,
+  // 5 empresas. Conferido na tela de planos do TMS em 13/08/2026. Um tenant
+  // ainda não sincronizado caía aqui e recebia 1, entregando menos do que o
+  // cliente contratou. `essencial` fica: saiu de venda nova, assinaturas vivas.
+  basico:       3,
   essencial:    3,
   pro:          5,
   profissional: 5,

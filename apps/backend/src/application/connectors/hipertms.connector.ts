@@ -530,13 +530,14 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'planos', category: 'comercial',
         title: 'Planos disponíveis — consultar dados dinâmicos',
         content:
-          'O HiperTMS oferece planos para transportadoras de todos os portes (Básico, Essencial, Profissional e Corporativo). ' +
-          'Os preços, limites de usuários e funcionalidades de cada plano são consultados em tempo real e podem mudar. ' +
-          'Sempre consulte os dados dinâmicos do conector (getPlans()) para responder sobre preços e limites. ' +
-          'NUNCA informe preço ou limite de plano a partir de texto fixo — se os dados do conector estiverem indisponíveis, ' +
-          'diga "vou confirmar os valores atualizados" e escale para um especialista. ' +
+          'REPOSICIONAMENTO DE AGOSTO/2026: a grade tem hoje BÁSICO (plano de entrada) e CORPORATIVO (sob consulta). ' +
+          'Essencial e Profissional saíram de venda nova — assinaturas existentes seguem ativas. ' +
+          'REGRA ABSOLUTA: a Lia NUNCA informa preço, de nenhum plano, nem faixa, nem "a partir de". ' +
+          'O valor é apresentado por um especialista humano junto do escopo de implantação. ' +
+          'Pergunta de preço = lead quente: qualifique (frota, sistema atual, rotas) e escale ao especialista. ' +
           'Todos os planos incluem: CT-e, MDF-e, precificação, frota, financeiro e suporte por e-mail. ' +
-          'ATENÇÃO (2026-08-01): o módulo de VIAGENS não está no Básico — só a partir do Essencial.',
+          'A implantação é CONDUZIDA pelo nosso time e faz parte do que se vende — nunca dizer "sem implantação", ' +
+          '"configure em 5 minutos" ou "crie sua conta": não existe mais autoatendimento.',
         tags: ['plano', 'preco', 'valor', 'basico', 'essencial', 'profissional', 'corporativo', 'quanto custa'],
       },
       {
@@ -550,41 +551,34 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         title: 'Trial e forma de pagamento',
         content:
           'ATENÇÃO: o HiperTMS NÃO tem período de teste (trial). Nunca prometa "teste grátis" nem "30 dias grátis". ' +
-          'A assinatura entra ATIVA desde o primeiro dia — o cliente é cliente, não testador. ' +
-          'O que existe é a PRIMEIRA COBRANÇA ADIADA: a fatura vence sempre no dia 15 e nunca em menos de 30 dias ' +
-          'da contratação. Se o dia 15 mais próximo estiver a menos de 30 dias, ela pula para o mês seguinte. ' +
-          'Na prática o cliente usa entre 30 e ~60 dias antes de pagar, dependendo do dia em que entrou: ' +
-          'quem entra dia 1º de agosto paga em 15 de setembro (45 dias); quem entra dia 20 de agosto paga em ' +
-          '15 de outubro (56 dias). ' +
-          'NÃO PRECISA CADASTRAR CARTÃO PARA ENTRAR (confirmado pela diretoria em 2026-08-01). O lead só se ' +
-          'cadastra e já acessa; o boleto é enviado depois. Esse é o argumento MAIS FORTE que temos para vencer ' +
-          'a hesitação inicial — use sempre que o lead demonstrar receio de se comprometer. ' +
-          'Ele também pode CANCELAR nos primeiros 7 dias. ' +
-          'Forma de dizer ao lead: "você se cadastra sem informar cartão nenhum, já começa a usar, e o boleto da ' +
-          'primeira mensalidade só vem depois — nunca em menos de 30 dias. E nos primeiros 7 dias você pode ' +
-          'cancelar." É forte E verdadeiro. NÃO chame de "grátis" nem de "teste": não é. ' +
-          'Pagamento via boleto (padrão), PIX ou cartão. Ciclo mensal ou ANUAL — o anual dá ' +
-          'ECONOMIA DE ATÉ 17% (informação da própria tela de assinatura). Sem fidelidade; upgrade e ' +
-          'downgrade são imediatos.',
+          'A assinatura entra ATIVA desde o primeiro dia — o cliente é cliente, não testador.\n' +
+          'REPOSICIONAMENTO DE AGOSTO/2026 — o que MUDOU e não vale mais: o autoatendimento acabou. ' +
+          'NÃO existe mais "se cadastra sem cartão e já começa a usar", nem "cancela nos primeiros 7 dias" ' +
+          'como argumento de venda. A conta é criada pelo NOSSO TIME depois da venda fechada, e a implantação ' +
+          'é conduzida por especialistas — é parte do que se vende. Nunca ofereça criar conta nem envie link de cadastro.\n' +
+          'A Lia NÃO fala de condição de pagamento, valor, ciclo nem desconto. Quem apresenta tudo isso é o ' +
+          'especialista humano, junto do escopo. Se o lead perguntar como paga ou quanto custa, ' +
+          'qualifique e escale — é sinal de lead quente, não de dúvida operacional.',
         tags: ['trial', 'teste', 'gratuito', 'pagamento', 'boleto', 'pix', 'cartao', 'sem cartao', 'cancelamento', 'primeira fatura', 'quando paga', 'compromisso'],
       },
       {
         topic: 'planos', category: 'comercial',
         title: 'Limites de cada plano — usar para qualificar o lead',
         content:
-          'Limites REAIS por plano (conferidos na tela de assinatura do TMS em 2026-08-01). ' +
-          'O que separa os planos é USUÁRIOS e VOLUME — veículos e empresas são ilimitados em todos, ' +
-          'então "quantos caminhões você tem?" NÃO é a pergunta que define o plano. ' +
-          'Pergunte quantas PESSOAS vão usar o sistema e quantos embarques/mês a operação faz.\n' +
-          'BÁSICO (R$89/mês): 5 usuários, 500 embarques/mês, 500 documentos/mês, 1 GB, alertas em 1 número. ' +
-          'NÃO inclui Viagens/roteirização, API nem relatórios avançados.\n' +
-          'ESSENCIAL (R$199/mês): 8 usuários, 1.000 embarques/mês, 1.000 documentos/mês, 10 GB, ' +
-          'alertas em 3 números. Inclui Viagens, API e relatórios avançados. É o plano marcado como ' +
-          '"Mais Popular" e atende 90% do público.\n' +
-          'PROFISSIONAL (R$299/mês): 15 usuários, 2.000 embarques/mês, 5.000 documentos/mês, 50 GB, ' +
-          'alertas em 5 números, suporte prioritário. Foco em precificação avançada, regras por cliente/rota.\n' +
-          'CORPORATIVO: SOB CONSULTA (não informe preço). Tudo ilimitado, SSO, instância dedicada, SLA.\n' +
-          'Empresas (matriz e filiais) e veículos são ILIMITADOS em todos os planos. ' +
+          'Limites REAIS por plano, conferidos na tela de planos do TMS em 2026-08-13. ' +
+          'SEM PREÇO de propósito: a Lia nunca informa valor — o especialista apresenta junto do escopo.\n' +
+          'BÁSICO (plano de entrada): 5 usuários, 5 empresas (matriz e filiais), 200 embarques/mês, ' +
+          '1.000 documentos/mês, 10 GB de armazenamento, 15 veículos, alertas de WhatsApp e e-mail em 3 números. ' +
+          'NF-e de clientes importadas não consomem cota de armazenamento do plano, e o CT-e emitido pela ' +
+          'transportadora não é limitado por essa regra.\n' +
+          'CORPORATIVO (sob consulta): usuários, empresas, embarques, documentos, armazenamento e veículos ' +
+          'ilimitados; suporte prioritário, API, relatórios avançados, SSO e instância dedicada com SLA.\n' +
+          'Essencial e Profissional saíram de venda nova (assinaturas existentes seguem ativas) — ' +
+          'não os ofereça a lead novo.\n' +
+          'COMO QUALIFICAR: pergunte quantas PESSOAS vão usar o sistema, quantos embarques/mês a operação faz ' +
+          'e o tamanho da frota — os três são limitados no Básico. ' +
+          'Operação de 1 a 3 veículos está FORA do perfil que atendemos: atenda bem, indique a calculadora ' +
+          'pública gratuita e não empurre venda.\n' +
           'NUNCA infle esses números para fechar venda: o limite é aplicado pelo sistema e o cliente descobre ' +
           'no primeiro uso.',
         tags: ['limite', 'usuarios', 'veiculos', 'frota', 'empresas', 'filial', 'embarques', 'documentos', 'quantos', 'cabe', 'preco', 'quanto custa'],
@@ -593,11 +587,15 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         topic: 'planos', category: 'comercial',
         title: 'Básico NÃO tem módulo de Viagens',
         content:
-          'O plano Básico (R$89/mês) cobre embarques e fiscal, mas o módulo de VIAGENS está desligado nele. ' +
-          'A própria descrição do plano no sistema diz: "Viagens e roteirização avançada nos planos Essencial ou superior". ' +
-          'Se o lead falar em roteirização, montagem de viagem, agrupar embarques numa viagem ou controle de ' +
-          'motorista em rota, o plano mínimo é o ESSENCIAL. ' +
-          'Vender o Básico nesse caso gera cancelamento na primeira semana.',
+          'DESATUALIZADO PELO REPOSICIONAMENTO DE AGOSTO/2026 — leia com cuidado. ' +
+          'Esta regra descrevia o Básico ANTIGO, extinto no repricing, que não tinha Viagens. ' +
+          'O Básico atual herdou limites do antigo Essencial, e a disponibilidade do módulo de Viagens ' +
+          'nele NÃO está confirmada aqui.\n' +
+          'CONDUTA: se o lead falar em roteirização, montagem de viagem, agrupar embarques numa viagem ou ' +
+          'controle de motorista em rota, NÃO afirme que está incluso nem que falta. ' +
+          'Registre o interesse, diga que o especialista confirma o escopo exato, e escale. ' +
+          'Prometer módulo que o plano não tem gera cancelamento na primeira semana; negar módulo que ele tem ' +
+          'perde a venda.',
         tags: ['basico', 'viagens', 'roteirizacao', 'trip', 'limitacao', 'nao tem'],
       },
 
@@ -809,21 +807,24 @@ export class HiperTmsConnector implements Connector, OnModuleInit {
         title: 'Relatórios por área',
         content:
           'O HiperTMS tem relatórios de logística, frota, fiscal e financeiro. ' +
-          'RELATÓRIOS AVANÇADOS estão disponíveis a partir do plano ESSENCIAL — o Básico não inclui. ' +
-          'Se o lead insistir em análise mais profunda ou exportação, o piso é o Essencial.',
+          'RELATÓRIOS AVANÇADOS não estão no Básico — constam no Corporativo (tela de planos, 2026-08-13). ' +
+          'A menção ao antigo Essencial saiu: ele não está mais em venda nova. ' +
+          'Se o lead insistir em análise mais profunda ou exportação, registre o interesse e escale ao ' +
+          'especialista, que confirma o escopo — não prometa nem negue o módulo por conta própria.',
         tags: ['relatorio', 'relatorios', 'exportar', 'analise', 'gerencial', 'planilha'],
       },
       {
         topic: 'addons', category: 'comercial',
         title: 'Add-ons cobrados à parte',
         content:
-          'Além da mensalidade, o HiperTMS cobra dois ADD-ONS (preços conferidos na tela de assinatura, 2026-08-01):\n' +
-          '• NÚMERO ADICIONAL de WhatsApp para os alertas do Monitor Proativo: R$ 29,90 por número/mês. ' +
-          'Cada plano já inclui uma quantidade (Básico 1, Essencial 3, Profissional 5; Corporativo sob consulta) — ' +
-          'acima disso é add-on.\n' +
-          '• ARMAZENAMENTO EXTRA: R$ 19,90 por bloco de 1 GB/mês, além da quota do plano.\n' +
-          'Se o lead perguntar "quantas pessoas recebem os alertas?", a resposta depende do plano. ' +
-          'Pode informar esses dois valores — são de tabela. Para o Corporativo, sob consulta.',
+          'Além da mensalidade existem dois ADD-ONS cobrados à parte:\n' +
+          '• NÚMERO ADICIONAL de WhatsApp para os alertas do Monitor Proativo. O Básico já inclui 3 números ' +
+          '(alertas de WhatsApp e e-mail); acima disso é add-on. No Corporativo é sob consulta.\n' +
+          '• ARMAZENAMENTO EXTRA, por bloco, além da quota do plano.\n' +
+          'A Lia NÃO informa o valor de nenhum dos dois — como não informa nenhum outro preço. ' +
+          'Pode dizer que EXISTEM e o que fazem; o valor vem do especialista junto do escopo. ' +
+          'Se o lead perguntar "quantas pessoas recebem os alertas?", responda pelo limite do plano (3 no Básico), ' +
+          'que é informação de produto, não de preço.',
         tags: ['addon', 'add-on', 'adicional', 'extra', 'armazenamento', 'monitor', 'numero extra', 'cobranca', 'whatsapp'],
       },
 
