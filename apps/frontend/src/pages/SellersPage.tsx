@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { displayPhone } from '@/shared/lib/phone';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Input, Icon, Badge, Switch } from '@/shared/ui';
@@ -178,8 +179,13 @@ export function SellersPage() {
     handleSubmit,
     reset,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<SellerForm>({ resolver: zodResolver(sellerSchema), defaultValues: emptyForm });
+
+  // Perder um cadastro meio preenchido por F5 ou por fechar a aba sem querer.
+  // `isDirty` do react-hook-form volta a false depois do `reset()` que o submit
+  // faz, entao o aviso some sozinho assim que salva.
+  useUnsavedGuard(isDirty && !isSubmitting);
   const [editId, setEditId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

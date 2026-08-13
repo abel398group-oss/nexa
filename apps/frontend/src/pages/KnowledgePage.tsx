@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Card, Input, Textarea, Breadcrumb, Icon } from '@/shared/ui';
@@ -47,6 +48,14 @@ export function KnowledgePage() {
   const toast = useToast();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
+
+  // F5 aqui custa caro: artigo é texto longo, e ele sumia sem uma palavra.
+  // Só vale enquanto o formulário está ABERTO e com conteúdo — depois de salvar,
+  // `creating`/`editing` viram false e o aviso some sozinho.
+  useUnsavedGuard(
+    (creating && (newTitle.trim() !== '' || newContent.trim() !== '')) ||
+      (editing && (eTitle.trim() !== '' || eContent.trim() !== '')),
+  );
 
   // debounce da busca (250ms) → alimenta a queryKey
   useEffect(() => {

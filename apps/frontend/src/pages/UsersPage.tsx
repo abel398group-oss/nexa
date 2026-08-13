@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/shared/lib/api';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { Button, Card, Modal, Input, Icon } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
@@ -62,8 +63,13 @@ export function UsersPage() {
   const [show, setShow] = useState(false);
   const {
     register, handleSubmit, reset, setError, watch, setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<UserForm>({ resolver: zodResolver(userSchema), defaultValues: emptyUser });
+
+  // Perder um cadastro meio preenchido por F5 ou por fechar a aba sem querer.
+  // `isDirty` do react-hook-form volta a false depois do `reset()` que o submit
+  // faz, entao o aviso some sozinho assim que salva.
+  useUnsavedGuard(isDirty && !isSubmitting);
   const formRole = watch('role');
   const formPerms = watch('permissions');
   const [search, setSearch] = useState('');

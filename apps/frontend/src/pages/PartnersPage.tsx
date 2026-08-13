@@ -17,6 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/app/providers/ToastContext';
 import { Button, Input, Icon, Badge } from '@/shared/ui';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import {
   type Partner,
   listPartners,
@@ -42,8 +43,13 @@ export function PartnersPage() {
     handleSubmit,
     reset,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PartnerForm>({ resolver: zodResolver(partnerSchema), defaultValues: emptyForm });
+
+  // Perder um cadastro meio preenchido por F5 ou por fechar a aba sem querer.
+  // `isDirty` do react-hook-form volta a false depois do `reset()` que o submit
+  // faz, entao o aviso some sozinho assim que salva.
+  useUnsavedGuard(isDirty && !isSubmitting);
   const [editId, setEditId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

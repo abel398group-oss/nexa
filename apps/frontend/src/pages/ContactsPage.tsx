@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/shared/lib/cn';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import {
   Button, Modal, Input, Textarea, Label, Select,
   StatusBadge, Badge, Icon, EmptyState,
@@ -94,8 +95,13 @@ export function ContactsPage() {
     handleSubmit,
     reset,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ContactForm>({ resolver: zodResolver(contactSchema), defaultValues: empty });
+
+  // Perder um cadastro meio preenchido por F5 ou por fechar a aba sem querer.
+  // `isDirty` do react-hook-form volta a false depois do `reset()` que o submit
+  // faz, entao o aviso some sozinho assim que salva.
+  useUnsavedGuard(isDirty && !isSubmitting);
   const [showImport, setShowImport] = useState(false);
   const [csv, setCsv] = useState('');
   const [importMsg, setImportMsg] = useState('');

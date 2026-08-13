@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
+import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
 import {
   type Campaign,
@@ -272,6 +273,14 @@ export function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const confirm = useConfirm();
+
+  // Campanha é o outro texto longo do sistema (corpo + assunto + lista colada de
+  // destinatários). Vale enquanto um dos dois modais está aberto com conteúdo
+  // digitado; fechar ou salvar limpa o estado e o aviso some.
+  useUnsavedGuard(
+    (show && (name.trim() !== '' || emailSubject.trim() !== '' || emailsText.trim() !== '')) ||
+      (!!editC && (editName.trim() !== '' || editMsg.trim() !== '')),
+  );
   // timer para distinguir single-click (detalhe) de double-click (editar)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
