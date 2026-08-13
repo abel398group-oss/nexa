@@ -867,8 +867,14 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
           </div>
         </div>
 
-        {/* filtros rápidos */}
-        {!loadingConvs && convs.length > 0 && (
+        {/* filtros rápidos.
+            `|| hasActiveFilter` é o que impede o beco sem saída: a condição
+            antiga era só `convs.length > 0`, ou seja, a barra sumia exatamente
+            quando o filtro escolhido não trazia nada. Clicar em "Encerrada" com
+            zero encerradas apagava a própria barra e não sobrava nenhum caminho
+            de volta pra "Todas" — só recarregando a página. Achado em
+            13/08/2026. Inbox vazio DE VERDADE (sem filtro) continua sem barra. */}
+        {!loadingConvs && (convs.length > 0 || hasActiveFilter) && (
           <ConversationStatusFilter
             active={activeFilter}
             onChange={setActiveFilter}

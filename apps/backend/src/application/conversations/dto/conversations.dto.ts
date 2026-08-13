@@ -30,9 +30,18 @@ export class ListConversationsQueryDto extends PaginationQueryDto {
   @IsIn(['all', 'mine', 'unassigned', 'waiting_internal'])
   queue?: 'all' | 'mine' | 'unassigned' | 'waiting_internal';
 
-  /** Status da conversa (open, escalated, closed…). */
+  /**
+   * Status da conversa. `'all'` = sem filtro (é o vocabulário do chip "Todas"
+   * no Inbox; o frontend já o remove da query, mas um link colado com
+   * `?status=all` também precisa funcionar).
+   *
+   * Só `@IsString()` aqui deixava QUALQUER texto passar até o Prisma, onde
+   * `status` é enum: `?status=banana` derrubava a listagem inteira com 500
+   * "Internal server error" em vez de 400 dizendo o que estava errado. Achado
+   * em 13/08/2026 testando o Inbox.
+   */
   @IsOptional()
-  @IsString()
+  @IsIn(['all', 'open', 'waiting_customer', 'waiting_internal', 'escalated', 'opt_out', 'closed'])
   status?: string;
 
   /** Filtro por vendedor. '__none__' = sem vendedor atribuído. */

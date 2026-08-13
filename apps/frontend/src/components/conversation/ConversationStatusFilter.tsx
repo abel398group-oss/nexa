@@ -10,9 +10,12 @@ export function ConversationStatusFilter({ active, onChange, counts }: Props) {
   return (
     <div className="flex flex-wrap gap-1 border-b px-3 py-2" style={{ borderColor: 'var(--border)' }}>
       {INBOX_FILTERS.map((f) => {
+        // `?? 0` importa: status sem nenhuma conversa não vem no statusCounts,
+        // e o chip saía SEM número nenhum — ao lado de "Aberta 4", o "Encerrada"
+        // pelado lia como "ainda não contei" e não como "não tem nenhuma".
         const count = f.key === 'all'
           ? (counts ? Object.values(counts).reduce((a, b) => a + b, 0) : undefined)
-          : counts?.[f.key];
+          : counts ? counts[f.key] ?? 0 : undefined;
         const isActive = active === f.key;
         return (
           <button

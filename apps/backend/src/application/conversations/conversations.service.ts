@@ -116,7 +116,10 @@ export class ConversationsService {
     const whereSemStatus = { ...where };
 
     if (opts.onlyWaitingInternal) where.status = 'waiting_internal' as any;
-    else if (opts.status) where.status = opts.status as any;
+    // `'all'` é o chip "Todas" do Inbox, não um status — repassá-lo ao Prisma
+    // (enum) estourava a listagem inteira. O DTO já barra valor inventado; este
+    // guarda é pra chamada interna, que não passa por validação.
+    else if (opts.status && opts.status !== 'all') where.status = opts.status as any;
 
     const [items, total, porStatus] = await Promise.all([
       this.prisma.aiConversation.findMany({

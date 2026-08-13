@@ -142,15 +142,22 @@ export const ACTIVE_STATUSES: ConversationStatus[] = [
   'escalated',
 ];
 
-/** Todos os filtros disponíveis no inbox */
+/**
+ * Todos os filtros disponíveis no inbox.
+ *
+ * Os rótulos vêm de `labelPt` — a mesma fonte que os badges do card usam. Antes
+ * eram os `label` em inglês, então a fila mostrava o chip "Open" logo acima de
+ * um card escrito "Aberta", como se fossem coisas diferentes. Achado em
+ * 13/08/2026 testando o Inbox.
+ */
 export const INBOX_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'all',              label: 'Todas' },
-  { key: 'open',             label: 'Open' },
-  { key: 'waiting_customer', label: 'Waiting Customer' },
-  { key: 'waiting_internal', label: 'Waiting Internal' },
-  { key: 'escalated',        label: 'Escalated' },
-  { key: 'closed',           label: 'Closed' },
-  { key: 'opt_out',          label: 'Opt-out' },
+  { key: 'open',             label: STATUS_CONFIG.open.labelPt },
+  { key: 'waiting_customer', label: STATUS_CONFIG.waiting_customer.labelPt },
+  { key: 'waiting_internal', label: STATUS_CONFIG.waiting_internal.labelPt },
+  { key: 'escalated',        label: STATUS_CONFIG.escalated.labelPt },
+  { key: 'closed',           label: STATUS_CONFIG.closed.labelPt },
+  { key: 'opt_out',          label: STATUS_CONFIG.opt_out.labelPt },
 ];
 
 /** Retorna true se a conversa waiting_internal está sem movimentação há mais de 2h */
