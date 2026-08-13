@@ -44,10 +44,18 @@ function montar() {
 
 const USUARIO = { id: 'u1', email: 'abel@nexa.local', role: 'admin' };
 
-/** Erro do axios COM resposta HTTP — o servidor falou. */
+/** O servidor respondeu e recusou a sessão. */
 const erro401 = () => Object.assign(new Error('Unauthorized'), { response: { status: 401 } });
-/** Erro do axios SEM resposta — a requisição não chegou. */
+/** Nenhuma resposta chegou (rede, DNS, timeout). */
 const erroDeRede = () => Object.assign(new Error('Network Error'), { request: {} });
+/**
+ * Backend fora do ar. ESTE é o caso que derrubou a primeira versão do conserto:
+ * com o backend morto quem responde é o PROXY, não ele — o Vite devolve 500 em
+ * dev e o nginx devolve 502 em produção. A regra "se veio resposta HTTP, o
+ * servidor falou" concluía o oposto do certo, e o teste manual foi quem pegou.
+ */
+const erroDeProxy = (status: number) =>
+  Object.assign(new Error('Proxy error'), { response: { status } });
 
 describe('AuthProvider — falha de rede não é logout', () => {
   beforeEach(() => {
@@ -70,6 +78,22 @@ describe('AuthProvider — falha de rede não é logout', () => {
     montar();
 
     await waitFor(() => expect(screen.getByTestId('unreachable')).toHaveTextContent('true'));
+  });
+
+  // Backend fora: quem responde é o proxy. Foi o que quebrou a 1ª versão.
+  it.each([500, 502, 503, 504])('erro %i do proxy: NÃO desloga', async (status) => {
+    mockGet.mockRejectedValue(erroDeProxy(status));
+    montar();
+
+    await waitFor(() => expect(screen.getByTestId('unreachable')).toHaveTextContent('true'));
+    expect(screen.getByTestId('user')).toHaveTextContent('sem-usuario');
+  });
+
+  it('403 desloga igual ao 401', async () => {
+    mockGet.mockRejectedValue(erroDeProxy(403));
+    montar();
+
+    await waitFor(() => expect(screen.getByTestId('unreachable')).toHaveTextContent('false'));
   });
 
   it('sucesso: carrega o usuário e não fica inacessível', async () => {
@@ -107,6 +131,33 @@ describe('AuthProvider — falha de rede não é logout', () => {
 
     await vi.advanceTimersByTimeAsync(1000); // passou de 1s
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThan(depoisDaPrimeira));
+  });
+
+  /**
+   * A 3ª versão do conserto travou aqui, e só o teste manual mostrou: o timer de
+   * retentativa corria EM PARALELO com a requisição em voo e cancelava o
+   * resultado dela. O `/auth/me` voltava 200 e a tela seguia em "sem conexão",
+   * porque a resposta boa chegava depois de já ter sido descartada.
+   *
+   * A resposta demorada abaixo é justamente o caso real: o backend subindo
+   * responde devagar, e a resposta chega DEPOIS do intervalo da próxima
+   * tentativa.
+   */
+  it('resposta lenta que chega depois do intervalo NÃO é descartada', async () => {
+    mockGet
+      .mockRejectedValueOnce(erroDeProxy(502))
+      .mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(() => resolve({ data: USUARIO }), 5000)),
+      );
+
+    montar();
+    await waitFor(() => expect(screen.getByTestId('unreachable')).toHaveTextContent('true'));
+
+    await vi.advanceTimersByTimeAsync(1100); // dispara a 2ª tentativa (a lenta)
+    await vi.advanceTimersByTimeAsync(6000); // ela responde 200 bem depois
+
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('abel@nexa.local'));
+    expect(screen.getByTestId('unreachable')).toHaveTextContent('false');
   });
 
   it('login limpa o estado de inacessível', async () => {
