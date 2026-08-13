@@ -6,6 +6,8 @@ import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.dec
 import {
   AddMessageDto,
   AssignAnalystDto,
+  AssignSellerDto,
+  CreateConversationDto,
   ListConversationsQueryDto,
   SetLinkedIssueDto,
   SetOutcomeDto,
@@ -142,10 +144,7 @@ export class ConversationsController {
   }
 
   @Post()
-  create(
-    @CurrentTenant() tenantId: string,
-    @Body() dto: { contactId: string; phone: string; productCode?: string; sourceChannel?: string },
-  ) {
+  create(@CurrentTenant() tenantId: string, @Body() dto: CreateConversationDto) {
     return this.conversations.create(tenantId, dto);
   }
 
@@ -162,7 +161,7 @@ export class ConversationsController {
   assign(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { sellerId: string | null },
+    @Body() dto: AssignSellerDto,
   ) {
     return this.conversations.assign(tenantId, id, dto.sellerId ?? null);
   }

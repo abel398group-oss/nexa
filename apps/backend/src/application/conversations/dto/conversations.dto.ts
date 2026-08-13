@@ -66,6 +66,61 @@ export class ListConversationsQueryDto extends PaginationQueryDto {
  * "limpar o outcome") e não uma ausência.
  */
 
+/**
+ * POST /api/conversations.
+ *
+ * Ficou de fora da rodada de 2026-08-06 e era a última rota de conversa com
+ * `@Body()` em tipo inline — ou seja, sem validação nenhuma. Medido em
+ * 13/08/2026: corpo vazio, `phone` numérico e `sourceChannel: 'banana'`
+ * respondiam 500 "Internal server error" (o valor ia cru até o enum do Prisma),
+ * e um campo inventado no corpo era aceito com 201, porque o
+ * `forbidNonWhitelisted` só age quando o metatype é uma CLASSE.
+ *
+ * Nenhum cliente HTTP chama esta rota hoje — os fluxos reais (WhatsApp, e-mail,
+ * portal, disparo) chamam `ConversationsService.create` direto. Ela existe
+ * exposta mesmo assim, então é a validação que decide o que entra.
+ */
+export class CreateConversationDto {
+  @IsString()
+  @IsNotEmpty()
+  contactId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsOptional()
+  @IsString()
+  productCode?: string;
+
+  @IsOptional()
+  @IsIn(['whatsapp', 'telegram', 'site', 'instagram', 'facebook', 'email', 'portal', 'web_chat'])
+  sourceChannel?: string;
+
+  @IsOptional()
+  @IsIn(['router', 'sdr', 'sales', 'onboarding', 'support', 'billing', 'knowledge', 'analytics'])
+  agentType?: string;
+
+  /** Vendedor dono quando a conversa nasce de um disparo. `null` = sem dono. */
+  @IsOptional()
+  @IsString()
+  assignedSellerId?: string | null;
+}
+
+/**
+ * PATCH /api/conversations/:id/assign — lado COMERCIAL (vendedor dono do lead).
+ * Não confundir com `AssignAnalystDto`, que é o chamado de suporte.
+ *
+ * Mesmo motivo do DTO acima: o `@Body()` era um tipo inline, então o corpo
+ * entrava sem whitelist e sem checagem de tipo.
+ */
+export class AssignSellerDto {
+  /** Vendedor que passa a ser dono. `null` tira o dono. */
+  @IsOptional()
+  @IsString()
+  sellerId?: string | null;
+}
+
 export class AssignAnalystDto {
   /** Analista que passa a ser dono. `null` devolve o chamado à fila geral. */
   @IsOptional()

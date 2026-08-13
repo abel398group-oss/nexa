@@ -415,10 +415,30 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     );
     // Atualiza a lista do inbox quando uma conversa do tenant recebe atividade.
     // Rebusca a lista completa para garantir ordem, dados frescos e novas conversas.
+    //
+    // `listParamsRef.current` é o ponto. A chamada era `listConversations()`
+    // pelada: qualquer mensagem que chegasse no tenant devolvia a lista SEM
+    // filtro nenhum, desfazendo por baixo o status, o vendedor e a busca que o
+    // atendente tinha escolhido — sem ele encostar em nada. Quanto mais movimento
+    // no inbox, mais a tela se recusava a ficar filtrada. O ref existe desde o
+    // 2B justamente porque este handler é registrado uma vez só e não enxerga o
+    // estado atual; faltava usá-lo aqui.
+    //
+    // total e statusCounts vêm junto pelo mesmo motivo: só `setConvs` deixava o
+    // "Mostrando X de Y" e os números dos chips congelados na contagem anterior.
+    //
+    // Sem `setLoadingConvs(true)` de propósito — isto dispara a cada mensagem
+    // recebida, e piscar o esqueleto da lista a cada uma seria pior que o bug.
     s.on('inbox:update', () => {
-      listConversations().then((r) => setConvs(r.items)).catch((e) => {
-        console.error('[InboxPage] inbox:update reload falhou:', e?.response?.data?.message ?? e?.message);
-      });
+      listConversations(listParamsRef.current)
+        .then((r) => {
+          setConvs(r.items);
+          setTotalConvs(r.total ?? r.items.length);
+          setStatusCounts(r.statusCounts ?? {});
+        })
+        .catch((e) => {
+          console.error('[InboxPage] inbox:update reload falhou:', e?.response?.data?.message ?? e?.message);
+        });
     });
     // Ao (re)conectar: entra na sala tenant para receber inbox:update em tempo real.
     s.on('connect', () => {
