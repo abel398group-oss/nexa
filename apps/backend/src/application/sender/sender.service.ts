@@ -1004,6 +1004,31 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       emailStartHour: clamp(dto.emailStartHour),
       emailEndHour: clamp(dto.emailEndHour),
     };
+
+    // A janela é lida como `hora >= início && hora < fim` (withinWaWindow, e o
+    // mesmo no worker de e-mail). Com início >= fim isso é FALSO nas 24 horas do
+    // dia: a campanha nunca sai, fica em 'queued' para sempre e ninguém recebe
+    // aviso nenhum — nem erro, nem log, nem badge na tela. Medido em 13/08/2026:
+    // `22 → 8` e `10 → 10` eram gravados com 200 OK.
+    //
+    // Salvar 22→8 achando que é "das 22h às 8h da manhã" é o erro natural de
+    // quem quer disparo noturno. Essa janela virando a meia-noite não existe
+    // neste modelo; recusar e dizer isso é o mínimo. Não tira capacidade
+    // nenhuma — só nomeia uma que nunca funcionou.
+    const janelas: [string, number, number][] = [
+      ['WhatsApp', data.waStartHour, data.waEndHour],
+      ['e-mail', data.emailStartHour, data.emailEndHour],
+    ];
+    for (const [canal, inicio, fim] of janelas) {
+      if (inicio >= fim) {
+        throw new BadRequestException(
+          `Janela de ${canal} inválida: ${inicio}h → ${fim}h. ` +
+          'O início precisa ser menor que o fim — nesta janela nenhuma campanha sairia. ' +
+          'Janela que vira a meia-noite não é suportada.',
+        );
+      }
+    }
+
     return this.prisma.senderSettings.upsert({ where: { tenantId }, update: data, create: { tenantId, ...data } });
   }
 

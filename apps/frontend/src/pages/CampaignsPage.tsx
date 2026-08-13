@@ -1204,15 +1204,41 @@ export function CampaignsPage() {
                       <span className="text-xs text-base-content/40">h</span>
                     </div>
                   </div>
-                  <span className="mb-2 text-[11px] text-base-content/30">
+                  {/* A conta já denunciava o problema — "(-14h de janela)" —
+                      e o Salvar continuava ligado. Janela de 0h ou negativa faz
+                      `hora >= início && hora < fim` ser falso nas 24 horas: a
+                      campanha nunca sai e nada na tela explica. Agora o número
+                      fica vermelho e o Salvar trava. Achado em 13/08/2026. */}
+                  <span
+                    className={`mb-2 text-[11px] ${
+                      settings[endKey] - settings[startKey] <= 0
+                        ? 'font-semibold text-error'
+                        : 'text-base-content/30'
+                    }`}
+                  >
                     ({settings[endKey] - settings[startKey]}h de janela)
                   </span>
                 </div>
               </div>
             ))}
+            {(settings.waEndHour <= settings.waStartHour ||
+              settings.emailEndHour <= settings.emailStartHour) && (
+              <p className="rounded-lg bg-error/10 px-3 py-2 text-[11px] text-error">
+                O início precisa ser menor que o fim. Nesta janela nenhuma campanha sairia —
+                ela ficaria em espera para sempre. Janela que vira a meia-noite (ex.: 22h → 8h)
+                não é suportada.
+              </p>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setShowHours(false)}>Cancelar</Button>
-              <Button>Salvar</Button>
+              <Button
+                disabled={
+                  settings.waEndHour <= settings.waStartHour ||
+                  settings.emailEndHour <= settings.emailStartHour
+                }
+              >
+                Salvar
+              </Button>
             </div>
           </form>
         )}

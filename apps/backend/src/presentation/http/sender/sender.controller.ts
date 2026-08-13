@@ -90,11 +90,15 @@ class AudienceQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
 }
 
+// `@Max(23)` faltava: 25 passava na validação e o `clamp` do service o
+// transformava em 23 sem dizer nada. Quem mandou 25 queria 25 — merece um erro,
+// não um valor diferente do que pediu gravado em silêncio. A regra de janela
+// (início < fim) mora no service, junto do resto do domínio.
 class SenderSettingsDto {
-  @Type(() => Number) @IsInt() @Min(0) waStartHour!: number;
-  @Type(() => Number) @IsInt() @Min(0) waEndHour!: number;
-  @Type(() => Number) @IsInt() @Min(0) emailStartHour!: number;
-  @Type(() => Number) @IsInt() @Min(0) emailEndHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(23) waStartHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(23) waEndHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(23) emailStartHour!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(23) emailEndHour!: number;
 }
 
 // DISP-008: sem isto qualquer string entrava na fila como "e-mail" e só falhava
