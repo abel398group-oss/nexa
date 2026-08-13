@@ -20,6 +20,7 @@ import {
   type SupportStats,
   listConversations,
   getSupportStats,
+  getConversation,
   getConversationMessages,
   sendMessage,
   updateInternalNote,
@@ -597,9 +598,26 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
     }
   }
 
-  // F16: abre um chamado do histórico do contato no meio da tela. O item pode não
-  // estar na página atual de `convs` (lista principal carrega só as mais recentes)
-  // — nesse caso rebusca a lista completa uma vez antes de desistir.
+  /**
+   * F16: abre um chamado do histórico do contato no meio da tela.
+   *
+   * Busca DIRETA por id. Antes disto o fallback era `listConversations()` sem
+   * parâmetro, e ele errava duas vezes (13/08/2026):
+   *
+   * 1. `setConvs(r.items)` trocava a barra lateral por uma página sem filtro —
+   *    o status, o vendedor e a busca do atendente iam embora porque ele clicou
+   *    num chamado antigo.
+   * 2. Rebuscar a MESMA página default não achava nada de novo: o chamado
+   *    procurado vem do histórico do contato, ou seja, é justamente um dos que
+   *    NÃO estão entre os mais recentes. O comentário dizia "rebusca a lista
+   *    completa", mas era a mesma lista de novo. Aí a tela dizia "Chamado não
+   *    encontrado na lista atual", que o atendente lê como "esse chamado não
+   *    existe" — existe, só é mais velho que a página.
+   *
+   * A rota por id devolve a linha crua, sem o `contact` que a listagem junta por
+   * telefone. Completa-se com o contato que já está aberto na tela: este
+   * histórico é dele, então é o mesmo contato.
+   */
   async function openTicketById(ticketId: string) {
     const found = convs.find((c) => c.id === ticketId);
     if (found) {
@@ -607,16 +625,11 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
       return;
     }
     try {
-      const r = await listConversations();
-      setConvs(r.items);
-      const refetched = r.items.find((c) => c.id === ticketId);
-      if (refetched) {
-        openGroup({ rep: refetched, convs: [{ id: refetched.id }] });
-      } else {
-        toast.error('Chamado não encontrado na lista atual.');
-      }
+      const conv = await getConversation(ticketId);
+      const rep = { ...conv, contact: conv.contact ?? active?.contact ?? null } as Conversation;
+      openGroup({ rep, convs: [{ id: conv.id }] });
     } catch {
-      toast.error('Erro ao abrir o chamado.');
+      toast.error('Não foi possível abrir este chamado.');
     }
   }
 

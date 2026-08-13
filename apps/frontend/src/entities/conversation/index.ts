@@ -7,6 +7,7 @@ export type { ListConversationsParams, SupportStats } from './api/conversation.a
 export {
   listConversations,
   getSupportStats,
+  getConversation,
   getConversationMessages,
   sendMessage,
   updateInternalNote,

@@ -52,6 +52,19 @@ export async function getSupportStats(signal?: AbortSignal): Promise<SupportStat
   return r.data;
 }
 
+/**
+ * Uma conversa pelo id, sem passar pela listagem.
+ *
+ * Serve para abrir um chamado que NÃO está na página carregada — o histórico de
+ * chamados do contato aponta para tickets antigos, que por definição não estão
+ * entre os mais recentes. Devolve a linha crua (sem o `contact`, que a listagem
+ * junta por telefone); quem chama completa com o contato que já tem em mãos.
+ */
+export async function getConversation(id: string): Promise<Conversation> {
+  const r = await api.get(`/conversations/${id}`);
+  return r.data;
+}
+
 export async function getConversationMessages(id: string): Promise<Message[]> {
   const r = await api.get(`/conversations/${id}/messages`);
   return r.data;
