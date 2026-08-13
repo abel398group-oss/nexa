@@ -38,7 +38,33 @@ export interface SendOptions {
   presence?: boolean;
   /** Rótulo do caminho de envio: `campaign`, `lia`, `monitor`, `janitor`, … */
   origin?: string;
+  /**
+   * Por qual LINHA sai (2026-08-13). Ausente = linha principal, que é o
+   * comportamento de sempre — nada muda para quem não passa nada.
+   *
+   * Linha é o número, não a sessão do WAHA: com dois containers as duas sessões
+   * se chamam `default`, então o nome da sessão não distingue nada. Ver
+   * `resolveLinha()`.
+   */
+  linha?: string;
 }
+
+/**
+ * Onde cada linha vive. `principal` é o número que já existe (alertas, cotação
+ * e tudo mais); as demais são opcionais e caem na principal quando não
+ * configuradas — assim uma linha mal configurada envia pelo número certo em vez
+ * de falhar em silêncio.
+ *
+ * Convenção de env: `WAHA_<LINHA>_API_URL` · `_API_KEY` · `_SESSION`.
+ * Exemplo para a linha `vendas`: `WAHA_VENDAS_API_URL=http://waha-vendas:3000`.
+ */
+export interface WahaTarget {
+  baseUrl: string;
+  apiKey: string;
+  session: string;
+}
+
+export const LINHA_PRINCIPAL = 'principal';
 
 const PRESENCE_ENABLED = () => process.env.WHATSAPP_PRESENCE_ENABLED !== 'false';
 const TYPING_MAX_MS = () => Number(process.env.WHATSAPP_TYPING_MAX_MS ?? 5000);
@@ -63,6 +89,35 @@ export class WahaClientService {
   }
   get configured(): boolean {
     return !!this.baseUrl && !!process.env.WAHA_API_KEY;
+  }
+
+  /**
+   * Resolve a linha para o container/sessão onde ela vive.
+   *
+   * Linha desconhecida ou sem env cai na PRINCIPAL de propósito: mandar pelo
+   * número principal é errado, mas não mandar é pior — e o log diz qual foi.
+   * Lida a cada chamada (não em campo) para respeitar mudança de env em runtime
+   * e teste, mesmo padrão do resto do arquivo.
+   */
+  resolveLinha(linha?: string): WahaTarget {
+    const principal: WahaTarget = {
+      baseUrl: this.baseUrl,
+      apiKey: process.env.WAHA_API_KEY ?? '',
+      session: this.session,
+    };
+    if (!linha || linha === LINHA_PRINCIPAL) return principal;
+
+    const p = `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+    const baseUrl = process.env[`${p}API_URL`];
+    if (!baseUrl) {
+      this.logger.warn(`Linha "${linha}" sem ${p}API_URL — enviando pela linha principal`);
+      return principal;
+    }
+    return {
+      baseUrl,
+      apiKey: process.env[`${p}API_KEY`] ?? principal.apiKey,
+      session: process.env[`${p}SESSION`] ?? 'default',
+    };
   }
 
   // allowlist de segurança: se setada, só envia pros números listados (evita spam em teste)
@@ -201,7 +256,11 @@ export class WahaClientService {
   }
 
   async sendText(phone: string, text: string, opts: SendOptions = {}): Promise<SendResult> {
-    if (!this.configured) {
+    // A linha decide o container e a sessão. Sem `opts.linha` isto devolve
+    // exatamente o que os getters devolviam antes — nenhum chamador muda.
+    const alvo = this.resolveLinha(opts.linha);
+
+    if (!alvo.baseUrl || !alvo.apiKey) {
       this.logger.warn('WAHA não configurado — mensagem NÃO enviada ao WhatsApp');
       return { sent: false, reason: 'waha_nao_configurado', definitive: true };
     }
@@ -219,10 +278,10 @@ export class WahaClientService {
 
     const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
     try {
-      const res = await fetch(`${this.baseUrl}/api/sendText`, {
+      const res = await fetch(`${alvo.baseUrl}/api/sendText`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
-        body: JSON.stringify({ session: this.session, chatId, text }),
+        headers: { 'content-type': 'application/json', 'X-Api-Key': alvo.apiKey },
+        body: JSON.stringify({ session: alvo.session, chatId, text }),
         // DISP-021: 30s. Com 15s o WAHA sob carga estourava o prazo DEPOIS de já
         // ter entregue a mensagem, e o envio entrava como falha (ver `definitive`).
         signal: AbortSignal.timeout(30_000),

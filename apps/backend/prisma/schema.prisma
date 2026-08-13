@@ -268,6 +268,11 @@ model AiConversation {
   contactId     String             @map("contact_id")
   phone         String
   sourceChannel SourceChannel      @map("source_channel")
+  /// Por qual LINHA do WhatsApp a conversa entrou (número, não sessão do WAHA —
+  /// com dois containers as duas sessões se chamam `default`). Null = linha
+  /// principal, que é toda conversa anterior à divisão de números.
+  /// Invariante: a resposta sai SEMPRE pela linha por onde a mensagem entrou.
+  wahaLine      String?            @map("waha_line")
   agentType     AgentType          @map("agent_type")
   customerStage CustomerStage      @map("customer_stage")
   status        ConversationStatus @default(open)

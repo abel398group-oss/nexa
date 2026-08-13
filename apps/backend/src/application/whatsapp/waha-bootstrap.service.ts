@@ -16,11 +16,37 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
   private readonly logger = new Logger('WahaBootstrap');
 
   async onApplicationBootstrap(): Promise<void> {
-    const wahaUrl = process.env.WAHA_API_URL;
-    const wahaKey = process.env.WAHA_API_KEY;
-    const session = process.env.WAHA_SESSION ?? 'default';
+    // Linha principal: sempre registrada, com a URL de webhook EXATAMENTE como
+    // era antes da divisão de números — sem parâmetro `linha`. Mexer nela faria
+    // o bootstrap reescrever um webhook que já funciona, sem ganho nenhum.
+    await this.registrarLinha();
+
+    // Linhas adicionais, por nome: `WAHA_LINHAS=vendas` procura
+    // `WAHA_VENDAS_API_URL` / `_API_KEY` / `_SESSION` e registra o webhook com
+    // `&linha=vendas`, que é como o controller sabe por onde a mensagem entrou.
+    // Vazio (o caso de hoje) = nada além da principal.
+    const extras = (process.env.WAHA_LINHAS ?? '')
+      .split(',')
+      .map((l) => l.trim().toLowerCase())
+      .filter(Boolean);
+    for (const linha of extras) {
+      await this.registrarLinha(linha);
+    }
+  }
+
+  /** Registra o webhook do Nexa numa linha. Sem `linha` = a principal. */
+  private async registrarLinha(linha?: string): Promise<void> {
+    const p = linha ? `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_` : 'WAHA_';
+    const wahaUrl = process.env[`${p}API_URL`];
+    const wahaKey = process.env[`${p}API_KEY`] ?? process.env.WAHA_API_KEY;
+    const session = process.env[`${p}SESSION`] ?? (linha ? 'default' : process.env.WAHA_SESSION ?? 'default');
     const webhookToken = process.env.WAHA_WEBHOOK_TOKEN;
     const nexaPublicUrl = process.env.NEXA_PUBLIC_URL;
+
+    if (linha && !wahaUrl) {
+      this.logger.warn(`WahaBootstrap: linha "${linha}" declarada em WAHA_LINHAS mas sem ${p}API_URL — ignorada.`);
+      return;
+    }
 
     if (!wahaUrl || !wahaKey || !webhookToken || !nexaPublicUrl) {
       this.logger.warn(
@@ -30,7 +56,9 @@ export class WahaBootstrapService implements OnApplicationBootstrap {
       return;
     }
 
-    const webhookUrl = `${nexaPublicUrl}/api/webhooks/waha?token=${webhookToken}`;
+    const webhookUrl =
+      `${nexaPublicUrl}/api/webhooks/waha?token=${webhookToken}` +
+      (linha ? `&linha=${encodeURIComponent(linha)}` : '');
 
     try {
       // Lê a configuração atual da sessão

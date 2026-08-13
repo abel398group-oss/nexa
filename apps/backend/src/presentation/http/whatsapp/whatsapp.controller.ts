@@ -26,6 +26,7 @@ export class WhatsappController {
     @Body() body: any,
     @Headers('x-waha-token') headerToken?: string,
     @Query('token') queryToken?: string,
+    @Query('linha') linha?: string,
   ) {
     // Header tem prioridade; query string mantida como fallback durante migração
     const token = headerToken ?? queryToken;
@@ -50,10 +51,19 @@ export class WhatsappController {
       await this.health.handleStatusEvent(body);
       return { ok: true };
     }
-    // só processa eventos de mensagem nova
-    if (event && event !== 'message') {
+    // Só processa evento de mensagem nova.
+    //
+    // `message.any` entra junto desde 13/08/2026: é o ÚNICO que traz o que SAI do
+    // nosso número — sem ele o takeover da ADR 035 nunca vê o humano digitando no
+    // WhatsApp Web da empresa. A assinatura foi feita em `waha-bootstrap`, mas o
+    // filtro aqui continuava recusando o evento, então o conserto não chegava a
+    // rodar. Entrega dobrada do que ENTRA morre no dedup por `messageId`.
+    if (event && event !== 'message' && event !== 'message.any') {
       return { ignored: true, reason: `evento ${event}` };
     }
-    return this.whatsapp.process(body, process.env.NEXA_DEFAULT_TENANT_ID ?? 'default');
+    // `linha` diz por QUAL número a mensagem entrou (query da URL registrada no
+    // webhook daquele container). Ausente = linha principal — todo webhook que já
+    // existe continua funcionando sem mudar nada.
+    return this.whatsapp.process(body, process.env.NEXA_DEFAULT_TENANT_ID ?? 'default', linha);
   }
 }

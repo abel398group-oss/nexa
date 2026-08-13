@@ -78,10 +78,37 @@ describe('WhatsappController', () => {
 
     it('processa body sem event como message', async () => {
       await makeController().waha({ payload: { text: 'sem event explícito' } }, VALID_TOKEN);
+      // 3º argumento = a linha, `undefined` quando o webhook não a informa
+      // (é o caso de todo webhook registrado antes da divisão de números).
       expect(mockWhatsappService.process).toHaveBeenCalledWith(
         { payload: { text: 'sem event explícito' } },
         'default',
+        undefined,
       );
+    });
+
+    // `message.any` é o ÚNICO evento que traz o que SAI do nosso número — é dele
+    // que depende o takeover da ADR 035 ver o humano digitando no WhatsApp Web.
+    // A assinatura foi feita em 12/08, mas este filtro continuava recusando o
+    // evento: o conserto existia e nunca rodava.
+    it('processa message.any — sem ele o takeover nunca dispara', async () => {
+      await makeController().waha({ event: 'message.any', payload: { fromMe: true } }, VALID_TOKEN);
+      expect(mockWhatsappService.process).toHaveBeenCalledTimes(1);
+    });
+
+    it('a linha da query chega ao serviço', async () => {
+      await makeController().waha({ payload: { text: 'oi' } }, VALID_TOKEN, undefined, 'vendas');
+      expect(mockWhatsappService.process).toHaveBeenCalledWith(
+        { payload: { text: 'oi' } },
+        'default',
+        'vendas',
+      );
+    });
+
+    it('evento desconhecido continua sendo ignorado', async () => {
+      const r = await makeController().waha({ event: 'group.join' }, VALID_TOKEN);
+      expect(r).toMatchObject({ ignored: true });
+      expect(mockWhatsappService.process).not.toHaveBeenCalled();
     });
 
     it('lê event de body.body.event (payload aninhado do WAHA)', async () => {

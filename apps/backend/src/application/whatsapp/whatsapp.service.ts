@@ -399,7 +399,12 @@ export class WhatsappService {
     }
   }
 
-  async process(rawBody: any, tenantId = 'default') {
+  /**
+   * @param linha Por qual número a mensagem entrou (vem da query do webhook
+   *   registrado naquele container). Ausente = linha principal — todo webhook
+   *   que já existe hoje continua igual.
+   */
+  async process(rawBody: any, tenantId = 'default', linha?: string) {
     if (this.isFromMe(rawBody)) return this.handleOwnNumberOutbound(rawBody, tenantId);
 
     // DEDUP: se já processamos essa mensagem, ignora (evita resposta/processamento dobrado)
@@ -528,6 +533,8 @@ export class WhatsappService {
         contactId: contact.id,
         phone: n.phone,
         sourceChannel: 'whatsapp',
+        // Fixa a linha no nascimento — é o que amarra o invariante de resposta.
+        wahaLine: linha,
       });
     } else if ((conv.status as string) === 'opt_out') {
       // opt-out: re-opt-in voluntário — reabre sempre (consentimento implícito de retorno).
@@ -575,6 +582,9 @@ export class WhatsappService {
           phone: n.phone,
           sourceChannel: 'whatsapp',
           agentType: (conv as any).agentType ?? 'router',
+          // O follow-up nasce da mensagem que ACABOU de chegar, então herda a
+          // linha dela — não a da conversa antiga, que pode ter sido outra.
+          wahaLine: linha,
         });
         await this.prisma.aiConversation.update({
           where: { id: followUp.id },

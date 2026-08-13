@@ -862,6 +862,13 @@ export class ConversationsService {
        * é quem atende a resposta.
        */
       assignedSellerId?: string | null;
+      /**
+       * Linha do WhatsApp por onde a conversa entrou (13/08/2026). Ausente = a
+       * principal, que é o número único de hoje. Fixada AQUI, no nascimento, e
+       * nunca mais alterada: é o que garante que a resposta saia pelo mesmo
+       * número — ver o despacho em `addMessage`.
+       */
+      wahaLine?: string | null;
     },
   ) {
     return this.prisma.aiConversation.create({
@@ -877,7 +884,10 @@ export class ConversationsService {
         ...(dto.assignedSellerId
           ? { assignedSellerId: dto.assignedSellerId, assignedAt: new Date() }
           : {}),
-      },
+        // `as any`: o campo só existe no client Prisma REGENERADO — mesmo padrão
+        // de `humanTakeoverAt`, mantém o build verde antes e depois do generate.
+        ...(dto.wahaLine ? ({ wahaLine: dto.wahaLine } as any) : {}),
+      } as any,
     });
   }
 
@@ -1043,9 +1053,18 @@ export class ConversationsService {
       // mensagem que passa por aqui é conversa de verdade (resposta da Lia,
       // inbox humano, primeira mensagem de campanha) — é exatamente onde uma
       // pessoa apareceria digitando. Alerta automático não passa por aqui.
+      // O INVARIANTE da divisão de números: a resposta sai pela linha por onde a
+      // conversa entrou, sempre. Este é o único ponto de saída de conversa no
+      // sistema, então garantir aqui cobre resposta da Lia, inbox humano,
+      // follow-up, encerramento do janitor e reengajamento de uma vez — inclusive
+      // os caminhos que rodam fora da conversa e seriam os primeiros a esquecer.
+      //
+      // Sem isto, um lead que escreveu para o número de vendas receberia resposta
+      // de um número desconhecido, e trataria como golpe.
       const r = await this.waha.sendText(conv.phone, dto.content, {
         presence: true,
         origin: dto.sendOrigin ?? 'lia',
+        linha: (conv as any).wahaLine ?? undefined,
       });
       if (r.sent) {
         this.logger.log(`WhatsApp enviado p/ ${conv.phone}${r.externalId ? ` (${r.externalId})` : ''}`);
