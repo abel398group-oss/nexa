@@ -165,6 +165,45 @@ export class FollowUpService {
           continue;
         }
 
+        // A cadência só era interrompida quando o LEAD respondia ou dava opt-out
+        // (os dois únicos `stop()`, ambos no whatsapp.service). Faltavam os dois
+        // casos em que quem mexeu na conversa fomos NÓS — e são justamente os que
+        // o cliente vê. Achado em 13/08/2026.
+        //
+        // A leitura é aqui, no instante antes do envio, e não no agendamento: é o
+        // que torna a checagem imune à corrida. O estado pode ter mudado a
+        // qualquer momento nas 24h/72h desde que o follow-up foi marcado.
+        const conv = await this.prisma.aiConversation.findUnique({
+          where: { id: f.conversationId },
+          select: { status: true, humanTakeoverAt: true } as any,
+        });
+
+        // ADR 035: com takeover humano a Lia entra em modo rascunho e não fala
+        // sozinha. O follow-up passava por fora disso: o vendedor escrevia de
+        // próprio punho e, 24h depois, o MESMO número mandava um "ainda tem
+        // interesse?" automático. Para o cliente, a empresa conversando sozinha.
+        if (conv && (conv as any).humanTakeoverAt) {
+          await this.prisma.followUp.update({ where: { id: f.id }, data: { status: 'stopped' } });
+          this.logger.log(`Follow-up parado p/ ${f.phone}: humano assumiu a conversa (ADR 035).`);
+          continue;
+        }
+
+        // Conversa encerrada — inclusive `won`. Perguntar "ainda tem interesse?"
+        // para quem acabou de fechar negócio é o pior desfecho da lista.
+        if (conv && (conv.status === 'closed' || conv.status === 'opt_out')) {
+          await this.prisma.followUp.update({ where: { id: f.id }, data: { status: 'stopped' } });
+          this.logger.log(`Follow-up parado p/ ${f.phone}: conversa já ${conv.status}.`);
+          continue;
+        }
+
+        // Conversa apagada no meio do caminho: sem isto o addMessage abaixo
+        // estouraria a cada 20s, para sempre, sem nunca sair de 'pending'.
+        if (!conv) {
+          await this.prisma.followUp.update({ where: { id: f.id }, data: { status: 'stopped' } });
+          this.logger.warn(`Follow-up parado p/ ${f.phone}: conversa ${f.conversationId} não existe mais.`);
+          continue;
+        }
+
         const nextStage = f.stage + 1; // 1 ou 2
         const text = renderFollowUp(nextStage as 1 | 2, f.name);
         if (!text) {
