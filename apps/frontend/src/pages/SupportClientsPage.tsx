@@ -31,14 +31,45 @@ const PAGE_SIZE = 20;
  * Clients (support) -- list of contacts that opened support tickets, grouped by
  * contact. Read-only; reuses GET /conversations and isSupportTicket helper.
  */
+/**
+ * Teto de chamados lidos para montar a lista. Ver o comentário do useQuery.
+ */
+const LIMITE_CHAMADOS = 500;
+
 export function SupportClientsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data: convs = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => listConversations().then((r) => r.items),
+  /**
+   * `scope: 'support'` e o limite explícito são o conserto de 13/08/2026.
+   *
+   * A chamada era `listConversations()` pelada: o servidor devolvia as 50
+   * conversas mais RECENTES do tenant — vendas e suporte misturadas — e a tela
+   * peneirava os chamados de suporte aqui no cliente. Ou seja, o corte da página
+   * decidia a resposta, não os dados.
+   *
+   * Medido no HiperTMS, que tem 3 clientes de suporte no banco: baixando 5
+   * conversas a tela mostrava 1 cliente; baixando 3, mostrava ZERO. E seguia
+   * anunciando "Mostrando 0 de 0 cliente(s)" e os dois cards como se fosse o
+   * total. Bastava o tenant passar de 50 conversas com as mais recentes sendo de
+   * vendas — o que acontece em dias — para um cliente com chamado ABERTO sumir
+   * da tela sem deixar rastro.
+   *
+   * É o mesmo erro que a Etapa 2B já tinha corrigido no Inbox, e cuja nota diz:
+   * número errado com cara de número certo é pior do que não mostrar nada. Esta
+   * tela nasceu depois e repetiu.
+   *
+   * Agora o servidor filtra o canal (só chamado entra na página) e o `total` dele
+   * é comparado com o que chegou — se ainda assim cortar, a tela AVISA em vez de
+   * afirmar um número que não é o total.
+   */
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['support-clients', LIMITE_CHAMADOS],
+    queryFn: () => listConversations({ scope: 'support', limit: LIMITE_CHAMADOS }),
   });
+  const convs = data?.items ?? [];
+  const totalChamadosNoServidor = data?.total ?? convs.length;
+  const listaCortada = totalChamadosNoServidor > convs.length;
 
   const clients = useMemo<Client[]>(() => {
     const tickets = convs.filter(isSupportTicket);
@@ -117,18 +148,33 @@ export function SupportClientsPage() {
         </Link>
       }
       topContent={
-        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
-          <div className="card p-4">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Clientes</div>
-            <div className="mt-0.5 text-2xl font-bold text-base-content">{clients.length}</div>
-            <div className="mt-0.5 text-xs text-base-content/40">com chamados de suporte</div>
+        <>
+          {/* Se ainda assim a página cortar, o número dos cards deixa de ser o
+              total — e dizer isso é obrigatório. Silenciar aqui seria repetir
+              exatamente o bug que esta tela tinha. */}
+          {listaCortada && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              Lendo {convs.length} de {totalChamadosNoServidor} chamados — os números abaixo cobrem
+              só os mais recentes. Use a busca para achar um cliente específico.
+            </div>
+          )}
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+            <div className="card p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Clientes</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content">{clients.length}</div>
+              <div className="mt-0.5 text-xs text-base-content/40">
+                {listaCortada ? 'nos chamados mais recentes' : 'com chamados de suporte'}
+              </div>
+            </div>
+            <div className="card p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Chamados abertos</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content">{totalOpen}</div>
+              <div className="mt-0.5 text-xs text-base-content/40">
+                {listaCortada ? 'nos chamados lidos' : 'não fechados'}
+              </div>
+            </div>
           </div>
-          <div className="card p-4">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Chamados abertos</div>
-            <div className="mt-0.5 text-2xl font-bold text-base-content">{totalOpen}</div>
-            <div className="mt-0.5 text-xs text-base-content/40">não fechados</div>
-          </div>
-        </div>
+        </>
       }
     >
       {filtered.length === 0 ? (
