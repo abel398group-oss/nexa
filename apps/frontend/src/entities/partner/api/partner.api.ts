@@ -24,6 +24,15 @@ export async function togglePartnerActive(id: string, active: boolean): Promise<
 }
 
 /**
+ * Exclui o parceiro. Responde 409 quando ele já recebeu indicação de lead —
+ * apagar apagaria do histórico com quem cada lead foi compartilhado, então o
+ * backend manda desativar. A mensagem do 409 já vem pronta para exibir.
+ */
+export async function deletePartner(id: string): Promise<void> {
+  await api.delete(`/partners/${id}`);
+}
+
+/**
  * Registra o consentimento do lead para compartilhar os dados dele com um
  * parceiro externo (LGPD). Precisa vir ANTES de `shareLeadWithPartner` — o
  * backend recusa o compartilhamento sem este carimbo.

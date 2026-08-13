@@ -7,6 +7,7 @@ export {
   createPartner,
   updatePartner,
   togglePartnerActive,
+  deletePartner,
   recordPartnerConsent,
   shareLeadWithPartner,
 } from './api/partner.api';

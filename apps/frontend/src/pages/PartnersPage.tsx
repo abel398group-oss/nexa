@@ -16,6 +16,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/app/providers/ToastContext';
+import { useConfirm } from '@/app/providers/ConfirmContext';
 import { Button, Input, Icon, Badge } from '@/shared/ui';
 import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import {
@@ -24,6 +25,7 @@ import {
   createPartner,
   updatePartner,
   togglePartnerActive,
+  deletePartner,
 } from '@/entities/partner';
 import { StandardListPage } from '@/components/shared/StandardListPage';
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
@@ -54,6 +56,7 @@ export function PartnersPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const toast = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -108,8 +111,6 @@ export function PartnersPage() {
     reset(emptyForm);
   }
 
-  // Parceiro não é excluído — é desativado. Ele fica referenciado nas
-  // oportunidades já compartilhadas, e apagar apagaria esse rastro.
   async function toggle(p: Partner) {
     try {
       await togglePartnerActive(p.id, !p.active);
@@ -117,6 +118,38 @@ export function PartnersPage() {
       await invalidate();
     } catch {
       toast.error('Erro ao alterar status.');
+    }
+  }
+
+  /**
+   * Excluir de verdade — só enquanto o parceiro não carrega histórico.
+   *
+   * Até 13/08/2026 a regra era "parceiro não se exclui, se desativa", e a rota
+   * nem existia. O motivo era bom (o parceiro fica referenciado nas
+   * oportunidades já compartilhadas, e apagar apagaria esse rastro) mas valia
+   * para TODO parceiro — inclusive o que foi cadastrado errado e nunca recebeu
+   * indicação nenhuma. Esse não tinha rastro a proteger e ficava na lista para
+   * sempre.
+   *
+   * Quem decide é o servidor: sem indicação, apaga; com indicação, devolve 409
+   * com a frase pronta explicando que é para desativar. O texto do erro é
+   * exibido como veio, porque ele é que diz QUANTAS indicações existem.
+   */
+  async function remove(p: Partner) {
+    const ok = await confirm({
+      title: 'Excluir parceiro',
+      message: `Excluir "${p.name}"? Esta ação não pode ser desfeita. Se ele já recebeu indicação de lead, a exclusão será recusada — nesse caso, desative.`,
+      variant: 'danger',
+      confirmLabel: 'Excluir',
+    });
+    if (!ok) return;
+    try {
+      await deletePartner(p.id);
+      toast.success(`${p.name} excluído.`);
+      await invalidate();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao excluir o parceiro.');
     }
   }
 
@@ -211,6 +244,7 @@ export function PartnersPage() {
         rowActions={(p) => [
           { label: 'Editar', onClick: () => openEdit(p) },
           { label: p.active ? 'Desativar' : 'Ativar', onClick: () => toggle(p) },
+          { label: 'Excluir', onClick: () => remove(p), destructive: true },
         ]}
         empty={{
           icon: <Icon name="building" className="h-9 w-9" />,

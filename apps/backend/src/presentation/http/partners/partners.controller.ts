@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { IsBrazilPhone } from '@/shared/dto/is-brazil-phone.validator';
@@ -80,5 +80,11 @@ export class PartnersController {
   @Patch(':id/active')
   setActive(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: ActiveDto) {
     return this.partners.setActive(tenantId, id, dto.active);
+  }
+
+  // Recusa com 409 se o parceiro já tem indicação no histórico — ver o service.
+  @Delete(':id')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.partners.remove(tenantId, id);
   }
 }

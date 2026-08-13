@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 /**
@@ -37,5 +37,41 @@ export class PartnersService {
   async setActive(tenantId: string, id: string, active: boolean) {
     await this.findOne(tenantId, id);
     return (this.prisma as any).partner.update({ where: { id }, data: { active } });
+  }
+
+  /**
+   * Exclui o parceiro — mas só enquanto ele não carrega histórico.
+   *
+   * A rota não existia (13/08/2026): dava para cadastrar errado e nunca limpar,
+   * só desativar. Cadastro de teste e nome digitado errado ficavam na lista para
+   * sempre.
+   *
+   * A recusa importa mais que a exclusão. `Opportunity.sharedWithPartnerId` é
+   * `onDelete: SetNull`, então apagar FUNCIONARIA — e apagaria em silêncio de
+   * QUEM o lead foi compartilhado, deixando `partnerSharedAt` e
+   * `partnerShareStatus` apontando para ninguém. Esse é o rastro de consentimento
+   * de LGPD (ver OpportunitiesService.shareWithPartner): a oportunidade
+   * continuaria dizendo "compartilhado em tal data", sem dizer com quem.
+   *
+   * Por isso: com indicação no histórico → 409 e a orientação de desativar, que
+   * é o que preserva o registro. Sem indicação nenhuma → apaga de verdade.
+   */
+  async remove(tenantId: string, id: string) {
+    const parceiro = await this.findOne(tenantId, id);
+
+    const indicacoes = await (this.prisma as any).opportunity.count({
+      where: { tenantId, sharedWithPartnerId: id },
+    });
+
+    if (indicacoes > 0) {
+      throw new ConflictException(
+        `"${parceiro.name}" já recebeu ${indicacoes} indicação(ões) de lead. ` +
+          'Excluir apagaria do histórico com quem cada lead foi compartilhado. ' +
+          'Desative o parceiro — ele para de aparecer para indicação e o registro fica de pé.',
+      );
+    }
+
+    await (this.prisma as any).partner.delete({ where: { id } });
+    return { id, deleted: true };
   }
 }
