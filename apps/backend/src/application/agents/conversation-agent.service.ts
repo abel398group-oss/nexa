@@ -498,7 +498,17 @@ export class ConversationAgentService {
           direction: 'outbound',
           content: outbound,
           intent: route.intent,
-          metadata: { aiGenerated: true, agent: route.agent, supervisorRisk: supervisor?.risk, fallback: outbound !== draft },
+          // `suggestedAction` passou a ser gravado em 13/08/2026: "demonstração
+          // agendada" virou o KPI do funil no reposicionamento, e sem persistir a
+          // ação sugerida não havia como contar — o intent do roteador diz o que o
+          // LEAD quis, não o que a Lia encaminhou.
+          metadata: {
+            aiGenerated: true,
+            agent: route.agent,
+            supervisorRisk: supervisor?.risk,
+            fallback: outbound !== draft,
+            suggestedAction,
+          },
           tokensIn: usage?.tokensIn,
           tokensOut: usage?.tokensOut,
           estimatedCostUsd: usage?.costUsd,

@@ -207,3 +207,71 @@ describe('MetricsService.sellerOverview (via overview() com sellerId)', () => {
     expect(overview.activity).toEqual({ calls: 3, emails: 0, notes: 0 });
   });
 });
+
+// ── Funil de prospecção (reposicionamento 2026-08) ───────────────────────────
+//
+// O funil deixou de terminar em "conta criada" e passou a terminar em
+// DEMONSTRAÇÃO AGENDADA. Estes testes prendem as duas coisas que mais
+// enganariam: contar interesse onde só houve resposta, e devolver zero para uma
+// métrica que ainda não é medível.
+describe('MetricsService.funnelProspeccao', () => {
+  const prismaFunil = (over: Partial<Record<string, any>> = {}) => {
+    // Cada chamada de findMany devolve uma lista de conversationId distintos.
+    const respostas: any[][] = [
+      over.inbound ?? [{ conversationId: 'c1' }, { conversationId: 'c2' }],   // comResposta
+      over.positivas ?? [{ conversationId: 'c1' }],                            // positivadas
+      over.agendadas ?? [{ conversationId: 'c1' }],                            // demos
+    ];
+    let i = 0;
+    return {
+      aiConversation: {
+        count: vi.fn()
+          .mockResolvedValueOnce(over.abordadas ?? 10)  // abordadas
+          .mockResolvedValueOnce(over.optOuts ?? 1),    // opt-outs
+      },
+      aiMessage: { findMany: vi.fn(async () => respostas[i++] ?? []) },
+      sellerNotification: { count: vi.fn(async () => over.escaladas ?? 1) },
+    } as any;
+  };
+
+  it('positivação é medida sobre quem RESPONDEU, não sobre quem foi abordado', async () => {
+    // 10 abordados, 2 responderam, 1 positivou → 50%, não 10%.
+    const svc = new MetricsService(prismaFunil() as any);
+    const r = await svc.funnelProspeccao('t1');
+
+    expect(r.abordadas).toBe(10);
+    expect(r.comResposta).toBe(2);
+    expect(r.positivadas).toBe(1);
+    expect(r.taxaPositivacao).toBe(50);
+    expect(r.taxaRespostaPorAbordagem).toBe(20);
+  });
+
+  it('conta demonstração agendada, que é o objetivo do funil hoje', async () => {
+    const svc = new MetricsService(prismaFunil() as any);
+    const r = await svc.funnelProspeccao('t1');
+
+    expect(r.demonstracoesAgendadas).toBe(1);
+    expect(r.taxaDemoPorPositivado).toBe(100);
+  });
+
+  // Zero seria lido como "ninguém cotou". A verdade é "a Lia ainda não cota" —
+  // depende do endpoint /nexa/quote no TMS. Null diz isso; zero mente.
+  it('rota cotada volta null enquanto a cotação não existe — nunca zero', async () => {
+    const svc = new MetricsService(prismaFunil() as any);
+    const r = await svc.funnelProspeccao('t1');
+
+    expect(r.rotasCotadas).toBeNull();
+    expect(r.rotasCotadas).not.toBe(0);
+  });
+
+  it('base vazia não divide por zero', async () => {
+    const svc = new MetricsService(
+      prismaFunil({ abordadas: 0, optOuts: 0, inbound: [], positivas: [], agendadas: [], escaladas: 0 }) as any,
+    );
+    const r = await svc.funnelProspeccao('t1');
+
+    expect(r.taxaPositivacao).toBe(0);
+    expect(r.taxaDemoPorPositivado).toBe(0);
+    expect(r.taxaOptOut).toBe(0);
+  });
+});

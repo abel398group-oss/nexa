@@ -37,6 +37,20 @@ export class MetricsController {
     return this.metrics.sellersKpi(tenantId);
   }
 
+  /**
+   * Funil de prospecção (reposicionamento 2026-08): positivação, demonstrações
+   * agendadas e escalações. Sem escopo por vendedor de propósito — mede a
+   * campanha, não a performance individual, que já vive em /metrics/sellers.
+   */
+  @Get('funnel')
+  funnelProspeccao(
+    @CurrentTenant() tenantId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.metrics.funnelProspeccao(tenantId, { from, to });
+  }
+
   @Get('support')
   supportOverview(
     @CurrentTenant() tenantId: string,

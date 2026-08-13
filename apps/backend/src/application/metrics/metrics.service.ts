@@ -648,4 +648,83 @@ export class MetricsService {
       .sort((a, b) => b.frequency - a.frequency || b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);
   }
+
+  /**
+   * Funil de prospecção — os KPIs do reposicionamento de agosto/2026.
+   *
+   * O objetivo do funil deixou de ser "conta criada" (o self-service acabou) e
+   * passou a ser DEMONSTRAÇÃO AGENDADA. Nada media isso: o painel contava
+   * conversa e mensagem, que sobem igual quando a campanha funciona e quando ela
+   * só incomoda.
+   *
+   * Importa agora por causa da campanha de leads frios: lista fria se gasta UMA
+   * vez — quem ignorou não pode ser reabordado. Sem estes números, dispara-se o
+   * ativo inteiro e descobre-se o resultado pelo faturamento, semanas depois,
+   * sem saber qual etapa vazou.
+   *
+   * Tudo sai do que já é persistido — nenhuma coluna nova:
+   *  - `aiMessage.intent` — como o ROTEADOR classificou a mensagem do lead
+   *  - `aiMessage.metadata.suggestedAction` — o que a Lia encaminhou
+   *  - `sellerNotification` — handoff efetivado
+   */
+  async funnelProspeccao(tenantId: string, range?: { from?: string; to?: string }) {
+    const dw: any =
+      range?.from || range?.to
+        ? {
+            createdAt: {
+              ...(range.from ? { gte: new Date(range.from) } : {}),
+              ...(range.to ? { lte: new Date(`${range.to}T23:59:59.999`) } : {}),
+            },
+          }
+        : {};
+
+    // Contam como POSITIVAÇÃO: o lead respondeu com interesse. `not_now`,
+    // `wrong_person`, `opt_out` e `unknown` ficam de fora — resposta existe,
+    // interesse não.
+    const POSITIVAS = ['interested', 'pricing_question', 'meeting_request'];
+
+    const distintasPorConversa = (where: any) =>
+      this.prisma.aiMessage
+        .findMany({ where, select: { conversationId: true }, distinct: ['conversationId'] })
+        .then((r: any[]) => r.length);
+
+    const [abordadas, comResposta, positivadas, agendadas, escaladas, optOuts] = await Promise.all([
+      this.prisma.aiConversation.count({ where: { tenantId, ...dw } }),
+      // "respondeu" = existe mensagem DO LEAD na conversa
+      distintasPorConversa({ tenantId, direction: 'inbound', ...dw }),
+      distintasPorConversa({ tenantId, direction: 'outbound', intent: { in: POSITIVAS }, ...dw }),
+      distintasPorConversa({
+        tenantId,
+        direction: 'outbound',
+        metadata: { path: ['suggestedAction'], equals: 'schedule_meeting' },
+        ...dw,
+      }),
+      this.prisma.sellerNotification.count({ where: { tenantId, ...dw } }),
+      this.prisma.aiConversation.count({ where: { tenantId, status: 'opt_out' as any, ...dw } }),
+    ]);
+
+    const pct = (parte: number, todo: number) => (todo > 0 ? Number(((parte / todo) * 100).toFixed(1)) : 0);
+
+    return {
+      abordadas,
+      comResposta,
+      positivadas,
+      demonstracoesAgendadas: agendadas,
+      escaladasParaVendedor: escaladas,
+      optOuts,
+      // Meta do doc de prospecção: positivação >= 40%.
+      taxaPositivacao: pct(positivadas, comResposta),
+      taxaRespostaPorAbordagem: pct(comResposta, abordadas),
+      taxaDemoPorPositivado: pct(agendadas, positivadas),
+      taxaOptOut: pct(optOuts, abordadas),
+      /**
+       * "Rota cotada na conversa" é apontada pelo doc do TMS como a métrica que
+       * mais prevê demonstração agendada — e NÃO é medível hoje: a Lia ainda não
+       * cota (depende do endpoint `/nexa/quote`). Vai como null, não como zero:
+       * zero seria lido como "ninguém cotou", quando a verdade é "não dá para
+       * cotar ainda".
+       */
+      rotasCotadas: null as number | null,
+    };
+  }
 }
