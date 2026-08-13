@@ -197,7 +197,11 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // realmente mandou, por todos os canais — é o número que importa para risco
     // de bloqueio, e sem ele a tela de saúde mostrava um chip ocioso que na
     // verdade estava a plena carga.
-    const budget = (await this.budget?.snapshot().catch(() => null)) ?? null;
+    //
+    // 'principal' explícito: campanha só roda no número principal hoje (a
+    // linha vendas ainda não tem `SenderNumber` próprio), então é o orçamento
+    // dela que interessa aqui.
+    const budget = (await this.budget?.snapshot('principal').catch(() => null)) ?? null;
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
     // e com a saúde de engajamento das últimas 24h (freio anti-queima).
     return numbers.map((n: any) => ({
@@ -1212,7 +1216,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       //
       // Quem cede é a campanha, sempre: prospecção fria é o tráfego descartável.
       // Alerta de cliente e resposta em conversa aberta nunca são bloqueados.
-      const ceiling = await this.budget?.overCeiling();
+      // 'principal' explícito pelo mesmo motivo do listNumbers() acima.
+      const ceiling = await this.budget?.overCeiling('principal');
       if (ceiling?.over) {
         this.logger.warn(`Campanha pausada — ${ceiling.reason}`);
         return;

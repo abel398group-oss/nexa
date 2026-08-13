@@ -84,7 +84,7 @@ describe('WahaClientService — presença e orçamento', () => {
 
       await svc.sendText('5511999999999', 'oi', { origin: 'monitor' });
 
-      expect(budget.record).toHaveBeenCalledWith('monitor');
+      expect(budget.record).toHaveBeenCalledWith('monitor', 'principal');
     });
 
     it('sem origem explícita cai em "outros" — nenhum envio fica de fora da conta', async () => {
@@ -93,7 +93,16 @@ describe('WahaClientService — presença e orçamento', () => {
 
       await svc.sendText('5511999999999', 'oi');
 
-      expect(budget.record).toHaveBeenCalledWith('outros');
+      expect(budget.record).toHaveBeenCalledWith('outros', 'principal');
+    });
+
+    it('linha explícita debita no balde daquela linha, não da principal', async () => {
+      const budget = { record: vi.fn().mockResolvedValue(undefined) };
+      const svc = new WahaClientService(budget as any);
+
+      await svc.sendText('5511999999999', 'oi', { origin: 'lia', linha: 'vendas' });
+
+      expect(budget.record).toHaveBeenCalledWith('lia', 'vendas');
     });
 
     it('timeout também debita: a mensagem PODE ter saído (mesmo critério do DISP-021)', async () => {
@@ -107,7 +116,7 @@ describe('WahaClientService — presença e orçamento', () => {
 
       expect(r.sent).toBe(false);
       expect(r.definitive).toBe(false);
-      expect(budget.record).toHaveBeenCalledWith('campaign');
+      expect(budget.record).toHaveBeenCalledWith('campaign', 'principal');
     });
 
     it('recusa DEFINITIVA (4xx) não debita — a mensagem com certeza não saiu', async () => {

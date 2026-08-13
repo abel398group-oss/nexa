@@ -40,9 +40,12 @@ const hourlyCeiling = () => Number(process.env.NUMBER_HOURLY_CEILING ?? 40);
 const DAY_TTL_S = 36 * 3600;
 const HOUR_TTL_S = 2 * 3600;
 
-const KEY_DAY = (stamp: string) => `number:sent:day:${stamp}`;
-const KEY_HOUR = (stamp: string) => `number:sent:hour:${stamp}`;
-const KEY_ORIGIN = (stamp: string) => `number:sent:origin:${stamp}`;
+/** Sem linha = principal, mesmo default usado em `WahaClientService.resolveLinha`. */
+const LINHA_PADRAO = 'principal';
+
+const KEY_DAY = (linha: string, stamp: string) => `number:sent:day:${linha}:${stamp}`;
+const KEY_HOUR = (linha: string, stamp: string) => `number:sent:hour:${linha}:${stamp}`;
+const KEY_ORIGIN = (linha: string, stamp: string) => `number:sent:origin:${linha}:${stamp}`;
 
 export interface NumberBudgetSnapshot {
   /** Envios de hoje por todos os caminhos. */
@@ -63,7 +66,21 @@ export class NumberBudgetService implements OnModuleInit, OnModuleDestroy {
   // Fallback em memória: sem Redis o processo continua contando (single-instance),
   // igual ao estado anti-ban do SenderService. Some no restart — aceitável para um
   // teto de segurança, e o alternativa (não contar nada) é pior.
-  private local = { dayStamp: '', day: 0, hourStamp: '', hour: 0, byOrigin: new Map<string, number>() };
+  //
+  // Um balde POR LINHA (2026-08-13): antes disto era um único contador global,
+  // então a linha vendas debitaria no mesmo orçamento da principal e as duas
+  // ficariam com o teto errado assim que o segundo número começasse a mandar
+  // mensagem de verdade.
+  private local = new Map<string, { dayStamp: string; day: number; hourStamp: string; hour: number; byOrigin: Map<string, number> }>();
+
+  private localFor(linha: string) {
+    let l = this.local.get(linha);
+    if (!l) {
+      l = { dayStamp: '', day: 0, hourStamp: '', hour: 0, byOrigin: new Map<string, number>() };
+      this.local.set(linha, l);
+    }
+    return l;
+  }
 
   onModuleInit(): void {
     const url = process.env.REDIS_URL;
@@ -79,57 +96,60 @@ export class NumberBudgetService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Zera os contadores locais quando vira o dia/hora (o Redis faz isso via chave nova). */
-  private rollLocal(dayStamp: string, hourStamp: string): void {
-    if (this.local.dayStamp !== dayStamp) {
-      this.local.dayStamp = dayStamp;
-      this.local.day = 0;
-      this.local.byOrigin.clear();
+  private rollLocal(linha: string, dayStamp: string, hourStamp: string) {
+    const l = this.localFor(linha);
+    if (l.dayStamp !== dayStamp) {
+      l.dayStamp = dayStamp;
+      l.day = 0;
+      l.byOrigin.clear();
     }
-    if (this.local.hourStamp !== hourStamp) {
-      this.local.hourStamp = hourStamp;
-      this.local.hour = 0;
+    if (l.hourStamp !== hourStamp) {
+      l.hourStamp = hourStamp;
+      l.hour = 0;
     }
+    return l;
   }
 
   /**
    * Debita um envio. `origin` é só rótulo de diagnóstico (`campaign`, `lia`,
-   * `monitor`, `janitor`, …) — não muda o teto.
+   * `monitor`, `janitor`, …) — não muda o teto. `linha` isola o balde: sem ela,
+   * cai na principal.
    *
    * Nunca lança: contar é observabilidade, e derrubar um envio real porque o
    * Redis piscou seria trocar um problema pequeno por um grande.
    */
-  async record(origin: string): Promise<void> {
+  async record(origin: string, linha: string = LINHA_PADRAO): Promise<void> {
     const now = new Date();
     const dayStamp = brasiliaDayStamp(now);
     const hourStamp = brasiliaHourStamp(now);
 
-    this.rollLocal(dayStamp, hourStamp);
-    this.local.day += 1;
-    this.local.hour += 1;
-    this.local.byOrigin.set(origin, (this.local.byOrigin.get(origin) ?? 0) + 1);
+    const l = this.rollLocal(linha, dayStamp, hourStamp);
+    l.day += 1;
+    l.hour += 1;
+    l.byOrigin.set(origin, (l.byOrigin.get(origin) ?? 0) + 1);
 
     if (!this.redis) return;
     try {
       await this.redis
         .multi()
-        .incr(KEY_DAY(dayStamp))
-        .expire(KEY_DAY(dayStamp), DAY_TTL_S)
-        .incr(KEY_HOUR(hourStamp))
-        .expire(KEY_HOUR(hourStamp), HOUR_TTL_S)
-        .hincrby(KEY_ORIGIN(dayStamp), origin, 1)
-        .expire(KEY_ORIGIN(dayStamp), DAY_TTL_S)
+        .incr(KEY_DAY(linha, dayStamp))
+        .expire(KEY_DAY(linha, dayStamp), DAY_TTL_S)
+        .incr(KEY_HOUR(linha, hourStamp))
+        .expire(KEY_HOUR(linha, hourStamp), HOUR_TTL_S)
+        .hincrby(KEY_ORIGIN(linha, dayStamp), origin, 1)
+        .expire(KEY_ORIGIN(linha, dayStamp), DAY_TTL_S)
         .exec();
     } catch (e: any) {
-      this.logger.warn(`falha ao debitar envio (origin=${origin}): ${e?.message}`);
+      this.logger.warn(`falha ao debitar envio (origin=${origin}, linha=${linha}): ${e?.message}`);
     }
   }
 
   /** Quanto o número já mandou hoje e nesta hora, com a quebra por origem. */
-  async snapshot(): Promise<NumberBudgetSnapshot> {
+  async snapshot(linha: string = LINHA_PADRAO): Promise<NumberBudgetSnapshot> {
     const now = new Date();
     const dayStamp = brasiliaDayStamp(now);
     const hourStamp = brasiliaHourStamp(now);
-    this.rollLocal(dayStamp, hourStamp);
+    const l = this.rollLocal(linha, dayStamp, hourStamp);
 
     const base = {
       dailyCeiling: dailyCeiling(),
@@ -139,15 +159,15 @@ export class NumberBudgetService implements OnModuleInit, OnModuleDestroy {
     if (!this.redis) {
       return {
         ...base,
-        today: this.local.day,
-        thisHour: this.local.hour,
-        byOrigin: Object.fromEntries(this.local.byOrigin),
+        today: l.day,
+        thisHour: l.hour,
+        byOrigin: Object.fromEntries(l.byOrigin),
       };
     }
 
     try {
-      const [day, hour] = await this.redis.mget(KEY_DAY(dayStamp), KEY_HOUR(hourStamp));
-      const byOrigin = await this.redis.hgetall(KEY_ORIGIN(dayStamp));
+      const [day, hour] = await this.redis.mget(KEY_DAY(linha, dayStamp), KEY_HOUR(linha, hourStamp));
+      const byOrigin = await this.redis.hgetall(KEY_ORIGIN(linha, dayStamp));
       return {
         ...base,
         today: Number(day ?? 0),
@@ -155,12 +175,12 @@ export class NumberBudgetService implements OnModuleInit, OnModuleDestroy {
         byOrigin: Object.fromEntries(Object.entries(byOrigin).map(([k, v]) => [k, Number(v)])),
       };
     } catch (e: any) {
-      this.logger.warn(`falha ao ler orçamento, usando contagem local: ${e?.message}`);
+      this.logger.warn(`falha ao ler orçamento (linha=${linha}), usando contagem local: ${e?.message}`);
       return {
         ...base,
-        today: this.local.day,
-        thisHour: this.local.hour,
-        byOrigin: Object.fromEntries(this.local.byOrigin),
+        today: l.day,
+        thisHour: l.hour,
+        byOrigin: Object.fromEntries(l.byOrigin),
       };
     }
   }
@@ -169,8 +189,8 @@ export class NumberBudgetService implements OnModuleInit, OnModuleDestroy {
    * Teto estourado? Consultado pelo worker de campanha antes de disparar.
    * Devolve o motivo pronto para log — quem chama não precisa remontar a frase.
    */
-  async overCeiling(): Promise<{ over: boolean; reason?: string; snapshot: NumberBudgetSnapshot }> {
-    const snapshot = await this.snapshot();
+  async overCeiling(linha: string = LINHA_PADRAO): Promise<{ over: boolean; reason?: string; snapshot: NumberBudgetSnapshot }> {
+    const snapshot = await this.snapshot(linha);
     if (snapshot.today >= snapshot.dailyCeiling) {
       return {
         over: true,

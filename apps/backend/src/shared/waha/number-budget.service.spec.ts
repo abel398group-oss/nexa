@@ -101,4 +101,30 @@ describe('NumberBudgetService (modo memória)', () => {
   it('record nunca lança, mesmo com origem estranha', async () => {
     await expect(svc.record('')).resolves.toBeUndefined();
   });
+
+  describe('linha (divisão de números, 2026-08-13)', () => {
+    it('cada linha tem o próprio balde — envio na vendas não conta na principal', async () => {
+      await svc.record('lia', 'principal');
+      await svc.record('lia', 'vendas');
+      await svc.record('lia', 'vendas');
+
+      expect((await svc.snapshot('principal')).today).toBe(1);
+      expect((await svc.snapshot('vendas')).today).toBe(2);
+    });
+
+    it('sem linha cai na principal, do jeito que já funcionava', async () => {
+      await svc.record('lia');
+      expect((await svc.snapshot()).today).toBe(1);
+      expect((await svc.snapshot('principal')).today).toBe(1);
+      expect((await svc.snapshot('vendas')).today).toBe(0);
+    });
+
+    it('overCeiling avalia o teto da linha pedida, não o das outras', async () => {
+      process.env.NUMBER_DAILY_CEILING = '1';
+      await svc.record('lia', 'vendas');
+
+      expect((await svc.overCeiling('vendas')).over).toBe(true);
+      expect((await svc.overCeiling('principal')).over).toBe(false);
+    });
+  });
 });

@@ -309,24 +309,29 @@ export class WahaClientService {
         // 5xx entra no orçamento: a mensagem PODE ter saído, e um teto que
         // subestima o que o número mandou não serve para nada. Mesmo critério
         // do DISP-021 usado no worker de campanha.
-        if (!definitive) await this.debit(opts.origin);
+        if (!definitive) await this.debit(opts.origin, opts.linha);
         return { sent: false, reason: `waha_${res.status}`, definitive };
       }
       const data: any = await res.json().catch(() => ({}));
-      await this.debit(opts.origin);
+      await this.debit(opts.origin, opts.linha);
       return { sent: true, externalId: data?.id?._serialized ?? data?.id ?? undefined };
     } catch (e: any) {
       // timeout/rede: a mensagem PODE ter ido. Nunca assumir que não foi.
       const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
       this.logger.error(`WAHA sendText falhou (${timeout ? 'timeout' : 'rede'}): ${e?.message}`);
-      await this.debit(opts.origin);
+      await this.debit(opts.origin, opts.linha);
       return { sent: false, reason: timeout ? 'timeout_sem_confirmacao' : 'erro_rede', definitive: false };
     }
   }
 
-  /** Debita um envio no orçamento do número. Nunca lança — ver NumberBudgetService. */
-  private async debit(origin?: string): Promise<void> {
-    await this.budget?.record(origin ?? 'outros').catch(() => undefined);
+  /**
+   * Debita um envio no orçamento do número. Nunca lança — ver NumberBudgetService.
+   *
+   * `linha` importa: sem ela o orçamento da linha vendas cairia no mesmo balde
+   * da principal, e as duas mostrariam um teto que não é o delas.
+   */
+  private async debit(origin?: string, linha?: string): Promise<void> {
+    await this.budget?.record(origin ?? 'outros', linha ?? LINHA_PRINCIPAL).catch(() => undefined);
   }
 
   // ── Gestão da sessão (reconectar número) ────────────────────────────────────
