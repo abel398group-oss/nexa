@@ -49,6 +49,8 @@ e quais alternativas foram rejeitadas.
 | [034](034-atendimento-vendedor-canal-unico.md) | Atendimento do vendedor — canal único controlado pelo Nexa (deep link; relay adiado) | Aceito (implementado) |
 | [035](035-takeover-humano-por-conversa.md) | Takeover humano por conversa — Lia em modo rascunho; gatilho automático; devolução por botão/fechamento | Aceito |
 | [036](036-digest-throttle-severidade.md) | Digest do Monitor — throttle por severidade (WhatsApp) + e-mail completo; CRITICAL de volta ao digest no standby | Aceito (implementado) |
+| [037](037-mercados.md) | Mercados — vender para mais de um cliente no mesmo Nexa | Aceito |
+| [038](038-recepcionista-vs-conversa.md) | Recepcionista ou conversa — a Lia decide pela direção da primeira mensagem | Aceito (a implementar) |
 
 > **Consolidação (2026-06-11):** a pasta legada `docs/architecture/decisions/`
 > foi unificada aqui — `001-agents.md` → ADR 023, `002-campaigns.md` → ADR 024.
