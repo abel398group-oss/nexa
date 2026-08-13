@@ -17,8 +17,26 @@ export async function getWhatsappStatus(): Promise<WhatsappStatus> {
 }
 
 // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão" / reparear via QR).
-export async function restartWhatsappSession(): Promise<{ ok: boolean; reason?: string }> {
-  const r = await api.post('/sender/session/restart');
+//
+// `linha` é obrigatório na prática desde a divisão de números: reiniciar sem
+// dizer qual derruba a linha principal — que costuma ser a que estava
+// funcionando. Continua opcional na assinatura só para não quebrar chamadas
+// antigas, mas a tela sempre passa.
+export async function restartWhatsappSession(linha?: string): Promise<{ ok: boolean; reason?: string }> {
+  const r = await api.post('/sender/session/restart', null, { params: linha ? { linha } : undefined });
+  return r.data;
+}
+
+export interface WhatsappLinha {
+  linha: string;
+  configurada: boolean;
+  status: string;
+  conectada: boolean;
+}
+
+// Linhas configuradas no servidor + estado de cada uma.
+export async function listWhatsappLinhas(): Promise<WhatsappLinha[]> {
+  const r = await api.get('/sender/session/linhas');
   return r.data;
 }
 
@@ -29,9 +47,16 @@ export interface WhatsappQr {
 }
 
 // QR de pareamento + status atual (para a tela mostrar o código a escanear).
-export async function getWhatsappQr(): Promise<WhatsappQr> {
-  const r = await api.get('/sender/session/qr');
+export async function getWhatsappQr(linha?: string): Promise<WhatsappQr> {
+  const r = await api.get('/sender/session/qr', { params: linha ? { linha } : undefined });
   return r.data;
+}
+
+/** Rótulo da linha para a tela. `principal` é o número que já existia. */
+export function linhaLabel(linha: string): string {
+  if (linha === 'principal') return 'Principal — alertas e cotação';
+  if (linha === 'vendas') return 'Vendas — prospecção';
+  return linha;
 }
 
 // Rótulo amigável do estado bruto da sessão (pt-BR).

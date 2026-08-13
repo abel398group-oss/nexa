@@ -66,6 +66,21 @@ export interface WahaTarget {
 
 export const LINHA_PRINCIPAL = 'principal';
 
+/**
+ * Linhas configuradas: a principal (sempre) mais as declaradas em `WAHA_LINHAS`.
+ *
+ * O painel precisa disto porque a lista vive só no ambiente do servidor — sem
+ * esta função a tela não teria como saber que existe um segundo número, e o
+ * botão de reconectar continuaria mirando às cegas na principal.
+ */
+export function linhasConfiguradas(): string[] {
+  const extras = (process.env.WAHA_LINHAS ?? '')
+    .split(',')
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean);
+  return [LINHA_PRINCIPAL, ...extras.filter((l) => l !== LINHA_PRINCIPAL)];
+}
+
 const PRESENCE_ENABLED = () => process.env.WHATSAPP_PRESENCE_ENABLED !== 'false';
 const TYPING_MAX_MS = () => Number(process.env.WHATSAPP_TYPING_MAX_MS ?? 5000);
 

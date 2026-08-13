@@ -4,7 +4,12 @@ import { displayPhone } from '@/shared/lib/phone';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon } from '@/shared/ui';
 import { listSenderNumbers } from '@/entities/campaign';
 import { WhatsappConnectionStatus } from '@/components/WhatsappConnectionStatus';
-import { restartWhatsappSession, getWhatsappQr } from '@/shared/lib/whatsappStatus';
+import {
+  restartWhatsappSession,
+  getWhatsappQr,
+  listWhatsappLinhas,
+  linhaLabel,
+} from '@/shared/lib/whatsappStatus';
 
 // Rótulos das origens de envio (NumberBudgetService). Chave desconhecida cai no
 // próprio nome — origem nova aparece na tela sem precisar mexer aqui.
@@ -45,19 +50,34 @@ export function NumberHealthPage() {
   const totalCap = items.reduce((a, n) => a + n.effectiveDailyLimit, 0);
   const activeCount = items.filter((n) => n.active).length;
 
-  // Reconexão do WhatsApp (reiniciar sessão + mostrar QR para reparear)
+  // Reconexão do WhatsApp (reiniciar sessão + mostrar QR para reparear).
+  //
+  // Guarda QUAL linha está sendo reconectada, não um booleano: com dois números,
+  // reiniciar sem dizer qual derruba a principal — que costuma ser justamente a
+  // que estava funcionando. `null` = modal fechado.
   const qc = useQueryClient();
-  const [showQr, setShowQr] = useState(false);
+  const [qrLinha, setQrLinha] = useState<string | null>(null);
 
-  const qr = useQuery({
-    queryKey: ['whatsapp-qr'],
-    queryFn: getWhatsappQr,
-    enabled: showQr,
-    refetchInterval: showQr ? 3000 : false,
+  const { data: linhas = [] } = useQuery({
+    queryKey: ['whatsapp-linhas'],
+    queryFn: listWhatsappLinhas,
+    refetchInterval: 15_000,
   });
 
-  const restart = useMutation({ mutationFn: restartWhatsappSession });
+  const qr = useQuery({
+    queryKey: ['whatsapp-qr', qrLinha],
+    queryFn: () => getWhatsappQr(qrLinha ?? undefined),
+    enabled: !!qrLinha,
+    refetchInterval: qrLinha ? 3000 : false,
+  });
+
+  const restart = useMutation({ mutationFn: (linha: string) => restartWhatsappSession(linha) });
   const connected = qr.data?.status === 'WORKING';
+
+  const abrirQr = (linha: string) => {
+    setQrLinha(linha);
+    restart.mutate(linha);
+  };
 
   return (
     <PageContainer>
@@ -66,18 +86,53 @@ export function NumberHealthPage() {
         title="Saúde dos números"
         subtitle="Status, limites e aquecimento dos números de WhatsApp (anti-ban). Atualiza a cada 10s."
         actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={restart.isPending}
-              onClick={() => { setShowQr(true); restart.mutate(); }}
-            >
-              <Icon name="refresh" className="h-4 w-4" /> {restart.isPending ? 'Reiniciando…' : 'Reconectar'}
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* Um botão POR LINHA. Com duas configuradas, um "Reconectar" genérico
+                reiniciaria a principal sem dizer — e derrubaria o número que
+                estava online. Com uma só, o rótulo continua o de sempre. */}
+            {linhas.map((l) => (
+              <Button
+                key={l.linha}
+                variant="outline"
+                disabled={restart.isPending}
+                onClick={() => abrirQr(l.linha)}
+                title={linhaLabel(l.linha)}
+              >
+                <Icon name="refresh" className="h-4 w-4" />
+                {linhas.length > 1 ? `Reconectar ${l.linha}` : 'Reconectar'}
+              </Button>
+            ))}
             <Button variant="outline" onClick={() => refetch()}><Icon name="refresh" className="h-4 w-4" /> Atualizar</Button>
           </div>
         }
       />
+
+      {/* Estado por LINHA. Só aparece quando existe mais de uma — com um número
+          só, o cartão de conexão abaixo já diz tudo e isto seria ruído. */}
+      {linhas.length > 1 && (
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {linhas.map((l) => (
+            <Card key={l.linha} className="flex items-center justify-between p-4">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">
+                  {linhaLabel(l.linha)}
+                </div>
+                <div
+                  className={`mt-0.5 text-lg font-bold ${l.conectada ? 'text-emerald-500' : 'text-amber-500'}`}
+                >
+                  {l.conectada ? 'Conectado' : 'Desconectado'}
+                </div>
+                <div className="mt-0.5 text-xs text-base-content/40">
+                  {l.configurada ? `status: ${l.status}` : 'sem container configurado'}
+                </div>
+              </div>
+              <Button variant="outline" disabled={restart.isPending} onClick={() => abrirQr(l.linha)}>
+                <Icon name="refresh" className="h-4 w-4" /> Parear
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* resumo */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -241,15 +296,19 @@ export function NumberHealthPage() {
         </div>
       )}
 
-      {showQr && (
+      {qrLinha && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setShowQr(false)}
+          onClick={() => setQrLinha(null)}
         >
           <div className="w-full max-w-sm rounded-xl bg-base-100 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-base-content">Reconectar WhatsApp</h3>
-              <button onClick={() => setShowQr(false)} className="text-lg leading-none text-base-content/50 hover:text-base-content">×</button>
+              {/* O rótulo da linha no título não é decoração: é a última chance
+                  de perceber que o QR aberto é do número errado ANTES de escanear. */}
+              <h3 className="text-sm font-semibold text-base-content">
+                Reconectar — {linhaLabel(qrLinha)}
+              </h3>
+              <button onClick={() => setQrLinha(null)} className="text-lg leading-none text-base-content/50 hover:text-base-content">×</button>
             </div>
 
             {connected ? (
@@ -260,7 +319,7 @@ export function NumberHealthPage() {
                 <Button
                   className="mt-4"
                   onClick={() => {
-                    setShowQr(false);
+                    setQrLinha(null);
                     qc.invalidateQueries({ queryKey: ['whatsapp-status'] });
                     qc.invalidateQueries({ queryKey: ['sender-numbers'] });
                     refetch();

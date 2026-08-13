@@ -7,7 +7,7 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { WahaClientService, linhasConfiguradas } from '@/shared/waha/waha-client.service';
 import { NumberBudgetService } from '@/shared/waha/number-budget.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
@@ -126,6 +126,35 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
   async getWahaQr(linha?: string) {
     return this.waha.getQr(linha);
+  }
+
+  /**
+   * Linhas de WhatsApp e o estado de cada uma — é o que a tela de Saúde precisa
+   * para deixar de tratar "o número" como se fosse um só.
+   *
+   * O status vai junto de propósito: separado, a tela faria uma chamada por
+   * linha e mostraria as duas dessincronizadas por alguns segundos, que é
+   * exatamente quando alguém aperta "reconectar" na errada.
+   *
+   * Uma linha fora do ar não derruba a lista: vem com status desconhecido e as
+   * outras aparecem normalmente.
+   */
+  async listWahaLinhas() {
+    const nomes = linhasConfiguradas();
+    return Promise.all(
+      nomes.map(async (nome) => {
+        const alvo = this.waha.resolveLinha(nome);
+        const st = await this.waha.getSessionStatus(nome).catch(() => null);
+        return {
+          linha: nome,
+          // `principal` sem env própria e uma linha declarada que caiu na
+          // principal são casos diferentes, e a tela precisa distinguir.
+          configurada: !!alvo.baseUrl,
+          status: st?.status ?? 'UNKNOWN',
+          conectada: st?.status === 'WORKING',
+        };
+      }),
+    );
   }
 
   // ---------- número do pool ----------

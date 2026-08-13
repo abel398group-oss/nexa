@@ -311,6 +311,14 @@ export class SenderController {
     return this.sender.getWahaQr(linha);
   }
 
+  // Linhas de WhatsApp configuradas + estado de cada uma. A tela de Saúde usa
+  // para parar de tratar "o número" como se fosse um só — e para o botão de
+  // reconectar saber qual sessão está reiniciando.
+  @Get('sender/session/linhas')
+  sessionLinhas() {
+    return this.sender.listWahaLinhas();
+  }
+
   // janela de envio (horários) por tenant — exibida/editada na tela de Disparo
   @Get('sender/settings')
   getSettings(@CurrentTenant() tenantId: string) {
