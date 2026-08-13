@@ -107,9 +107,47 @@ services:
         max-file: "3"
     restart: unless-stopped
 
+  # Segunda LINHA de WhatsApp: prospeccao e vendas (2026-08-13).
+  #
+  # Container separado, e nao uma segunda sessao no de cima, porque a imagem Core
+  # roda UMA sessao por vez — e porque isolamento e o motivo de existir: disparo
+  # para lead frio e a atividade que mais derruba numero, e quando este cair o
+  # numero de alertas e cotacao segue de pe, inclusive para avisar que caiu.
+  #
+  # VOLUME PROPRIO e obrigatorio. Dois containers montando `nexa-waha` brigam
+  # pelos mesmos arquivos de pareamento e derrubam os DOIS numeros, em silencio.
+  #
+  # Para ativar, no .env:
+  #   WAHA_LINHAS=vendas
+  #   WAHA_VENDAS_API_URL=http://waha-vendas:3000
+  #   WAHA_VENDAS_API_KEY=${WAHA_API_KEY}
+  # Sem essas variaveis o backend ignora a linha e tudo sai pelo numero principal.
+  waha-vendas:
+    image: devlikeapro/waha:latest
+    environment:
+      - WAHA_API_KEY=${WAHA_API_KEY}
+      - WAHA_PRINT_QR=false
+      - WHATSAPP_RESTART_ALL_SESSIONS=true
+    # SEM porta no host - o backend chama http://waha-vendas:3000 pela nexa-network.
+    volumes:
+      - nexa-waha-vendas:/app/.sessions
+    mem_limit: 512m
+    # Se a maquina ficar sem memoria, que o kernel mate ESTE primeiro. E o servico
+    # menos critico da caixa: perder prospeccao por algumas horas custa menos que
+    # perder o backend do TMS ou o canal de alertas. Sem isto o OOM killer escolhe
+    # pelo tamanho, e o maior processo costuma ser justamente o que nao pode cair.
+    oom_score_adj: 500
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
 volumes:
   nexa-redis:
   nexa-waha:
+  nexa-waha-vendas:
   nexa-models:
   nexa-uploads:
 

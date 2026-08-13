@@ -36,6 +36,31 @@ services:
     volumes:
       - ./waha-sessions:/app/.sessions  # persiste a sessão entre restarts
 
+  # Segunda linha (vendas) para testar a divisão de números LOCALMENTE, antes de
+  # subir. Pasta de sessão PRÓPRIA — duas instâncias na mesma pasta brigam pelos
+  # arquivos de pareamento e derrubam os dois números.
+  #
+  # Pareie aqui um chip descartável, nunca o número real de vendas: ligar e
+  # desligar a mesma conta em máquinas diferentes é padrão que o WhatsApp olha
+  # com desconfiança, e o número que não se quer perder é justamente esse.
+  #
+  # Para ativar, no apps/backend/.env:
+  #   WAHA_LINHAS=vendas
+  #   WAHA_VENDAS_API_URL=http://localhost:3019
+  #   WAHA_VENDAS_API_KEY=Inicial398!
+  waha-vendas:
+    image: devlikeapro/waha:latest
+    container_name: nexa_waha_vendas
+    restart: unless-stopped
+    environment:
+      WAHA_API_KEY: Inicial398!
+      WAHA_PRINT_QR: "true"
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+    ports:
+      - "3019:3000"                 # porta diferente da linha principal
+    volumes:
+      - ./waha-sessions-vendas:/app/.sessions
+
   backend:
     # Descomente para rodar o backend em container (opcional em dev local)
     # build: ./apps/backend

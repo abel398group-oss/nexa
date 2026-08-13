@@ -46,6 +46,7 @@ apps/backend/err.txt
 *.tsbuildinfo
 
 waha-sessions/
+waha-sessions-vendas/
 
 # Backups pontuais de dados (playbook, etc) — ficam locais, nunca no repo.
 backup-*.json
