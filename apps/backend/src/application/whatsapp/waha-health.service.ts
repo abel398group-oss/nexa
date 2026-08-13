@@ -45,17 +45,40 @@ export class WahaHealthService {
 
   private sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
+  /**
+   * Prazos destes dois fetch. Este serviço era o ÚNICO lugar que falava com o
+   * WAHA sem timeout — o WahaClientService já usa AbortSignal.timeout em todas
+   * as chamadas dele desde sempre.
+   *
+   * O que isso custava: WAHA aceitando a conexão e nunca respondendo (travado,
+   * não caído — o caso mais comum quando o container está sobrecarregado) fazia
+   * o `fetch` esperar para sempre. Aí o `finally` que devolve `this.checking`
+   * para false NUNCA rodava, e todo healthCheck seguinte voltava na primeira
+   * linha, no `if (this.checking) return`.
+   *
+   * Resultado: o monitor da sessão do WhatsApp morria em silêncio até alguém
+   * reiniciar o backend. Sem auto-restart, sem alerta "WhatsApp FORA DO AR" —
+   * exatamente quando mais se precisa dele. E o GET /api/whatsapp/status do
+   * painel ficava pendurado junto, em vez de dizer que não deu para consultar.
+   */
+  private static readonly STATUS_TIMEOUT_MS = 8_000;
+  private static readonly START_TIMEOUT_MS = 15_000;
+
   /** Lê o status atual da sessão no WAHA. Retorna o status ou um código de erro. */
   private async getStatus(): Promise<string> {
     if (!this.configured) return 'NOT_CONFIGURED';
     try {
       const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}`, {
         headers: { 'X-Api-Key': this.apiKey },
+        signal: AbortSignal.timeout(WahaHealthService.STATUS_TIMEOUT_MS),
       });
       if (!res.ok) return `HTTP_${res.status}`;
       const data = (await res.json()) as any;
       return String(data?.status ?? 'UNKNOWN');
     } catch (e: any) {
+      // Estourar o prazo é 'UNREACHABLE' do mesmo jeito que a conexão recusada:
+      // dos dois lados a Lia não está atendendo, e é isso que o painel precisa
+      // dizer. O motivo exato fica no log.
       this.logger.warn(`getStatus falhou: ${e?.message}`);
       return 'UNREACHABLE';
     }
@@ -69,6 +92,7 @@ export class WahaHealthService {
         method: 'POST',
         headers: { 'X-Api-Key': this.apiKey, 'Content-Type': 'application/json' },
         body: '{}',
+        signal: AbortSignal.timeout(WahaHealthService.START_TIMEOUT_MS),
       });
       this.logger.log(`tryStart: HTTP ${res.status}`);
       return res.ok;
