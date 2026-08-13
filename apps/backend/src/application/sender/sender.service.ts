@@ -118,12 +118,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   // ── Reconexão do número (WAHA) ──────────────────────────────────────────────
   // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão") e devolve o
   // status/QR para a tela de Saúde dos números.
-  async restartWahaSession() {
-    return this.waha.restartSession();
+  // `linha` desde 13/08/2026: sem ela a tela só alcançava o número principal, e
+  // o segundo número não teria como ser pareado nem recuperado pela interface.
+  async restartWahaSession(linha?: string) {
+    return this.waha.restartSession(linha);
   }
 
-  async getWahaQr() {
-    return this.waha.getQr();
+  async getWahaQr(linha?: string) {
+    return this.waha.getQr(linha);
   }
 
   // ---------- número do pool ----------

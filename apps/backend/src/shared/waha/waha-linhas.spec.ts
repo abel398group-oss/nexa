@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WahaClientService, LINHA_PRINCIPAL } from './waha-client.service';
 
 /**
@@ -67,5 +67,49 @@ describe('WahaClientService — resolução de linha', () => {
   it('nome com hífen vira env com underscore', () => {
     process.env.WAHA_PRE_VENDAS_API_URL = 'http://waha-pre:3000';
     expect(svc().resolveLinha('pre-vendas').baseUrl).toBe('http://waha-pre:3000');
+  });
+});
+
+// Pareamento da segunda linha — sem isto o número novo não teria como ser
+// vinculado pela tela, nem no primeiro dia nem nas quedas seguintes, que é o
+// caso que mais dói: sessão cai e quem recupera precisa do QR na hora.
+describe('WahaClientService — sessão por linha', () => {
+  const OLD = process.env;
+  let chamadas: string[];
+
+  beforeEach(() => {
+    process.env = {
+      ...OLD,
+      WAHA_API_URL: 'http://waha:3000',
+      WAHA_API_KEY: 'chave-principal',
+      WAHA_SESSION: 'default',
+      WAHA_VENDAS_API_URL: 'http://waha-vendas:3000',
+      WAHA_VENDAS_API_KEY: 'chave-vendas',
+    };
+    chamadas = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      chamadas.push(String(url));
+      return { ok: true, json: async () => ({ status: 'SCAN_QR_CODE' }), arrayBuffer: async () => new ArrayBuffer(4) };
+    }));
+  });
+
+  afterEach(() => {
+    process.env = OLD;
+    vi.unstubAllGlobals();
+  });
+
+  it('o QR da linha de vendas vem do container de vendas', async () => {
+    await new WahaClientService().getQr('vendas');
+    expect(chamadas.every((u) => u.startsWith('http://waha-vendas:3000'))).toBe(true);
+  });
+
+  it('sem linha, continua olhando o número principal', async () => {
+    await new WahaClientService().getQr();
+    expect(chamadas.every((u) => u.startsWith('http://waha:3000'))).toBe(true);
+  });
+
+  it('o restart também respeita a linha — reiniciar o número errado derruba quem está online', async () => {
+    await new WahaClientService().restartSession('vendas');
+    expect(chamadas[0]).toBe('http://waha-vendas:3000/api/sessions/default/restart');
   });
 });

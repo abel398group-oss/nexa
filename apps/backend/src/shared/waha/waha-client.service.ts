@@ -315,12 +315,19 @@ export class WahaClientService {
   }
 
   // ── Gestão da sessão (reconectar número) ────────────────────────────────────
+  //
+  // Os três métodos abaixo aceitam LINHA desde 13/08/2026. Sem isso o painel só
+  // enxergava o número principal, e o segundo número não teria como ser pareado
+  // pela tela — nem no primeiro dia, nem nas quedas seguintes, que são o caso
+  // que mais dói (sessão cai, e quem recupera precisa do QR na hora).
+  //
   // Estado atual: WORKING | SCAN_QR_CODE | STARTING | FAILED | STOPPED
-  async getSessionStatus(): Promise<{ status: string } | null> {
-    if (!this.configured) return null;
+  async getSessionStatus(linha?: string): Promise<{ status: string } | null> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return null;
     try {
-      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}`, {
-        headers: { 'X-Api-Key': process.env.WAHA_API_KEY as string },
+      const res = await fetch(`${alvo.baseUrl}/api/sessions/${alvo.session}`, {
+        headers: { 'X-Api-Key': alvo.apiKey },
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return null;
@@ -333,12 +340,13 @@ export class WahaClientService {
 
   // Reinicia a sessão (recupera de FAILED e força novo pareamento por QR
   // quando o aparelho foi desvinculado do WhatsApp).
-  async restartSession(): Promise<{ ok: boolean; reason?: string }> {
-    if (!this.configured) return { ok: false, reason: 'waha_nao_configurado' };
+  async restartSession(linha?: string): Promise<{ ok: boolean; reason?: string }> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return { ok: false, reason: 'waha_nao_configurado' };
     try {
-      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}/restart`, {
+      const res = await fetch(`${alvo.baseUrl}/api/sessions/${alvo.session}/restart`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        headers: { 'content-type': 'application/json', 'X-Api-Key': alvo.apiKey },
         signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) {
@@ -354,14 +362,15 @@ export class WahaClientService {
 
   // QR de pareamento como data URL (image/png) + status atual.
   // Se já estiver WORKING, não há QR (retorna só o status).
-  async getQr(): Promise<{ status: string; qr?: string; reason?: string }> {
-    if (!this.configured) return { status: 'UNKNOWN', reason: 'waha_nao_configurado' };
-    const st = await this.getSessionStatus();
+  async getQr(linha?: string): Promise<{ status: string; qr?: string; reason?: string }> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return { status: 'UNKNOWN', reason: 'waha_nao_configurado' };
+    const st = await this.getSessionStatus(linha);
     const status = st?.status ?? 'UNKNOWN';
     if (status === 'WORKING') return { status };
     try {
-      const res = await fetch(`${this.baseUrl}/api/${this.session}/auth/qr?format=image`, {
-        headers: { 'X-Api-Key': process.env.WAHA_API_KEY as string, Accept: 'image/png' },
+      const res = await fetch(`${alvo.baseUrl}/api/${alvo.session}/auth/qr?format=image`, {
+        headers: { 'X-Api-Key': alvo.apiKey, Accept: 'image/png' },
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) return { status, reason: `waha_${res.status}` };

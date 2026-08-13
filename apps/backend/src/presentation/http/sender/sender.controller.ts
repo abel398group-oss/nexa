@@ -297,16 +297,18 @@ export class SenderController {
     return this.sender.listNumbers(tenantId);
   }
 
-  // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão" / reparear)
+  // Reinicia a sessão do WhatsApp (recuperar de "Falha na sessão" / reparear).
+  // `?linha=vendas` alcança a segunda linha; sem o parâmetro, a principal — que
+  // é o comportamento de quem já usa a tela hoje.
   @Post('sender/session/restart')
-  restartSession() {
-    return this.sender.restartWahaSession();
+  restartSession(@Query('linha') linha?: string) {
+    return this.sender.restartWahaSession(linha);
   }
 
   // QR de pareamento + status atual da sessão (a tela mostra o QR para escanear)
   @Get('sender/session/qr')
-  sessionQr() {
-    return this.sender.getWahaQr();
+  sessionQr(@Query('linha') linha?: string) {
+    return this.sender.getWahaQr(linha);
   }
 
   // janela de envio (horários) por tenant — exibida/editada na tela de Disparo
