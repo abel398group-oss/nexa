@@ -16,6 +16,10 @@
  *
  * Filtros aplicados em todos os branches:
  *   • Nunca fecha waiting_internal nem escalated (responsabilidade da equipe)
+ *   • Nunca fecha conversa com humanTakeoverAt — um humano assumiu, e ele fecha.
+ *     (`escalated` não cobre: o takeover do ADR 035 liga numa conversa `open`.)
+ *     Exceção deliberada: closeResolvedSupport, onde o próprio humano marcou como
+ *     resolvido e pediu o fechamento em 48h.
  *   • Branch comercial: só customerStage='lead'
  *   • Branch suporte:   só customerStage in ['cliente_ativo', 'cliente_novo']
  *                       E ticketCategory NOT NULL (ticket classificado)
@@ -428,6 +432,7 @@ export class ConversationJanitorService {
         ticketCategory: { not: null },   // tem que ser um ticket de suporte classificado
         lastActivityAt: { lt: cutoff },
         resolvedAt: null,                // não fechar tickets que já foram resolvidos (usam autoCloseAt)
+        humanTakeoverAt: null,           // ver nota em closeInactiveLeads
       } as any,
       select: { id: true, status: true, phone: true, ticketNumber: true }, // status real para fromStatus no histórico (BUG-004 fix)
     });
@@ -478,12 +483,30 @@ export class ConversationJanitorService {
     //
     // Ajuste 3: só leads (customerStage = lead).
     //   cliente_ativo/cliente_novo usam lógica de suporte (RESOLVED→48h)
+    //
+    // `humanTakeoverAt: null` (13/08/2026) fecha o buraco entre a política
+    // declarada no topo deste arquivo — "escalado a humano → humano fecha
+    // manualmente, fora do escopo do janitor" — e o que ela conseguia checar.
+    // `escalated` era o único marcador quando isto foi escrito; o ADR 035 trouxe
+    // o `humanTakeoverAt`, que é o marcador PRECISO de "um humano assumiu" e que
+    // liga numa conversa `open`, sem nunca passar por `escalated`
+    // (conversations.service, addMessage: primeira resposta humana → takeover).
+    //
+    // Sem isto, o vendedor respondia o lead de próprio punho e, no silêncio dos 7
+    // dias seguintes, o janitor fechava a conversa dele E mandava ao cliente
+    // "Encerramos nossa conversa por inatividade" — por cima de um atendimento
+    // humano. Mesmo padrão do follow-up corrigido no mesmo dia.
+    //
+    // Efeito colateral aceito e igual ao do `escalated`: conversa com dono humano
+    // não fecha sozinha. Quem devolve pra fila é o `returnToAi` (que limpa o
+    // takeover) ou o fechamento manual.
     const candidates = await this.prisma.aiConversation.findMany({
       where: {
         status: { in: ['open', 'waiting_customer'] as any },
         customerStage: 'lead',
         lastActivityAt: { lt: cutoff },
-      },
+        humanTakeoverAt: null,
+      } as any,
       select: { id: true, phone: true, status: true }, // status para fromStatus no histórico (BUG-004 fix)
     });
 

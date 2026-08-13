@@ -447,3 +447,57 @@ describe('ConversationJanitorService — janela de horario do fechamento', () =>
     expect(deps.waha.sendText).not.toHaveBeenCalled();
   });
 });
+
+// ─── Takeover humano: o janitor não fecha nem avisa por cima do atendente ────
+//
+// O cabeçalho deste serviço já declarava a política — "escalado a humano →
+// humano fecha manualmente, fora do escopo do janitor". O que faltava era
+// alcance: `escalated` era o único marcador quando aquilo foi escrito, e o
+// takeover do ADR 035 liga numa conversa `open`, sem nunca passar por
+// `escalated`. Achado em 13/08/2026.
+describe('Janitor — conversa com dono humano', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationJanitorService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+    deps.prisma.aiConversation.findMany.mockResolvedValue([]);
+  });
+
+  const whereDaBusca = () => deps.prisma.aiConversation.findMany.mock.calls[0][0].where;
+
+  it('lead: a busca exclui quem tem takeover humano', async () => {
+    await (svc as any).closeInactiveLeads();
+    expect(whereDaBusca().humanTakeoverAt).toBeNull();
+  });
+
+  it('suporte sem resposta: a busca exclui quem tem takeover humano', async () => {
+    await (svc as any).closeNoResponseSupport();
+    expect(whereDaBusca().humanTakeoverAt).toBeNull();
+  });
+
+  // Sem candidato, nada é fechado e NADA é mandado ao cliente — era este o
+  // estrago: "Encerramos nossa conversa por inatividade" caindo em cima de um
+  // atendimento humano em andamento.
+  it('nada a fechar: não escreve no banco nem manda mensagem', async () => {
+    await (svc as any).closeInactiveLeads();
+    expect(deps.prisma.$transaction).not.toHaveBeenCalled();
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
+  });
+
+  // A exceção deliberada: aqui foi o PRÓPRIO humano que marcou como resolvido e
+  // pediu o fechamento em 48h — o janitor só cumpre o que ele pediu.
+  it('resolvido pelo humano continua fechando em 48h (não filtra takeover)', async () => {
+    await (svc as any).closeResolvedSupport();
+    expect(whereDaBusca()).not.toHaveProperty('humanTakeoverAt');
+  });
+
+  it('os outros filtros da regra continuam de pé', async () => {
+    await (svc as any).closeInactiveLeads();
+    const w = whereDaBusca();
+    expect(w.status).toEqual({ in: ['open', 'waiting_customer'] });
+    expect(w.customerStage).toBe('lead');
+    expect(w.lastActivityAt.lt).toBeInstanceOf(Date);
+  });
+});
