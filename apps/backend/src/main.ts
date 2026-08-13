@@ -17,6 +17,7 @@ import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { validateEnv } from './shared/config/validate-env';
+import { traduzirMensagensDeValidacao } from './shared/validation/validation-messages.pt';
 
 /**
  * Rejeição de promise sem `catch` NÃO pode derrubar o servidor.
@@ -97,8 +98,14 @@ async function bootstrap() {
         const detalhes = errors.flatMap((e) =>
           Object.values(e.constraints ?? {}).length ? Object.values(e.constraints ?? {}) : [e.property],
         );
-        validationLogger.warn(`payload rejeitado: ${detalhes.join(' | ')}`);
-        return new BadRequestException(detalhes);
+        // O produto inteiro fala português e as mensagens de validação eram as
+        // únicas em inglês — o operador via "name should not be empty" no meio
+        // de uma tela em pt-BR. Só o TEXTO muda: o shape, a ordem e o nome do
+        // campo continuam iguais, e o proxy do TMS mostra este array como texto
+        // para o usuário final. Ver validation-messages.pt.ts.
+        const traduzidos = traduzirMensagensDeValidacao(detalhes);
+        validationLogger.warn(`payload rejeitado: ${traduzidos.join(' | ')}`);
+        return new BadRequestException(traduzidos);
       },
     }),
   );

@@ -96,8 +96,14 @@ Content-Type: application/json
 > ⚠️ **Campo novo neste payload exige mudança no Nexa ANTES do deploy do TMS.**
 > O Nexa roda `ValidationPipe({ forbidNonWhitelisted: true })` global: qualquer
 > propriedade não declarada no `CreateHandoffDto` faz a request inteira falhar com
-> `400 { "message": ["property X should not exist"] }`. A validação roda **antes**
-> da autenticação, então a chamada nem chega ao service.
+> `400 { "message": ["o campo \"X\" não é aceito nesta rota"] }`. A validação roda
+> **antes** da autenticação, então a chamada nem chega ao service.
+>
+> As mensagens de validação passaram a sair em **português** em 13/08/2026 (antes
+> eram o texto padrão do class-validator, em inglês — `property X should not
+> exist`). O **shape não mudou**: continua `{ message: string[], error,
+> statusCode }`, e o nome do campo continua dentro da frase. Se algum lado casar
+> o TEXTO da mensagem em vez de ler o array, é aqui que quebra.
 >
 > Isso já derrubou a abertura de chamado do widget duas vezes: `isManager`
 > (09/07/2026) e `companyName` + `cnpj` (07/08/2026). Nas duas, o TMS converteu o
