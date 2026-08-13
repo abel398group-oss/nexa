@@ -89,9 +89,19 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // nao tenta renovar em rotas de auth nem se ja tentou
-    const isAuthRoute =
-      url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/me');
+    // Não tenta renovar em rotas de auth nem se já tentou.
+    //
+    // `/auth/me` saiu desta lista, e é o ponto todo: o access token vive 15min
+    // (ACCESS_TTL) e o refresh vive 7 dias. Passados 15min parado, a primeira
+    // chamada de qualquer carga de página é o `/auth/me` — que levava 401, não
+    // tentava renovar por estar listado aqui, e mandava para o login com o
+    // refresh token ainda válido por uma semana. Deslogava sozinho a cada 15min
+    // de inatividade (medido em 12/08/2026).
+    //
+    // `login` e `refresh` continuam fora: renovar depois de um login recusado
+    // não faz sentido, e renovar o próprio refresh seria recursão. O laço em
+    // `/auth/me` já é impedido pelo `_retry` logo abaixo — uma tentativa só.
+    const isAuthRoute = url.includes('/auth/login') || url.includes('/auth/refresh');
     if (status === 401 && original && !original._retry && !isAuthRoute) {
       original._retry = true;
       try {
