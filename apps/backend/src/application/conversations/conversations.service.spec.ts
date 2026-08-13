@@ -803,8 +803,54 @@ describe('ConversationsService — 2B findAll: escopo, fila e ordenação', () =
     ]);
     const grupoBusca = whereDe().AND.find((c: any) => c.OR?.some((o: any) => o.phone));
     expect(grupoBusca.OR).toEqual(
-      expect.arrayContaining([{ phone: { contains: 'Transportadora' } }, { phone: { in: ['5511999'] } }]),
+      expect.arrayContaining([
+        { phone: { contains: 'Transportadora', mode: 'insensitive' } },
+        { phone: { in: ['5511999'] } },
+      ]),
     );
+  });
+
+  // O campo `phone` guarda "email:<endereço>" no canal e-mail. Sem `mode`, o
+  // Postgres compara com maiúscula: "Mateus" não achava "email:mateus.gomes@…"
+  // e "mateus" achava — a mesma busca dando resposta diferente conforme a tecla
+  // Shift.
+  it('busca por telefone/e-mail ignora maiúsculas', async () => {
+    deps.prisma.contact.findMany.mockResolvedValue([]);
+
+    await svc.findAll('t1', { ...q, search: 'MATEUS' });
+
+    const grupoBusca = whereDe().AND.find((c: any) => c.OR?.some((o: any) => o.phone));
+    expect(grupoBusca.OR).toContainEqual({ phone: { contains: 'MATEUS', mode: 'insensitive' } });
+  });
+
+  // A tela mostra "(11) 97486-9142", o banco guarda "5511974869142". Copiar da
+  // tela e colar na busca é o gesto mais natural que existe e devolvia zero.
+  it('busca por número formatado também procura só os dígitos', async () => {
+    deps.prisma.contact.findMany.mockResolvedValue([]);
+
+    await svc.findAll('t1', { ...q, search: '(11) 97486-9142' });
+
+    const grupoBusca = whereDe().AND.find((c: any) => c.OR?.some((o: any) => o.phone));
+    expect(grupoBusca.OR).toContainEqual({ phone: { contains: '11974869142' } });
+  });
+
+  // O contrário do teste acima: dígito solto dentro de um texto não pode virar
+  // uma busca larga que casa com meio banco.
+  it('não cria busca por dígitos quando são poucos demais', async () => {
+    deps.prisma.contact.findMany.mockResolvedValue([]);
+
+    await svc.findAll('t1', { ...q, search: 'Rota 12' });
+
+    const grupoBusca = whereDe().AND.find((c: any) => c.OR?.some((o: any) => o.phone));
+    expect(grupoBusca.OR).not.toContainEqual({ phone: { contains: '12' } });
+    expect(grupoBusca.OR).toHaveLength(1);
+  });
+
+  // 'all' é o chip "Todas" do Inbox, não um status do enum: repassá-lo ao
+  // Prisma derrubava a listagem inteira com 500.
+  it("status 'all' não vira filtro no Prisma", async () => {
+    await svc.findAll('t1', q, undefined, undefined, { status: 'all' });
+    expect(whereDe().status).toBeUndefined();
   });
 
   it('statusCounts ignora o filtro de status — senão o chip selecionado zeraria os outros', async () => {

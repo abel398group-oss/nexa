@@ -60,9 +60,28 @@ export class ConversationsService {
       take: 500,
     });
     const phones = contatos.map((c) => c.phone);
+
+    // O campo `phone` guarda duas coisas: o número cru ("5511974869142") e, no
+    // canal e-mail, "email:<endereço>". Dois furos vinham daí, achados em
+    // 13/08/2026:
+    //
+    // 1. `contains` sem `mode` é sensível a maiúscula no Postgres — buscar
+    //    "Mateus" não achava "email:mateus.gomes@…", só "mateus". Nome e
+    //    empresa (acima) já eram insensitive; o telefone ficou para trás.
+    //
+    // 2. A tela mostra "(11) 97486-9142" e guarda "5511974869142". Copiar o
+    //    número do card e colar na busca — o gesto mais natural que existe —
+    //    devolvia zero. Comparar só os dígitos resolve.
+    //
+    // O piso de 4 dígitos evita o oposto: em "Rota 12" os dígitos soltos
+    // casariam com meio banco.
+    const digitos = t.replace(/\D/g, '');
+    const buscaPorDigitos = digitos.length >= 4 && digitos !== t;
+
     return {
       OR: [
-        { phone: { contains: t } },
+        { phone: { contains: t, mode: 'insensitive' } },
+        ...(buscaPorDigitos ? [{ phone: { contains: digitos } }] : []),
         ...(phones.length ? [{ phone: { in: phones } }] : []),
       ],
     };
