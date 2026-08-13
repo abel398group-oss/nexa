@@ -11,7 +11,7 @@ import { useTenant } from '@/app/providers/TenantContext';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/icons';
-import { displayPhone } from '@/shared/lib/phone';
+import { identidadeVisivel } from '@/shared/lib/conversation';
 import { bulkTagContacts, getContactTickets, updateContact, type ContactTicket } from '@/entities/contact';
 import { listSellersMini } from '@/entities/seller';
 import {
@@ -1041,13 +1041,13 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                     <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
                       {(c.contact?.name
                         ? c.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
-                        : displayPhone(c.phone).slice(0, 2)
+                        : identidadeVisivel(c.phone, c.sourceChannel).slice(0, 2)
                       ).toUpperCase()}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
                         <span className="truncate font-medium text-base-content">
-                          {c.contact?.name || displayPhone(c.phone)}
+                          {c.contact?.name || identidadeVisivel(c.phone, c.sourceChannel)}
                         </span>
                         <div className="flex shrink-0 items-center gap-1">
                           {stale && <span title="Aguardando equipe há +2h" className="inline-flex text-amber-500"><Icon name="alert" className="h-3.5 w-3.5" /></span>}
@@ -1070,8 +1070,10 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                           </div>
                         </div>
                       </div>
-                      {c.contact?.name && (
-                        <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>
+                      {c.contact?.name && identidadeVisivel(c.phone, c.sourceChannel) && (
+                        <div className="truncate text-[11px] text-base-content/50">
+                          {identidadeVisivel(c.phone, c.sourceChannel)}
+                        </div>
                       )}
                       {c.contact?.company && (
                         <div className="flex items-center gap-1 truncate text-[11px] text-base-content/60 font-medium">
@@ -1205,7 +1207,7 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
                         <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-medium text-base-content">
-                              {c.contact?.name || displayPhone(c.phone)}
+                              {c.contact?.name || identidadeVisivel(c.phone, c.sourceChannel)}
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-base-content/50">
                               {c.contact?.company && <span className="truncate">{c.contact.company}</span>}
@@ -1240,10 +1242,12 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <div className="flex flex-col min-w-0">
                   <span className="font-medium text-base-content leading-tight">
-                    {active.contact?.name || displayPhone(active.phone)}
+                    {active.contact?.name || identidadeVisivel(active.phone, active.sourceChannel)}
                   </span>
-                  {active.contact?.name && (
-                    <span className="text-xs text-base-content/50">{displayPhone(active.phone)}</span>
+                  {active.contact?.name && identidadeVisivel(active.phone, active.sourceChannel) && (
+                    <span className="text-xs text-base-content/50">
+                      {identidadeVisivel(active.phone, active.sourceChannel)}
+                    </span>
                   )}
                   {active.contact?.company && (
                     <span className="flex items-center gap-1 text-xs text-base-content/60 font-medium">
@@ -1660,14 +1664,18 @@ export function ConversationInbox({ scope = 'sales' }: { scope?: 'sales' | 'supp
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
                 {(active.contact?.name
                   ? active.contact.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
-                  : displayPhone(active.phone).slice(0, 2)
+                  : identidadeVisivel(active.phone, active.sourceChannel).slice(0, 2)
                 ).toUpperCase()}
               </span>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-base-content">
-                  {active.contact?.name || displayPhone(active.phone)}
+                  {active.contact?.name || identidadeVisivel(active.phone, active.sourceChannel)}
                 </div>
-                <div className="truncate text-[11px] text-base-content/50">{displayPhone(active.phone)}</div>
+                {identidadeVisivel(active.phone, active.sourceChannel) && (
+                  <div className="truncate text-[11px] text-base-content/50">
+                    {identidadeVisivel(active.phone, active.sourceChannel)}
+                  </div>
+                )}
               </div>
             </div>
             {tmsLookup?.customer?.email && (

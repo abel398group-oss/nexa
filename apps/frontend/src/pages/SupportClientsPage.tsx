@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { displayPhone } from '@/shared/lib/phone';
-import { isSupportTicket } from '@/shared/lib/conversation';
+import { identidadeVisivel, isSupportTicket } from '@/shared/lib/conversation';
 import { Icon } from '@/shared/ui';
 import { listConversations } from '@/entities/conversation';
 import { StandardListPage } from '@/components/shared/StandardListPage';
@@ -11,10 +10,15 @@ interface Client {
   key: string;
   name: string | null;
   phone: string;
+  /** Canal do chamado — o que aparece quando não existe telefone. */
+  channel: string | null;
   tickets: number;
   open: number;
   lastAt: number;
 }
+
+/** Ver `identidadeVisivel`: só sai número quando existe número; senão, o canal. */
+const subtitulo = (c: Client) => identidadeVisivel(c.phone, c.channel);
 
 function fmt(ts: number): string {
   if (!ts) return '--';
@@ -49,7 +53,15 @@ export function SupportClientsPage() {
         if (isOpen) g.open++;
         if (at > g.lastAt) g.lastAt = at;
       } else {
-        map.set(key, { key, name: c.contact?.name ?? null, phone: c.phone, tickets: 1, open: isOpen ? 1 : 0, lastAt: at });
+        map.set(key, {
+          key,
+          name: c.contact?.name ?? null,
+          phone: c.phone,
+          channel: c.sourceChannel ?? null,
+          tickets: 1,
+          open: isOpen ? 1 : 0,
+          lastAt: at,
+        });
       }
     }
     return [...map.values()].sort((a, b) => b.lastAt - a.lastAt);
@@ -134,11 +146,18 @@ export function SupportClientsPage() {
             <div key={c.key} className="flex items-center justify-between rounded-xl border border-base-200 bg-[var(--surface)] p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600">
-                  {(c.name ? c.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('') : displayPhone(c.phone).slice(0, 2)).toUpperCase()}
+                  {(c.name
+                    ? c.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('')
+                    : subtitulo(c).slice(0, 2) || '?'
+                  ).toUpperCase()}
                 </span>
                 <div className="min-w-0">
-                  <div className="truncate font-medium text-base-content">{c.name || displayPhone(c.phone)}</div>
-                  {c.name && <div className="truncate text-[11px] text-base-content/50">{displayPhone(c.phone)}</div>}
+                  <div className="truncate font-medium text-base-content">
+                    {c.name || subtitulo(c) || 'Cliente sem nome'}
+                  </div>
+                  {c.name && subtitulo(c) && (
+                    <div className="truncate text-[11px] text-base-content/50">{subtitulo(c)}</div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-4 text-xs">

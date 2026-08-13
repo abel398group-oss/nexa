@@ -12,7 +12,35 @@ export function displayPhone(raw: string | null | undefined): string {
   if (d.startsWith('55') && d.length >= 12) d = d.slice(2); // tira o código do país
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  return d || String(raw);
+  // Dígitos soltos só saem quando a entrada JÁ era só dígitos (número parcial,
+  // internacional). Se vieram letras e hífens junto, aquilo não é telefone e
+  // arrancar os dígitos FABRICA um número que nunca existiu: a conversa de web
+  // chat guarda um UUID nesta coluna, e "9f88be3f-5fac-4311-9d3e-ea78a4c6c295"
+  // virava "988354311937846295" na tela de Clientes — 18 dígitos com cara de
+  // telefone, que ninguém consegue discar nem procurar. Achado em 13/08/2026.
+  // Devolver o valor cru já era o combinado para texto sem dígito nenhum
+  // (ver displayPhone('abc') === 'abc' no spec); só faltava valer para o
+  // alfanumérico misturado.
+  const soDigitos = /^\d+$/.test(String(raw).trim());
+  return soDigitos ? d : String(raw);
+}
+
+/**
+ * Existe um telefone de verdade aqui? Serve para a tela decidir entre MOSTRAR o
+ * número e mostrar outra coisa (o canal, por exemplo) — em vez de imprimir um
+ * identificador interno no lugar onde o operador espera um número.
+ *
+ * `email:` e os UUIDs do web chat moram na mesma coluna `phone`; nenhum dos dois
+ * é telefone.
+ */
+export function isPhoneLike(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const s = String(raw).trim();
+  if (s.startsWith('email:')) return false;
+  if (!/^[\d\s()+-]+$/.test(s)) return false; // letra no meio = identificador, não número
+  let d = s.replace(/\D/g, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+  return d.length === 10 || d.length === 11;
 }
 
 /**

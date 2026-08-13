@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { displayPhone, toBrPhone, toLocalPhone } from './phone';
+import { displayPhone, isPhoneLike, toBrPhone, toLocalPhone } from './phone';
 
 describe('displayPhone', () => {
   it('formata celular BR com DDI 55', () => {
@@ -32,6 +32,49 @@ describe('displayPhone', () => {
 
   it('retorna raw se nao reconhecer o formato', () => {
     expect(displayPhone('abc')).toBe('abc');
+  });
+
+  // O bug de 13/08/2026: a conversa de web chat guarda um UUID na coluna
+  // `phone`. Arrancar os dígitos dele FABRICAVA um telefone que nunca existiu —
+  // "988354311937846295" aparecia embaixo do nome de um cliente real na tela de
+  // Clientes, com 18 dígitos e cara de número discável.
+  it('NAO fabrica telefone a partir de um UUID', () => {
+    const uuid = '9f88be3f-5fac-4311-9d3e-ea78a4c6c295';
+    expect(displayPhone(uuid)).toBe(uuid);
+    expect(displayPhone(uuid)).not.toBe('988354311937846295');
+  });
+
+  it('digito solto so sai quando a entrada ja era so digito', () => {
+    // número parcial/estrangeiro: segue devolvendo os dígitos, como antes
+    expect(displayPhone('123456')).toBe('123456');
+    // com letra no meio, devolve cru em vez de inventar
+    expect(displayPhone('ID-12-AB-345')).toBe('ID-12-AB-345');
+  });
+
+  it('mascara digitada continua sendo formatada', () => {
+    expect(displayPhone('(11) 97486-9142')).toBe('(11) 97486-9142');
+    expect(displayPhone('+55 11 97486-9142')).toBe('(11) 97486-9142');
+  });
+});
+
+describe('isPhoneLike', () => {
+  it.each(['5511974869142', '11974869142', '551134567890', '1134567890', '(11) 97486-9142', '+55 11 97486-9142'])(
+    'reconhece %s como telefone',
+    (v) => expect(isPhoneLike(v)).toBe(true),
+  );
+
+  it.each([
+    ['UUID do web chat', '9f88be3f-5fac-4311-9d3e-ea78a4c6c295'],
+    ['e-mail', 'email:lia@hipertms.com.br'],
+    ['texto', 'abc'],
+    ['vazio', ''],
+    ['curto demais', '12345'],
+    ['longo demais', '988354311937846295'],
+  ])('nao reconhece %s', (_, v) => expect(isPhoneLike(v)).toBe(false));
+
+  it('nao reconhece null nem undefined', () => {
+    expect(isPhoneLike(null)).toBe(false);
+    expect(isPhoneLike(undefined)).toBe(false);
   });
 });
 
