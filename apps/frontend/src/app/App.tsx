@@ -45,6 +45,9 @@ const OpportunitiesPage = lazy(() => import('@/pages/OpportunitiesPage').then((m
 const PartnersPage = lazy(() => import('@/pages/PartnersPage').then((m) => ({ default: m.PartnersPage })));
 const SalesQueuePage = lazy(() => import('@/pages/SalesQueuePage').then((m) => ({ default: m.SalesQueuePage })));
 const DevTokensPage = lazy(() => import('@/pages/DevTokensPage').then((m) => ({ default: m.DevTokensPage })));
+const AdminCockpitPage = lazy(() => import('@/pages/AdminCockpitPage').then((m) => ({ default: m.AdminCockpitPage })));
+const SdrCockpitPage = lazy(() => import('@/pages/SdrCockpitPage').then((m) => ({ default: m.SdrCockpitPage })));
+const CloserCockpitPage = lazy(() => import('@/pages/CloserCockpitPage').then((m) => ({ default: m.CloserCockpitPage })));
 // Portal do cliente — área pública e independente (auth própria, fora do Layout interno).
 const PortalPage = lazy(() => import('@/pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
 
@@ -118,6 +121,9 @@ export default function App() {
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
                     <Route path="/settings/support-email" element={<Perm perm="admin"><SupportEmailSettingsPage /></Perm>} />
                     <Route path="/settings/monitor" element={<Perm perm="admin"><MonitorConfigPage /></Perm>} />
+                    <Route path="/admin-cockpit" element={<Perm perm="admin"><AdminCockpitPage /></Perm>} />
+                    <Route path="/sdr-cockpit" element={<Perm perm="telemarketing"><SdrCockpitPage /></Perm>} />
+                    <Route path="/closer-cockpit" element={<Perm perm="telemarketing"><CloserCockpitPage /></Perm>} />
                     {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
                   </Route>
                 </Route>

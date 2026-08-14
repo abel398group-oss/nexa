@@ -36,39 +36,15 @@ const NAV_GROUPS: NavGroup[] = [
     // Primeiro item de propósito: é a tela onde o vendedor TRABALHA (F7 — RevOps).
     { to: '/fila',           label: 'Minha fila',        ic: 'zap',       perm: 'opportunities' },
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
-    // F16: tirado do menu — o perfil do contato (empresa/dono da conta/histórico)
-    // agora vive fixo no painel do Inbox. A tela continua em /contacts (import
-    // CSV, tags, bloqueio em massa não têm equivalente lá ainda), só não é mais
-    // o caminho do dia a dia.
     { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
-    { to: '/campaigns',      label: 'Disparo',           ic: 'campaigns', perm: 'campaigns' },
-      // Audiência do site fica ao lado do Disparo, não em 'Saúde dos números':
-      // aquela tela é sessão do WAHA e risco de ban. A pergunta desta é 'a campanha
-      // trouxe gente ao site?', e quem a faz é quem dispara.
-      // 'Quem clicou' vem ANTES da audiência: audiência é número, esta é ação.
-      { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap',  perm: 'campaigns' },
-      { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye', perm: 'campaigns' },
-    { to: '/sender/health',  label: 'Saúde dos números', ic: 'pulse',     perm: 'campaigns' },
-    { to: '/contacts/abuse', label: 'Números banidos',   ic: 'ban',       perm: 'contacts' },
-    { to: '/sellers',        label: 'Vendedores',        ic: 'sellers',   perm: 'sellers' },
-    { to: '/partners',       label: 'Parceiros',         ic: 'building',  perm: 'partners' },
-    { to: '/playbook',       label: 'Playbook',          ic: 'playbook',  perm: 'ai_control' },
-    // Mercados fica no fim do bloco de Vendas: é configuração de quem monta a
-    // operação, não do dia a dia de quem dispara.
-    // Mensagens é do dia a dia de quem dispara (perm campaigns); Mercados é de quem
-    // monta a operação (perm settings).
-    { to: '/messages',       label: 'Mensagens',         ic: 'mail',      perm: 'campaigns' },
-    { to: '/markets',        label: 'Mercados',          ic: 'building',  perm: 'settings' },
-    // Prospecção ativa (módulos 1-3). A ordem é a da esteira — quem chega novo entende
-    // o fluxo lendo o menu de cima para baixo: sobe a lista, trabalha, fecha.
-    // Listas fica sob `lead_batches` e não `campaigns`: importar cria contatos e
-    // oportunidades, que é um poder diferente de disparar para quem já está na base.
-    { to: '/lead-batches',   label: 'Listas de lead',    ic: 'contacts',  perm: 'lead_batches' },
-    { to: '/roteiro',        label: 'Roteiro do SDR',    ic: 'playbook',  perm: 'settings' },
-    { to: '/sdr',            label: 'Mesa do SDR',       ic: 'sellers',   perm: 'telemarketing' },
-    { to: '/closer',         label: 'Hoje (closer)',     ic: 'zap',       perm: 'telemarketing' },
-    // Fecha o bloco: é a leitura do que as outras quatro telas produziram.
-    { to: '/vendas/relatorio', label: 'Relatório comercial', ic: 'trophy', perm: 'metrics' },
+    // Audiência do site — fica aqui (não entrou no Cockpit Admin)
+    { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap',       perm: 'campaigns' },
+    { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye',       perm: 'campaigns' },
+    { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
+    // Cockpits unificados (13/08/2026) — consolidam todas as telas admin, SDR e Closer
+    { to: '/admin-cockpit',  label: 'Cockpit Admin',     ic: 'building',  perm: 'admin' },
+    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: 'telemarketing' },
+    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: 'telemarketing' },
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
@@ -116,6 +92,9 @@ const titles: Record<string, string> = {
   '/settings/email-channel': 'Canal de E-mail',
   '/settings/support-email': 'E-mail de Suporte',
   '/settings/monitor': 'Monitor Proativo',
+  '/admin-cockpit': 'Cockpit Admin',
+  '/sdr-cockpit': 'Cockpit SDR',
+  '/closer-cockpit': 'Cockpit Closer',
 };
 
 type AutonomyState = { master: boolean; whatsapp: boolean; email: boolean };
