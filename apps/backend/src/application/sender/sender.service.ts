@@ -172,11 +172,22 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return Math.min(n.dailyLimit, warm);
   }
 
-  async ensureNumber(tenantId: string) {
-    let n = await this.prisma.senderNumber.findFirst({ where: { tenantId, active: true } });
+  /**
+   * `linha` isola o registro (13/08/2026 — divisão de números): a principal e a
+   * vendas são chips DIFERENTES, e aquecimento/teto diário de um não pode valer
+   * para o outro. Sem `linha`, cai na principal — mesmo comportamento de sempre
+   * para quem não passa nada.
+   */
+  async ensureNumber(tenantId: string, linha: string = 'principal') {
+    let n = await this.prisma.senderNumber.findFirst({ where: { tenantId, active: true, linha } as any });
     if (!n) {
+      const phoneEnvKey = linha === 'principal' ? 'WAHA_SENDER_PHONE' : `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_SENDER_PHONE`;
+      const phone = process.env[phoneEnvKey] ?? (linha === 'principal' ? '5512997880659' : `sem-numero-${linha}`);
+      if (phone.startsWith('sem-numero-')) {
+        this.logger.warn(`ensureNumber: sem ${phoneEnvKey} — número de exibição fica "${phone}" (não afeta o envio, só o rótulo na tela)`);
+      }
       n = await this.prisma.senderNumber.create({
-        data: { tenantId, phone: process.env.WAHA_SENDER_PHONE ?? '5512997880659', sessionName: process.env.WAHA_SESSION ?? 'default' },
+        data: { tenantId, phone, sessionName: 'default', linha } as any,
       });
     }
     // reseta contador diário se virou o dia
@@ -198,18 +209,19 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // de bloqueio, e sem ele a tela de saúde mostrava um chip ocioso que na
     // verdade estava a plena carga.
     //
-    // 'principal' explícito: campanha só roda no número principal hoje (a
-    // linha vendas ainda não tem `SenderNumber` próprio), então é o orçamento
-    // dela que interessa aqui.
-    const budget = (await this.budget?.snapshot('principal').catch(() => null)) ?? null;
+    // Por NÚMERO, não mais um snapshot global (13/08/2026): com duas linhas,
+    // cada `SenderNumber` tem o orçamento do próprio chip — misturar os dois
+    // aqui reintroduziria o mesmo bug que corrigimos no NumberBudgetService.
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
     // e com a saúde de engajamento das últimas 24h (freio anti-queima).
-    return numbers.map((n: any) => ({
-      ...n,
-      effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
-      health,
-      budget,
-    }));
+    return Promise.all(
+      numbers.map(async (n: any) => ({
+        ...n,
+        effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
+        health,
+        budget: (await this.budget?.snapshot(n.linha ?? 'principal').catch(() => null)) ?? null,
+      })),
+    );
   }
 
   /**
@@ -310,11 +322,20 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
       /** Vendedor dono. Vem do token quando quem cria é vendedor. */
       ownerSellerId?: string | null;
+      /**
+       * Linha de WhatsApp (13/08/2026). Sem escolha explícita, campanha NOVA sai
+       * pela vendas — é o funil de prospecção migrando pro número dedicado
+       * (Mateus). Linha inexistente/mal configurada cai na principal sozinha
+       * (ver `WahaClientService.resolveLinha`), então o default aqui nunca
+       * derruba um disparo por falta de configuração.
+       */
+      linha?: string;
     },
   ) {
     const ownerSellerId = dto.ownerSellerId || null;
     const campaignType = dto.type === 'status' ? 'status' : 'message';
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+    const linha = dto.linha || 'vendas';
 
     // ── Campanha de Status WhatsApp: sem targets, cria direto e retorna ────────
     if (campaignType === 'status') {
@@ -329,6 +350,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           mediaName: dto.mediaName || null,
           scheduledAt,
           ownerSellerId,
+          ...({ linha } as any),
           ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         },
       });
@@ -535,6 +557,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         // agendada já entra como running; o worker só dispara a partir de scheduledAt
         scheduledAt,
+        ...({ linha } as any),
         ...(scheduledAt ? { status: 'running', startedAt: new Date() } : {}),
         targets: {
           create: [
@@ -765,7 +788,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async updateCampaign(
     tenantId: string,
     id: string,
-    dto: { name?: string; template?: string; subject?: string; link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string | null },
+    dto: { name?: string; template?: string; subject?: string; link?: string; mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string | null; linha?: string },
   ) {
     const c = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
@@ -796,6 +819,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         ...(isEditableInFull && dto.mediaUrl !== undefined ? { mediaUrl: dto.mediaUrl || null } : {}),
         ...(isEditableInFull && dto.mediaName !== undefined ? { mediaName: dto.mediaName || null } : {}),
         ...(isEditableInFull && dto.sendLimit !== undefined ? { sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null } : {}),
+        ...(isEditableInFull && dto.linha !== undefined ? ({ linha: dto.linha || 'vendas' } as any) : {}),
         // DISP-019: reagendamento. Campanha agendada entra como 'running' e o
         // worker segura até a hora; ao tirar o agendamento (null) ela passa a
         // poder disparar assim que o operador iniciar.
@@ -1145,9 +1169,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           // Status é UM post só — o spin aqui não é anti-ban, é para as chaves não
           // vazarem literalmente caso o usuário reaproveite um template com variação.
           const statusText = spin(statusCampaign.template ?? '');
+          const statusLinha = (statusCampaign as any).linha ?? undefined;
           const result = resolvedMediaUrl
-            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusText || undefined)
-            : await this.waha.sendStatusText(statusText);
+            ? await this.waha.sendStatusImage(resolvedMediaUrl, statusText || undefined, statusLinha)
+            : await this.waha.sendStatusText(statusText, undefined, undefined, statusLinha);
           if (result.sent) {
             await this.prisma.campaign.update({
               where: { id: statusCampaign.id },
@@ -1198,7 +1223,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       const antibanState = await this.readAntibanState();
       if (Date.now() - antibanState.lastSentAt < antibanState.nextDelayMs) return;
 
-      const number = await this.ensureNumber(campaign.tenantId);
+      const number = await this.ensureNumber(campaign.tenantId, (campaign as any).linha ?? 'principal');
       const dailyCap = this.effectiveDailyLimit(number);
       if (number.sentToday >= dailyCap) {
         this.logger.warn(`Limite diário atingido (${dailyCap}, warmup stage ${number.warmupStage}) — pausa hoje`);
@@ -1216,8 +1241,9 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       //
       // Quem cede é a campanha, sempre: prospecção fria é o tráfego descartável.
       // Alerta de cliente e resposta em conversa aberta nunca são bloqueados.
-      // 'principal' explícito pelo mesmo motivo do listNumbers() acima.
-      const ceiling = await this.budget?.overCeiling('principal');
+      // Teto da LINHA da campanha, não mais fixo em 'principal' — cada chip tem
+      // o próprio orçamento (mesmo motivo do ensureNumber acima).
+      const ceiling = await this.budget?.overCeiling((campaign as any).linha ?? 'principal');
       if (ceiling?.over) {
         this.logger.warn(`Campanha pausada — ${ceiling.reason}`);
         return;
@@ -1331,6 +1357,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             productCode: (campaign as any).productCode ?? undefined,
             // Quem disparou é quem atende a resposta (11/08/2026).
             assignedSellerId: (campaign as any).ownerSellerId ?? undefined,
+            // A conversa nasce na linha da campanha e a resposta (inclusive
+            // follow-up) sai por ela pra sempre — ver o invariante em
+            // ConversationsService.addMessage.
+            wahaLine: (campaign as any).linha ?? undefined,
           });
         } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
           // reabre; se vinha de opt-out, limpa o outcome (voltou a ficar ativa).
@@ -1388,7 +1418,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           const wahaUrl = campaign.mediaUrl.startsWith('http') && idx2 < 0
             ? campaign.mediaUrl
             : wahaBase.replace(/\/$/, '') + relativePath2;
-          const rAnexo = await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign');
+          const rAnexo = await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign', (campaign as any).linha ?? undefined);
           if (!rAnexo.sent) {
             anexoFalhou = rAnexo.reason ?? 'motivo desconhecido';
             this.logger.warn(

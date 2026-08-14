@@ -831,8 +831,13 @@ model SenderNumber {
   hourStamp    String?  @map("hour_stamp") // YYYY-MM-DD-HH
   warmupStage  Int      @default(0) @map("warmup_stage") // aquecimento (G7)
   createdAt    DateTime @default(now()) @map("created_at")
+  /// LINHA de WhatsApp que este número representa (13/08/2026). Cada linha é um
+  /// chip físico diferente — não pode compartilhar aquecimento/teto diário com
+  /// outra. `ensureNumber(tenantId, linha)` isola um registro por linha.
+  linha String @default("principal") @map("linha")
 
   @@index([tenantId])
+  @@index([tenantId, linha])
   @@map("sender_numbers")
 }
 
@@ -865,6 +870,13 @@ model Campaign {
   /// admin vê todos. A conversa criada por esta campanha nasce com este vendedor
   /// — sem isso a resposta do lead cairia sem dono e os três a veriam.
   ownerSellerId String? @map("owner_seller_id")
+  /// Por qual LINHA de WhatsApp esta campanha dispara (13/08/2026 — divisão de
+  /// números). Default "principal" é só o valor de BACKFILL para linhas
+  /// históricas que realmente saíram por ali; campanha NOVA recebe "vendas" na
+  /// própria `createCampaign()` — é o funil de prospecção migrando pro número
+  /// dedicado. A conversa criada herda esta linha (ver `wahaLine`), e toda
+  /// resposta — inclusive follow-up — sai por ela depois.
+  linha String @default("principal") @map("linha")
 
   targets CampaignTarget[]
 

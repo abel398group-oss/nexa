@@ -199,7 +199,8 @@ describe('SenderService — Canal Status WhatsApp (ADR-026)', () => {
       wahaResult: { sent: true, postId: 'pid2' },
     });
     await svc.tick();
-    expect(waha.sendStatusImage).toHaveBeenCalledWith('https://cdn.example.com/banner.jpg', expect.anything());
+    // 3º arg (linha) vem undefined porque o fixture não declara `linha` na campanha.
+    expect(waha.sendStatusImage).toHaveBeenCalledWith('https://cdn.example.com/banner.jpg', expect.anything(), undefined);
     expect(waha.sendStatusText).not.toHaveBeenCalled();
   });
 

@@ -143,8 +143,9 @@ export class WahaClientService {
   }
 
   // envia um arquivo (PDF/Word/imagem) via WAHA, por URL
-  async sendFile(phone: string, fileUrl: string, filename: string, caption?: string, origin?: string): Promise<SendResult> {
-    if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
+  async sendFile(phone: string, fileUrl: string, filename: string, caption?: string, origin?: string, linha?: string): Promise<SendResult> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return { sent: false, reason: 'waha_nao_configurado' };
     if (!this.allowed(phone)) return { sent: false, reason: 'fora_do_allowlist' };
     const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
     const ext = (filename.split('.').pop() ?? '').toLowerCase();
@@ -156,21 +157,21 @@ export class WahaClientService {
       : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
       : 'application/octet-stream';
     try {
-      const res = await fetch(`${this.baseUrl}/api/sendFile`, {
+      const res = await fetch(`${alvo.baseUrl}/api/sendFile`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
-        body: JSON.stringify({ session: this.session, chatId, file: { url: fileUrl, filename, mimetype }, caption }),
+        headers: { 'content-type': 'application/json', 'X-Api-Key': alvo.apiKey },
+        body: JSON.stringify({ session: alvo.session, chatId, file: { url: fileUrl, filename, mimetype }, caption }),
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         this.logger.error(`WAHA sendFile ${res.status}: ${(await res.text()).slice(0, 160)}`);
         return { sent: false, reason: `waha_${res.status}` };
       }
-      await this.debit(origin ?? 'anexo');
+      await this.debit(origin ?? 'anexo', linha);
       return { sent: true };
     } catch (e: any) {
       this.logger.error(`WAHA sendFile falhou: ${e?.message}`);
-      await this.debit(origin ?? 'anexo');
+      await this.debit(origin ?? 'anexo', linha);
       return { sent: false, reason: 'erro_rede' };
     }
   }
@@ -178,12 +179,13 @@ export class WahaClientService {
   // ── Canal Status WhatsApp (ADR-026) ──────────────────────────────────────────
   // Publica um texto no Status (Story) do WhatsApp — visível a todos os contatos
   // salvos, sem destinatário individual. Não usa allowlist (broadcast interno).
-  async sendStatusText(text: string, backgroundColor = '#075E54', font = 0): Promise<StatusPostResult> {
-    if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
+  async sendStatusText(text: string, backgroundColor = '#075E54', font = 0, linha?: string): Promise<StatusPostResult> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return { sent: false, reason: 'waha_nao_configurado' };
     try {
-      const res = await fetch(`${this.baseUrl}/api/${this.session}/status/text`, {
+      const res = await fetch(`${alvo.baseUrl}/api/${alvo.session}/status/text`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        headers: { 'content-type': 'application/json', 'X-Api-Key': alvo.apiKey },
         body: JSON.stringify({ text, backgroundColor, font }),
         signal: AbortSignal.timeout(15_000),
       });
@@ -200,12 +202,13 @@ export class WahaClientService {
   }
 
   // Publica uma imagem (ou vídeo) no Status do WhatsApp com legenda opcional.
-  async sendStatusImage(fileUrl: string, caption?: string): Promise<StatusPostResult> {
-    if (!this.configured) return { sent: false, reason: 'waha_nao_configurado' };
+  async sendStatusImage(fileUrl: string, caption?: string, linha?: string): Promise<StatusPostResult> {
+    const alvo = this.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return { sent: false, reason: 'waha_nao_configurado' };
     try {
-      const res = await fetch(`${this.baseUrl}/api/${this.session}/status/image`, {
+      const res = await fetch(`${alvo.baseUrl}/api/${alvo.session}/status/image`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY as string },
+        headers: { 'content-type': 'application/json', 'X-Api-Key': alvo.apiKey },
         body: JSON.stringify({ file: { url: fileUrl }, caption }),
         signal: AbortSignal.timeout(15_000),
       });

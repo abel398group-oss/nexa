@@ -9,6 +9,8 @@ export interface Campaign {
   status: string;
   scheduledAt?: string | null;
   statusPostedAt?: string | null;
+  /** Linha de WhatsApp por onde dispara (13/08/2026). Ausente = 'principal' (campanha antiga). */
+  linha?: string;
   counts: Record<string, number>;
 }
 

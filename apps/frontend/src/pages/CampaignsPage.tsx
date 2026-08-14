@@ -30,6 +30,7 @@ import {
   getSenderSettings,
   saveSenderSettings,
 } from '@/entities/campaign';
+import { listWhatsappLinhas, linhaLabel, type WhatsappLinha } from '@/shared/lib/whatsappStatus';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/app/providers/ToastContext';
@@ -203,6 +204,17 @@ export function CampaignsPage() {
     api.get('/knowledge/product-codes')
       .then((r) => setProductCodes(r.data ?? []))
       .catch(() => setProductCodes([])); // sugestão é conveniência, não pode quebrar a tela
+  }, []);
+  // Linha de WhatsApp por onde a campanha dispara (13/08/2026 — divisão de
+  // números). Default 'vendas': é o funil de prospecção migrando pro número
+  // dedicado. Some da tela sozinho quando só existe uma linha — nada pra
+  // escolher, nada pra confundir.
+  const [linha, setLinha] = useState('vendas');
+  const [linhas, setLinhas] = useState<WhatsappLinha[]>([]);
+  useEffect(() => {
+    listWhatsappLinhas()
+      .then(setLinhas)
+      .catch(() => setLinhas([])); // some o seletor, campanha continua criável
   }, []);
   const [template, setTemplate] = useState('{{saudacao}}, {{nome}}! Aqui é a Lia do HiperTMS. Posso te apresentar nosso sistema de gestão de fretes?');
   // WhatsApp: default "todos os contatos". Email: default lista manual (fromContacts=false)
@@ -390,7 +402,7 @@ export function CampaignsPage() {
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
     setManualSort('az'); setManualSnapshot(null);
-    setProductCode('');
+    setProductCode(''); setLinha('vendas');
     setFormErrors({});
   }
 
@@ -928,7 +940,7 @@ export function CampaignsPage() {
       setFormErrors({});
       setBusy(true);
       try {
-        const payload: any = { name: name.trim(), template: template.trim(), type: 'status' };
+        const payload: any = { name: name.trim(), template: template.trim(), type: 'status', linha };
         if (productCode.trim()) payload.productCode = productCode.trim();
         if (statusMediaUrl.trim()) payload.mediaUrl = statusMediaUrl.trim();
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
@@ -987,7 +999,7 @@ export function CampaignsPage() {
         if (ignoreDedup) payload.ignoreDedup = true;
         r = await createEmailCampaign(payload);
       } else {
-        const payload: any = { name: name.trim(), template: template.trim() };
+        const payload: any = { name: name.trim(), template: template.trim(), linha };
         if (productCode.trim()) payload.productCode = productCode.trim();
         if (audience === 'todos') {
           payload.fromContacts = true;
@@ -1315,6 +1327,13 @@ export function CampaignsPage() {
                         ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[11px] text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"><Icon name="zap" className="h-3 w-3" /> WA Status</span>
                         : <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700 dark:bg-green-500/15"><Icon name="inbox" className="h-3 w-3" /> WhatsApp</span>
                     }
+                    {/* Linha só aparece com 2+ configuradas — com uma só, dizer "principal"
+                        em toda campanha é ruído (era o único jeito de sempre). */}
+                    {!isEmailCh && linhas.length > 1 && (c as any).linha && (
+                      <span className="rounded-full bg-base-200 px-2 py-0.5 text-[11px] text-base-content/60">
+                        {linhaLabel((c as any).linha)}
+                      </span>
+                    )}
                     {c.scheduledAt && new Date(c.scheduledAt).getTime() > Date.now() && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                         <Icon name="calendar" className="h-3 w-3" /> Agendada {new Date(c.scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -1723,6 +1742,31 @@ export function CampaignsPage() {
                 <Icon name="mail" className="h-4 w-4" /> E-mail
               </button>
             </div>
+
+            {/* Linha de WhatsApp (13/08/2026) — só aparece com 2+ linhas configuradas.
+                Com uma só não há nada pra escolher, e o seletor seria ruído. */}
+            {channel === 'whatsapp' && linhas.length > 1 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-base-content/60">Linha de WhatsApp</label>
+                <div className="flex gap-2">
+                  {linhas.map((l) => (
+                    <button
+                      key={l.linha}
+                      type="button"
+                      onClick={() => setLinha(l.linha)}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                        linha === l.linha
+                          ? 'border-green-500 bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300'
+                          : 'border-base-200 text-base-content/60 hover:bg-base-100'
+                      }`}
+                    >
+                      <div className="font-medium">{linhaLabel(l.linha)}</div>
+                      <div className="mt-0.5 text-[11px] opacity-70">{l.conectada ? 'Conectado' : 'Desconectado'}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Nome */}
             <div>

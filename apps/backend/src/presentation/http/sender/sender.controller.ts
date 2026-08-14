@@ -48,6 +48,9 @@ class CreateCampaignDto {
   @IsOptional() @IsString() mediaName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
   @IsOptional() @IsString() scheduledAt?: string;
+  // Linha de WhatsApp (13/08/2026). Vazio = 'vendas' — o funil de prospecção
+  // migrou pra lá, ver SenderService.createCampaign.
+  @IsOptional() @IsString() linha?: string;
 }
 
 class CampaignIdsDto {
@@ -80,6 +83,7 @@ class UpdateCampaignDto {
   // uma campanha agendada ficava presa no horário original. Aceita null para
   // remover o agendamento (dispara assim que iniciar).
   @IsOptional() @IsISO8601() scheduledAt?: string | null;
+  @IsOptional() @IsString() linha?: string;
 }
 
 // REGRA 2: query param não declarado aqui é derrubado com 400 pelo
