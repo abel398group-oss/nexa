@@ -1024,6 +1024,16 @@ model EmailChannel {
   label        String   @default("Principal")
   /// Quem envia. Exatamente uma por tenant — trocar é o seletor da tela.
   isSender     Boolean  @default(true) @map("is_sender")
+  /// Para que serve esta caixa: `both` | `comercial` | `transacional`.
+  ///
+  /// Prospecção fria e e-mail transacional (redefinição de senha, alerta do Monitor,
+  /// escalação de chamado) saem hoje do MESMO remetente — uma denúncia de spam na
+  /// primeira derruba a entrega da segunda, e a segunda é a que não pode falhar.
+  ///
+  /// `both` é o padrão e mantém o comportamento atual: enquanto o tenant tiver uma caixa
+  /// só, ela serve aos dois. A separação começa a valer quando alguém cadastrar a
+  /// segunda — nada muda no deploy.
+  purpose      String   @default("both")
   provider     String   @default("smtp") // smtp | mailgun
   // Remetente
   fromEmail    String   @map("from_email")    // ex: lia@hipertms.com.br

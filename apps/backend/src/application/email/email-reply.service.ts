@@ -122,16 +122,33 @@ export class EmailReplyService {
     private readonly crypto: EmailCryptoService,
   ) {}
 
-  /** Resolve configuração SMTP: banco (por tenant) ou fallback .env. */
-  private async resolveConfig(tenantId: string): Promise<SmtpConfig | null> {
-    // A caixa REMETENTE do tenant. Podem existir várias cadastradas — todas as
-    // ativas são lidas, só esta envia (ver EmailChannelService). `isSender` desc
-    // como ordenação, e não filtro, para que uma base sem nenhuma marcada ainda
-    // ache uma caixa em vez de parar de enviar em silêncio.
-    const ch = await this.prisma.emailChannel.findFirst({
+  /**
+   * Resolve configuração SMTP: banco (por tenant) ou fallback .env.
+   *
+   * `proposito` separa a reputação de entrega: prospecção fria e transacional
+   * (redefinição de senha, alerta do Monitor, escalação) saíam do mesmo remetente, e uma
+   * denúncia de spam na primeira derrubava a segunda — que é a que não pode falhar.
+   *
+   * A escolha é por PREFERÊNCIA, nunca por filtro: caixa do propósito exato → caixa
+   * `both` → qualquer ativa. Filtrar faria um tenant com uma caixa só parar de enviar no
+   * dia do deploy, que é exatamente o desastre que a separação quer evitar.
+   */
+  private async resolveConfig(
+    tenantId: string,
+    proposito: 'comercial' | 'transacional' = 'comercial',
+  ): Promise<SmtpConfig | null> {
+    // Todas as ativas do tenant, e a escolha acontece aqui: ordenar por "propósito igual
+    // primeiro" no Prisma exigiria SQL cru, e são poucas linhas por tenant.
+    const ativas = await this.prisma.emailChannel.findMany({
       where: { tenantId, isActive: true },
       orderBy: [{ isSender: 'desc' }, { createdAt: 'asc' }],
-    }).catch(() => null);
+    }).catch(() => [] as any[]);
+
+    const ch =
+      ativas.find((c: any) => c.purpose === proposito) ??
+      ativas.find((c: any) => c.purpose === 'both') ??
+      ativas[0] ??
+      null;
 
     if (ch?.isActive && ch.smtpUser && ch.smtpPass) {
       return {
@@ -174,7 +191,10 @@ export class EmailReplyService {
    * sucedido, mas quem consome trata `undefined` sem quebrar.
    */
   async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string; messageId?: string }> {
-    const config = await this.resolveConfig(opts.tenantId);
+    // Comercial: disparo de campanha E a resposta da Lia na mesma conversa. As duas
+    // PRECISAM sair do mesmo endereço — separar aqui faria o lead ver dois remetentes
+    // numa thread só, e a resposta dele cairia numa caixa que ninguém lê.
+    const config = await this.resolveConfig(opts.tenantId, 'comercial');
 
     if (!config) {
       this.logger.warn(
@@ -353,7 +373,10 @@ export class EmailReplyService {
     // quando o disparo real sairia como o mercado seria a prévia mentindo de novo.
     fromName?: string,
   ): Promise<{ sent: boolean; reason?: string }> {
-    const config = await this.resolveConfig(tenantId);
+    // Transacional: redefinição de senha, digest do Monitor, escalação de chamado,
+    // handoff de vendedor. É o e-mail que não pode falhar — e falhava junto com a
+    // reputação da prospecção fria, por dividir a caixa com ela.
+    const config = await this.resolveConfig(tenantId, 'transacional');
     if (!config) {
       this.logger.warn(`sendAlertEmail: SMTP não configurado para tenant ${tenantId} — e-mail não enviado`);
       return { sent: false, reason: 'smtp_not_configured' };
