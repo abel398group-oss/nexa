@@ -173,11 +173,20 @@ Dois ambientes distintos — nunca confundir:
   HiperTMS / n8n MVP (3000/5432/6379) so both can run side by side.
 - **Database**: the hard "never touch the DB" rule applies **only to the HiperTMS
   database** — never run migrations/seed against it, ever. For the **Nexa** database,
-  Claude **may** run migrations and seed locally when the user asks (`pnpm db:migrate`,
-  `pnpm db:seed`). Caveat: Claude usually has **no production `.env`** and may not be
-  able to reach the user's running Nexa DB from its sandbox — in that case it writes
-  the Prisma schema change + migration and asks the user to run it. In staging/prod
-  use `prisma migrate deploy`, **never** `migrate dev` (ADR 013).
+  **`pnpm db:migrate` is forbidden — it is `prisma migrate dev`, and there is no local
+  Nexa database.** This file's own "Database rule" says the `.env` points at production
+  and always will, so `migrate dev` here means `migrate dev` against production. It does
+  not fail on drift — it *offers to reset*, and reset drops the schema and recreates it
+  empty. On 16/08/2026 that wiped the entire production database: 53 tables recreated in
+  one contiguous block of OIDs, zero rows, the shadow database left behind in the
+  cluster. The drift that triggered it had been introduced the day before by commit
+  `a311226`, which declared two hand-made indexes in the schema.
+
+  `apps/backend/scripts/guard-remote-db.mjs` now refuses the command when the host is
+  not local, but the guard only covers the npm script — a hand-typed
+  `npx prisma migrate dev` still gets through. **To add a migration: write the
+  `migration.sql` by hand and apply it with `prisma migrate deploy`.** Never
+  `migrate dev`, never `db push`, never `migrate reset` (ADR 013).
 - **Git**: Claude may stage and commit on a branch without asking, but **must
   never push** without explicit authorization.
 - **Commits**: follow **Conventional Commits** in English
