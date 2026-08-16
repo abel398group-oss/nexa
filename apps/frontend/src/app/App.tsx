@@ -110,8 +110,10 @@ export default function App() {
                     <Route path="/messages" element={<Perm perm="campaigns"><MessageTemplatesPage /></Perm>} />
                     {/* Importar lista cria contatos e oportunidades — perm própria, não `campaigns`. */}
                     <Route path="/lead-batches" element={<Perm perm="lead_batches"><LeadBatchesPage /></Perm>} />
-                    <Route path="/sdr" element={<Perm perm="telemarketing"><SdrWorkbenchPage /></Perm>} />
-                    <Route path="/closer" element={<Perm perm="telemarketing"><CloserTodayPage /></Perm>} />
+                    {/* Rotas diretas, anteriores aos cockpits. Seguem a mesma separação:
+                        `telemarketing` deixou de existir e as deixaria inalcançáveis. */}
+                    <Route path="/sdr" element={<Perm perm="sdr"><SdrWorkbenchPage /></Perm>} />
+                    <Route path="/closer" element={<Perm perm="closer"><CloserTodayPage /></Perm>} />
                     {/* Escrever roteiro é `settings`: o SDR lê na mesa dele, não edita. */}
                     <Route path="/roteiro" element={<Perm perm="settings"><SalesScriptPage /></Perm>} />
                     {/* `metrics` e não uma perm nova: quem vê número da operação já tem essa. */}

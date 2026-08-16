@@ -47,13 +47,16 @@ describe('PermissionsGuard', () => {
   });
 });
 
-describe('PermissionsGuard — convivência com a permissão antiga', () => {
-  // Sem isto, o deploy que separa sdr/closer tira a mesa de quem está trabalhando: o
-  // token já emitido continua com `telemarketing` e o backfill não roda no mesmo instante.
-  it('telemarketing ainda abre a mesa do SDR e o painel do closer', () => {
+describe('PermissionsGuard — separação SDR × closer', () => {
+  // A ponte `telemarketing → sdr/closer` foi removida em 16/08/2026, depois de o backfill
+  // confirmar zero usuários com ela. Este teste guarda a remoção: se alguém reintroduzir
+  // a permissão antiga sem reintroduzir a ponte, o acesso não volta por acidente.
+  it('telemarketing não abre mais nada — a ponte foi removida', () => {
     const user = { role: 'operacional', permissions: ['telemarketing'] };
-    expect(new PermissionsGuard(reflector('sdr')).canActivate(makeCtx(user))).toBe(true);
-    expect(new PermissionsGuard(reflector('closer')).canActivate(makeCtx(user))).toBe(true);
+    expect(() => new PermissionsGuard(reflector('sdr')).canActivate(makeCtx(user)))
+      .toThrow(ForbiddenException);
+    expect(() => new PermissionsGuard(reflector('closer')).canActivate(makeCtx(user)))
+      .toThrow(ForbiddenException);
   });
 
   it('sdr NÃO abre o painel do closer — é o ponto da separação', () => {
@@ -75,11 +78,6 @@ describe('PermissionsGuard — convivência com a permissão antiga', () => {
     expect(new PermissionsGuard(reflector('closer')).canActivate(makeCtx(user))).toBe(true);
   });
 
-  it('a ponte é de mão única: sdr não vira telemarketing', () => {
-    const user = { role: 'operacional', permissions: ['sdr'] };
-    expect(() => new PermissionsGuard(reflector('telemarketing')).canActivate(makeCtx(user)))
-      .toThrow(ForbiddenException);
-  });
 });
 
 describe('Catálogo de permissões', () => {

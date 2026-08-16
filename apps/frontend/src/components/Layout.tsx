@@ -384,7 +384,7 @@ export function Layout() {
   const perms = user?.permissions ?? [];
   const visibleGroups = NAV_GROUPS
     // `temPerm` e não `includes`: o item aceita lista de permissões (cockpit) e conhece a
-    // ponte da permissão antiga (telemarketing → sdr/closer, inbox → support). Um
+    // ponte da permissão antiga (hoje `inbox → support`). Um
     // `includes` cru aqui esconderia do menu telas que o backend deixa abrir.
     .map((g) => ({ ...g, items: g.items.filter((it) => temPerm(user, it.perm)) }))
     .filter((g) => g.items.length > 0);

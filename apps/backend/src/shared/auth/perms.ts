@@ -35,10 +35,9 @@ export const PERMS = [
   // Exigidas por rota e ausentes da lista antiga — eram inconcedíveis por qualquer tela.
   'settings', // configurar mercado e escrever o roteiro do SDR
   'webhooks:manage',
-  // Prospecção ativa. `telemarketing` continua aqui durante a convivência: removê-la
-  // agora faria a PRIMEIRA edição de qualquer usuário apagar a permissão dele em
-  // silêncio, pelo filtro do `users.service`.
-  'telemarketing',
+  // Prospecção ativa. `telemarketing` — a permissão única que dava as duas mesas — foi
+  // removida em 16/08/2026, depois de o backfill confirmar que nenhum usuário dependia
+  // dela (`count(*) FILTER (WHERE 'telemarketing' = ANY(permissions))` = 0).
   'sdr',
   'closer',
   'support',
@@ -60,17 +59,16 @@ export const GRANTABLE_PERMS: readonly Perm[] = PERMS.filter((p) => p !== 'admin
 /**
  * Permissão legada que ainda satisfaz uma nova, durante a transição.
  *
- * `telemarketing` dava as duas mesas (SDR e closer) numa permissão só; `inbox` dava o
- * atendimento inteiro. Separar sem esta ponte tiraria o acesso de quem está trabalhando
- * agora — o token já emitido continua com a permissão antiga, e o backfill não roda no
- * mesmo instante do deploy.
+ * A ponte `telemarketing → sdr/closer` saiu em 16/08/2026: o backfill mostrou zero
+ * usuários com a permissão antiga, então ela não carregava ninguém. Ponte que sobrevive
+ * ao motivo vira regra invisível — quem ler o guard daqui a um ano não saberia por que
+ * uma permissão que não existe mais ainda abre duas telas.
  *
- * REMOVER junto com `telemarketing` de `PERMS`, e só depois de o backfill confirmar que
- * ninguém depende mais da permissão antiga.
+ * `inbox → support` continua: os dois vendedores do tenant têm `inbox` e passariam a
+ * perder as telas de atendimento sem ela. Sai quando o admin decidir que vendedor não vê
+ * suporte — é decisão de operação, não de código.
  */
 export const PERM_LEGADA: Partial<Record<Perm, Perm[]>> = {
-  sdr: ['telemarketing'],
-  closer: ['telemarketing'],
   support: ['inbox'],
 };
 
@@ -98,7 +96,6 @@ export const PERM_CATALOG: readonly PermCatalogItem[] = [
 
   { id: 'sdr', label: 'Mesa do SDR', group: 'Prospecção' },
   { id: 'closer', label: 'Painel do closer', group: 'Prospecção' },
-  { id: 'telemarketing', label: 'SDR + closer (antigo)', group: 'Prospecção', legacy: true },
 
   { id: 'support', label: 'Atendimento', group: 'Suporte' },
 

@@ -22,10 +22,10 @@ export class PermissionsGuard implements CanActivate {
     const user = ctx.switchToHttp().getRequest().user;
     if (!user) throw new ForbiddenException('não autenticado');
     if (user.role === 'admin') return true; // admin acessa tudo
-    // `satisfazPerm` e não `includes`: durante a transição, a permissão antiga ainda
-    // vale pela nova (telemarketing → sdr/closer, inbox → support). Sem isso, separar
-    // as permissões tiraria o acesso de quem está trabalhando no momento do deploy —
-    // inclusive de quem tem um token já emitido com a lista antiga.
+    // `satisfazPerm` e não `includes`: uma permissão antiga ainda pode valer pela nova
+    // durante a transição (hoje só `inbox → support`). Sem isso, separar permissões
+    // tiraria o acesso de quem está trabalhando no momento do deploy — inclusive de quem
+    // tem um token já emitido com a lista antiga. Ver `PERM_LEGADA`.
     if (satisfazPerm(user.permissions ?? [], perm)) return true;
     throw new ForbiddenException(`sem permissão: ${perm}`);
   }

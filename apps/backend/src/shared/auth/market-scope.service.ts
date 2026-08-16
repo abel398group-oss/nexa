@@ -41,9 +41,7 @@ function operaLead(user: UsuarioComMercados | undefined): boolean {
   if (!user) return false;
   if (user.role === 'vendedor') return true;
   const p = user.permissions ?? [];
-  // `telemarketing` continua aqui enquanto a ponte de transição existir — quem ainda tem
-  // a permissão antiga opera as duas mesas e precisa do mesmo escopo.
-  return p.includes('sdr') || p.includes('closer') || p.includes('telemarketing');
+  return p.includes('sdr') || p.includes('closer');
 }
 
 @Injectable()

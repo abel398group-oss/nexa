@@ -44,10 +44,12 @@ describe('mercadosDoUsuario — quem é limitado', () => {
       .toEqual(['pneus']);
   });
 
-  it('quem ainda tem a permissão antiga é limitado igual', async () => {
+  // A permissão antiga saiu junto com a ponte (16/08/2026). Quem a tivesse deixaria de
+  // ser tratado como operador de lead — e como ninguém a tem, não há o que quebrar.
+  it('a permissão antiga não confere mais escopo de operador', async () => {
     const { svc } = makeSvc([{ productCode: 'agabe' }], 9);
     expect(await svc.mercadosDoUsuario('t1', { permissions: ['telemarketing'], sellerId: 's1' }))
-      .toEqual(['agabe']);
+      .toBeUndefined();
   });
 
   // Fail-closed: é o furo que existia até hoje — SDR criado como `operacional` sem

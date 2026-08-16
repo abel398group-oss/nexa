@@ -23,7 +23,7 @@ interface User {
 interface SellerOption { id: string; name: string }
 
 /** Permissões que só funcionam com vínculo de vendedor — a fila filtra por ele. */
-const PERMS_QUE_EXIGEM_SELLER = ['sdr', 'closer', 'telemarketing'];
+const PERMS_QUE_EXIGEM_SELLER = ['sdr', 'closer'];
 
 const userSchema = z.object({
   name: z.string().trim().optional().or(z.literal('')),

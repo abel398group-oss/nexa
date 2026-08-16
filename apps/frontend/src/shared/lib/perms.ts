@@ -18,8 +18,7 @@
  * antes de qualquer requisição.
  */
 const PERM_LEGADA: Record<string, string[]> = {
-  sdr: ['telemarketing'],
-  closer: ['telemarketing'],
+  // `telemarketing → sdr/closer` saiu em 16/08/2026 — zero usuários dependiam dela.
   support: ['inbox'],
 };
 

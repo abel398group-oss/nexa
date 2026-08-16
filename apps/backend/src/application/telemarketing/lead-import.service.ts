@@ -308,14 +308,24 @@ export class LeadImportService {
     let vagaConsumida = false;
 
     // TMS: 2 queries pro lote inteiro, e Map indexado por telefone SEM o 55.
-    const noTms = await this.tms
-      .batchLookup(fones)
-      .catch((e: any) => {
-        // TMS fora do ar não pode travar importação: sem ele a peneira fica mais
-        // frouxa, e isso é melhor que o operador não conseguir subir lista nenhuma.
-        this.logger.warn(`lookup TMS falhou, seguindo sem ele: ${e?.message ?? e}`);
-        return new Map<string, unknown>();
-      });
+    //
+    // Fail-CLOSED desde 16/08/2026. Antes seguia sem o TMS "porque travar a importação é
+    // pior" — mas o que entra aqui vira lead na fila do SDR, e cliente pagante importado
+    // como lead é alguém ligando para vender o produto que a pessoa já assina. A peneira
+    // frouxa não é mais frouxa: é errada, e o erro só aparece na ligação.
+    //
+    // TMS não configurado continua passando: ali não há peneira a aplicar, e barrar
+    // travaria ambiente que roda sem conector de propósito.
+    const tms = await this.tms.batchLookupVerificado(fones);
+    if (tms.falhou) {
+      this.logger.error(`Importação recusada: consulta ao TMS indisponível (${tms.motivo})`);
+      throw new BadRequestException(
+        'Não foi possível consultar a base do HiperTMS para separar quem já é cliente. ' +
+        'A lista não foi importada — sem essa checagem, clientes pagantes entrariam como ' +
+        'lead novo na fila do SDR. Tente novamente em alguns minutos.',
+      );
+    }
+    const noTms = tms.clientes;
 
     for (const linha of candidatas) {
       const existente =
