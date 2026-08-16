@@ -56,7 +56,7 @@ function PageFallback() {
 }
 
 // Atalho: rota protegida por permissão (admin passa sempre).
-function Perm({ perm, children }: { perm: string; children: ReactElement }) {
+function Perm({ perm, children }: { perm: string | string[]; children: ReactElement }) {
   return <PermissionRoute perm={perm}>{children}</PermissionRoute>;
 }
 
@@ -121,9 +121,19 @@ export default function App() {
                     <Route path="/settings/email-channel" element={<Perm perm="admin"><EmailChannelSettingsPage /></Perm>} />
                     <Route path="/settings/support-email" element={<Perm perm="admin"><SupportEmailSettingsPage /></Perm>} />
                     <Route path="/settings/monitor" element={<Perm perm="admin"><MonitorConfigPage /></Perm>} />
-                    <Route path="/admin-cockpit" element={<Perm perm="admin"><AdminCockpitPage /></Perm>} />
-                    <Route path="/sdr-cockpit" element={<Perm perm="telemarketing"><SdrCockpitPage /></Perm>} />
-                    <Route path="/closer-cockpit" element={<Perm perm="telemarketing"><CloserCockpitPage /></Perm>} />
+                    {/* Cockpits: a rota exige QUALQUER uma das permissões das abas — quem
+                        pode ver uma aba entra e vê só aquela. Exigir `admin` escondia o
+                        painel de quem tinha acesso legítimo a parte dele. */}
+                    <Route
+                      path="/admin-cockpit"
+                      element={
+                        <Perm perm={['settings', 'lead_batches', 'campaigns', 'ai_control', 'sellers', 'contacts']}>
+                          <AdminCockpitPage />
+                        </Perm>
+                      }
+                    />
+                    <Route path="/sdr-cockpit" element={<Perm perm={['sdr', 'opportunities']}><SdrCockpitPage /></Perm>} />
+                    <Route path="/closer-cockpit" element={<Perm perm={['closer', 'opportunities', 'metrics']}><CloserCockpitPage /></Perm>} />
                     {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
                   </Route>
                 </Route>

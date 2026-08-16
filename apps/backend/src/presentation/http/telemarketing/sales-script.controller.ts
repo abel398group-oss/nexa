@@ -50,7 +50,7 @@ export class SalesScriptController {
    * é que fica atrás de `settings`, e essa separação é a regra "o SDR lê, não edita".
    */
   @Get(':productCode')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   vigente(@CurrentTenant() tenantId: string, @Param('productCode') code: string) {
     return this.scripts.vigente(tenantId, code);
   }

@@ -21,13 +21,13 @@ export class CloserController {
   /// Painel "HOJE": os 3 blocos já agrupados e ordenados. Sempre devolve as três
   /// chaves, mesmo vazias — a tela renderiza os cabeçalhos de qualquer forma.
   @Get('today')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   hoje(@CurrentTenant() tenantId: string, @CurrentUser() user: Usuario) {
     return this.closer.hoje(tenantId, user);
   }
 
   @Patch('opportunities/:id/proposal')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   proposta(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -38,7 +38,7 @@ export class CloserController {
   }
 
   @Patch('opportunities/:id/reschedule')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   reagendar(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -58,7 +58,7 @@ export class CloserController {
   /// Ganhou: etapa, valor e `Contact.customerSince` na mesma transação — é o que
   /// impede o cliente novo de receber campanha fria antes de existir no TMS.
   @Patch('opportunities/:id/win')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   ganhou(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -69,7 +69,7 @@ export class CloserController {
   }
 
   @Patch('opportunities/:id/lose')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   perdeu(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -82,7 +82,7 @@ export class CloserController {
   /// Perda por timing: volta pra fila na data, em vez de morrer. É a versão mínima do
   /// "cultivador" sem módulo novo.
   @Patch('opportunities/:id/postpone')
-  @RequirePerm('telemarketing')
+  @RequirePerm('closer')
   adiar(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,

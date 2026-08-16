@@ -12,6 +12,7 @@ import { Icon, type IconName } from '@/components/ui/icons';
 import { TenantSelector } from '@/app/providers/TenantContext';
 import { Button, Input, Modal } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { temPerm } from '@/shared/lib/perms';
 
 const TOUR_STEPS: TourStep[] = [
   { selector: 'aside nav', title: 'Bem-vindo ao Nexa!', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
@@ -22,7 +23,9 @@ const TOUR_STEPS: TourStep[] = [
   { selector: '[data-tour="killswitch"]', title: 'Controle da IA', text: 'Ligue/desligue a resposta automática da Lia a qualquer momento (botão de pânico).' },
 ];
 
-type NavItem = { to: string; label: string; ic: IconName; perm: string };
+// `perm` aceita lista: o item do cockpit aparece para quem pode ver QUALQUER uma das
+// abas dele. Com uma string só, o painel sumia do menu de quem tinha acesso a parte dele.
+type NavItem = { to: string; label: string; ic: IconName; perm: string | string[] };
 type NavGroup = { label: string | null; icon?: IconName; items: NavItem[] };
 
 // Navegação agrupada em 3 serviços principais + suporte operacional.
@@ -37,11 +40,12 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: 'Admin', icon: 'users', items: [
     { to: '/dashboard',      label: 'Painel',            ic: 'dashboard', perm: 'dashboard' },
-    { to: '/admin-cockpit',  label: 'Cockpit Admin',     ic: 'building',  perm: 'admin' },
+    { to: '/admin-cockpit',  label: 'Cockpit Admin',     ic: 'building',
+      perm: ['settings', 'lead_batches', 'campaigns', 'ai_control', 'sellers', 'contacts'] },
   ] },
   { label: 'Operação', icon: 'zap', items: [
-    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: 'telemarketing' },
-    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: 'telemarketing' },
+    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: ['sdr', 'opportunities'] },
+    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: ['closer', 'opportunities', 'metrics'] },
   ] },
   { label: 'Vendas (Legado)', icon: 'dollar', items: [
     // Links preservados apenas para compatibilidade — rotas viram red herrings com cockpits
@@ -50,10 +54,12 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
+  // `support` é a permissão do atendimento desde 16/08/2026. Durante a transição ela é
+  // satisfeita por `inbox` (ver PERM_LEGADA), então ninguém que atende hoje perde a tela.
   { label: 'Suporte', icon: 'support', items: [
-    { to: '/support',                  label: 'Inbox de Suporte', ic: 'support',   perm: 'inbox' },
+    { to: '/support',                  label: 'Inbox de Suporte', ic: 'support',   perm: 'support' },
     { to: '/support/dashboard',        label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
-    { to: '/support/clients',          label: 'Clientes',         ic: 'contacts',  perm: 'inbox' },
+    { to: '/support/clients',          label: 'Clientes',         ic: 'contacts',  perm: 'support' },
     { to: '/support/config',           label: 'Configurações',    ic: 'bot',       perm: 'ai_control' },
     { to: '/settings/support-email',   label: 'E-mail de Suporte', ic: 'mail',    perm: 'admin' },
   ] },
@@ -377,7 +383,10 @@ export function Layout() {
   const isAdmin = user?.role === 'admin';
   const perms = user?.permissions ?? [];
   const visibleGroups = NAV_GROUPS
-    .map((g) => ({ ...g, items: g.items.filter((it) => isAdmin || perms.includes(it.perm)) }))
+    // `temPerm` e não `includes`: o item aceita lista de permissões (cockpit) e conhece a
+    // ponte da permissão antiga (telemarketing → sdr/closer, inbox → support). Um
+    // `includes` cru aqui esconderia do menu telas que o backend deixa abrir.
+    .map((g) => ({ ...g, items: g.items.filter((it) => temPerm(user, it.perm)) }))
     .filter((g) => g.items.length > 0);
   const visibleItems = visibleGroups.flatMap((g) => g.items);
   const pageTitle = titles[location.pathname] ?? 'Nexa';
@@ -438,7 +447,8 @@ export function Layout() {
       label: it.label,
       icon: it.ic,
       hint: 'Ir para',
-      keywords: it.perm,
+      // `perm` virou `string | string[]`; a busca indexa texto, então junta a lista.
+      keywords: Array.isArray(it.perm) ? it.perm.join(' ') : it.perm,
       run: () => navigate(it.to),
     })),
     { id: 'act:theme', label: dark ? 'Tema claro' : 'Tema escuro', icon: (dark ? 'sun' : 'moon') as IconName, hint: 'Ação', run: toggleTheme },

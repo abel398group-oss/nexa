@@ -20,13 +20,13 @@ export class SdrController {
   /// Fila do SDR numa chamada só — oportunidade, contato, lote e histórico juntos.
   /// Já ordenada e com a prioridade calculada, pra tela agrupar sem repetir a regra.
   @Get('queue')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   fila(@CurrentTenant() tenantId: string, @CurrentUser() user: Usuario) {
     return this.sdr.fila(tenantId, user);
   }
 
   @Post('activity')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   registrar(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -36,7 +36,7 @@ export class SdrController {
   }
 
   @Patch('opportunities/:id/pause')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   pausar(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -54,7 +54,7 @@ export class SdrController {
   }
 
   @Patch('opportunities/:id/discard')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   descartar(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -66,7 +66,7 @@ export class SdrController {
 
   /// Closers elegíveis para um mercado — é a lista que o SDR escolhe na tela.
   @Get('closers')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   closers(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,
@@ -79,7 +79,7 @@ export class SdrController {
   /// Fica em `telemarketing` e não em `knowledge`: aquela permissão deixa editar o
   /// acervo, e o SDR precisa consultar durante a ligação, não reescrever.
   @Get('knowledge')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   material(
     @CurrentTenant() tenantId: string,
     @Query('productCode') productCode: string,
@@ -92,7 +92,7 @@ export class SdrController {
   /// `pickAndClaimSeller` foi o centro do incidente de 09/07 e não se mexe nele para
   /// atender uma tela nova.
   @Patch('opportunities/:id/transfer')
-  @RequirePerm('telemarketing')
+  @RequirePerm('sdr')
   transferir(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: Usuario,

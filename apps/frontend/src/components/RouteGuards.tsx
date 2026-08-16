@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
+import { temPerm } from '@/shared/lib/perms';
 
 /** Tela de carregamento padrão enquanto o auth resolve. */
 function RouteLoading() {
@@ -74,16 +75,20 @@ export function ProtectedRoute({ children }: { children: ReactElement }) {
 }
 
 /**
- * PermissionRoute — exige uma permissão específica (admin passa sempre).
+ * PermissionRoute — exige permissão (admin passa sempre).
  * Deve ficar DENTRO de uma ProtectedRoute (assume usuário já carregado).
  * Sem a permissão, redireciona para o `fallback` (padrão /inbox).
+ *
+ * Aceita LISTA: uma tela de cockpit junta abas de permissões diferentes, e exigir todas
+ * esconderia a tela inteira de quem pode ver uma aba. Com lista, a semântica é qualquer
+ * uma — e cada aba se filtra por conta própria lá dentro.
  */
 export function PermissionRoute({
   perm,
   children,
   fallback = '/inbox',
 }: {
-  perm: string;
+  perm: string | string[];
   children: ReactElement;
   fallback?: string;
 }) {
@@ -93,6 +98,5 @@ export function PermissionRoute({
     if (unreachable) return <RouteOffline retry={retry} />;
     return <Navigate to="/login" replace />;
   }
-  const allowed = user.role === 'admin' || (user.permissions ?? []).includes(perm);
-  return allowed ? children : <Navigate to={fallback} replace />;
+  return temPerm(user, perm) ? children : <Navigate to={fallback} replace />;
 }

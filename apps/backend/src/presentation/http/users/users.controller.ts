@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
-import { UsersService, AREAS } from '@/application/users/users.service';
+import { UsersService } from '@/application/users/users.service';
+import { PERM_CATALOG } from '@/shared/auth/perms';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
@@ -45,8 +46,16 @@ class ActiveDto { @IsBoolean() active!: boolean; }
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
+  /**
+   * Catálogo de permissões para a tela de Usuários.
+   *
+   * Devolve objeto (id/label/group/legacy) e não `string[]`: a tela mantinha a lista, os
+   * rótulos e o agrupamento copiados à mão, e a cópia atrasava em relação aos
+   * `@RequirePerm` reais. `legacy` marca a permissão que está sendo substituída — a tela
+   * deixa remover, nunca conceder de novo.
+   */
   @Get('areas')
-  areas() { return AREAS; }
+  areas() { return PERM_CATALOG; }
 
   @Get()
   list(@CurrentTenant() tenantId: string, @Query('search') search?: string) {

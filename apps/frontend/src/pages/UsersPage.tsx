@@ -27,36 +27,38 @@ const userSchema = z.object({
 type UserForm = z.infer<typeof userSchema>;
 const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: [] };
 
-const AREA_LABEL: Record<string, string> = {
-  dashboard: 'Painel', inbox: 'Inbox', contacts: 'Contatos', knowledge: 'Conhecimento',
-  sellers: 'Vendedores', campaigns: 'Disparo', opportunities: 'Leads / Funil',
-  metrics: 'Metricas', ai_control: 'Controle da IA', users: 'Usuarios',
-  partners: 'Parceiros (cross-sell)',
-  telemarketing: 'Mesa do SDR / Closer',
-  lead_batches: 'Listas de lead',
-};
-// Precisa espelhar AREAS do backend (users.service.ts) — o que nao estiver la e
-// descartado no create/update.
-const ALL_AREAS = [
-  'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
-  'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
-  'partners', 'telemarketing', 'lead_batches',
-];
+/** Item do catálogo servido por `GET /users/areas`. */
+interface PermCatalogItem {
+  id: string;
+  label: string;
+  group: string;
+  /** Substituída por outra — dá para remover, nunca conceder de novo. */
+  legacy?: boolean;
+}
+
+// A lista de permissões, os rótulos e o agrupamento vinham copiados à mão daqui, e a
+// cópia atrasava: `settings` e `webhooks:manage` eram exigidas por rota e não estavam
+// aqui nem no backend, então nenhuma tela conseguia concedê-las. Agora vem da API.
 
 // Conjuntos prontos para os papeis do dia a dia — o admin ainda pode ajustar
 // marcando/desmarcando area por area depois de criar.
 const PRESETS: { id: string; label: string; hint: string; areas: string[] }[] = [
-  { id: 'suporte', label: 'Suporte', hint: 'Atende o inbox e consulta a base',
-    areas: ['dashboard', 'inbox', 'contacts', 'knowledge'] },
+  { id: 'suporte', label: 'Suporte', hint: 'Atende chamados e consulta a base',
+    areas: ['dashboard', 'inbox', 'support', 'contacts', 'knowledge'] },
   { id: 'vendas', label: 'Vendas', hint: 'Disparo de leads e funil',
     areas: ['dashboard', 'inbox', 'contacts', 'campaigns', 'opportunities'] },
   { id: 'suporte_vendas', label: 'Suporte + Vendas', hint: 'As duas frentes',
-    areas: ['dashboard', 'inbox', 'contacts', 'knowledge', 'campaigns', 'opportunities', 'metrics'] },
+    areas: ['dashboard', 'inbox', 'support', 'contacts', 'knowledge', 'campaigns', 'opportunities', 'metrics'] },
   // Prospecção ativa: trabalha a fila e o funil, mas NÃO sobe nem distribui lista
   // (`lead_batches`) — quem decide de quem é o lead é quem monta a operação, e essa
   // separação é o que sustenta a regra de comissão.
-  { id: 'sdr', label: 'SDR / Closer', hint: 'Trabalha a fila de leads e fecha',
-    areas: ['dashboard', 'inbox', 'contacts', 'opportunities', 'telemarketing'] },
+  //
+  // SDR e closer viraram dois presets (16/08/2026): antes eram um só, porque a permissão
+  // `telemarketing` dava as duas mesas. Quem faz os dois papéis recebe os dois.
+  { id: 'sdr', label: 'SDR', hint: 'Trabalha a fila de leads e qualifica',
+    areas: ['dashboard', 'inbox', 'contacts', 'opportunities', 'sdr'] },
+  { id: 'closer', label: 'Closer', hint: 'Carteira, reuniões e fechamento',
+    areas: ['dashboard', 'inbox', 'contacts', 'opportunities', 'closer', 'metrics'] },
 ];
 
 export function UsersPage() {
@@ -95,6 +97,19 @@ export function UsersPage() {
     queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then((r) => r.data as User[]),
   });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] });
+
+  /**
+   * Catálogo de permissões, servido pelo backend.
+   *
+   * A lista morava aqui copiada à mão e atrasava em relação aos `@RequirePerm` reais —
+   * como o backend descarta em silêncio o que não conhece, permissão fora da cópia virava
+   * inconcedível sem ninguém perceber. `staleTime` alto porque muda com deploy, não com uso.
+   */
+  const { data: areas = [] } = useQuery({
+    queryKey: ['users', 'areas'],
+    queryFn: () => api.get('/users/areas').then((r) => r.data as PermCatalogItem[]),
+    staleTime: 60 * 60 * 1000,
+  });
 
   const roles = [...new Set(items.map((u) => u.role))];
   const shown = items.filter((u) => u.role !== 'vendedor' && (!roleFilter || u.role === roleFilter));
@@ -275,18 +290,25 @@ export function UsersPage() {
                   <p className="text-xs text-base-content/50">Acesso total (administrador)</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {ALL_AREAS.map((a) => {
-                      const on = u.permissions.includes(a);
+                    {/* Permissão legada só aparece em quem AINDA a tem: dá para tirar,
+                        não para conceder de novo — senão a migração nunca termina. */}
+                    {areas.filter((a) => !a.legacy || u.permissions.includes(a.id)).map((a) => {
+                      const on = u.permissions.includes(a.id);
                       return (
                         <button
-                          key={a}
-                          onClick={() => savePerms(u, togglePerm(u.permissions, a))}
+                          key={a.id}
+                          onClick={() => savePerms(u, togglePerm(u.permissions, a.id))}
+                          title={a.legacy ? 'Permissão antiga — foi substituída, remova quando puder' : a.group}
                           className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                            on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'
+                            on
+                              ? a.legacy
+                                ? 'border-amber-500 bg-amber-50 text-amber-700'
+                                : 'border-brand-500 bg-brand-50 text-brand-700'
+                              : 'border-base-300 text-base-content/50'
                           }`}
                           style={!on ? { background: 'var(--surface)' } : undefined}
                         >
-                          {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
+                          {on && <Icon name="check" className="h-3 w-3" />}{a.label}
                         </button>
                       );
                     })}
@@ -413,24 +435,31 @@ export function UsersPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_AREAS.map((a) => {
-                  const on = (formPerms ?? []).includes(a);
-                  return (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => setValue('permissions', togglePerm(formPerms ?? [], a))}
-                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                        on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'
-                      }`}
-                      style={!on ? { background: 'var(--surface)' } : undefined}
-                    >
-                      {on && <Icon name="check" className="h-3 w-3" />}{AREA_LABEL[a]}
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Agrupado pelo `group` do catálogo: com 18 permissões numa fileira só,
+                  achar "Mesa do SDR" no meio de "Webhooks" vira caça-palavra. */}
+              {[...new Set(areas.filter((a) => !a.legacy).map((a) => a.group))].map((grupo) => (
+                <div key={grupo} className="space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">{grupo}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {areas.filter((a) => a.group === grupo && !a.legacy).map((a) => {
+                      const on = (formPerms ?? []).includes(a.id);
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => setValue('permissions', togglePerm(formPerms ?? [], a.id))}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                            on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-base-300 text-base-content/50'
+                          }`}
+                          style={!on ? { background: 'var(--surface)' } : undefined}
+                        >
+                          {on && <Icon name="check" className="h-3 w-3" />}{a.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               {(formPerms ?? []).length === 0 && (
                 <p className="text-[11px] text-amber-600">
                   Sem nenhum modulo marcado o usuario entra e nao ve nada.

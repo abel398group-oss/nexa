@@ -3,23 +3,16 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 // Áreas que podem ser habilitadas por usuário.
-// Precisa cobrir TODO `@RequirePerm(...)` de rota de tenant — o que não estiver
-// aqui é filtrado no create/update e vira permissão impossível de conceder pela
-// tela. Faltavam `opportunities` (funil (funil/"Meus leads") e `metrics`, ambos já
-// exigidos por controllers: o vendedor recebia `opportunities` fixo no código e
-// pela tela de Usuários não havia como dar a ninguém.
-export const AREAS = [
-  'dashboard', 'inbox', 'contacts', 'knowledge', 'sellers',
-  'campaigns', 'opportunities', 'metrics', 'ai_control', 'users',
-  'partners', // F7 (RevOps): cadastro de empresa parceira externa (ex.: pneus)
-  // Esta lista é um FILTRO, não só um catálogo: `create`/`update` descartam em silêncio
-  // o que não estiver aqui. Sem estas duas, as telas de telemarketing ficavam
-  // acessíveis só para admin — o SDR e o closer, que são o ponto do módulo, não podiam
-  // existir. Toda permissão nova de @RequirePerm precisa entrar aqui E no ALL_AREAS do
-  // UsersPage.
-  'telemarketing', // mesa do SDR e painel do closer (módulos 2 e 3)
-  'lead_batches', // subir e distribuir listas de lead (módulo 1)
-] as const;
+//
+// A lista deixou de morar aqui (16/08/2026): é um FILTRO — `create`/`update` descartam em
+// silêncio o que não estiver nela — e viver longe dos `@RequirePerm` fazia ela atrasar.
+// Três permissões exigidas por rota (`settings`, `webhooks:manage`, `admin`) tinham
+// ficado de fora e viraram admin-only por acidente, sem ninguém decidir isso.
+//
+// Fonte única agora em `shared/auth/perms.ts`, do lado do guard que as consome. O nome
+// `AREAS` fica como reexport para não quebrar quem já importa daqui.
+export { GRANTABLE_PERMS as AREAS } from '@/shared/auth/perms';
+import { GRANTABLE_PERMS } from '@/shared/auth/perms';
 
 const SELECT = { id: true, email: true, name: true, role: true, permissions: true, isActive: true, sellerId: true, createdAt: true };
 
@@ -50,7 +43,7 @@ export class UsersService {
           passwordHash: await bcrypt.hash(dto.password, 10),
           name: dto.name,
           role,
-          permissions: role === 'admin' ? [] : (dto.permissions ?? []).filter((p) => (AREAS as readonly string[]).includes(p)),
+          permissions: role === 'admin' ? [] : (dto.permissions ?? []).filter((p) => (GRANTABLE_PERMS as readonly string[]).includes(p)),
         },
         select: SELECT,
       });
@@ -73,7 +66,7 @@ export class UsersService {
     if (!u) throw new NotFoundException('usuário não encontrado');
     const data: any = {};
     if (dto.role) data.role = dto.role;
-    if (dto.permissions) data.permissions = dto.permissions.filter((p) => (AREAS as readonly string[]).includes(p));
+    if (dto.permissions) data.permissions = dto.permissions.filter((p) => (GRANTABLE_PERMS as readonly string[]).includes(p));
     // Promoveu a admin → zera a lista, igual ao create. Admin passa direto pelo
     // guard, então manter permissões antigas é lixo que reaparece se um dia ele
     // for rebaixado (voltaria com os acessos de antes, sem ninguém pedir).

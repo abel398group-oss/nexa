@@ -42,8 +42,17 @@ function sellerScope(user: any): string | undefined {
  */
 const SUPPORT_ROLES = ['admin', 'operacional'];
 
+/**
+ * 16/08/2026: a permissão `support` passa a valer como marcador explícito de "opera
+ * suporte", ao lado dos papéis. É ADITIVO — ninguém que lia nota interna deixa de ler.
+ *
+ * A checagem é `includes` cru, NUNCA `satisfazPerm`: o alias de transição diz que
+ * `inbox` satisfaz `support` para efeito de abrir tela, e `vendedor` recebe `inbox` de
+ * fábrica (`sellers.service.ts`). Passar por lá daria o diagnóstico técnico do chamado
+ * para todo o lado comercial — exatamente o furo que a auditoria fechou.
+ */
 function canReadInternalNotes(user: any): boolean {
-  return SUPPORT_ROLES.includes(user?.role);
+  return SUPPORT_ROLES.includes(user?.role) || (user?.permissions ?? []).includes('support');
 }
 
 @UseGuards(JwtAuthGuard)
