@@ -43,8 +43,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      # Repete o install porque ele falha por REDE, não por código.
+      #
+      # `sharp` entra como dependência de `@xenova/transformers` (a lib de
+      # embeddings que alimenta a base de conhecimento da Lia) e, durante o
+      # install, baixa um binário pré-compilado direto do GitHub Releases. Essa
+      # conexão cai sozinha de vez em quando: `socket hang up` numa vez,
+      # `ECONNRESET` em 16/08/2026 — as duas com o lockfile intacto.
+      #
+      # Pular a build do sharp resolveria o CI e criaria um problema maior: quem
+      # o exige é a lib de embeddings, então a falha sairia daqui e reapareceria
+      # no boot do backend. Melhor repetir o download.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for tentativa in 1 2 3; do
+            if pnpm install --frozen-lockfile; then exit 0; fi
+            echo "::warning::pnpm install falhou (tentativa $tentativa/3) — repetindo"
+            sleep $((tentativa * 15))
+          done
+          echo "::error::pnpm install falhou nas 3 tentativas"
+          exit 1
 
       # Prisma client PRIMEIRO: specs que importam PrismaService (ex.:
       # dev-watch.service.spec) precisam do client gerado — sem isso o teste

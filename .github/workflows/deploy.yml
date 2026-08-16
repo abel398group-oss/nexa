@@ -38,8 +38,18 @@ jobs:
       - name: Tag short SHA
         id: meta
         run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      # Mesma repetição do ci.yml, e aqui pesa mais: uma queda de rede baixando o
+      # binário do `sharp` (via @xenova/transformers) aborta o DEPLOY. Ver a nota
+      # completa no ci.yml.
       - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+        run: |
+          for tentativa in 1 2 3; do
+            if pnpm install --frozen-lockfile; then exit 0; fi
+            echo "::warning::pnpm install falhou (tentativa $tentativa/3) — repetindo"
+            sleep $((tentativa * 15))
+          done
+          echo "::error::pnpm install falhou nas 3 tentativas"
+          exit 1
       # As duas envs só precisam EXISTIR: `prisma generate` lê a string do
       # datasource e não conecta. O schema declara `directUrl`, e sem a variável
       # o generate falha — derrubando o build inteiro. Ver CLAUDE.md (P1002).
