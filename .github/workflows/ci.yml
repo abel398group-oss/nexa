@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Histórico completo: o gate de migration compara com a base para saber
+          # quais arquivos são NOVOS. Com o depth 1 padrão, o `git diff` não tem
+          # com o que comparar e a checagem passaria sem olhar nada.
+          fetch-depth: 0
 
       # pnpm ANTES do Node, e a ordem não é estética: o setup-node lê o
       # `packageManager` do package.json e precisa encontrar o pnpm já no PATH.
@@ -75,6 +80,17 @@ jobs:
         env:
           DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
           DIRECT_DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+
+      # Antes do lint e dos testes: é barato, não precisa de banco, e o que ele barra
+      # (DROP em produção) custa muito mais caro que uma suíte vermelha.
+      #
+      # Não é um gate de `migrate diff`: aquele ficaria VERDE justamente depois de o
+      # `migrate dev` empacotar o drift numa migration — que é o cenário a evitar. Ver
+      # o comentário no topo do script.
+      - name: Migrations destrutivas (gate)
+        run: node apps/backend/scripts/check-migrations.mjs
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.event.before }}
 
       - name: Lint (backend)
         run: pnpm lint
