@@ -17,7 +17,7 @@
  *   node scripts/baseline-prisma.mjs           # mostra o que faria
  *   node scripts/baseline-prisma.mjs --aplicar # grava
  */
-import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -77,36 +77,50 @@ if (!aplicar) {
   process.exit(0);
 }
 
+/**
+ * UMA conexão para tudo, em vez de 68 `prisma migrate resolve`.
+ *
+ * A versão anterior chamava o CLI uma vez por migration. Cada chamada abre uma conexão
+ * nova, e o Postgres gerenciado da DO corta em 22 — na 48ª o script morreu com P1001
+ * ("não alcança o banco"), que parece queda de rede e é esgotamento de conexão.
+ *
+ * O `checksum` é SHA-256 do próprio `migration.sql` — conferido contra uma linha que o
+ * CLI já tinha gravado. Se estivesse errado, o `migrate deploy` seguinte acusaria
+ * "migration modificada depois de aplicada", que seria trocar um problema por outro.
+ */
+const escrita = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+await escrita.connect();
+
+// `_prisma_migrations` NÃO tem unique em `migration_name` — o Prisma permite várias
+// linhas para a mesma migration (tentativas que falharam e foram refeitas). Então
+// `ON CONFLICT` não serve de proteção: a checagem de duplicata é esta leitura.
+const { rows: existentes } = await escrita.query(
+  'SELECT migration_name FROM _prisma_migrations',
+);
+const jaGravadas = new Set(existentes.map((r) => r.migration_name));
+
 let gravadas = 0;
 let jaEstavam = 0;
 
-for (const [i, nome] of migrations.entries()) {
-  process.stdout.write(`[${i + 1}/${migrations.length}] ${nome} … `);
-  try {
-    execFileSync(
-      process.execPath,
-      ['node_modules/prisma/build/index.js', 'migrate', 'resolve', '--applied', nome],
-      { cwd: raiz, stdio: 'pipe' },
-    );
-    gravadas += 1;
-    console.log('ok');
-  } catch (e) {
-    // P3008 = "já registrada como aplicada". NÃO é falha: é o resultado que queremos,
-    // só que alguém chegou antes — outra pessoa rodando o mesmo conserto, ou este
-    // script sendo repetido depois de parar no meio. Abortar aqui deixaria o baseline
-    // pela metade, que é pior que qualquer um dos dois casos.
-    const saida = `${e.stdout ?? ''}${e.stderr ?? ''}`;
-    if (saida.includes('P3008')) {
-      jaEstavam += 1;
-      console.log('já estava');
-      continue;
-    }
-    console.log('FALHOU');
-    console.error(saida || e.message);
-    throw e;
+for (const nome of migrations) {
+  if (jaGravadas.has(nome)) {
+    jaEstavam += 1;
+    continue;
   }
+  const sql = readFileSync(resolve(raiz, 'prisma/migrations', nome, 'migration.sql'));
+  const checksum = createHash('sha256').update(sql).digest('hex');
+
+  await escrita.query(
+    `INSERT INTO _prisma_migrations
+       (id, checksum, migration_name, started_at, finished_at, applied_steps_count)
+     VALUES (gen_random_uuid()::text, $1, $2, now(), now(), 1)`,
+    [checksum, nome],
+  );
+  gravadas += 1;
+  console.log(`  + ${nome}`);
 }
 
 console.log(`\n${gravadas} gravadas agora, ${jaEstavam} já estavam.`);
+await escrita.end();
 
 console.log('\nPronto. Confirme com: npx prisma migrate deploy (deve dizer "No pending migrations").');
