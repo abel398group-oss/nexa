@@ -39,13 +39,30 @@ const emailSchema = z.object({
   imapMailbox: z.string().trim().min(1, "Normalmente 'INBOX'"),
   imapSentMailbox: z.string().trim().optional().or(z.literal('')),
   isActive: z.boolean(),
+  purpose: z.string(),
 });
 type EmailForm = z.infer<typeof emailSchema>;
+
+/**
+ * Para que serve a caixa. Separa a reputação de entrega: uma denúncia de spam vinda da
+ * prospecção fria derruba a entrega da redefinição de senha se as duas saem do mesmo
+ * remetente — e a segunda é a que não pode falhar.
+ *
+ * `both` é o padrão e mantém tudo como sempre foi. A separação só passa a valer quando
+ * existir uma segunda caixa com propósito próprio.
+ */
+const PROPOSITOS = [
+  { id: 'both', label: 'Ambos', hint: 'Serve para prospecção e para e-mails do sistema' },
+  { id: 'comercial', label: 'Comercial', hint: 'Disparo de campanha e respostas da Lia' },
+  { id: 'transacional', label: 'Transacional', hint: 'Senha, alertas do Monitor, escalação' },
+];
 
 interface Caixa {
   id: string;
   label: string;
   isSender: boolean;
+  /** both | comercial | transacional. Ausente em caixa anterior ao campo. */
+  purpose?: string | null;
   isActive: boolean;
   fromEmail: string;
   fromName: string | null;
@@ -79,10 +96,14 @@ const DEFAULT: EmailForm = {
   imapMailbox: 'INBOX',
   imapSentMailbox: '',
   isActive: true,
+  purpose: 'both',
 };
 
 function paraFormulario(c: Caixa): EmailForm {
   return {
+    // Caixa anterior ao campo vem sem `purpose` — cai em `both`, que é o que ela sempre
+    // fez na prática.
+    purpose: c.purpose ?? 'both',
     label: c.label ?? '',
     fromEmail: c.fromEmail ?? '',
     fromName: c.fromName ?? '',
@@ -224,6 +245,7 @@ export function EmailChannelSettingsPage() {
       const r = await api.put('/settings/email-channel', {
         id: editandoId ?? undefined,
         label: form.label,
+        purpose: form.purpose,
         fromEmail: form.fromEmail,
         fromName: form.fromName,
         replyTo: form.replyTo || undefined,
@@ -292,6 +314,13 @@ export function EmailChannelSettingsPage() {
                       Enviando
                     </span>
                   )}
+                  {/* Só aparece quando a caixa tem propósito próprio: com `both` a
+                      etiqueta não diria nada além do padrão. */}
+                  {c.purpose && c.purpose !== 'both' && (
+                    <span className="rounded-full border border-base-300 px-2 py-0.5 text-[11px] text-base-content/60">
+                      {PROPOSITOS.find((p) => p.id === c.purpose)?.label ?? c.purpose}
+                    </span>
+                  )}
                   {!c.isActive && (
                     <span className="rounded-full bg-base-300 px-2 py-0.5 text-[11px] text-base-content/60">
                       Inativa
@@ -356,6 +385,19 @@ export function EmailChannelSettingsPage() {
         <Section title="Remetente" subtitle="Endereço que o lead vê ao receber o e-mail.">
           <Field label="Nome desta caixa" required hint="Só para você identificar na lista. Ex.: Lia, Mateus." error={errors.label?.message}>
             <Input type="text" {...register('label')} placeholder="Mateus" />
+          </Field>
+          <Field
+            label="Para que serve"
+            hint="Prospecção fria e e-mail do sistema na mesma caixa: uma denúncia de spam na primeira derruba a entrega da segunda — e é a segunda que não pode falhar."
+          >
+            <select
+              {...register('purpose')}
+              className="w-full rounded-md border border-base-300 bg-transparent px-3 py-2 text-sm"
+            >
+              {PROPOSITOS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label} — {p.hint}</option>
+              ))}
+            </select>
           </Field>
           <Field label="E-mail de envio" required error={errors.fromEmail?.message}>
             <Input type="email" {...register('fromEmail')} placeholder="mateus@hipertms.com.br" />

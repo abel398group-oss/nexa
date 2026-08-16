@@ -6,7 +6,7 @@
  * vive no MonitorNotificationService.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { WahaClientService, LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 import { NotificationChannel } from './notification-channel.interface';
 
 /**
@@ -35,7 +35,12 @@ export class WahaNotificationChannel implements NotificationChannel {
     const text = message.startsWith(DO_NOT_REPLY_NOTICE)
       ? message
       : `${DO_NOT_REPLY_NOTICE}\n\n${message}`;
-    const result = await this.waha.sendText(to, text, { origin: 'monitor' });
+    // Linha EXPLÍCITA, e não pela omissão do parâmetro. O alerta sempre saiu pela
+    // principal porque `resolveLinha(undefined)` cai nela — comportamento idêntico, mas
+    // por acidente de default. Declarado aqui, `grep "linha:"` responde por qual número
+    // cada coisa sai, e uma mudança de default não move alerta para a linha de vendas
+    // sem ninguém notar.
+    const result = await this.waha.sendText(to, text, { origin: 'monitor', linha: LINHA_PRINCIPAL });
     if (!result.sent) {
       this.logger.warn(`WAHA: falha ao enviar para ${to} (tenant=${tenantId}): ${result.reason}`);
       return { sent: false, reason: result.reason ?? 'waha_send_failed' };

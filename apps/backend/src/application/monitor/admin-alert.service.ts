@@ -13,7 +13,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { WahaClientService, LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { parseAdminPhones } from './admin-phones.util';
 
@@ -56,7 +56,7 @@ export class AdminAlertService {
     let anySent = false;
     for (const phone of phones) {
       try {
-        const r = await this.waha.sendText(phone, text, { origin: 'admin' });
+        const r = await this.waha.sendText(phone, text, { origin: 'admin', linha: LINHA_PRINCIPAL });
         if (r.sent) anySent = true;
         else this.logger.warn(`admin WhatsApp não enviado (${phone}): ${r.reason}`);
       } catch (e: any) {

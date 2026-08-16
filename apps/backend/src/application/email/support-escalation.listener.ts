@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { WahaClientService, LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 
 export interface SupportEscalatedEvent {
   tenantId: string;
@@ -111,7 +111,13 @@ export class SupportEscalationListener {
           `Cliente: ${contact?.name ?? '-'} (${phone})\n` +
           `Assunto: ${c.subject ?? '-'}\n` +
           (inboxLink ? `👉 Atender agora: ${inboxLink}` : `👉 Atenda pelo Inbox do painel Nexa.`);
-        const r = await this.waha.sendText(supportWa, waMsg, { origin: 'suporte-interno' });
+        // Linha explícita: o aviso de escalação vai para o time interno, pelo número
+        // principal. Antes dependia do default de `resolveLinha` — mesmo destino, mas
+        // sem ninguém ter decidido.
+        const r = await this.waha.sendText(supportWa, waMsg, {
+          origin: 'suporte-interno',
+          linha: LINHA_PRINCIPAL,
+        });
         if (!r.sent) {
           this.logger.warn(`WhatsApp de escalação falhou (conv=${event.conversationId}): ${r.reason}`);
         }

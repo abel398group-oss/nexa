@@ -37,7 +37,17 @@ export interface UpsertEmailChannelDto {
   isActive?: boolean;
   /** Marca esta caixa como a remetente já no salvamento. */
   isSender?: boolean;
+  /**
+   * Para que serve: `both` | `comercial` | `transacional`.
+   *
+   * Separa a reputação de entrega — prospecção fria de um lado, redefinição de senha e
+   * alerta do Monitor do outro. `both` mantém o comportamento de sempre.
+   */
+  purpose?: string;
 }
+
+/** Valores aceitos em `purpose`. Fora daqui, o service normaliza para `both`. */
+export const EMAIL_PURPOSES = ['both', 'comercial', 'transacional'] as const;
 
 // Campos que NUNCA voltam para o frontend (senhas)
 const SAFE_SELECT = {
@@ -45,6 +55,7 @@ const SAFE_SELECT = {
   tenantId: true,
   label: true,
   isSender: true,
+  purpose: true,
   provider: true,
   fromEmail: true,
   fromName: true,
@@ -120,6 +131,12 @@ export class EmailChannelService {
       // Vazio = descoberta automática pelo atributo \Sent. Ver EmailImapService.
       imapSentMailbox: dto.imapSentMailbox?.trim() || null,
       isActive: dto.isActive ?? true,
+      // Valor desconhecido vira `both` em vez de ser gravado: `both` é o comportamento
+      // de sempre (a caixa serve aos dois), então um typo degrada para o seguro em vez
+      // de tirar a caixa da escolha e deixar um fluxo sem remetente.
+      purpose: (EMAIL_PURPOSES as readonly string[]).includes(dto.purpose ?? '')
+        ? (dto.purpose as string)
+        : 'both',
     };
 
     const salvo = existing
