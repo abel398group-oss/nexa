@@ -650,8 +650,11 @@ export function Layout() {
             })}
           </div>
 
-          {/* ── menu do módulo — largura fixa para o texto não refluir na animação ── */}
-          <div className={`min-h-0 w-[10.5rem] flex-col ${isExpandedMode ? 'flex' : 'hidden'}`}>
+          {/* ── menu do módulo — largura fixa para o texto não refluir na animação.
+              13rem + o trilho de 3.5rem fecham exatamente os 16.5rem que o `aside`
+              abre no hover. Estava 10.5rem: sobrava vazio à direita ENQUANTO
+              "Saúde dos números" e "Audiência do site" apareciam cortados. */}
+          <div className={`min-h-0 w-[13rem] flex-col ${isExpandedMode ? 'flex' : 'hidden'}`}>
             <div className="shrink-0 border-b border-white/10 px-3 py-3">
               <div className="truncate text-sm font-semibold tracking-tight text-white">{activeModule?.label ?? 'Nexa'}</div>
               <div className="truncate text-[10px] text-white/40">{activeModule?.hint}</div>
