@@ -263,6 +263,17 @@ function Fila({
                       {f.tentativas} {f.tentativas === 1 ? 'tentativa' : 'tentativas'}
                     </span>
                   )}
+                  {/* O mesmo lead veio em mais de uma lista. A fila já mostra ele uma
+                      vez só; o selo existe para o SDR não achar que a duplicata sumiu
+                      do sistema — ela está aqui, contada. */}
+                  {(f.oportunidades?.length ?? 1) > 1 && (
+                    <span
+                      className="rounded bg-base-200 px-1.5 py-0.5 text-[10px] text-base-content/60"
+                      title={`Este lead entrou em ${f.oportunidades!.length} listas diferentes`}
+                    >
+                      {f.oportunidades!.length} listas
+                    </span>
+                  )}
                 </div>
               </button>
             </li>

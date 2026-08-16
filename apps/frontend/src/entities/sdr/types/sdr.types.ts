@@ -37,6 +37,10 @@ export interface ItemDaFila {
   activities: AtividadeRecente[];
   tentativas: number;
   prioridade: PrioridadeFila;
+  /// Ids das oportunidades fundidas nesta linha — o mesmo lead importado em lotes
+  /// diferentes vira uma entrada só na fila. Quase sempre tem 1 item; mais que isso
+  /// é o que o badge "N listas" mostra.
+  oportunidades?: string[];
 }
 
 export interface Closer {

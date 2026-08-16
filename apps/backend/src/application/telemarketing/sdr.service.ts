@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
-import { ordenarFila } from './sdr-queue';
+import { agruparPorContato, ordenarFila } from './sdr-queue';
 import { naoAusente } from './seller-availability';
 
 /// Etapas em que o lead ainda é trabalho do SDR. `qualified` em diante é do closer.
@@ -81,12 +81,16 @@ export class SdrService {
       : [];
     const porId = new Map(contatos.map((c) => [c.id, c]));
 
+    // Agrupar ANTES de ordenar: a prioridade tem que ser calculada sobre o total de
+    // tentativas do contato, não sobre uma das linhas dele. Ver `agruparPorContato`.
     return ordenarFila(
-      oportunidades.map((o) => ({
-        ...o,
-        contact: o.contactId ? porId.get(o.contactId) ?? null : null,
-        tentativas: o._count.activities,
-      })),
+      agruparPorContato(
+        oportunidades.map((o) => ({
+          ...o,
+          contact: o.contactId ? porId.get(o.contactId) ?? null : null,
+          tentativas: o._count.activities,
+        })),
+      ),
     );
   }
 
