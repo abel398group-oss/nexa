@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { SdrService } from './sdr.service';
+import { MarketScopeService } from '@/shared/auth/market-scope.service';
 
 /**
  * Transferência para o closer, contra Postgres real.
@@ -13,7 +14,9 @@ import { SdrService } from './sdr.service';
 const prisma = new PrismaClient();
 const TENANT = 'tenant-int-transfer';
 const MERCADO = 'int-transfer-tms';
-const service = new SdrService(prisma as any);
+// MarketScopeService de verdade, contra o mesmo banco: o cenário cria vínculos em
+// `seller_markets`, então o escopo por mercado é exercido junto — que é o ponto.
+const service = new SdrService(prisma as any, new MarketScopeService(prisma as any));
 
 async function limpar() {
   await prisma.sellerActivity.deleteMany({ where: { tenantId: TENANT } });

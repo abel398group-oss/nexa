@@ -10,6 +10,7 @@ import { LeadBatchesController } from '@/presentation/http/telemarketing/lead-ba
 import { SdrController } from '@/presentation/http/telemarketing/sdr.controller';
 import { CloserController } from '@/presentation/http/telemarketing/closer.controller';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { MarketScopeService } from '@/shared/auth/market-scope.service';
 
 /**
  * Módulo 1 do telemarketing (docs/features/telemarketing/prd.md).
@@ -34,6 +35,9 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
     SalesScriptService,
     TelemarketingReportService,
     TmsLookupService,
+    // Provider próprio, mesmo padrão do TmsLookupService acima: o serviço só depende do
+    // Prisma (global), então não traz módulo de aplicação junto nem risco de ciclo.
+    MarketScopeService,
   ],
 })
 export class TelemarketingModule {}

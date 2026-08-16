@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { UsersService } from '@/application/users/users.service';
 import { PERM_CATALOG } from '@/shared/auth/perms';
@@ -31,12 +31,22 @@ class CreateUserDto {
   password!: string;
   @IsOptional() @IsIn(ROLES as unknown as string[]) role?: string;
   @IsOptional() @IsArray() permissions?: string[];
+  /**
+   * Cadastro de vendedor ligado a este login.
+   *
+   * Sem isto não havia CAMINHO NENHUM para preencher `User.sellerId` pela tela: só
+   * `SellersService` escrevia o campo. Resultado, todo SDR e closer criado aqui ficava
+   * com o vínculo nulo — e é justamente esse vínculo que amarra a carteira e o escopo
+   * por mercado. `null` desvincula de propósito.
+   */
+  @IsOptional() @IsUUID(undefined, { message: 'Vendedor inválido.' }) sellerId?: string | null;
 }
 class UpdateUserDto {
   @IsOptional() @IsIn(ROLES as unknown as string[]) role?: string;
   @IsOptional() @IsArray() permissions?: string[];
   // Mesmo mínimo do create — sem isto dava para trocar a senha por "1" na edição.
   @IsOptional() @IsString() @MinLength(6) password?: string;
+  @IsOptional() @IsUUID(undefined, { message: 'Vendedor inválido.' }) sellerId?: string | null;
 }
 class ActiveDto { @IsBoolean() active!: boolean; }
 

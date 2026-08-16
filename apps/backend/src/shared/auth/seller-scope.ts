@@ -37,6 +37,13 @@
 export interface UsuarioComEscopo {
   role?: string | null;
   sellerId?: string | null;
+  /**
+   * Vem do JWT junto com role e sellerId. Não é usado por `escopoDeVendedor` — está aqui
+   * para o escopo de MERCADO (`market-scope.service.ts`), que decide quem é operador de
+   * lead por permissão (`sdr`/`closer`) e não só por papel, e assim os dois escopos
+   * recebem o mesmo objeto sem cast.
+   */
+  permissions?: string[] | null;
 }
 
 /**

@@ -31,10 +31,26 @@ export class UsersService {
     return this.prisma.user.findMany({ where, select: SELECT, orderBy: { createdAt: 'asc' } });
   }
 
-  async create(tenantId: string, dto: { name: string; email: string; password: string; role?: string; permissions?: string[] }) {
+  /**
+   * Confere que o vendedor existe E é deste tenant, antes de gravar o vínculo.
+   *
+   * Não basta o id ser válido: `sellerId` decide qual carteira e quais mercados o login
+   * enxerga, então aceitar um id de outro cliente entregaria a base dele (ADR 005 D2).
+   * Mesmo cuidado que `markets.service.vincularVendedor` já toma.
+   */
+  private async validarSeller(tenantId: string, sellerId: string): Promise<void> {
+    const seller = await this.prisma.seller.findFirst({
+      where: { id: sellerId, tenantId },
+      select: { id: true },
+    });
+    if (!seller) throw new BadRequestException('Vendedor não encontrado neste cliente.');
+  }
+
+  async create(tenantId: string, dto: { name: string; email: string; password: string; role?: string; permissions?: string[]; sellerId?: string | null }) {
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new BadRequestException('Este e-mail já está cadastrado.');
     const role = (dto.role as any) ?? 'operacional';
+    if (dto.sellerId) await this.validarSeller(tenantId, dto.sellerId);
     try {
       return await this.prisma.user.create({
         data: {
@@ -43,6 +59,7 @@ export class UsersService {
           passwordHash: await bcrypt.hash(dto.password, 10),
           name: dto.name,
           role,
+          sellerId: dto.sellerId ?? null,
           permissions: role === 'admin' ? [] : (dto.permissions ?? []).filter((p) => (GRANTABLE_PERMS as readonly string[]).includes(p)),
         },
         select: SELECT,
@@ -61,11 +78,17 @@ export class UsersService {
     }
   }
 
-  async update(tenantId: string, id: string, dto: { role?: string; permissions?: string[]; password?: string }) {
+  async update(tenantId: string, id: string, dto: { role?: string; permissions?: string[]; password?: string; sellerId?: string | null }) {
     const u = await this.prisma.user.findFirst({ where: { id, tenantId } });
     if (!u) throw new NotFoundException('usuário não encontrado');
     const data: any = {};
     if (dto.role) data.role = dto.role;
+    // `undefined` = não mexer; `null` = desvincular de propósito. A distinção importa:
+    // um PATCH que só troca a senha não pode apagar o vínculo por omissão.
+    if (dto.sellerId !== undefined) {
+      if (dto.sellerId) await this.validarSeller(tenantId, dto.sellerId);
+      data.sellerId = dto.sellerId;
+    }
     if (dto.permissions) data.permissions = dto.permissions.filter((p) => (GRANTABLE_PERMS as readonly string[]).includes(p));
     // Promoveu a admin → zera a lista, igual ao create. Admin passa direto pelo
     // guard, então manter permissões antigas é lixo que reaparece se um dia ele

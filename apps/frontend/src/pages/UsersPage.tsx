@@ -15,7 +15,15 @@ const PAGE_SIZE = 20;
 interface User {
   id: string; email: string; name?: string; role: string;
   permissions: string[]; isActive: boolean;
+  /** Cadastro de vendedor ligado ao login — base da carteira e do escopo por market. */
+  sellerId?: string | null;
 }
+
+/** Vendedor para o seletor de vínculo. */
+interface SellerOption { id: string; name: string }
+
+/** Permissões que só funcionam com vínculo de vendedor — a fila filtra por ele. */
+const PERMS_QUE_EXIGEM_SELLER = ['sdr', 'closer', 'telemarketing'];
 
 const userSchema = z.object({
   name: z.string().trim().optional().or(z.literal('')),
@@ -23,9 +31,10 @@ const userSchema = z.object({
   password: z.string().trim().min(6, 'Minimo 6 caracteres'),
   role: z.string(),
   permissions: z.array(z.string()),
+  sellerId: z.string().optional(),
 });
 type UserForm = z.infer<typeof userSchema>;
-const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: [] };
+const emptyUser: UserForm = { name: '', email: '', password: '', role: 'operacional', permissions: [], sellerId: '' };
 
 /** Item do catálogo servido por `GET /users/areas`. */
 interface PermCatalogItem {
@@ -74,6 +83,10 @@ export function UsersPage() {
   useUnsavedGuard(isDirty && !isSubmitting);
   const formRole = watch('role');
   const formPerms = watch('permissions');
+  const formSellerId = watch('sellerId');
+  // Marcar SDR/Closer sem vincular vendedor cria um acesso que abre a fila vazia — o
+  // aviso existe para isso não virar um chamado de "o sistema não mostra meus leads".
+  const precisaSeller = (formPerms ?? []).some((p) => PERMS_QUE_EXIGEM_SELLER.includes(p));
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -111,6 +124,14 @@ export function UsersPage() {
     staleTime: 60 * 60 * 1000,
   });
 
+  // Vendedores para o vínculo. Sem ele, `User.sellerId` ficava nulo em todo mundo criado
+  // por esta tela — e é esse campo que amarra a carteira e o escopo por market.
+  const { data: sellers = [] } = useQuery({
+    queryKey: ['sellers', 'options'],
+    queryFn: () => api.get('/sellers').then((r) => (r.data as SellerOption[]) ?? []),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const roles = [...new Set(items.map((u) => u.role))];
   const shown = items.filter((u) => u.role !== 'vendedor' && (!roleFilter || u.role === roleFilter));
 
@@ -146,7 +167,9 @@ export function UsersPage() {
 
   const onSubmit = async (data: UserForm) => {
     try {
-      await api.post('/users', data);
+      // `sellerId` vazio vira `null`: o backend distingue "não mexer" (undefined) de
+      // "desvincular" (null), e mandar string vazia estouraria a validação de UUID.
+      await api.post('/users', { ...data, sellerId: data.sellerId || null });
       setShow(false);
       reset(emptyUser);
       await invalidate();
@@ -155,6 +178,16 @@ export function UsersPage() {
       setError('root', { message: Array.isArray(m) ? m.join(', ') : m || 'Erro' });
     }
   };
+
+  /** Troca o vínculo de vendedor direto no card, igual às permissões. */
+  async function saveSeller(u: User, sellerId: string) {
+    try {
+      await api.patch(`/users/${u.id}`, { sellerId: sellerId || null });
+      await invalidate();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Erro ao vincular o vendedor.');
+    }
+  }
 
   async function savePerms(u: User, perms: string[]) {
     queryClient.setQueryData<User[]>(['users', debouncedSearch], (prev) =>
@@ -289,6 +322,27 @@ export function UsersPage() {
                 {u.role === 'admin' ? (
                   <p className="text-xs text-base-content/50">Acesso total (administrador)</p>
                 ) : (
+                  <div className="space-y-2">
+                  {/* Vínculo de vendedor — só aparece para quem opera lead, que é quem
+                      precisa dele. Mostrar em todo usuário viraria ruído. */}
+                  {u.permissions.some((p) => PERMS_QUE_EXIGEM_SELLER.includes(p)) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-base-content/40">Vendedor:</span>
+                      <select
+                        value={u.sellerId ?? ''}
+                        onChange={(e) => saveSeller(u, e.target.value)}
+                        className={`rounded-md border px-2 py-1 text-xs ${
+                          u.sellerId ? 'border-base-300' : 'border-amber-500 text-amber-700'
+                        }`}
+                        style={{ background: 'var(--surface)' }}
+                      >
+                        <option value="">— sem vínculo (fila vazia) —</option>
+                        {sellers.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {/* Permissão legada só aparece em quem AINDA a tem: dá para tirar,
                         não para conceder de novo — senão a migração nunca termina. */}
@@ -312,6 +366,7 @@ export function UsersPage() {
                         </button>
                       );
                     })}
+                  </div>
                   </div>
                 )}
               </Card>
@@ -465,6 +520,30 @@ export function UsersPage() {
                   Sem nenhum modulo marcado o usuario entra e nao ve nada.
                 </p>
               )}
+
+              {/* Vínculo com o cadastro de vendedor. Fica junto das permissões porque é
+                  o que faz a mesa do SDR e a carteira do closer terem conteúdo: a fila
+                  filtra por `assignedSellerId` e o escopo de market anda por este id. */}
+              <div className="space-y-1 pt-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">
+                  Vendedor vinculado
+                </label>
+                <select
+                  {...register('sellerId')}
+                  className="w-full rounded-md border border-base-300 bg-transparent px-2 py-1.5 text-sm"
+                >
+                  <option value="">— sem vínculo —</option>
+                  {sellers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {precisaSeller && !formSellerId && (
+                  <p className="text-[11px] text-amber-600">
+                    Este acesso trabalha leads (SDR/Closer). <strong>Sem vendedor vinculado
+                    a fila abre vazia</strong> — o sistema não tem como saber quais leads são dele.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

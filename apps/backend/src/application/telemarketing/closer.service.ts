@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
+import { MarketScopeService, filtroDeMercado } from '@/shared/auth/market-scope.service';
 import { agruparPorBloco } from './closer-today';
 
 type Usuario = UsuarioComEscopo & { sellerId?: string | null };
@@ -10,7 +11,10 @@ const ABERTAS = ['qualified', 'proposal', 'paused'];
 
 @Injectable()
 export class CloserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly marketScope: MarketScopeService,
+  ) {}
 
   /**
    * Painel "HOJE" nos 3 blocos. A regra de qual bloco vive em `closer-today.ts`,
@@ -22,12 +26,15 @@ export class CloserService {
    */
   async hoje(tenantId: string, user: Usuario) {
     const escopo = escopoDeVendedor(user);
+    // Carteira também é escopada por mercado: closer de pneus não abre negócio de TMS.
+    const mercados = await this.marketScope.mercadosDoUsuario(tenantId, user);
 
     const negocios = await this.prisma.opportunity.findMany({
       where: {
         tenantId,
         stage: { in: ABERTAS },
         ...(escopo ? { assignedSellerId: escopo } : {}),
+        ...filtroDeMercado(mercados),
       },
       select: {
         id: true,
@@ -214,10 +221,15 @@ export class CloserService {
   /// adivinhar o id (R5).
   private async doEscopo(tenantId: string, user: Usuario, id: string) {
     const escopo = escopoDeVendedor(user);
+    // O mercado entra AQUI e não só na listagem: sem isto, esconder o negócio do painel
+    // e continuar aceitando agir nele por id seria trocar a fechadura e deixar a chave.
+    const mercados = await this.marketScope.mercadosDoUsuario(tenantId, user);
     const o = await this.prisma.opportunity.findFirst({
-      where: { id, tenantId, ...(escopo ? { assignedSellerId: escopo } : {}) },
+      where: { id, tenantId, ...(escopo ? { assignedSellerId: escopo } : {}), ...filtroDeMercado(mercados) },
       select: { id: true, stage: true, contactId: true, assignedSellerId: true },
     });
+    // 404 e não 403, igual ao resto: para quem não tem escopo o negócio não existe —
+    // um 403 confirmaria que o id é válido.
     if (!o) throw new NotFoundException('Negócio não encontrado.');
     return o;
   }

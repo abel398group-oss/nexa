@@ -72,7 +72,7 @@ export class SdrController {
     @CurrentUser() user: Usuario,
     @Query('productCode') productCode: string,
   ) {
-    return this.sdr.closersDoMercado(tenantId, productCode, user?.sellerId);
+    return this.sdr.closersDoMercado(tenantId, productCode, user?.sellerId, user);
   }
 
   /// Material de consulta do mercado — a base de conhecimento filtrada, só leitura.
@@ -82,10 +82,11 @@ export class SdrController {
   @RequirePerm('sdr')
   material(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
     @Query('productCode') productCode: string,
     @Query('q') q?: string,
   ) {
-    return this.sdr.materialDoMercado(tenantId, productCode, q);
+    return this.sdr.materialDoMercado(tenantId, productCode, q, user);
   }
 
   /// Passa pro closer: escolha direta pelo SDR (decidido 11/08), sem round-robin —

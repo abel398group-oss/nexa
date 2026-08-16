@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
+import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
 import { ordenarFila } from './sdr-queue';
 import { naoAusente } from './seller-availability';
 
@@ -9,7 +10,10 @@ const ETAPAS_DO_SDR = ['new'];
 
 @Injectable()
 export class SdrService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly marketScope: MarketScopeService,
+  ) {}
 
   /**
    * A fila do SDR, numa chamada só: oportunidade + contato + lote + histórico.
@@ -19,6 +23,9 @@ export class SdrService {
    */
   async fila(tenantId: string, user: UsuarioComEscopo) {
     const escopo = escopoDeVendedor(user);
+    // Segunda dimensão, composta com a do dono: o SDR do Agabê vê os leads de Agabê que
+    // são dele. Sem escopo de mercado devolve `{}` e nada muda.
+    const mercados = await this.marketScope.mercadosDoUsuario(tenantId, user);
 
     // ATENÇÃO: aqui NÃO se usa `filtroDeDono`. Naquele filtro, lead sem dono aparece
     // pra todos — correto em Contatos, errado aqui. O módulo 1 decidiu que sem dono o
@@ -29,6 +36,7 @@ export class SdrService {
         tenantId,
         stage: { in: ETAPAS_DO_SDR },
         ...(escopo ? { assignedSellerId: escopo } : {}),
+        ...filtroDeMercado(mercados),
       },
       select: {
         id: true,
@@ -197,8 +205,16 @@ export class SdrService {
    * está atrás da permissão `knowledge`, que dá poder de EDITAR o acervo. Ele precisa
    * consultar durante a ligação, não reescrever o que a Lia responde.
    */
-  async materialDoMercado(tenantId: string, productCode: string, busca?: string) {
+  async materialDoMercado(
+    tenantId: string,
+    productCode: string,
+    busca?: string,
+    user?: UsuarioComEscopo,
+  ) {
     if (!productCode) return [];
+    // `productCode` vem da query: aqui a decisão é permitir/negar, não filtrar. Sem o
+    // assert, bastava trocar o parâmetro na URL para ler o acervo de outro mercado.
+    assertMercado(await this.marketScope.mercadosDoUsuario(tenantId, user), productCode);
 
     const where: any = { tenantId, productCode, approved: true };
     if (busca?.trim()) {
@@ -223,7 +239,14 @@ export class SdrService {
   /// Closers elegíveis para um mercado. É a lista que o SDR escolhe — e a mesma que
   /// valida a escolha no `transferir`, senão um lead de pneus cai num closer que só
   /// vende TMS (R8).
-  async closersDoMercado(tenantId: string, productCode: string, excluirSellerId?: string | null) {
+  async closersDoMercado(
+    tenantId: string,
+    productCode: string,
+    excluirSellerId?: string | null,
+    user?: UsuarioComEscopo,
+  ) {
+    // Mesma razão do material: o mercado chega pela query e decide o que é devolvido.
+    assertMercado(await this.marketScope.mercadosDoUsuario(tenantId, user), productCode);
     const vinculos = await this.prisma.sellerMarket.findMany({
       where: { tenantId, productCode },
       select: { sellerId: true, role: true },
@@ -345,11 +368,15 @@ export class SdrService {
     opportunityId: string,
   ) {
     const escopo = escopoDeVendedor(user);
+    // O mercado entra AQUI e não só na fila: sem isto, esconder o lead da lista e
+    // continuar aceitando agir nele por id seria trocar a fechadura e deixar a chave.
+    const mercados = await this.marketScope.mercadosDoUsuario(tenantId, user);
     const o = await this.prisma.opportunity.findFirst({
       where: {
         id: opportunityId,
         tenantId,
         ...(escopo ? { assignedSellerId: escopo } : {}),
+        ...filtroDeMercado(mercados),
       },
       select: {
         id: true,
