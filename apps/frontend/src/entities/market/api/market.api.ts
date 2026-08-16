@@ -53,3 +53,14 @@ export async function unlinkMarketSeller(
   const r = await api.delete(`/markets/${code}/sellers/${sellerId}`);
   return r.data;
 }
+
+/**
+ * Cria um mercado. `slug` vira o `code` do produto — a chave usada em conhecimento,
+ * campanha e conector — então o servidor recusa qualquer coisa fora de
+ * `letras-minusculas-com-hifen`. Nasce em rascunho: só aparece no Disparo depois de
+ * liberado.
+ */
+export async function createMarket(data: { name: string; slug: string }): Promise<Market> {
+  const r = await api.post('/markets', data);
+  return r.data;
+}

@@ -32,19 +32,21 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
 
   // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
-  { label: 'Vendas', icon: 'dollar', items: [
-    // Primeiro item de propósito: é a tela onde o vendedor TRABALHA (F7 — RevOps).
-    { to: '/fila',           label: 'Minha fila',        ic: 'zap',       perm: 'opportunities' },
+  { label: null, items: [
     { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
-    { to: '/opportunities',  label: 'Oportunidades',     ic: 'dollar',    perm: 'opportunities' },
-    // Audiência do site — fica aqui (não entrou no Cockpit Admin)
-    { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap',       perm: 'campaigns' },
-    { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye',       perm: 'campaigns' },
-    { to: '/contacts',       label: 'Contatos',          ic: 'contacts',  perm: 'contacts' },
-    // Cockpits unificados (13/08/2026) — consolidam todas as telas admin, SDR e Closer
+  ] },
+  { label: 'Admin', icon: 'users', items: [
+    { to: '/dashboard',      label: 'Painel',            ic: 'dashboard', perm: 'dashboard' },
     { to: '/admin-cockpit',  label: 'Cockpit Admin',     ic: 'building',  perm: 'admin' },
+  ] },
+  { label: 'Operação', icon: 'zap', items: [
     { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: 'telemarketing' },
     { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: 'telemarketing' },
+  ] },
+  { label: 'Vendas (Legado)', icon: 'dollar', items: [
+    // Links preservados apenas para compatibilidade — rotas viram red herrings com cockpits
+    { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap',       perm: 'campaigns' },
+    { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye',       perm: 'campaigns' },
   ] },
 
   // ── Serviço 2: Suporte ─────────────────────────────────────────────────────

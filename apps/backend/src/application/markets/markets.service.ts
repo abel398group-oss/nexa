@@ -64,6 +64,54 @@ export class MarketsService {
   }
 
   /**
+   * Cria um mercado (linha de `products`).
+   *
+   * Nasce em `draft` de propósito: mercado novo não tem conhecimento, modelo nem
+   * vendedor vinculado, e a trava de liberação (`readiness`) é justamente o que impede
+   * ele de aparecer no seletor do disparo antes de estar montado. Criar já ativo
+   * contornaria a trava pela porta dos fundos.
+   *
+   * `connector: 'none'` porque o conector é escolhido depois, na configuração do
+   * mercado — a coluna é obrigatória no schema e omiti-la derruba o insert.
+   *
+   * Não recebe `tenantId`: `products` é global (ver `list()`, que busca sem filtro de
+   * tenant). O parâmetro entra só para manter a assinatura dos outros métodos.
+   */
+  async create(_tenantId: string, dto: { name: string; slug: string }) {
+    const code = dto.slug.trim().toLowerCase();
+    const name = dto.name.trim();
+
+    // Checagem explícita antes do insert: o unique de `code` devolveria P2002, que sem
+    // tratamento vira 500 — e quem clicou precisa saber que o identificador já é de
+    // outro mercado, não que "o servidor caiu".
+    const existe = await this.prisma.product.findUnique({
+      where: { code },
+      select: { name: true },
+    });
+    if (existe) {
+      throw new BadRequestException(
+        `O identificador "${code}" já pertence ao mercado "${existe.name}". Escolha outro.`,
+      );
+    }
+
+    const market = await this.prisma.product.create({
+      data: {
+        code,
+        name,
+        connector: 'none',
+        status: 'draft',
+        // A identidade do e-mail começa com o nome do mercado para o primeiro disparo
+        // não sair com a marca do HiperTMS na cara do lead de outro parceiro
+        // (email-market-identity.ts). Editável depois na configuração do mercado.
+        displayName: name,
+        senderName: name,
+      },
+    });
+    this.logger.log(`Mercado "${market.name}" (${code}) criado em rascunho`);
+    return market;
+  }
+
+  /**
    * Quantos vendedores contam para a trava de liberação.
    *
    * Conta os VINCULADOS a este mercado — é quem de fato pode receber lead dele. Mas com

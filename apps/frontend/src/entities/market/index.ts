@@ -10,6 +10,7 @@ export type {
 
 export {
   listMarkets,
+  createMarket,
   getMarketReadiness,
   releaseMarket,
   pauseMarket,

@@ -1,17 +1,33 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { MarketsService } from '@/application/markets/markets.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 
-/// `role` distingue quem trabalha o mercado de quem lidera nele. Opcional: o padrão
-/// `seller` cobre o caso normal, e um DTO que exigisse o campo faria a tela mandar
-/// sempre o mesmo valor à mão.
 class LinkSellerDto {
   @IsOptional()
   @IsIn(['seller', 'lead'])
   role?: 'seller' | 'lead';
+}
+
+/// Criação de mercado. `slug` vira o `code` do produto — a chave que separa
+/// conhecimento, campanha e conector em todo o sistema (ADR 037). Por isso o formato
+/// é validado aqui e não só normalizado no service: um code com espaço ou acento
+/// entraria em rota, filtro e chave de Redis e só quebraria muito depois.
+class CreateMarketDto {
+  @IsString()
+  @IsNotEmpty({ message: 'O nome do market é obrigatório.' })
+  @MaxLength(80)
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O identificador (slug) é obrigatório.' })
+  @MaxLength(40)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message: 'O identificador deve ter apenas letras minúsculas, números e hífen (ex.: agabe, oleo-lubrificante).',
+  })
+  slug!: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -28,6 +44,14 @@ export class MarketsController {
   @RequirePerm('campaigns')
   list(@CurrentTenant() tenantId: string, @Query('liberados') liberados?: string) {
     return this.markets.list(tenantId, { somenteLiberados: liberados === 'true' });
+  }
+
+  /// Criar mercado fica atrás de 'settings', igual a liberar/suspender: é quem monta a
+  /// operação, não quem dispara.
+  @Post()
+  @RequirePerm('settings')
+  create(@CurrentTenant() tenantId: string, @Body() dto: CreateMarketDto) {
+    return this.markets.create(tenantId, dto);
   }
 
   @Get(':code/readiness')
