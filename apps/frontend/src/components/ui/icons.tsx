@@ -52,7 +52,8 @@ export type IconName =
   | 'archive'
   | 'pulse'
   | 'clock'
-  | 'menu';
+  | 'menu'
+  | 'gear';
 
 const PATHS: Record<IconName, ReactNode> = {
   dashboard: (
@@ -300,6 +301,12 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   menu: (
     <path d="M4 6h16M4 12h16M4 18h16" />
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M18 6l-1.4 1.4M7.4 16.6 6 18M18 18l-1.4-1.4M7.4 7.4 6 6" />
+    </>
   ),
 };
 

@@ -14,8 +14,11 @@ import { Button, Input, Modal } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { temPerm } from '@/shared/lib/perms';
 
+// O tour descarta sozinho o passo cujo seletor não existe na tela (ver GuidedTour), então
+// os passos de item só aparecem para quem está no módulo que os contém.
 const TOUR_STEPS: TourStep[] = [
-  { selector: 'aside nav', title: 'Bem-vindo ao Nexa!', text: 'Este é o menu lateral — por aqui você navega entre todas as áreas do sistema.' },
+  { selector: '[data-tour="modulos"]', title: 'Bem-vindo ao Nexa!', text: 'O sistema tem três partes: TMS (clientes e suporte), Market (leads e vendas) e Plataforma (o que os dois usam). Clique num ícone para trocar.' },
+  { selector: 'aside nav', title: 'Menu do módulo', text: 'Aqui ficam só as telas do módulo aberto — por isso a lista é curta. Passe o mouse na barra para abrir.' },
   { selector: 'a[href="/inbox"]', title: 'Inbox', text: 'Atenda as conversas do WhatsApp em tempo real. A IA (Lia) sugere ou envia respostas.' },
   { selector: 'a[href="/campaigns"]', title: 'Disparo de Leads', text: 'Envie campanhas em massa com proteção anti-bloqueio (horário, limites, follow-up).' },
   { selector: 'a[href="/sellers"]', title: 'Vendedores', text: 'Cadastre sua equipe. Leads quentes são distribuídos e o vendedor é avisado no WhatsApp.' },
@@ -27,58 +30,110 @@ const TOUR_STEPS: TourStep[] = [
 // abas dele. Com uma string só, o painel sumia do menu de quem tinha acesso a parte dele.
 type NavItem = { to: string; label: string; ic: IconName; perm: string | string[] };
 type NavGroup = { label: string | null; icon?: IconName; items: NavItem[] };
+type NavModule = { id: string; label: string; hint: string; ic: IconName; groups: NavGroup[] };
 
-// Navegação agrupada em 3 serviços principais + suporte operacional.
-const NAV_GROUPS: NavGroup[] = [
-  { label: null, items: [
-    { to: '/dashboard', label: 'Painel', ic: 'dashboard', perm: 'dashboard' },
-  ] },
-
-  // ── Serviço 1: Vendas ──────────────────────────────────────────────────────
-  { label: null, items: [
-    { to: '/inbox',          label: 'Inbox',             ic: 'inbox',     perm: 'inbox' },
-  ] },
-  { label: 'Admin', icon: 'users', items: [
-    { to: '/dashboard',      label: 'Painel',            ic: 'dashboard', perm: 'dashboard' },
-    { to: '/admin-cockpit',  label: 'Cockpit Admin',     ic: 'building',
-      perm: ['settings', 'lead_batches', 'campaigns', 'ai_control', 'sellers', 'contacts'] },
-  ] },
-  { label: 'Operação', icon: 'zap', items: [
-    // Só a permissão do papel — `opportunities`/`metrics` são comuns aos dois e faziam
-    // o SDR enxergar o painel do closer no menu.
-    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: 'sdr' },
-    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: 'closer' },
-  ] },
-  { label: 'Vendas (Legado)', icon: 'dollar', items: [
-    // Links preservados apenas para compatibilidade — rotas viram red herrings com cockpits
-    { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap',       perm: 'campaigns' },
-    { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye',       perm: 'campaigns' },
-  ] },
-
-  // ── Serviço 2: Suporte ─────────────────────────────────────────────────────
-  // `support` é a permissão do atendimento desde 16/08/2026. Durante a transição ela é
-  // satisfeita por `inbox` (ver PERM_LEGADA), então ninguém que atende hoje perde a tela.
-  { label: 'Suporte', icon: 'support', items: [
-    { to: '/support',                  label: 'Inbox de Suporte', ic: 'support',   perm: 'support' },
-    { to: '/support/dashboard',        label: 'Dashboard',        ic: 'dashboard', perm: 'dashboard' },
-    { to: '/support/clients',          label: 'Clientes',         ic: 'contacts',  perm: 'support' },
-    { to: '/support/config',           label: 'Configurações',    ic: 'bot',       perm: 'ai_control' },
-    { to: '/settings/support-email',   label: 'E-mail de Suporte', ic: 'mail',    perm: 'admin' },
-  ] },
-
-  // ── Serviço 3: Monitoramento ───────────────────────────────────────────────
-  { label: 'Monitoramento', icon: 'bell', items: [
-    { to: '/settings/monitor', label: 'Monitor Proativo', ic: 'bell', perm: 'admin' },
-  ] },
-
-  // ── Suporte operacional ────────────────────────────────────────────────────
-  { label: 'Conhecimento', icon: 'knowledge', items: [
-    { to: '/knowledge', label: 'Base de Conhecimento', ic: 'knowledge', perm: 'knowledge' },
-  ] },
-  { label: 'Administração', icon: 'users', items: [
-    { to: '/users',                   label: 'Usuários',        ic: 'users', perm: 'users' },
-    { to: '/settings/email-channel',  label: 'Canal de E-mail', ic: 'mail',  perm: 'admin' },
-  ] },
+/**
+ * A navegação se divide por BASE DE PESSOAS, não por tela.
+ *
+ * No TMS está quem já é cliente: fala pelo web chat do produto e recebe alerta. No
+ * Market está quem ainda não é — lead e parceiro — e sai pela linha comercial. A
+ * Plataforma é o que os dois consomem (canais, conhecimento, usuários), e é lá que
+ * cada canal declara a quem serve.
+ *
+ * A régua para decidir onde um item novo entra é essa pergunta: *quem está do outro
+ * lado da conversa que esta tela produz?* Item que não fala com ninguém (config,
+ * relatório consolidado) vai para a Plataforma.
+ *
+ * Antes disto eram 8 grupos numa lista só, com `/dashboard` declarado duas vezes e um
+ * bloco de atalhos fixo repetindo `/inbox` e `/campaigns` logo acima dos mesmos links —
+ * o que desenhava item duplicado na tela.
+ */
+const NAV_MODULES: NavModule[] = [
+  {
+    id: 'tms',
+    label: 'TMS',
+    hint: 'Clientes, suporte e alertas',
+    ic: 'support',
+    groups: [
+      { label: 'Base', icon: 'contacts', items: [
+        { to: '/support/clients', label: 'Clientes', ic: 'contacts', perm: 'support' },
+      ] },
+      // `support` é a permissão do atendimento desde 16/08/2026. Durante a transição ela é
+      // satisfeita por `inbox` (ver PERM_LEGADA), então ninguém que atende hoje perde a tela.
+      { label: 'Suporte', icon: 'support', items: [
+        { to: '/support',           label: 'Atendimentos', ic: 'support',   perm: 'support' },
+        { to: '/support/dashboard', label: 'Painel',       ic: 'dashboard', perm: 'dashboard' },
+      ] },
+      { label: 'Alertas', icon: 'bell', items: [
+        { to: '/settings/monitor', label: 'Monitor proativo', ic: 'bell', perm: 'admin' },
+      ] },
+      { label: 'Ajustes', icon: 'bot', items: [
+        { to: '/support/config',         label: 'Lia do suporte',   ic: 'bot',  perm: 'ai_control' },
+        { to: '/settings/support-email', label: 'E-mail de suporte', ic: 'mail', perm: 'admin' },
+      ] },
+    ],
+  },
+  {
+    id: 'market',
+    label: 'Market',
+    hint: 'Leads, parceiros e disparo',
+    ic: 'dollar',
+    groups: [
+      { label: 'Base', icon: 'contacts', items: [
+        { to: '/contacts',     label: 'Leads',     ic: 'contacts', perm: 'contacts' },
+        { to: '/partners',     label: 'Parceiros', ic: 'building', perm: 'partners' },
+        { to: '/lead-batches', label: 'Lotes',     ic: 'upload',   perm: 'lead_batches' },
+      ] },
+      { label: 'Operação', icon: 'zap', items: [
+        { to: '/admin-cockpit',  label: 'Cockpit admin', ic: 'building',
+          perm: ['settings', 'lead_batches', 'campaigns', 'ai_control', 'sellers', 'contacts'] },
+        // Só a permissão do papel — `opportunities`/`metrics` são comuns aos dois e faziam
+        // o SDR enxergar o painel do closer no menu.
+        { to: '/sdr-cockpit',    label: 'Cockpit SDR',    ic: 'sellers',  perm: 'sdr' },
+        { to: '/closer-cockpit', label: 'Cockpit closer', ic: 'trophy',   perm: 'closer' },
+        { to: '/inbox',          label: 'Inbox de vendas', ic: 'inbox',   perm: 'inbox' },
+        { to: '/opportunities',  label: 'Oportunidades',  ic: 'dollar',   perm: 'opportunities' },
+        { to: '/fila',           label: 'Minha fila',     ic: 'filter',   perm: 'opportunities' },
+        { to: '/sellers',        label: 'Vendedores',     ic: 'sellers',  perm: 'sellers' },
+      ] },
+      { label: 'Disparo', icon: 'campaigns', items: [
+        { to: '/campaigns',     label: 'Campanhas',        ic: 'campaigns', perm: 'campaigns' },
+        { to: '/markets',       label: 'Mercados',         ic: 'building',  perm: 'settings' },
+        { to: '/messages',      label: 'Modelos',          ic: 'mail',      perm: 'campaigns' },
+        { to: '/roteiro',       label: 'Roteiro de venda', ic: 'playbook',  perm: 'settings' },
+        { to: '/playbook',      label: 'Playbook',         ic: 'playbook',  perm: 'ai_control' },
+        { to: '/sender/health', label: 'Saúde dos números', ic: 'pulse',    perm: 'campaigns' },
+      ] },
+      { label: 'Site', icon: 'eye', items: [
+        { to: '/site/cliques',   label: 'Quem clicou',       ic: 'zap', perm: 'campaigns' },
+        { to: '/site/audiencia', label: 'Audiência do site', ic: 'eye', perm: 'campaigns' },
+      ] },
+      { label: 'Relatórios', icon: 'dashboard', items: [
+        { to: '/vendas/relatorio', label: 'Telemarketing', ic: 'dashboard', perm: 'metrics' },
+      ] },
+    ],
+  },
+  {
+    id: 'plataforma',
+    label: 'Plataforma',
+    hint: 'O que os dois módulos usam',
+    ic: 'gear',
+    groups: [
+      { label: 'Visão', icon: 'dashboard', items: [
+        { to: '/dashboard', label: 'Painel geral', ic: 'dashboard', perm: 'dashboard' },
+      ] },
+      { label: 'Canais', icon: 'mail', items: [
+        { to: '/settings/email-channel', label: 'Caixas de e-mail', ic: 'mail', perm: 'admin' },
+      ] },
+      { label: 'Conteúdo', icon: 'knowledge', items: [
+        { to: '/knowledge', label: 'Base de conhecimento', ic: 'knowledge', perm: 'knowledge' },
+      ] },
+      { label: 'Governança', icon: 'users', items: [
+        { to: '/users',          label: 'Usuários',       ic: 'users', perm: 'users' },
+        { to: '/contacts/abuse', label: 'Números banidos', ic: 'ban',  perm: 'contacts' },
+      ] },
+    ],
+  },
 ];
 
 const titles: Record<string, string> = {
@@ -105,6 +160,13 @@ const titles: Record<string, string> = {
   '/admin-cockpit': 'Cockpit Admin',
   '/sdr-cockpit': 'Cockpit SDR',
   '/closer-cockpit': 'Cockpit Closer',
+  '/lead-batches': 'Lotes de Leads',
+  '/markets': 'Mercados',
+  '/messages': 'Modelos de Mensagem',
+  '/roteiro': 'Roteiro de Venda',
+  '/vendas/relatorio': 'Relatório de Telemarketing',
+  '/site/cliques': 'Quem clicou',
+  '/site/audiencia': 'Audiência do site',
 };
 
 type AutonomyState = { master: boolean; whatsapp: boolean; email: boolean };
@@ -384,13 +446,47 @@ export function Layout() {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const perms = user?.permissions ?? [];
-  const visibleGroups = NAV_GROUPS
-    // `temPerm` e não `includes`: o item aceita lista de permissões (cockpit) e conhece a
-    // ponte da permissão antiga (hoje `inbox → support`). Um
-    // `includes` cru aqui esconderia do menu telas que o backend deixa abrir.
-    .map((g) => ({ ...g, items: g.items.filter((it) => temPerm(user, it.perm)) }))
-    .filter((g) => g.items.length > 0);
-  const visibleItems = visibleGroups.flatMap((g) => g.items);
+  // `temPerm` e não `includes`: o item aceita lista de permissões (cockpit) e conhece a
+  // ponte da permissão antiga (hoje `inbox → support`). Um
+  // `includes` cru aqui esconderia do menu telas que o backend deixa abrir.
+  const visibleModules = useMemo(
+    () =>
+      NAV_MODULES.map((m) => ({
+        ...m,
+        groups: m.groups
+          .map((g) => ({ ...g, items: g.items.filter((it) => temPerm(user, it.perm)) }))
+          .filter((g) => g.items.length > 0),
+      })).filter((m) => m.groups.length > 0),
+    [user],
+  );
+  // Módulo do que está aberto agora. Casa pelo prefixo MAIS LONGO: `/support/clients`
+  // não pode cair no `/support`, e `/contacts/abuse` (Plataforma) não pode cair no
+  // `/contacts` (Market). Sem rota conhecida, fica no primeiro módulo visível — nunca
+  // num id fixo, que sumiria do menu de quem não tem a permissão dele.
+  const activeModuleId = useMemo(() => {
+    let melhor = '';
+    let id = visibleModules[0]?.id ?? '';
+    for (const m of visibleModules) {
+      for (const g of m.groups) {
+        for (const it of g.items) {
+          if (location.pathname.startsWith(it.to) && it.to.length > melhor.length) {
+            melhor = it.to;
+            id = m.id;
+          }
+        }
+      }
+    }
+    return id;
+  }, [visibleModules, location.pathname]);
+  const activeModule = visibleModules.find((m) => m.id === activeModuleId);
+  const visibleGroups = activeModule?.groups ?? [];
+  // A busca (Ctrl+K) varre os TRÊS módulos, não só o aberto: o menu é o recorte do
+  // contexto, a busca é o mapa inteiro. Limitá-la ao módulo ativo obrigaria a trocar de
+  // módulo para depois procurar — que é justamente o passo que a busca existe para pular.
+  const visibleItems = useMemo(
+    () => visibleModules.flatMap((m) => m.groups.flatMap((g) => g.items)),
+    [visibleModules],
+  );
   const pageTitle = titles[location.pathname] ?? 'Nexa';
   const [helpOpen, setHelpOpen] = useState(false);
   const hasHelp = !!HELP[location.pathname];
@@ -402,22 +498,32 @@ export function Layout() {
   const [sidebarHovered, setSidebarHovered] = useState(false);
   // sidebar "expandido" = mobile aberto OU hover no desktop
   const isExpandedMode = mobileNavOpen || sidebarHovered;
-  // grupos colapsados/expandidos — persiste no localStorage
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+  // Guarda os grupos FECHADOS, não os abertos. Com um módulo por vez a lista é curta e o
+  // certo é ver tudo; guardar os abertos deixava o menu inteiro colapsado para quem nunca
+  // clicou em nada. A chave leva o id do módulo porque "Base" existe no TMS e no Market.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('nexa_nav_expanded') ?? 'null');
+      const saved = JSON.parse(localStorage.getItem('nexa_nav_collapsed') ?? 'null');
       if (Array.isArray(saved)) return new Set<string>(saved);
     } catch {}
-    // default: abre o grupo da rota atual (ou Vendas se não encontrar)
-    const active = NAV_GROUPS.find((g) => g.label && g.items.some((it) => location.pathname.startsWith(it.to)));
-    return new Set<string>([active?.label ?? 'Vendas']);
+    return new Set<string>();
   });
+  const chaveGrupo = (moduleId: string, label: string) => `${moduleId}:${label}`;
 
-  function toggleGroup(label: string) {
-    setExpandedGroups((prev) => {
+  // Clicar no módulo abre a primeira tela dele. Trocar de módulo sem navegar deixaria o
+  // menu de um módulo com o conteúdo de outro na tela — e no próximo render o
+  // `activeModuleId`, que sai da rota, puxaria o menu de volta sozinho.
+  function irParaModulo(m: { groups: NavGroup[] }) {
+    const primeira = m.groups[0]?.items[0]?.to;
+    if (primeira) navigate(primeira);
+    setMobileNavOpen(false);
+  }
+
+  function toggleGroup(chave: string) {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label); else next.add(label);
-      localStorage.setItem('nexa_nav_expanded', JSON.stringify([...next]));
+      if (next.has(chave)) next.delete(chave); else next.add(chave);
+      localStorage.setItem('nexa_nav_collapsed', JSON.stringify([...next]));
       return next;
     });
   }
@@ -459,17 +565,19 @@ export function Layout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [visibleItems, dark]);
 
-  // auto-expand o grupo quando a rota mudar para dentro dele
+  // Reabre o grupo quando a rota entra nele — senão a tela aberta fica escondida atrás de
+  // um grupo que o usuário fechou dias atrás, e o menu parece não ter o item.
   useEffect(() => {
     const active = visibleGroups.find((g) => g.label && g.items.some((it) => location.pathname.startsWith(it.to)));
-    if (active?.label && !expandedGroups.has(active.label)) {
-      setExpandedGroups((prev) => {
-        const next = new Set(prev);
-        next.add(active.label!);
-        localStorage.setItem('nexa_nav_expanded', JSON.stringify([...next]));
-        return next;
-      });
-    }
+    if (!active?.label) return;
+    const chave = chaveGrupo(activeModuleId, active.label);
+    if (!collapsedGroups.has(chave)) return;
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.delete(chave);
+      localStorage.setItem('nexa_nav_collapsed', JSON.stringify([...next]));
+      return next;
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
@@ -509,133 +617,114 @@ export function Layout() {
       <aside
         aria-label="Navegação principal"
         className={`group/sb fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-sidebar text-white/90 transition-all duration-200 ease-layout ${
-          mobileNavOpen ? 'translate-x-0 w-60 shadow-elevated' : '-translate-x-full'
-        } sm:translate-x-0 sm:w-16 sm:hover:w-60 sm:hover:shadow-elevated`}
+          mobileNavOpen ? 'translate-x-0 w-[16.5rem] shadow-elevated' : '-translate-x-full'
+        } sm:translate-x-0 sm:w-14 sm:hover:w-[16.5rem] sm:hover:shadow-elevated`}
         onMouseEnter={() => setSidebarHovered(true)}
         onMouseLeave={() => setSidebarHovered(false)}
       >
-        {/* marca: símbolo no rail, wordmark quando expandido (fixado ou hover) */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
-          <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${isExpandedMode ? 'inline' : 'hidden'}`}>Nexa</span>
-        </div>
-
-        {/* Atalhos rápidos — ícone no rail, label no hover.
-            Eram fixos e SEM checagem de permissão: quem não tinha `campaigns` via
-            "Disparo" no menu e levava redirect ao clicar, o que parece defeito da tela.
-            Agora passam pelo mesmo `temPerm` do resto da navegação. */}
-        <div className="shrink-0 border-b border-white/10 px-2 py-2">
-          {[
-            { to: '/inbox', label: 'Inbox', ic: 'inbox' as IconName, perm: 'inbox' },
-            { to: '/campaigns', label: 'Disparo', ic: 'campaigns' as IconName, perm: 'campaigns' },
-          ].filter((s) => temPerm(user, s.perm)).map((s) => (
-            <NavLink
-              key={s.to}
-              to={s.to}
-              title={s.label}
-              onClick={() => setMobileNavOpen(false)}
-              className={({ isActive }) =>
-                `relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors justify-center group-hover/sb:justify-start ${
-                  isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />}
-                  <Icon name={s.ic} className={`h-4 w-4 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                  <span className={`truncate whitespace-nowrap text-xs ${isExpandedMode ? 'inline' : 'hidden'}`}>{s.label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
-        </div>
-
-        <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
-          {visibleGroups.map((g, gi) => {
-            const isOpen = !g.label || !isExpandedMode || expandedGroups.has(g.label);
-            return (
-              <div key={gi} className={gi > 0 ? 'pt-2' : ''}>
-                {/* Cabeçalho do grupo — visível apenas no modo expandido */}
-                {g.label && (
-                  <button
-                    onClick={() => toggleGroup(g.label!)}
-                    aria-expanded={isOpen}
-                    aria-label={`${isOpen ? 'Recolher' : 'Expandir'} grupo ${g.label}`}
-                    className={`w-full flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:bg-white/[0.07] ${isExpandedMode ? 'flex' : 'hidden'}`}
-                  >
-                    {g.icon && (
-                      <Icon name={g.icon} className="h-4 w-4 shrink-0 text-white/50" aria-hidden />
-                    )}
-                    <span aria-hidden className="flex-1 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                      {g.label}
-                    </span>
-                    <Icon
-                      name="chevronDown"
-                      aria-hidden
-                      className={`h-3.5 w-3.5 shrink-0 text-white/30 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
-                    />
-                  </button>
-                )}
-                {/* Items: sempre visíveis no rail, colapsáveis no modo expandido */}
-                {/* `maxHeight` só existe para a animação de abrir/fechar. Era `20rem`
-                    fixo — e quando o grupo Vendas passou de 9 para 17 itens, os últimos
-                    ficaram cortados por `overflow: hidden`: apareciam no rail (que não
-                    recebe este style) e desapareciam no modo expandido. Calcular pela
-                    quantidade de itens faz o teto acompanhar o menu; um número fixo volta
-                    a esconder item silenciosamente no dia que alguém acrescentar o
-                    próximo. */}
-                <div
-                  className="overflow-hidden transition-all duration-200"
-                  style={
-                    isExpandedMode
-                      ? {
-                          maxHeight: isOpen ? `${g.items.length * 2.75 + 1}rem` : '0',
-                          opacity: isOpen ? 1 : 0,
-                        }
-                      : undefined
-                  }
+        <div className="flex h-full min-h-0">
+          {/* ── trilho de módulos — a única parte sempre visível ────────────────
+              Aqui não entra tela, só módulo. O que o rail mostrava antes era o menu
+              inteiro em ícone: 20 alvos de 20px sem rótulo, que só faziam sentido
+              depois do hover. Três ícones estáveis respondem a outra pergunta, essa
+              sim útil de relance — em que parte do sistema eu estou. */}
+          <div data-tour="modulos" className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-white/10 bg-black/25 py-3">
+            <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
+            {visibleModules.map((m) => {
+              const isActive = m.id === activeModuleId;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => irParaModulo(m)}
+                  title={`${m.label} — ${m.hint}`}
+                  aria-label={`${m.label}: ${m.hint}`}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                    isActive ? 'bg-white/[0.13] text-white' : 'text-white/45 hover:bg-white/[0.07] hover:text-white/80'
+                  }`}
                 >
-                  {g.items.map((it) => (
-                    <NavLink
-                      key={it.to}
-                      to={it.to}
-                      title={it.label}
-                      onClick={() => setMobileNavOpen(false)}
-                      className={({ isActive }) =>
-                        `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                          isExpandedMode ? 'justify-start' : 'justify-center'
-                        } ${
-                          isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {isActive && (
-                            <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />
-                          )}
-                          <Icon name={it.ic} className={`h-5 w-5 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
-                          <span className={`truncate whitespace-nowrap ${isExpandedMode ? 'inline' : 'hidden'}`}>{it.label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </nav>
+                  {isActive && <span className="absolute -left-2 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-sidebar-accent" />}
+                  <Icon name={m.ic} className={`h-5 w-5 ${isActive ? 'text-sidebar-accent' : ''}`} />
+                </button>
+              );
+            })}
+          </div>
 
-        {/* rodapé — só quando expandido (hover ou mobile) */}
-        <div className={`shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45 ${isExpandedMode ? 'block' : 'hidden'}`}>
-          <div className="truncate">{user?.email}</div>
-          <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
+          {/* ── menu do módulo — largura fixa para o texto não refluir na animação ── */}
+          <div className={`min-h-0 w-[10.5rem] flex-col ${isExpandedMode ? 'flex' : 'hidden'}`}>
+            <div className="shrink-0 border-b border-white/10 px-3 py-3">
+              <div className="truncate text-sm font-semibold tracking-tight text-white">{activeModule?.label ?? 'Nexa'}</div>
+              <div className="truncate text-[10px] text-white/40">{activeModule?.hint}</div>
+            </div>
+
+            <nav className="sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 py-2">
+              {visibleGroups.map((g, gi) => {
+                const chave = g.label ? chaveGrupo(activeModuleId, g.label) : '';
+                const isOpen = !g.label || !collapsedGroups.has(chave);
+                return (
+                  <div key={g.label ?? gi} className={gi > 0 ? 'pt-2' : ''}>
+                    {g.label && (
+                      <button
+                        onClick={() => toggleGroup(chave)}
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? 'Recolher' : 'Expandir'} grupo ${g.label}`}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.07]"
+                      >
+                        {g.icon && <Icon name={g.icon} className="h-3.5 w-3.5 shrink-0 text-white/40" aria-hidden />}
+                        <span aria-hidden className="flex-1 text-left text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                          {g.label}
+                        </span>
+                        <Icon
+                          name="chevronDown"
+                          aria-hidden
+                          className={`h-3 w-3 shrink-0 text-white/30 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                        />
+                      </button>
+                    )}
+                    {/* `maxHeight` só existe para a animação de abrir/fechar. Era `20rem`
+                        fixo — e quando um grupo cresceu, os últimos itens ficaram cortados
+                        por `overflow: hidden`, sumindo sem aviso. Calcular pela quantidade
+                        de itens faz o teto acompanhar o menu. */}
+                    <div
+                      className="overflow-hidden transition-all duration-200"
+                      style={{ maxHeight: isOpen ? `${g.items.length * 2.5 + 1}rem` : '0', opacity: isOpen ? 1 : 0 }}
+                    >
+                      {g.items.map((it) => (
+                        <NavLink
+                          key={it.to}
+                          to={it.to}
+                          title={it.label}
+                          onClick={() => setMobileNavOpen(false)}
+                          className={({ isActive }) =>
+                            `relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors ${
+                              isActive ? 'bg-white/[0.13] text-white' : 'text-white/55 hover:bg-white/[0.07] hover:text-white/90'
+                            }`
+                          }
+                        >
+                          {({ isActive }) => (
+                            <>
+                              <Icon name={it.ic} className={`h-4 w-4 shrink-0 ${isActive ? 'text-sidebar-accent' : ''}`} />
+                              <span className="truncate whitespace-nowrap">{it.label}</span>
+                            </>
+                          )}
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </nav>
+
+            <div className="shrink-0 border-t border-white/10 p-3 text-[11px] text-white/45">
+              <div className="truncate">{user?.email}</div>
+              <div className="mt-0.5 text-white/30">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
+            </div>
+          </div>
         </div>
       </aside>
 
       {/* ===== COLUNA PRINCIPAL — sempre deslocada 4rem no desktop (sidebar é rail sobreposto) ===== */}
-      <div className="flex h-full min-w-0 flex-col pl-0 sm:pl-16">
+      <div className="flex h-full min-w-0 flex-col pl-0 sm:pl-14">
         {/* topbar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-base-200 px-4 sm:px-6" style={{ background: 'var(--surface)' }}>
           <div className="flex min-w-0 items-center gap-3">
