@@ -95,6 +95,13 @@ export class EmailImapService implements OnModuleInit {
    */
   private polling = false;
 
+  /**
+   * O aviso do fallback de `.env` sai UMA vez por processo. Ele denuncia uma
+   * configuração incompleta, não um evento — repetir de 60 em 60 segundos viraria
+   * ruído e seria filtrado junto com o resto.
+   */
+  private avisouFallback = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
@@ -149,6 +156,20 @@ export class EmailImapService implements OnModuleInit {
     const user = process.env.EMAIL_IMAP_USER;
     const pass = process.env.EMAIL_IMAP_PASS;
     if (!host || !user || !pass) return [];
+
+    // Cair aqui em produção é defeito de configuração, e era MUDO: o e-mail de
+    // entrada continua chegando (por UNSEEN), então nada parece errado — enquanto
+    // a pasta de enviados nunca é lida e o tenant fica em 'default'. Foi assim por
+    // semanas, descoberto em 16/08/2026 só porque a "marca inicial" repetia no log.
+    if (!this.avisouFallback) {
+      this.avisouFallback = true;
+      this.logger.warn(
+        `IMAP ${user}: nenhum canal de e-mail no banco — usando o fallback de .env. ` +
+        'A pasta de enviados NÃO será lida (sem linha no banco não há onde guardar a ' +
+        'marca d\'água) e o tenant fica como "default". Cadastre a caixa em ' +
+        'Configurações → E-mail.',
+      );
+    }
 
     return [{
       // Sem linha no banco não há marca d'água para gravar — este caminho é
@@ -284,6 +305,12 @@ export class EmailImapService implements OnModuleInit {
    * antiga. Planta a marca no topo e passa a valer daqui para a frente.
    */
   private async varrerEnviados(connection: any, cfg: ImapConfig) {
+    // Sem linha no banco não há onde gravar a marca, então esta varredura nunca
+    // sairia do "plantar a marca no topo": abria a caixa, calculava o UID, não
+    // conseguia salvar e voltava — de 60 em 60 segundos, para sempre. O aviso já
+    // saiu uma vez em `getConfigs`; aqui só não se insiste.
+    if (!cfg.id) return;
+
     const pasta = await this.resolverPastaEnviados(connection, cfg);
     if (!pasta) {
       this.logger.warn(
