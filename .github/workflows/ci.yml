@@ -49,10 +49,14 @@ jobs:
       # Prisma client PRIMEIRO: specs que importam PrismaService (ex.:
       # dev-watch.service.spec) precisam do client gerado — sem isso o teste
       # quebra com "Cannot find module '.prisma/client/default'" (CI 2026-07-25).
+      # DIRECT_DATABASE_URL: o schema declara `directUrl`, e o Prisma exige que a
+      # env EXISTA mesmo quando não vai conectar — `generate` e `validate` só
+      # leem a string. Valor de mentira serve; o que não pode é faltar.
       - name: Generate Prisma client
         run: pnpm --filter backend exec prisma generate
         env:
           DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+          DIRECT_DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
 
       - name: Lint (backend)
         run: pnpm lint
@@ -76,3 +80,4 @@ jobs:
         run: pnpm --filter backend exec prisma validate
         env:
           DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+          DIRECT_DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"

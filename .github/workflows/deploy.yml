@@ -40,8 +40,14 @@ jobs:
         run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
+      # As duas envs só precisam EXISTIR: `prisma generate` lê a string do
+      # datasource e não conecta. O schema declara `directUrl`, e sem a variável
+      # o generate falha — derrubando o build inteiro. Ver CLAUDE.md (P1002).
       - name: Build backend
         run: pnpm --filter backend exec prisma generate && pnpm --filter backend build
+        env:
+          DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
+          DIRECT_DATABASE_URL: "postgresql://nexa:nexa@localhost:5432/nexa?schema=public"
       - name: Verificar build backend
         run: test -f apps/backend/dist/main.js
       - name: Build frontend

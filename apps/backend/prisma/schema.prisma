@@ -10,11 +10,25 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // NOTA (docs/infra/item1-pool-conexoes-2026-07.md): ao ativar o connection
-  // pool do DO, ADICIONAR aqui `directUrl = env("DIRECT_DATABASE_URL")` E
-  // definir a env no mesmo passo — declarar antes, com a env ausente, quebra
-  // `prisma generate`/CI. Por isso fica como nota até a ativação.
+
+  // `url` é o que o APP usa em runtime: em produção aponta para o pool do DO
+  // (porta 25061, `pgbouncer=true`). É o certo — o pool existe para isso.
+  url = env("DATABASE_URL")
+
+  // `directUrl` é o que MIGRATION e introspecção usam, e precisa furar o pool
+  // (porta 25060, banco `nexa` — o `Nexa` da outra URL é o nome do POOL).
+  //
+  // Sem isto, `migrate deploy` ia pelo pool em modo `transaction`, onde a
+  // conexão é emprestada por transação e devolvida. Advisory lock é preso à
+  // SESSÃO: quem pega a chave não é necessariamente quem devolve. Um deploy
+  // interrompido deixava `pg_advisory_lock(72707369)` preso numa conexão do
+  // pool que continua viva, e todo deploy seguinte batia em P1002 esperando
+  // uma chave que nunca voltava. Foi o que aconteceu em 16/08/2026.
+  //
+  // A env precisa existir em TODO ambiente antes desta linha valer — CI roda
+  // `prisma generate` e `prisma validate`, e declarar o campo sem a variável
+  // quebra os dois. Por isso entram no mesmo commit. Ver CLAUDE.md.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ===================== ENUMS =====================
