@@ -362,7 +362,10 @@ model AiConversation {
   // Find-or-create de conversa por telefone: disparo (sender.service.ts) e inbound
   // (whatsapp.service.ts). Roda por alvo de campanha e por mensagem recebida, e antes
   // caía no @@index([tenantId]) — varredura do tenant inteiro.
-  @@index([tenantId, phone, startedAt(sort: Desc)])
+  // `map` casa com o nome criado à mão na migration 20260816140000. Sem ele o Prisma
+  // usaria a convenção dele (`..._tenant_id_phone_started_at_idx`) e o diff pediria um
+  // RENAME — dois nomes para o mesmo índice, e a próxima migration decide qual fica.
+  @@index([tenantId, phone, startedAt(sort: Desc)], map: "ai_conversations_tenant_phone_started_idx")
   @@map("ai_conversations")
 }
 
@@ -1077,6 +1080,12 @@ model EmailChannel {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@index([tenantId])
+  // Escolha da caixa por propósito, a cada envio (email-reply.service.resolveConfig).
+  //
+  // `map` fixa o nome que a migration 20260816200000 criou no SQL. Sem declarar aqui, o
+  // índice existia no banco e não no schema — e o `migrate diff` já pedia um DROP dele,
+  // que é o mesmo furo que o comentário do índice de `assignedAnalystId` documenta.
+  @@index([tenantId, purpose], map: "email_channels_tenant_purpose_idx")
   @@map("email_channels")
 }
 
