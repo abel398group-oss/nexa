@@ -94,6 +94,32 @@ New migrations must always be **additive**. If a column or table needs to be
 removed, write a dedicated migration and get approval before running it in
 production.
 
+### P1002 (advisory lock timeout) — a configuração, não um acidente
+
+`migrate deploy` pode travar em `P1002` esperando `pg_advisory_lock(72707369)`.
+Isso **não é um lock órfão para caçar e matar**. O Postgres gerenciado da DO tem
+um **pool (PgBouncer) na frente** — dá para confirmar: as conexões do pool
+aparecem em `pg_stat_activity` com `client_addr = 127.0.0.1`. O advisory lock do
+Prisma é preso à SESSÃO, e com pool não há garantia de que quem pega a chave seja
+quem devolve. Um deploy interrompido deixa a trava numa conexão do pool que segue
+viva e sendo reusada.
+
+A saída é pedir ao Prisma que não use o lock:
+
+```
+PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true npx prisma migrate deploy
+```
+
+Ou, para valer sempre, a linha `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true` no
+`.env` (o Prisma CLI lê o `.env` sozinho) — local e produção, já que os dois
+apontam para o mesmo banco atrás do mesmo pool.
+
+**Não rode `pg_terminate_backend` na conexão que aparece segurando o lock.** Ela
+é do pool, está em uso, e derrubá-la erra as requisições que estiverem em cima
+dela — sem resolver, porque o próximo deploy interrompido vaza de novo.
+`pg_advisory_unlock` de outra conexão também não serve: só solta lock da própria
+sessão, e de fora devolve `false` calado. Diagnosticado em 16/08/2026.
+
 ## Database rule — Abel uses the production DB locally (ALWAYS)
 
 **Abel's `apps/backend/.env` points directly to the DigitalOcean managed database.**
