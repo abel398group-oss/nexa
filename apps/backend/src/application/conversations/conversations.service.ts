@@ -952,6 +952,31 @@ export class ConversationsService {
   ) {
     const conv = await this.findOne(tenantId, conversationId);
 
+    // Campanha fria NUNCA entra em thread de chamado nem em canal que não seja WhatsApp.
+    //
+    // Antes desta guarda: o disparo reaproveitava qualquer conversa do telefone
+    // (sender.service.ts), inclusive uma de `portal`. A mensagem era gravada com
+    // isInternal=false — ou seja, o cliente via a copy de prospecção DENTRO do chamado
+    // dele — e o despacho de portal marca ack=1 sem chamar o WAHA, então a campanha
+    // reportava "enviada" sem ter enviado nada.
+    //
+    // A checagem fica ANTES do `aiMessage.create` de propósito. Depois dele o texto já
+    // está gravado na conversa: barrar o envio consertaria o recibo e deixaria o
+    // vazamento de pé.
+    //
+    // Lança em vez de ignorar: o disparo chama com requireDelivery=true e trata a
+    // exceção marcando o alvo como 'failed' com motivo, o que é a verdade. Um retorno
+    // silencioso viraria de novo um "enviado" que não saiu.
+    if (dto.sendOrigin === 'campaign' && dto.direction === 'outbound' && !dto.isInternal) {
+      const ticket = (conv as any).ticketNumber ?? (conv as any).ticketCategory;
+      if ((conv.sourceChannel as string) !== 'whatsapp' || ticket) {
+        throw new BadRequestException(
+          `Campanha não pode escrever nesta conversa (id=${conv.id}, canal=${conv.sourceChannel}` +
+          `${ticket ? `, chamado=${ticket}` : ''}) — é atendimento, não prospecção.`,
+        );
+      }
+    }
+
     // ADR 035: first outbound sent by a human activates the per-conversation
     // takeover — Lia switches to draft-only mode until release (close or
     // explicit return). Lia's own sends (metadata.aiGenerated) never set this.

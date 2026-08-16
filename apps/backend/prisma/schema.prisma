@@ -345,6 +345,10 @@ model AiConversation {
   // Existe no banco desde a migration 20260806140000_support_assignment_and_internal_notes,
   // mas não estava declarado aqui — o próximo `migrate dev` geraria um DROP silencioso.
   @@index([assignedAnalystId])
+  // Find-or-create de conversa por telefone: disparo (sender.service.ts) e inbound
+  // (whatsapp.service.ts). Roda por alvo de campanha e por mensagem recebida, e antes
+  // caía no @@index([tenantId]) — varredura do tenant inteiro.
+  @@index([tenantId, phone, startedAt(sort: Desc)])
   @@map("ai_conversations")
 }
 

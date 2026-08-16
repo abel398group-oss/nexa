@@ -11,6 +11,7 @@ import { AutonomyService } from '@/shared/governance/autonomy.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
 import { TranscriptionService } from '@/shared/ai/transcription.service';
 import { InternalNumbersService } from './internal-numbers.service';
+import { LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 import { isOptOutMessage } from './opt-out-detection';
 import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 
@@ -522,9 +523,29 @@ export class WhatsappService {
       this.logger.log(`Re-opt-in: ${n.phone} voltou a interagir — status reativado`);
     }
 
-    // 3) acha conversa mais recente do telefone (qualquer status, incluindo opt_out — re-opt-in já foi tratado acima)
+    // 3) acha conversa mais recente do telefone NAQUELA LINHA (qualquer status, incluindo
+    // opt_out — re-opt-in já foi tratado acima).
+    //
+    // O escopo por linha existe porque `wahaLine` é gravada só no nascimento e nunca
+    // atualizada: reaproveitar a thread da linha principal para quem escreveu no número
+    // de vendas fazia a resposta sair pelo número errado — exatamente o que o invariante
+    // em ConversationsService.addMessage diz evitar ("receberia resposta de um número
+    // desconhecido, e trataria como golpe").
+    //
+    // `null` conta como principal: é o estado de toda conversa anterior à divisão de
+    // números, e migrar essas linhas em massa seria risco sem ganho.
+    // `linha` é opcional na assinatura (webhook antigo não manda) e ausente SIGNIFICA
+    // principal — normalizar aqui é obrigatório: `{ wahaLine: undefined }` no Prisma não
+    // é "linha nula", é "sem filtro nenhum", que traria de volta o bug inteiro.
+    const linhaEfetiva = linha ?? LINHA_PRINCIPAL;
     let conv = await this.prisma.aiConversation.findFirst({
-      where: { tenantId, phone: n.phone },
+      where: {
+        tenantId,
+        phone: n.phone,
+        ...(linhaEfetiva === LINHA_PRINCIPAL
+          ? { OR: [{ wahaLine: LINHA_PRINCIPAL }, { wahaLine: null }] }
+          : { wahaLine: linhaEfetiva }),
+      } as any,
       orderBy: { startedAt: 'desc' },
     });
     if (!conv) {
@@ -534,7 +555,8 @@ export class WhatsappService {
         phone: n.phone,
         sourceChannel: 'whatsapp',
         // Fixa a linha no nascimento — é o que amarra o invariante de resposta.
-        wahaLine: linha,
+        // Normalizada: grava 'principal' em vez de null para casar com a busca acima.
+        wahaLine: linhaEfetiva,
       });
     } else if ((conv.status as string) === 'opt_out') {
       // opt-out: re-opt-in voluntário — reabre sempre (consentimento implícito de retorno).

@@ -323,6 +323,54 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     expect(call.data.status).toBe('queued');
   });
 
+  // ── Escopo da busca de conversa (16/08/2026) ──────────────────────────────
+  // Dois bugs de produção moravam nesta única query, e os dois eram silenciosos:
+  //
+  //  • sem `sourceChannel`/ticket, a campanha reaproveitava a conversa do PORTAL de um
+  //    cliente com chamado aberto. A copy fria era gravada dentro do chamado (visível
+  //    para o cliente) e o despacho de portal marca ack=1 sem chamar o WAHA — a campanha
+  //    dizia "enviada" sem ter enviado.
+  //  • sem `wahaLine`, a campanha de vendas reaproveitava a thread da linha principal e
+  //    saía pelo número errado, ainda reportando que rodou em vendas.
+  //
+  // Por isso se afirma o CONTEÚDO do `where`, não que "chamou o findFirst": a versão com
+  // bug chamava exatamente o mesmo método.
+  it('busca conversa só de WhatsApp, sem chamado e da linha da campanha', async () => {
+    await makeService().tick();
+
+    const { where } = prisma.aiConversation.findFirst.mock.calls[0][0];
+    expect(where.sourceChannel).toBe('whatsapp');
+    expect(where.ticketCategory).toBeNull();
+    expect(where.ticketNumber).toBeNull();
+    // Campanha sem `linha` é principal, e `null` é o estado de toda conversa anterior
+    // à divisão de números — as duas precisam casar.
+    expect(where.OR).toEqual([{ wahaLine: 'principal' }, { wahaLine: null }]);
+  });
+
+  it('campanha de vendas não enxerga a thread da linha principal', async () => {
+    prisma.campaign.findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...MSG_CAMPAIGN, linha: 'vendas' });
+
+    await makeService().tick();
+
+    const { where } = prisma.aiConversation.findFirst.mock.calls[0][0];
+    expect(where.wahaLine).toBe('vendas');
+    // Sem OR: linha não-principal casa exata. Aceitar `null` aqui traria o bug de volta.
+    expect(where.OR).toBeUndefined();
+  });
+
+  it('sem conversa naquela linha, cria uma nova já carimbada com a linha', async () => {
+    prisma.aiConversation.findFirst.mockResolvedValue(null);
+    prisma.campaign.findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...MSG_CAMPAIGN, linha: 'vendas' });
+
+    await makeService().tick();
+
+    expect(conversations.create).toHaveBeenCalledWith('t1', expect.objectContaining({ wahaLine: 'vendas' }));
+  });
+
   it('NAO envia fora da janela comercial', async () => {
     prisma.senderSettings.findUnique.mockResolvedValue({ waStartHour: 20, waEndHour: 22 }); // 12h fora
     await makeService().tick();

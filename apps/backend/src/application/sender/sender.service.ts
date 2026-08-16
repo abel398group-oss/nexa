@@ -7,7 +7,7 @@ import { ContactsService } from '@/application/contacts/contacts.service';
 import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 import { ConversationsService } from '@/application/conversations/conversations.service';
 import { FollowUpService } from '@/application/followup/followup.service';
-import { WahaClientService, linhasConfiguradas } from '@/shared/waha/waha-client.service';
+import { WahaClientService, linhasConfiguradas, LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 import { NumberBudgetService } from '@/shared/waha/number-budget.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { RedisLockService } from '@/shared/lock/redis-lock.service';
@@ -1270,6 +1270,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
    * Sem mudança de comportamento — é o mesmo código de antes, só em outro lugar.
    */
   private async dispatchOneTarget(campaign: any, number: any): Promise<void> {
+      // Linha por onde ESTA campanha fala. Resolvida uma vez: a busca da conversa, a
+      // criação dela e o anexo precisam concordar — se divergirem, a thread nasce numa
+      // linha e a mensagem sai por outra.
+      const linhaDaCampanha: string = (campaign as any).linha ?? LINHA_PRINCIPAL;
       const target = await this.prisma.campaignTarget.findFirst({
         where: { campaignId: campaign.id, status: 'queued' },
         orderBy: { createdAt: 'asc' },
@@ -1338,11 +1342,34 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       // caso de entrega não confirmada (DISP-021).
       let conv: { id: string; status?: string } | null = null;
       try {
-        // UMA thread por contato (igual ao recebimento): acha a conversa mais recente
-        // do telefone (qualquer status) e reaproveita; reabre se estava fechada; só cria
-        // se o contato nunca teve conversa. Evita threads duplicadas no inbox.
+        // UMA thread por contato E POR LINHA: acha a conversa mais recente do telefone
+        // naquele número e reaproveita; reabre se estava fechada; só cria se não houver.
+        // Evita threads duplicadas no inbox sem misturar o que é de números diferentes.
+        //
+        // O escopo não é decoração — sem ele, dois defeitos:
+        //
+        //  • `sourceChannel`/ticket: a busca pegava conversa de `portal` e a campanha
+        //    escrevia a copy fria DENTRO do chamado do cliente, sem enviar nada pelo
+        //    WhatsApp (ver a guarda em ConversationsService.addMessage). Filtra-se por
+        //    `ticketCategory` E `ticketNumber` porque o número só é atribuído depois da
+        //    categoria — sozinho, deixaria passar o chamado recém-aberto.
+        //
+        //  • `wahaLine`: a conversa carrega a linha por onde a resposta sai, e a coluna
+        //    nunca é atualizada depois do nascimento. Reaproveitar a thread da linha
+        //    principal fazia a campanha de `vendas` sair pelo número principal —
+        //    silenciosamente, com a campanha reportando que rodou em vendas.
+        //    `null` conta como principal: é o estado de toda conversa anterior à divisão.
         conv = await this.prisma.aiConversation.findFirst({
-          where: { tenantId: campaign.tenantId, phone: target.phone },
+          where: {
+            tenantId: campaign.tenantId,
+            phone: target.phone,
+            sourceChannel: 'whatsapp',
+            ticketCategory: null,
+            ticketNumber: null,
+            ...(linhaDaCampanha === LINHA_PRINCIPAL
+              ? { OR: [{ wahaLine: LINHA_PRINCIPAL }, { wahaLine: null }] }
+              : { wahaLine: linhaDaCampanha }),
+          } as any,
           orderBy: { startedAt: 'desc' },
         });
         if (!conv) {
@@ -1360,7 +1387,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             // A conversa nasce na linha da campanha e a resposta (inclusive
             // follow-up) sai por ela pra sempre — ver o invariante em
             // ConversationsService.addMessage.
-            wahaLine: (campaign as any).linha ?? undefined,
+            wahaLine: linhaDaCampanha,
           });
         } else if ((conv.status as string) === 'closed' || (conv.status as string) === 'opt_out') {
           // reabre; se vinha de opt-out, limpa o outcome (voltou a ficar ativa).
@@ -1418,7 +1445,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
           const wahaUrl = campaign.mediaUrl.startsWith('http') && idx2 < 0
             ? campaign.mediaUrl
             : wahaBase.replace(/\/$/, '') + relativePath2;
-          const rAnexo = await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign', (campaign as any).linha ?? undefined);
+          const rAnexo = await this.waha.sendFile(target.phone, wahaUrl, campaign.mediaName ?? 'arquivo', '', 'campaign', linhaDaCampanha);
           if (!rAnexo.sent) {
             anexoFalhou = rAnexo.reason ?? 'motivo desconhecido';
             this.logger.warn(

@@ -1086,3 +1086,83 @@ describe('ConversationsService — alreadyDelivered', () => {
     expect(eventos).toContain('conversation.outbound.email');
   });
 });
+
+// ─── Campanha fria nunca entra em thread de atendimento (16/08/2026) ─────────
+//
+// Bug de produção: o disparo reaproveitava qualquer conversa do telefone, inclusive uma
+// de `portal`. A copy fria era gravada com isInternal=false — o cliente via texto de
+// prospecção DENTRO do chamado dele — e o ramo de portal marca ack=1 sem chamar o WAHA,
+// então a campanha reportava "enviada" sem ter enviado nada.
+//
+// O que estes testes prendem é a ORDEM: a guarda roda antes do aiMessage.create. Barrar
+// só o envio consertaria o recibo e deixaria o vazamento de pé — por isso cada caso
+// afirma que `aiMessage.create` NÃO foi chamado, e não apenas que lançou.
+describe('ConversationsService — campanha não escreve em atendimento', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: ConversationsService;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    svc = makeService(deps);
+  });
+
+  it('recusa campanha em conversa de portal SEM gravar a mensagem', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'portal', correlationId: 'corr-1',
+    });
+
+    await expect(
+      svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'oferta', sendOrigin: 'campaign' }),
+    ).rejects.toThrow(/prospec/i);
+
+    expect(deps.prisma.aiMessage.create).not.toHaveBeenCalled();
+    expect(deps.waha.sendText).not.toHaveBeenCalled();
+  });
+
+  it('recusa campanha em conversa de WhatsApp que virou chamado', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'whatsapp', ticketNumber: 42, correlationId: 'corr-1',
+    });
+
+    await expect(
+      svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'oferta', sendOrigin: 'campaign' }),
+    ).rejects.toThrow(/prospec/i);
+    expect(deps.prisma.aiMessage.create).not.toHaveBeenCalled();
+  });
+
+  // O chamado é numerado só DEPOIS de classificado: sem esta checagem, a janela entre
+  // abrir e numerar ficava aberta para a campanha.
+  it('recusa campanha em chamado ainda sem número, só com categoria', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'whatsapp', ticketCategory: 'fiscal', correlationId: 'corr-1',
+    });
+
+    await expect(
+      svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'oferta', sendOrigin: 'campaign' }),
+    ).rejects.toThrow(/prospec/i);
+    expect(deps.prisma.aiMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('deixa passar campanha em conversa de WhatsApp sem chamado', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'whatsapp', correlationId: 'corr-1', phone: '5511999998888',
+    });
+    deps.waha.sendText.mockResolvedValue({ sent: true, externalId: 'wa-1' });
+
+    await svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'oferta', sendOrigin: 'campaign' });
+
+    expect(deps.prisma.aiMessage.create).toHaveBeenCalled();
+    expect(deps.waha.sendText).toHaveBeenCalled();
+  });
+
+  // A guarda é só para campanha: suporte e Lia respondem no portal o tempo todo.
+  it('não interfere na resposta de atendimento no portal', async () => {
+    deps.prisma.aiConversation.findFirst.mockResolvedValue({
+      ...existingConv, sourceChannel: 'portal', correlationId: 'corr-1',
+    });
+
+    await svc.addMessage('t1', 'conv-1', { direction: 'outbound', content: 'já verifiquei seu CT-e' });
+
+    expect(deps.prisma.aiMessage.create).toHaveBeenCalled();
+  });
+});
