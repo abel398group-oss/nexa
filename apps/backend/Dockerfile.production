@@ -65,6 +65,16 @@ RUN mkdir -p uploads .cache
 
 EXPOSE 3001
 
-# Entrypoint: roda migrations antes de subir o app.
-# npx prisma@5 já está cacheado pelo RUN acima — sem download extra no boot.
-CMD ["sh", "-c", "npx --yes prisma@5 migrate deploy && node dist/main.js"]
+# O container SÓ sobe o app. Migration é passo de implantação e roda no deploy.yml,
+# antes de trocar o container, num container descartável.
+#
+# Aqui era `migrate deploy && node dist/main.js`. Aquele `&&` parecia prudente e foi o
+# que transformou, em 16/08/2026, um problema de REGISTRO (a tabela `_prisma_migrations`
+# tinha sido apagada) numa hora de site fora do ar: a migration falhava, o app nunca
+# subia, o `restart: unless-stopped` recriava o container, e cada tentativa abria
+# conexões novas até esgotar as 8 diretas que o cluster deixa livres. Aí nem para
+# CONSERTAR dava mais, porque não sobrava conexão.
+#
+# Com a migration no deploy, uma falha aborta o deploy e o container ANTIGO continua
+# servindo — que é o comportamento que já vale para todo o resto do pipeline.
+CMD ["node", "dist/main.js"]

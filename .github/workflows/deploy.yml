@@ -164,6 +164,20 @@ jobs:
             echo "[2/5] Baixando novas imagens..."
             docker compose -f docker-compose.production.yml pull
 
+            echo "[2b/5] Aplicando migrations (container descartavel, imagem nova)..."
+            # Sai daqui e nao do entrypoint do container: enquanto isto roda, o backend
+            # ANTIGO continua servindo. Se falhar, o `set -e` aborta o deploy e o site
+            # segue no ar na versao anterior — em vez do loop de restart de 16/08/2026,
+            # que derrubou o site e ainda esgotou as conexoes do banco.
+            #
+            # `run --rm --no-deps`: usa a imagem recem-baixada e o mesmo `.env` do
+            # servico, sem subir redis/waha de novo nem tocar no container em uso.
+            if ! docker compose -f docker-compose.production.yml run --rm --no-deps \
+                 --entrypoint sh backend -c "npx --yes prisma@5 migrate deploy"; then
+              echo "FALHA: migrations nao aplicaram. Deploy abortado; o backend anterior segue no ar."
+              exit 1
+            fi
+
             echo "[3/5] Rolling deploy — backend..."
             docker compose -f docker-compose.production.yml up -d --no-deps --force-recreate backend
 
