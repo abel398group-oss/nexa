@@ -40,8 +40,12 @@ export class MarketsController {
    * sem o relatório de pendências. Mercado em rascunho não pode aparecer no seletor do
    * vendedor, senão a trava de liberação não serve para nada (ADR 037).
    */
+  // `campaigns` OU `settings`: a lista serve a dois públicos — quem dispara escolhe o
+  // mercado no formulário, e quem configura a operação abre a tela de Markets. Com
+  // `campaigns` sozinho, o segundo recebia 403 e a tela dizia "nenhum mercado
+  // cadastrado", que é falso e manda procurar defeito no lugar errado.
   @Get()
-  @RequirePerm('campaigns')
+  @RequirePerm('campaigns', 'settings')
   list(@CurrentTenant() tenantId: string, @Query('liberados') liberados?: string) {
     return this.markets.list(tenantId, { somenteLiberados: liberados === 'true' });
   }

@@ -80,6 +80,31 @@ describe('PermissionsGuard — separação SDR × closer', () => {
 
 });
 
+describe('PermissionsGuard — rota que aceita mais de uma permissão', () => {
+  // A lista de mercados serve quem dispara (`campaigns`) e quem configura (`settings`).
+  // Com uma permissão só, o segundo levava 403 e a tela mostrava "nenhum mercado
+  // cadastrado" — mentira que manda procurar defeito no lugar errado.
+  const guardDuplo = () => new PermissionsGuard({ getAllAndOverride: () => ['campaigns', 'settings'] } as any);
+
+  it('qualquer uma das duas libera', () => {
+    expect(guardDuplo().canActivate(makeCtx({ role: 'operacional', permissions: ['campaigns'] }))).toBe(true);
+    expect(guardDuplo().canActivate(makeCtx({ role: 'operacional', permissions: ['settings'] }))).toBe(true);
+  });
+
+  it('nenhuma das duas nega, e a mensagem diz as duas', () => {
+    expect(() => guardDuplo().canActivate(makeCtx({ role: 'operacional', permissions: ['inbox'] })))
+      .toThrow(/campaigns ou settings/);
+  });
+
+  // `getAllAndOverride` também lê metadata de classe: um decorator antigo que gravou
+  // string precisa continuar valendo, senão a troca derruba rota sem ninguém notar.
+  it('metadata em formato antigo (string) continua funcionando', () => {
+    const g = new PermissionsGuard({ getAllAndOverride: () => 'campaigns' } as any);
+    expect(g.canActivate(makeCtx({ role: 'operacional', permissions: ['campaigns'] }))).toBe(true);
+    expect(() => g.canActivate(makeCtx({ role: 'operacional', permissions: [] }))).toThrow(ForbiddenException);
+  });
+});
+
 describe('Catálogo de permissões', () => {
   it('admin existe como exigível mas NÃO é concedível por checkbox', () => {
     expect(PERMS).toContain('admin');

@@ -134,8 +134,12 @@ export default function App() {
                         </Perm>
                       }
                     />
-                    <Route path="/sdr-cockpit" element={<Perm perm={['sdr', 'opportunities']}><SdrCockpitPage /></Perm>} />
-                    <Route path="/closer-cockpit" element={<Perm perm={['closer', 'opportunities', 'metrics']}><CloserCockpitPage /></Perm>} />
+                    {/* Só a permissão do PAPEL. Antes a rota aceitava `opportunities` e
+                        `metrics` junto, e como as duas são comuns aos dois papéis, o SDR
+                        via o Cockpit Closer no menu. Aba interna que exige outra coisa
+                        (carteira, relatório) já se filtra sozinha lá dentro. */}
+                    <Route path="/sdr-cockpit" element={<Perm perm="sdr"><SdrCockpitPage /></Perm>} />
+                    <Route path="/closer-cockpit" element={<Perm perm="closer"><CloserCockpitPage /></Perm>} />
                     {import.meta.env.DEV && <Route path="/dev/tokens" element={<DevTokensPage />} />}
                   </Route>
                 </Route>

@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { SalesQueuePage } from './SalesQueuePage';
 import { SdrWorkbenchPage } from './SdrWorkbenchPage';
 import { SalesScriptPage } from './SalesScriptPage';
 import { useAuth } from '@/app/providers/AuthContext';
@@ -24,9 +23,15 @@ export function SdrCockpitPage() {
   const { user } = useAuth();
 
   const ABAS: Aba[] = [
-    // A fila é do funil (`opportunities`), não da mesa: é a mesma tela que o vendedor
-    // já usava em /fila antes do cockpit existir.
-    { id: 'queue', label: '📞 Fila de Atendimento', cor: 'bg-green-100 text-green-700', perm: 'opportunities', render: () => <SalesQueuePage /> },
+    // A MESA é a primeira aba, e a fila geral saiu daqui (16/08/2026).
+    //
+    // Antes a primeira aba era a `SalesQueuePage`, que consome `/opportunities/queue` —
+    // endpoint do funil, sem escopo por mercado nem por vendedor. Medido em produção: um
+    // SDR sem vínculo via 15 leads do tenant inteiro nessa aba e 0 na mesa, que é a
+    // escopada. O cockpit anulava a trava justamente na tela em que o SDR cai primeiro.
+    //
+    // A fila geral continua existindo em `/fila` para quem tem `opportunities` — o que
+    // mudou é que ela não é mais a porta de entrada de quem trabalha por mercado.
     { id: 'workbench', label: '🖥️ Mesa de Trabalho', cor: 'bg-blue-100 text-blue-700', perm: 'sdr', render: () => <SdrWorkbenchPage /> },
     // Ler o roteiro é `sdr`; editar continua `settings`, dentro da própria tela.
     { id: 'script', label: '📖 Roteiro', cor: 'bg-orange-100 text-orange-700', perm: 'sdr', render: () => <SalesScriptPage /> },

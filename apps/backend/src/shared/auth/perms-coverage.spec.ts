@@ -27,9 +27,14 @@ describe('@RequirePerm — cobertura contra o catálogo', () => {
   const usadas = new Map<string, string[]>();
   for (const f of arquivosTs(SRC)) {
     const txt = fs.readFileSync(f, 'utf8');
-    for (const m of txt.matchAll(/@RequirePerm\('([^']+)'\)/g)) {
+    // O decorator aceita mais de uma permissão: `@RequirePerm('campaigns', 'settings')`.
+    // Capturar só a primeira deixaria a segunda fora da conferência — e é justamente
+    // uma permissão a menos na lista que torna a rota inalcançável por qualquer tela.
+    for (const m of txt.matchAll(/@RequirePerm\(([^)]+)\)/g)) {
       const rel = path.relative(SRC, f).replace(/\\/g, '/');
-      usadas.set(m[1], [...(usadas.get(m[1]) ?? []), rel]);
+      for (const q of m[1].matchAll(/'([^']+)'/g)) {
+        usadas.set(q[1], [...(usadas.get(q[1]) ?? []), rel]);
+      }
     }
   }
 

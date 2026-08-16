@@ -44,8 +44,10 @@ const NAV_GROUPS: NavGroup[] = [
       perm: ['settings', 'lead_batches', 'campaigns', 'ai_control', 'sellers', 'contacts'] },
   ] },
   { label: 'Operação', icon: 'zap', items: [
-    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: ['sdr', 'opportunities'] },
-    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: ['closer', 'opportunities', 'metrics'] },
+    // Só a permissão do papel — `opportunities`/`metrics` são comuns aos dois e faziam
+    // o SDR enxergar o painel do closer no menu.
+    { to: '/sdr-cockpit',    label: 'Cockpit SDR',       ic: 'sellers',   perm: 'sdr' },
+    { to: '/closer-cockpit', label: 'Cockpit Closer',    ic: 'trophy',    perm: 'closer' },
   ] },
   { label: 'Vendas (Legado)', icon: 'dollar', items: [
     // Links preservados apenas para compatibilidade — rotas viram red herrings com cockpits
@@ -518,12 +520,15 @@ export function Layout() {
           <span className={`whitespace-nowrap text-base font-semibold tracking-tight text-white ${isExpandedMode ? 'inline' : 'hidden'}`}>Nexa</span>
         </div>
 
-        {/* atalhos rápidos — sempre visíveis, ícone no rail / label no hover */}
+        {/* Atalhos rápidos — ícone no rail, label no hover.
+            Eram fixos e SEM checagem de permissão: quem não tinha `campaigns` via
+            "Disparo" no menu e levava redirect ao clicar, o que parece defeito da tela.
+            Agora passam pelo mesmo `temPerm` do resto da navegação. */}
         <div className="shrink-0 border-b border-white/10 px-2 py-2">
           {[
-            { to: '/inbox', label: 'Inbox', ic: 'inbox' as IconName },
-            { to: '/campaigns', label: 'Disparo', ic: 'campaigns' as IconName },
-          ].map((s) => (
+            { to: '/inbox', label: 'Inbox', ic: 'inbox' as IconName, perm: 'inbox' },
+            { to: '/campaigns', label: 'Disparo', ic: 'campaigns' as IconName, perm: 'campaigns' },
+          ].filter((s) => temPerm(user, s.perm)).map((s) => (
             <NavLink
               key={s.to}
               to={s.to}
