@@ -17,7 +17,6 @@ import { PlaybookModule } from '@/application/playbook/playbook.module';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 import { OpportunitiesModule } from '@/application/opportunities/opportunities.module';
 import { AgentsController } from '@/presentation/http/agents/agents.controller';
-import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 
 @Module({
@@ -25,7 +24,6 @@ import { ContactsModule } from '@/application/contacts/contacts.module';
   controllers: [AgentsController],
   providers: [
     // Infra
-    TmsLookupService,
     // Agentes de suporte — pipeline ADR 015
     CaseClassifierAgentService,
     DiagnosticAgentService,

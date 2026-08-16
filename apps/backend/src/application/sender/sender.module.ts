@@ -5,13 +5,14 @@ import { ConversationsModule } from '@/application/conversations/conversations.m
 import { FollowUpModule } from '@/application/followup/followup.module';
 import { EmailModule } from '@/application/email/email.module';
 import { SenderController } from '@/presentation/http/sender/sender.controller';
-import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 // Freio de engajamento avisa o time quando desativa um número (sender-health.ts).
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 
 @Module({
   imports: [ContactsModule, ConversationsModule, FollowUpModule, EmailModule, NotificationsModule],
   controllers: [SenderController],
-  providers: [SenderService, TmsLookupService],
+  // TmsLookupService vem do TmsModule (@Global): era provider local aqui e em outros
+  // dois módulos, e cada registro abria um pool próprio contra o banco do TMS.
+  providers: [SenderService],
 })
 export class SenderModule {}

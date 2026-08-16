@@ -9,16 +9,19 @@ import { TelemarketingReportController } from '@/presentation/http/telemarketing
 import { LeadBatchesController } from '@/presentation/http/telemarketing/lead-batches.controller';
 import { SdrController } from '@/presentation/http/telemarketing/sdr.controller';
 import { CloserController } from '@/presentation/http/telemarketing/closer.controller';
-import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { MarketScopeService } from '@/shared/auth/market-scope.service';
 
 /**
  * Módulo 1 do telemarketing (docs/features/telemarketing/prd.md).
  *
- * Sem `imports`: PrismaService é global e o TmsLookupService entra como provider
- * próprio — é o padrão do `SenderModule`, e mantém este módulo sem depender de
- * nenhum outro módulo de aplicação. Ciclo de módulo aqui custaria o boot, não a
- * compilação (aconteceu em 11/08 com SellersModule → EmailModule → AgentsModule).
+ * Sem `imports`: tudo de que ele depende é global — Prisma e, desde 16/08/2026, o
+ * TmsLookupService (`TmsModule`). Antes o lookup era provider próprio aqui, no
+ * `SenderModule` e no `AgentsModule` justamente para não importar módulo de aplicação e
+ * fechar ciclo; o preço eram três instâncias, cada uma com seu pool contra o banco do
+ * TMS. Módulo folha e global resolve os dois lados.
+ *
+ * Ciclo de módulo aqui custaria o boot, não a compilação (aconteceu em 11/08 com
+ * SellersModule → EmailModule → AgentsModule).
  */
 @Module({
   controllers: [
@@ -34,9 +37,8 @@ import { MarketScopeService } from '@/shared/auth/market-scope.service';
     CloserService,
     SalesScriptService,
     TelemarketingReportService,
-    TmsLookupService,
-    // Provider próprio, mesmo padrão do TmsLookupService acima: o serviço só depende do
-    // Prisma (global), então não traz módulo de aplicação junto nem risco de ciclo.
+    // Provider próprio: só depende do Prisma (global), então não traz módulo de
+    // aplicação junto nem risco de ciclo.
     MarketScopeService,
   ],
 })

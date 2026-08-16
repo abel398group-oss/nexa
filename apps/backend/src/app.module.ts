@@ -10,6 +10,7 @@ import { PrismaModule } from './infra/prisma/prisma.module';
 import { AiModule } from './shared/ai/ai.module';
 import { GovernanceModule } from './shared/governance/governance.module';
 import { WahaModule } from './shared/waha/waha.module';
+import { TmsModule } from './infra/tms/tms.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { RedisLockModule } from './shared/lock/redis-lock.module';
 import { AdminModule } from './application/admin/admin.module';
@@ -72,6 +73,7 @@ import { HealthController } from './presentation/http/health/health.controller';
     AiModule,
     GovernanceModule,
     WahaModule,
+    TmsModule, // global — uma instância do lookup do TMS (era um pool por módulo)
     AuditModule,
     AuthModule,
     EventsModule,
