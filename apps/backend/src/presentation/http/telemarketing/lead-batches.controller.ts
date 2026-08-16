@@ -31,13 +31,17 @@ export class LeadBatchesController {
   @RequirePerm('lead_batches')
   importar(
     @CurrentTenant() tenantId: string,
-    @CurrentUser() user: { id?: string } | undefined,
+    // `userId`, não `id`: é o nome que `jwt.strategy.validate` devolve em `req.user`.
+    // Com `id`, o campo saía `undefined` em TODA importação e o lote ficava sem registro
+    // de quem subiu — sem erro, sem log, e só se percebe ao perguntar "quem importou
+    // esta lista?" meses depois, quando não há mais como saber.
+    @CurrentUser() user: { userId?: string } | undefined,
     @Body() dto: ImportarLoteDto,
   ) {
     const { csv, ...resto } = dto;
     return this.importer.importar(
       tenantId,
-      { ...resto, uploadedByUserId: user?.id },
+      { ...resto, uploadedByUserId: user?.userId },
       csv,
     );
   }
