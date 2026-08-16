@@ -307,7 +307,7 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     conversations = { create: vi.fn().mockResolvedValue({ id: 'conv1' }), addMessage: vi.fn().mockResolvedValue({}) };
     followup = { schedule: vi.fn().mockResolvedValue({}) };
     waha = { sendText: vi.fn(), sendFile: vi.fn(), sendStatusText: vi.fn(), sendStatusImage: vi.fn() };
-    tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()) };
+    tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()), batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) };
   });
 
   afterEach(() => {
@@ -791,7 +791,7 @@ describe('SenderService.createCampaign — lista de bloqueio sobrevive a limpeza
 
   const svcCom = (prisma: any, bloqueados: string[]) =>
     new SenderService(prisma, {} as any, {} as any, {} as any, {} as any,
-      { batchLookup: vi.fn().mockResolvedValue(new Map()) } as any,
+      { batchLookup: vi.fn().mockResolvedValue(new Map()), batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) } as any,
       { acquire: async () => async () => {} } as any,
       {
         blockedPhones: async () => new Set(bloqueados),
@@ -830,7 +830,7 @@ describe('SenderService.createCampaign — lista de bloqueio sobrevive a limpeza
 describe('SenderService.createCampaign — campanha sem destinatários', () => {
   const makeSvc = (prisma: any) =>
     new SenderService(prisma, {} as any, {} as any, {} as any, {} as any,
-      { batchLookup: vi.fn().mockResolvedValue(new Map()) } as any,
+      { batchLookup: vi.fn().mockResolvedValue(new Map()), batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) } as any,
       { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
 
   const prismaVazio = () => ({
@@ -890,7 +890,7 @@ describe('SenderService.createCampaign — dedup entre campanhas', () => {
       },
     };
     contacts = {};
-    tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()) };
+    tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()), batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) };
   });
 
   const dto = (phones: string[]) => ({
@@ -962,5 +962,80 @@ describe('SenderService.createCampaign — dedup entre campanhas', () => {
     const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
     const blocked = created.find((t: any) => t.phone === '5511961688954');
     expect(blocked).toMatchObject({ status: 'skipped', error: 'bloqueado' });
+  });
+});
+
+// ─── Filtro de cliente TMS: fail-CLOSED (16/08/2026) ────────────────────────
+//
+// O `batchLookup` devolvia Map vazio em três situações que não são a mesma coisa:
+// ninguém do lote é cliente, TMS não configurado, e TMS fora do ar. O disparo usava esse
+// Map para NÃO mandar oferta fria a cliente pagante — então uma oscilação de rede fazia a
+// peneira sumir em silêncio e a campanha ia inteira para a base, clientes inclusos.
+//
+// Estes testes prendem a diferença entre os dois vazios. Um teste que só checasse
+// "campanha criada" passaria com o bug de volta.
+describe('SenderService.createCampaign — filtro TMS indisponível', () => {
+  const prismaLimpo = () => ({
+    contact: {
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({}),
+      count: vi.fn().mockResolvedValue(0),
+    },
+    campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
+    campaign: {
+      create: vi.fn().mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 'c1', ...data, _count: { targets: data.targets?.create?.length ?? 0 } })),
+    },
+  } as any);
+
+  const svcComTms = (prisma: any, tms: any) =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, tms as any,
+      { acquire: async () => async () => {} } as any,
+      {
+        blockedPhones: async () => new Set<string>(),
+        blockedEmails: async () => new Set<string>(),
+        isBlocked: async () => false,
+        register: async () => undefined,
+      } as any);
+
+  const alvo = [{ phone: '5511988887777', name: 'Lead' }];
+
+  it('RECUSA a campanha quando a consulta ao TMS falha', async () => {
+    const prisma = prismaLimpo();
+    const svc = svcComTms(prisma, {
+      batchLookupVerificado: vi.fn().mockResolvedValue({
+        clientes: new Map(), falhou: true, motivo: 'conexão recusada',
+      }),
+    });
+
+    await expect(svc.createCampaign('t1', { name: 'Fria', template: 'Oi', phones: alvo }))
+      .rejects.toThrow(/HiperTMS/i);
+    // O ponto: nada é criado. Recusar depois de gravar deixaria a campanha pronta para
+    // alguém apertar "Iniciar" sem peneira nenhuma.
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+
+  it('CRIA normalmente quando a consulta funciona e ninguém é cliente', async () => {
+    const prisma = prismaLimpo();
+    const svc = svcComTms(prisma, {
+      batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }),
+    });
+
+    await svc.createCampaign('t1', { name: 'Fria', template: 'Oi', phones: alvo });
+    expect(prisma.campaign.create).toHaveBeenCalled();
+  });
+
+  // TMS não configurado é ambiente sem conector (CI, máquina nova), não falha —
+  // barrar ali travaria quem nunca teve TMS.
+  it('CRIA quando o TMS não está configurado', async () => {
+    const prisma = prismaLimpo();
+    const svc = svcComTms(prisma, {
+      batchLookupVerificado: vi.fn().mockResolvedValue({
+        clientes: new Map(), falhou: false, motivo: 'tms_nao_configurado',
+      }),
+    });
+
+    await svc.createCampaign('t1', { name: 'Fria', template: 'Oi', phones: alvo });
+    expect(prisma.campaign.create).toHaveBeenCalled();
   });
 });

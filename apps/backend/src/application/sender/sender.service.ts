@@ -490,8 +490,28 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
     // ── Filtro TMS: consulta o lote no banco do HiperTMS (read-only) ──────────
     // Clientes já cadastrados no TMS não recebem campanha de prospecção.
-    // Se TMS_DB_URL não estiver configurado, tmsMap fica vazio e nenhum lead é bloqueado.
-    const tmsMap = await this.tmsLookup.batchLookup(targets.map((t) => t.phone));
+    //
+    // A consulta é VERIFICADA porque um Map vazio tem dois significados opostos: "ninguém
+    // do lote é cliente" e "o banco do TMS não respondeu". Enquanto os dois se pareciam,
+    // uma oscilação de rede fazia a peneira sumir em silêncio e a campanha ia inteira
+    // para a base — inclusive para quem já paga pelo produto.
+    //
+    // Recusar a criação é a escolha certa aqui: campanha não é urgente, e "não disparou,
+    // tente de novo" custa minutos. O outro lado é oferta fria na caixa do cliente
+    // pagante, que não tem desfazer. TMS não configurado não entra neste caminho — ali
+    // não há filtro a aplicar, e barrar travaria ambiente que roda sem conector.
+    const tms = await this.tmsLookup.batchLookupVerificado(targets.map((t) => t.phone));
+    if (tms.falhou) {
+      this.logger.error(
+        `Campanha "${dto.name}" recusada: filtro de cliente TMS indisponível (${tms.motivo})`,
+      );
+      throw new BadRequestException(
+        'Não foi possível consultar a base do HiperTMS para excluir quem já é cliente. ' +
+        'A campanha não foi criada — sem essa checagem, clientes pagantes receberiam ' +
+        'prospecção fria. Tente novamente em alguns minutos.',
+      );
+    }
+    const tmsMap = tms.clientes;
     const tmsBlocked = targets.filter((t) => tmsMap.has(TmsLookupService.normalize(t.phone)));
     const tmsAllowed = targets.filter((t) => !tmsMap.has(TmsLookupService.normalize(t.phone)));
     const skippedTms = tmsBlocked.length;

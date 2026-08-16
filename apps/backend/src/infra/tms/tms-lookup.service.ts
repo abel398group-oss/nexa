@@ -7,8 +7,11 @@
  * Configuração (env do Nexa):
  *   TMS_DB_URL = postgresql://user:pass@host:port/hipertms_v12_398?sslmode=require
  *
- * Se TMS_DB_URL não estiver configurado, todos os métodos retornam vazio/null
- * sem erro — o fluxo de campanha continua normalmente.
+ * Se TMS_DB_URL não estiver configurado, os métodos retornam vazio/null sem erro.
+ *
+ * ⚠️  Vazio NÃO significa "ninguém é cliente": pode ser TMS fora do ar. Quem usa o
+ *     resultado para DECIDIR (o filtro de campanha) precisa de `batchLookupVerificado`,
+ *     que informa se a consulta funcionou. Ver o comentário lá.
  */
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
@@ -65,20 +68,46 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
    * Faz apenas 2 queries (usuarios + empresas) independente do tamanho do lote.
    */
   async batchLookup(phones: string[]): Promise<Map<string, TmsCustomerInfo>> {
+    return (await this.batchLookupVerificado(phones)).clientes;
+  }
+
+  /**
+   * Igual ao `batchLookup`, mas DIZ se a consulta funcionou.
+   *
+   * O `batchLookup` devolve um Map vazio em três situações que não são a mesma coisa:
+   * ninguém do lote é cliente, o TMS não está configurado, ou o TMS caiu. Quem chama não
+   * tinha como distinguir — e o disparo de campanha usa esse resultado para NÃO mandar
+   * oferta fria a cliente pagante. Ou seja, o banco do TMS fora do ar virava "nenhum
+   * deles é cliente", e a campanha saía para a base inteira.
+   *
+   * `falhou` é true SÓ quando a consulta deveria ter funcionado e não funcionou. TMS não
+   * configurado não é falha: é um ambiente que deliberadamente roda sem o conector (CI,
+   * máquina nova) e ali não há filtro a aplicar.
+   */
+  async batchLookupVerificado(
+    phones: string[],
+  ): Promise<{ clientes: Map<string, TmsCustomerInfo>; falhou: boolean; motivo?: string }> {
     const result = new Map<string, TmsCustomerInfo>();
-    if (!phones.length) return result;
+    if (!phones.length) return { clientes: result, falhou: false };
 
     const pool = this.getPool();
-    if (!pool) return result; // TMS não configurado — retorna vazio sem erro
+    // Sem TMS_DB_URL: não há filtro a aplicar. Não é falha, mas o aviso fica no log —
+    // em produção isso significa campanha saindo sem peneira de cliente.
+    if (!pool) {
+      this.logger.warn('TMS_DB_URL ausente — nenhum filtro de cliente TMS será aplicado');
+      return { clientes: result, falhou: false, motivo: 'tms_nao_configurado' };
+    }
 
     // Normaliza todos os telefones de entrada
     const normalized = phones.map(TmsLookupService.normalize);
 
     const client = await pool.connect().catch((e: any) => {
-      this.logger.warn(`TMS DB indisponível: ${e?.message}`);
+      this.logger.error(`TMS DB indisponível: ${e?.message}`);
       return null;
     });
-    if (!client) return result;
+    if (!client) {
+      return { clientes: result, falhou: true, motivo: 'conexão com o banco do TMS recusada' };
+    }
 
     try {
       // ── Query 1: usuários (tenant_core_user) ──────────────────────────────
@@ -149,13 +178,16 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
         }
       }
     } catch (e: any) {
-      this.logger.warn(`batchLookup falhou: ${e?.message} — campanha prossegue sem filtro TMS`);
-      // fail-open: se der erro, não bloqueia a campanha
+      // Antes era fail-open com um `warn`: a campanha prosseguia SEM filtro e ninguém
+      // ficava sabendo. Agora o erro é devolvido a quem chamou, que decide — o disparo
+      // recusa a campanha, o roteamento da Lia segue como antes.
+      this.logger.error(`batchLookup falhou: ${e?.message}`);
+      return { clientes: result, falhou: true, motivo: e?.message ?? 'erro na consulta ao TMS' };
     } finally {
       client.release();
     }
 
-    return result;
+    return { clientes: result, falhou: false };
   }
 
   async onModuleDestroy() {
