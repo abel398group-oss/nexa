@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { identidadeVisivel, isSupportTicket } from '@/shared/lib/conversation';
 import { Icon } from '@/shared/ui';
-import { listConversations } from '@/entities/conversation';
+import { listConversations, listSupportClients } from '@/entities/conversation';
 import { StandardListPage } from '@/components/shared/StandardListPage';
 
 interface Client {
@@ -116,11 +116,35 @@ export function SupportClientsPage() {
 
   const totalOpen = clients.reduce((a, c) => a + c.open, 0);
 
+  /**
+   * A base de clientes do TMS, para a tela parar de dizer que "Clientes" são os que
+   * abriram chamado. Consulta separada de propósito: ela lê OUTRO banco (o do HiperTMS),
+   * e falha dela não pode derrubar a lista de chamados que já funciona.
+   *
+   * Não é usada para montar a lista abaixo, e isso não é preguiça: a conversa de suporte
+   * guarda o id da PESSOA que abriu o chamado, e esta base é de EMPRESAS. Cruzar as duas
+   * exige confirmar que aquele id é de `tenant_core_user` e subir dele para a empresa —
+   * e afirmar isso sem verificar poria dado errado numa tela de atendimento.
+   */
+  const { data: baseTms } = useQuery({
+    queryKey: ['support-clients-tms'],
+    queryFn: () => listSupportClients(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const totalNoTms = baseTms && !baseTms.falhou ? baseTms.clientes.length : null;
+  const ativosNoTms =
+    baseTms && !baseTms.falhou && baseTms.filtrouCancelados
+      ? baseTms.clientes.filter((c) => c.ativo).length
+      : null;
+
   return (
     <StandardListPage
       title="Clientes"
       breadcrumb={[{ label: 'Início', path: '/dashboard' }, { label: 'Suporte' }, { label: 'Clientes' }]}
-      description="Quem já abriu chamado de suporte, agrupado por contato. Abra o atendimento no Inbox de Suporte."
+      // A descrição diz o que a lista É. Chamar isto de "base de clientes" fazia quem
+      // olhava achar que cliente que nunca reclamou não existe.
+      description="Quem já abriu chamado de suporte, agrupado por contato — não é a base completa de clientes. Abra o atendimento no Inbox de Suporte."
       isLoading={isLoading}
       hasData={clients.length > 0}
       error={isError ? error : undefined}
@@ -159,8 +183,22 @@ export function SupportClientsPage() {
             </div>
           )}
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+            {/* Dois cartões, não um: "quantos clientes existem" e "quantos falaram com o
+                suporte" são perguntas diferentes, e mostrar só a segunda com o rótulo
+                "Clientes" era o que fazia a tela parecer a base inteira. */}
+            {totalNoTms !== null && (
+              <div className="card p-4">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Clientes no TMS</div>
+                <div className="mt-0.5 text-2xl font-bold text-base-content">
+                  {ativosNoTms ?? totalNoTms}
+                </div>
+                <div className="mt-0.5 text-xs text-base-content/40">
+                  {ativosNoTms !== null ? `ativos · ${totalNoTms} no total` : 'sem filtro de cancelados'}
+                </div>
+              </div>
+            )}
             <div className="card p-4">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Clientes</div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Abriram chamado</div>
               <div className="mt-0.5 text-2xl font-bold text-base-content">{clients.length}</div>
               <div className="mt-0.5 text-xs text-base-content/40">
                 {listaCortada ? 'nos chamados mais recentes' : 'com chamados de suporte'}

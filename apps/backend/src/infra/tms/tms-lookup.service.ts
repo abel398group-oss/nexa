@@ -190,6 +190,117 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     return { clientes: result, falhou: false };
   }
 
+  /**
+   * Coluna que diz se o cliente do TMS está vigente.
+   *
+   * Descoberta em tempo de execução, e não escrita à mão, porque o schema do TMS é de
+   * OUTRO projeto: chutar `isActive` e errar produziria a pior saída possível — a
+   * consulta falha e a tela mostra "nenhum cliente", que se lê como base vazia. E
+   * fixar o nome aqui deixaria o Nexa quebrando no dia que o TMS renomear a coluna.
+   *
+   * Só nomes desta lista são aceitos, e é isso que torna seguro interpolar o nome no
+   * SQL: ele nunca vem de entrada do usuário, vem do catálogo do banco filtrado por
+   * uma lista fechada.
+   */
+  private static readonly COLUNAS_DE_ATIVO = ['isActive', 'is_active', 'active', 'ativo'] as const;
+  private static readonly COLUNAS_DE_EXCLUSAO = ['deletedAt', 'deleted_at'] as const;
+  /// `undefined` = ainda não perguntei. `null` = perguntei e não existe.
+  private colunaDeVigencia?: { nome: string; tipo: 'booleano' | 'exclusao' } | null;
+
+  private async descobrirColunaDeVigencia(client: any): Promise<{ nome: string; tipo: 'booleano' | 'exclusao' } | null> {
+    if (this.colunaDeVigencia !== undefined) return this.colunaDeVigencia;
+    try {
+      const res = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = $1`,
+        ['system_core_tenant'],
+      );
+      const existentes = new Set<string>(res.rows.map((r: { column_name: string }) => r.column_name));
+      const booleana = TmsLookupService.COLUNAS_DE_ATIVO.find((c) => existentes.has(c));
+      if (booleana) {
+        this.colunaDeVigencia = { nome: booleana, tipo: 'booleano' };
+      } else {
+        const exclusao = TmsLookupService.COLUNAS_DE_EXCLUSAO.find((c) => existentes.has(c));
+        this.colunaDeVigencia = exclusao ? { nome: exclusao, tipo: 'exclusao' } : null;
+      }
+      this.logger.log(
+        this.colunaDeVigencia
+          ? `clientes do TMS: vigência lida de "${this.colunaDeVigencia.nome}"`
+          : 'clientes do TMS: nenhuma coluna de vigência encontrada — a lista virá sem filtro de cancelados',
+      );
+    } catch (e: any) {
+      this.logger.warn(`não consegui ler o catálogo do TMS: ${e?.message}`);
+      this.colunaDeVigencia = null;
+    }
+    return this.colunaDeVigencia;
+  }
+
+  /**
+   * Todos os clientes do TMS — as empresas que usam o produto.
+   *
+   * Existe porque a tela "Clientes" do módulo TMS montava a lista a partir das CONVERSAS
+   * de suporte: era "quem abriu chamado" com nome de "Clientes", e cliente que paga e
+   * nunca reclamou não aparecia. A base de verdade está aqui.
+   *
+   * `filtrouCancelados = false` é informação para a tela, não detalhe interno: sem a
+   * coluna de vigência a lista inclui quem já cancelou, e quem lê precisa saber disso.
+   *
+   * Como o resto deste serviço: apenas SELECT, e falha devolvida a quem chamou em vez de
+   * lista vazia silenciosa — vazio e "TMS fora do ar" não são a mesma coisa.
+   */
+  async listarClientes(limite = 500): Promise<{
+    clientes: { id: string; name: string; ativo: boolean | null }[];
+    falhou: boolean;
+    motivo?: string;
+    filtrouCancelados: boolean;
+  }> {
+    const pool = this.getPool();
+    if (!pool) {
+      return { clientes: [], falhou: false, motivo: 'tms_nao_configurado', filtrouCancelados: false };
+    }
+    const client = await pool.connect().catch((e: any) => {
+      this.logger.error(`TMS DB indisponível: ${e?.message}`);
+      return null;
+    });
+    if (!client) {
+      return {
+        clientes: [],
+        falhou: true,
+        motivo: 'conexão com o banco do TMS recusada',
+        filtrouCancelados: false,
+      };
+    }
+
+    try {
+      const coluna = await this.descobrirColunaDeVigencia(client);
+      // `"nome"` entre aspas duplas: o TMS usa camelCase em coluna, que o Postgres só
+      // reconhece citado. O nome vem da lista fechada acima, nunca de fora.
+      const expressaoAtivo = !coluna
+        ? 'NULL::boolean'
+        : coluna.tipo === 'booleano'
+          ? `t."${coluna.nome}"`
+          : `(t."${coluna.nome}" IS NULL)`;
+
+      const res = await client.query<{ id: string; name: string; ativo: boolean | null }>(
+        `SELECT t.id, t.name, ${expressaoAtivo} AS ativo
+           FROM system_core_tenant t
+          ORDER BY t.name ASC
+          LIMIT $1`,
+        [limite],
+      );
+      return { clientes: res.rows, falhou: false, filtrouCancelados: !!coluna };
+    } catch (e: any) {
+      this.logger.error(`listarClientes falhou: ${e?.message}`);
+      return {
+        clientes: [],
+        falhou: true,
+        motivo: e?.message ?? 'erro na consulta ao TMS',
+        filtrouCancelados: false,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
   async onModuleDestroy() {
     if (this.pool) {
       await this.pool.end().catch(() => null);

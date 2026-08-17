@@ -181,3 +181,24 @@ export async function bulkConversationAction(
   const r = await api.post('/conversations/bulk-action', { ids, action });
   return r.data;
 }
+
+/**
+ * Base de clientes do TMS — as empresas que usam o produto.
+ *
+ * Diferente do resto deste arquivo, o dado NÃO vem do banco do Nexa: vem do banco do
+ * HiperTMS, por leitura. Por isso a resposta traz `falhou` e `filtrouCancelados`:
+ * lista vazia porque o TMS não respondeu é coisa diferente de "não há clientes", e a
+ * tela precisa poder dizer qual dos dois é.
+ */
+export interface ClientesDoTms {
+  clientes: { id: string; name: string; ativo: boolean | null }[];
+  falhou: boolean;
+  motivo?: string;
+  /// false = o TMS não expõe coluna de vigência, então cancelados estão na lista.
+  filtrouCancelados: boolean;
+}
+
+export async function listSupportClients(limite = 500): Promise<ClientesDoTms> {
+  const r = await api.get('/support/clients', { params: { limite } });
+  return r.data;
+}

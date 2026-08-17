@@ -4,6 +4,9 @@ import { ConfigService } from '@nestjs/config';
 import { ConversationsService } from './conversations.service';
 import { ConversationJanitorService } from './conversation-janitor.service';
 import { ConversationsController } from '@/presentation/http/conversations/conversations.controller';
+// Fica neste módulo por ser a mesma tela (Clientes do suporte). O `TmsLookupService` que
+// ele usa vem do `TmsModule`, que é @Global — nada a importar aqui.
+import { SupportClientsController } from '@/presentation/http/support/support-clients.controller';
 import { ConversationsGateway } from '@/presentation/ws/conversations.gateway';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 
@@ -18,7 +21,7 @@ import { NotificationsModule } from '@/application/notifications/notifications.m
     }),
     NotificationsModule,
   ],
-  controllers: [ConversationsController],
+  controllers: [ConversationsController, SupportClientsController],
   providers: [ConversationsService, ConversationsGateway, ConversationJanitorService],
   exports: [ConversationsService],
 })

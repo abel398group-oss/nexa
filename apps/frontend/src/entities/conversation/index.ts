@@ -2,7 +2,7 @@
 // Importe SEMPRE por aqui: `@/entities/conversation`. Nunca alcance o interior.
 export type { Conversation, Message, ConversationListResult, AnalystMini } from './types/conversation.types';
 
-export type { ListConversationsParams, SupportStats } from './api/conversation.api';
+export type { ListConversationsParams, SupportStats, ClientesDoTms } from './api/conversation.api';
 
 export {
   listConversations,
@@ -22,4 +22,5 @@ export {
   archiveConversation,
   deleteConversation,
   bulkConversationAction,
+  listSupportClients,
 } from './api/conversation.api';
