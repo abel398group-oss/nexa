@@ -344,9 +344,16 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
       const suspensao = await this.colunaExiste(client, 'suspended');
       const expressaoAtivo = coluna && suspensao ? `(${base} AND NOT COALESCE(t."suspended", false))` : base;
 
+      // Amostra pública do TMS não é cliente. Visto na tela em 17/08/2026: três linhas
+      // "Calculadora Pública — Lucro Presumido / Lucro Real / Simples Nacional" contadas
+      // como clientes, inflando a base em 3 de 7. A coluna existe justamente para isso.
+      const amostra = await this.colunaExiste(client, 'is_public_sample');
+      const filtroAmostra = amostra ? `WHERE NOT COALESCE(t."is_public_sample", false)` : '';
+
       const res = await client.query<{ id: string; name: string; ativo: boolean | null }>(
         `SELECT t.id, t.name, ${expressaoAtivo} AS ativo
            FROM system_core_tenant t
+           ${filtroAmostra}
           ORDER BY t.name ASC
           LIMIT $1`,
         [limite],
@@ -393,7 +400,14 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     try {
       const res = await client.query(
         // `"tenantId"` citado: o TMS usa camelCase em coluna.
-        `SELECT id, "tenantId" FROM tenant_core_user WHERE id = ANY($1::uuid[])`,
+        //
+        // `id::text = ANY($1::text[])` e não `$1::uuid[]`: eu não sei se `id` é `uuid` ou
+        // `text` no TMS, e errar o lado faz o Postgres recusar a comparação ("operator
+        // does not exist: text = uuid"). A consulta estoura, o mapa volta vazio, e a tela
+        // diz que NENHUM chamado tem empresa — que foi o que apareceu em produção em
+        // 17/08/2026. Comparar como texto nos dois lados funciona nos dois casos, e a
+        // lista aqui é pequena (os chamados de uma tela), então o custo não importa.
+        `SELECT id, "tenantId" FROM tenant_core_user WHERE id::text = ANY($1::text[])`,
         [ids],
       );
       for (const row of res.rows as { id: string; tenantId: string | null }[]) {
