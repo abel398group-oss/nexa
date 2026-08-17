@@ -41,21 +41,19 @@ updates:
         dependency-type: "development"
         update-types: ["minor", "patch"]
     ignore:
-      # MAJOR de framework não entra por robô: NestJS 10→11 e React 18→19 exigem
-      # migração de código, e um PR automático desses só cria trabalho de fechar.
-      # Vulnerabilidade em major continua chegando pelo alerta de segurança, que
-      # NÃO respeita este ignore.
-      - dependency-name: "@nestjs/*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
-      # Prisma major muda geração de client e migration ao mesmo tempo. Depois do
-      # P1002 de 16/08/2026, é atualização para fazer à mão e com o banco na mira.
-      - dependency-name: "prisma"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@prisma/client"
+      # NENHUM major por robô. A primeira versão deste arquivo listava só NestJS,
+      # React e Prisma — e a lista nomeada errou na primeira hora de uso: no
+      # primeiro ciclo entraram `vitest` 2→3, `vite` 5→6 e `uuid` 9→14 (cinco
+      # majors de uma vez), cada um em seu PR. Major quebra API: `uuid` mudou a
+      # forma de importar, `vite` mudou config de build. PR automático desses não
+      # é atualização, é uma migração de código esperando alguém fechar.
+      #
+      # Lista nomeada é jogo perdido — sempre falta um. A regra passa a ser a
+      # categoria inteira, e major sobe à mão, um por vez, com os testes na mão.
+      #
+      # Isto NÃO enfraquece a segurança: alerta de vulnerabilidade e security
+      # update IGNORAM esta lista. CVE em major continua abrindo PR sozinho.
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
   # ── Versões das actions usadas nos workflows ───────────────────────────────
