@@ -73,6 +73,28 @@ export const LINHA_PRINCIPAL = 'principal';
  * esta função a tela não teria como saber que existe um segundo número, e o
  * botão de reconectar continuaria mirando às cegas na principal.
  */
+/**
+ * Telefone do chip pareado, tirado da resposta de `/api/sessions/{session}`.
+ *
+ * O campo é `me.id` ("5512997880659@c.us"). **Nunca `me.number`**: em outros endpoints
+ * do WAHA esse campo vem sem código de país e não é telefone válido — foi exatamente o
+ * erro que fez a resolução de LID gravar número inválido em 16/08/2026. `id` é o que
+ * carrega o número completo.
+ *
+ * Só existe quando a sessão está pareada; em SCAN_QR_CODE o WAHA não tem `me`.
+ */
+export function telefonePareado(sessao: any): string | null {
+  const id = sessao?.me?.id;
+  if (typeof id !== 'string') return null;
+  // Corta no `@` E no `:`. O sufixo depois dos dois-pontos é o número do APARELHO
+  // ("5512997880659:15@s.whatsapp.net"); colado no telefone ele produz 15 dígitos que
+  // passariam pela checagem de tamanho abaixo e virariam um número que não existe.
+  const digitos = id.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? '';
+  // Sanidade: telefone com DDI tem 12 ou 13 dígitos no Brasil. Fora dessa faixa é
+  // identificador interno, e devolver isso viraria um número falso na tela de saúde.
+  return digitos.length >= 12 && digitos.length <= 13 ? digitos : null;
+}
+
 export function linhasConfiguradas(): string[] {
   const extras = (process.env.WAHA_LINHAS ?? '')
     .split(',')
@@ -345,7 +367,7 @@ export class WahaClientService {
   // que mais dói (sessão cai, e quem recupera precisa do QR na hora).
   //
   // Estado atual: WORKING | SCAN_QR_CODE | STARTING | FAILED | STOPPED
-  async getSessionStatus(linha?: string): Promise<{ status: string } | null> {
+  async getSessionStatus(linha?: string): Promise<{ status: string; phone: string | null } | null> {
     const alvo = this.resolveLinha(linha);
     if (!alvo.baseUrl || !alvo.apiKey) return null;
     try {
@@ -355,7 +377,7 @@ export class WahaClientService {
       });
       if (!res.ok) return null;
       const data: any = await res.json().catch(() => ({}));
-      return { status: data?.status ?? 'UNKNOWN' };
+      return { status: data?.status ?? 'UNKNOWN', phone: telefonePareado(data) };
     } catch {
       return null;
     }

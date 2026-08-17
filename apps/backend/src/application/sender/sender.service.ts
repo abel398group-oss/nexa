@@ -193,9 +193,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     let n = await this.prisma.senderNumber.findFirst({ where: { tenantId, active: true, linha } as any });
     if (!n) {
       const phoneEnvKey = linha === 'principal' ? 'WAHA_SENDER_PHONE' : `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_SENDER_PHONE`;
-      const phone = process.env[phoneEnvKey] ?? (linha === 'principal' ? '5512997880659' : `sem-numero-${linha}`);
+      // Pergunta ao WAHA qual chip está pareado nesta linha. Vem antes da env porque é a
+      // verdade do momento; a env é reserva para quando o WAHA está fora do ar na hora
+      // exata em que o registro nasce.
+      const foneDoWaha = (await this.waha.getSessionStatus(linha).catch(() => null))?.phone ?? null;
+      const phone = foneDoWaha ?? process.env[phoneEnvKey] ?? (linha === 'principal' ? '5512997880659' : `sem-numero-${linha}`);
       if (phone.startsWith('sem-numero-')) {
-        this.logger.warn(`ensureNumber: sem ${phoneEnvKey} — número de exibição fica "${phone}" (não afeta o envio, só o rótulo na tela)`);
+        this.logger.warn(`ensureNumber: WAHA não informou o número e falta ${phoneEnvKey} — rótulo na tela fica "${phone}" (não afeta o envio)`);
       }
       n = await this.prisma.senderNumber.create({
         data: { tenantId, phone, sessionName: 'default', linha } as any,
@@ -227,7 +231,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
    * Os valores espelham os defaults do schema (ver `sender-defaults.spec.ts`, que
    * falha se o schema mudar e esta linha virar mentira).
    */
-  private linhaSemRegistro(linha: string) {
+  private linhaSemRegistro(linha: string, foneDoWaha: string | null) {
     const chaveFone =
       linha === LINHA_PRINCIPAL
         ? 'WAHA_SENDER_PHONE'
@@ -235,9 +239,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return {
       id: `sem-registro:${linha}`,
       linha,
-      // null e não um texto tipo "sem-numero-vendas": a tela sabe dizer "número ainda
-      // não identificado", e um rótulo falso com cara de telefone é pior que a ausência.
-      phone: process.env[chaveFone] ?? null,
+      // O WAHA sabe qual chip está pareado (`me.id`), então perguntar a ele vem PRIMEIRO:
+      // é a verdade do momento, e não depende de alguém lembrar de declarar a env — nem
+      // fica desatualizado quando o chip é trocado. A env é reserva, e `null` é o último
+      // caso: a tela diz "número ainda não identificado", que é melhor que um rótulo
+      // falso com cara de telefone numa tela de anti-ban.
+      phone: foneDoWaha ?? process.env[chaveFone] ?? null,
       active: true,
       dailyLimit: SENDER_DEFAULTS.dailyLimit,
       sentToday: 0,
@@ -281,7 +288,16 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         semRegistro: false,
       })),
     );
-    return [...registrados, ...pendentes.map((l) => this.linhaSemRegistro(l))];
+    // Uma consulta ao WAHA por linha PENDENTE (nunca por linha já registrada), e só para
+    // descobrir o número do chip. WAHA fora do ar devolve null e a tela diz que o número
+    // não foi identificado — nunca quebra a listagem.
+    const semRegistro = await Promise.all(
+      pendentes.map(async (l) => {
+        const st = await this.waha.getSessionStatus(l).catch(() => null);
+        return this.linhaSemRegistro(l, st?.phone ?? null);
+      }),
+    );
+    return [...registrados, ...semRegistro];
   }
 
   /**
