@@ -3,7 +3,8 @@ import { IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
-import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { SupportClientsService } from '@/application/conversations/support-clients.service';
+import { CurrentTenant } from '@/shared/decorators/current-user.decorator';
 import { IsIntInRange } from '@/shared/dto/is-int-in-range.validator';
 
 /// Todos os filtros num DTO só — com `forbidNonWhitelisted`, parâmetro fora dele
@@ -30,10 +31,10 @@ class ListarClientesQueryDto {
 @RequirePerm('support')
 @Controller('support')
 export class SupportClientsController {
-  constructor(private readonly tms: TmsLookupService) {}
+  constructor(private readonly clientes: SupportClientsService) {}
 
   @Get('clients')
-  listar(@Query() q: ListarClientesQueryDto) {
-    return this.tms.listarClientes(q.limite);
+  listar(@CurrentTenant() tenantId: string, @Query() q: ListarClientesQueryDto) {
+    return this.clientes.listar(tenantId, q.limite);
   }
 }

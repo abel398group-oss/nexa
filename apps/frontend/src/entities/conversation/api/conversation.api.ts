@@ -190,12 +190,27 @@ export async function bulkConversationAction(
  * lista vazia porque o TMS não respondeu é coisa diferente de "não há clientes", e a
  * tela precisa poder dizer qual dos dois é.
  */
+export interface ClienteDoTms {
+  id: string;
+  name: string;
+  /// null = o TMS não expõe coluna de vigência neste ambiente.
+  ativo: boolean | null;
+  chamados: number;
+  abertos: number;
+  /// Última atividade de suporte, em milissegundos. Null = nunca abriu chamado.
+  ultimoEm: number | null;
+}
+
 export interface ClientesDoTms {
-  clientes: { id: string; name: string; ativo: boolean | null }[];
+  clientes: ClienteDoTms[];
   falhou: boolean;
   motivo?: string;
   /// false = o TMS não expõe coluna de vigência, então cancelados estão na lista.
   filtrouCancelados: boolean;
+  /// Chamados que não chegaram a nenhuma empresa (sem id, ou usuário removido do TMS).
+  chamadosSemEmpresa: number;
+  /// true = o teto de leitura cortou; os contadores cobrem só os mais recentes.
+  listaCortada: boolean;
 }
 
 export async function listSupportClients(limite = 500): Promise<ClientesDoTms> {

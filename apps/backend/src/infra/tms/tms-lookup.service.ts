@@ -365,6 +365,48 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Empresa de cada pessoa: `tenant_core_user.id` → `tenantId`.
+   *
+   * A conversa de suporte do Nexa guarda o id da PESSOA que abriu o chamado (confirmado
+   * em produção em 17/08/2026: o id gravado existe em `tenant_core_user`). A base de
+   * clientes é de EMPRESAS. Este é o degrau que liga os dois.
+   *
+   * Uma query só, com `= ANY`, independente do tamanho da lista — o pool tem 2 conexões.
+   *
+   * Usuário removido do TMS simplesmente não vem no Map. Quem chama trata isso como
+   * "chamado sem empresa" e MOSTRA o número, em vez de sumir com o atendimento.
+   */
+  async empresasDeUsuarios(userIds: string[]): Promise<Map<string, string>> {
+    const mapa = new Map<string, string>();
+    const ids = [...new Set(userIds.filter(Boolean))];
+    if (!ids.length) return mapa;
+
+    const pool = this.getPool();
+    if (!pool) return mapa;
+    const client = await pool.connect().catch((e: any) => {
+      this.logger.error(`TMS DB indisponível: ${e?.message}`);
+      return null;
+    });
+    if (!client) return mapa;
+
+    try {
+      const res = await client.query(
+        // `"tenantId"` citado: o TMS usa camelCase em coluna.
+        `SELECT id, "tenantId" FROM tenant_core_user WHERE id = ANY($1::uuid[])`,
+        [ids],
+      );
+      for (const row of res.rows as { id: string; tenantId: string | null }[]) {
+        if (row.tenantId) mapa.set(row.id, row.tenantId);
+      }
+    } catch (e: any) {
+      this.logger.error(`empresasDeUsuarios falhou: ${e?.message}`);
+    } finally {
+      client.release();
+    }
+    return mapa;
+  }
+
   async onModuleDestroy() {
     if (this.pool) {
       await this.pool.end().catch(() => null);

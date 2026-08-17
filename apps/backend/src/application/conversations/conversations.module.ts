@@ -8,6 +8,7 @@ import { ConversationsController } from '@/presentation/http/conversations/conve
 // ele usa vem do `TmsModule`, que é @Global — nada a importar aqui.
 import { SupportClientsController } from '@/presentation/http/support/support-clients.controller';
 import { ConversationsGateway } from '@/presentation/ws/conversations.gateway';
+import { SupportClientsService } from './support-clients.service';
 import { NotificationsModule } from '@/application/notifications/notifications.module';
 
 @Module({
@@ -22,7 +23,12 @@ import { NotificationsModule } from '@/application/notifications/notifications.m
     NotificationsModule,
   ],
   controllers: [ConversationsController, SupportClientsController],
-  providers: [ConversationsService, ConversationsGateway, ConversationJanitorService],
+  providers: [
+    ConversationsService,
+    ConversationsGateway,
+    ConversationJanitorService,
+    SupportClientsService,
+  ],
   exports: [ConversationsService],
 })
 export class ConversationsModule {}
