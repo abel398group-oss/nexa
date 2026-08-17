@@ -348,6 +348,9 @@ model AiConversation {
   stageHistory  ConversationStageHistory[]
   followUpOf    AiConversation?  @relation("FollowUp", fields: [followUpOfId], references: [id], onDelete: SetNull)
   followUps     AiConversation[] @relation("FollowUp")
+  /// Oportunidades que nasceram desta conversa. Lado inverso da FK — sem ele o Prisma
+  /// não valida o schema.
+  opportunities Opportunity[]
 
   @@index([tenantId])
   @@index([tenantId, contactId]) // F16: histórico de chamados por contato (painel do Inbox)
@@ -1195,6 +1198,10 @@ model Opportunity {
   tenantId       String   @map("tenant_id")
   contactId      String?  @map("contact_id")
   conversationId String?  @map("conversation_id") // origem (lead quente)
+  /// SetNull, não Cascade: apagar a conversa não pode apagar o negócio — ele existe
+  /// independente do histórico de mensagens. E não Restrict, que travaria a limpeza de
+  /// conversa antiga. Perder o ponteiro é a consequência certa.
+  conversation   AiConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   phone          String?
   name           String?
   company        String?
