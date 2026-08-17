@@ -33,6 +33,27 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
   // max:2 — read-only, baixa concorrência; idleTimeoutMillis: 30s — libera conexões ociosas.
   private pool: Pool | null = null;
 
+  /**
+   * Acrescenta `uselibpqcompat=true` quando a URL declara `sslmode`.
+   *
+   * O `pg` novo trata `sslmode=require` como `verify-full`, e o certificado do Postgres
+   * gerenciado da DigitalOcean é autoassinado — a conexão morre com "self-signed
+   * certificate in certificate chain". O `ssl: { rejectUnauthorized: false }` do config
+   * NÃO salva: quando a URL declara `sslmode`, é ela que decide.
+   *
+   * Sintoma em produção (17/08/2026): o log mostrava "Pool TMS inicializado" e nunca uma
+   * consulta — o pool é criado sem conectar, e a conexão só é tentada na primeira query.
+   * Como o filtro de cliente do disparo usa isso, campanha era RECUSADA por falha de
+   * consulta. É o mesmo tratamento que o CLAUDE.md prescreve para o banco do Nexa.
+   *
+   * Só age quando há `sslmode` e ainda não há o parâmetro — URL sem SSL fica intocada.
+   */
+  static comCompatibilidadeSsl(url: string): string {
+    if (!url.includes('sslmode=')) return url;
+    if (url.includes('uselibpqcompat=')) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}uselibpqcompat=true`;
+  }
+
   // Normaliza para dígitos sem código de país (55)
   static normalize(phone: string): string {
     const digits = phone.replace(/\D/g, '');
@@ -44,7 +65,7 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     const url = process.env.TMS_DB_URL;
     if (!url) return;
     this.pool = new Pool({
-      connectionString: url,
+      connectionString: TmsLookupService.comCompatibilidadeSsl(url),
       ssl: { rejectUnauthorized: false },
       max: 2,
       idleTimeoutMillis: 30_000,
@@ -54,6 +75,23 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`TMS pool error: ${err.message}`);
     });
     this.logger.log('Pool TMS inicializado (read-only, max:2)');
+
+    /**
+     * Prova a conexão no boot, sem bloquear o startup.
+     *
+     * `new Pool` não conecta — ele só conecta na primeira query. Por isso o log de
+     * produção mostrava "Pool TMS inicializado" e mais nada, enquanto a conexão estava
+     * quebrada por SSL: a falha só apareceria na primeira campanha, como campanha
+     * recusada, longe da causa. Um `SELECT 1` no boot põe a verdade no log de deploy.
+     */
+    this.pool
+      .query('SELECT 1')
+      .then(() => this.logger.log('conexão com o banco do TMS verificada'))
+      .catch((e: any) =>
+        this.logger.error(
+          `banco do TMS INACESSÍVEL: ${e?.message} — o filtro de cliente do disparo vai recusar campanha até isto ser resolvido`,
+        ),
+      );
   }
 
   private getPool(): Pool | null {
@@ -207,6 +245,27 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
   /// `undefined` = ainda não perguntei. `null` = perguntei e não existe.
   private colunaDeVigencia?: { nome: string; tipo: 'booleano' | 'exclusao' } | null;
 
+  /// Cache do catálogo por tabela+coluna. O schema do TMS não muda em runtime, e uma
+  /// consulta ao `information_schema` por listagem seria desperdício num pool de 2.
+  private readonly colunasConhecidas = new Map<string, boolean>();
+
+  private async colunaExiste(client: any, coluna: string, tabela = 'system_core_tenant'): Promise<boolean> {
+    const chave = `${tabela}.${coluna}`;
+    const cache = this.colunasConhecidas.get(chave);
+    if (cache !== undefined) return cache;
+    try {
+      const r = await client.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+        [tabela, coluna],
+      );
+      const existe = r.rowCount > 0;
+      this.colunasConhecidas.set(chave, existe);
+      return existe;
+    } catch {
+      return false;
+    }
+  }
+
   private async descobrirColunaDeVigencia(client: any): Promise<{ nome: string; tipo: 'booleano' | 'exclusao' } | null> {
     if (this.colunaDeVigencia !== undefined) return this.colunaDeVigencia;
     try {
@@ -274,11 +333,16 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
       const coluna = await this.descobrirColunaDeVigencia(client);
       // `"nome"` entre aspas duplas: o TMS usa camelCase em coluna, que o Postgres só
       // reconhece citado. O nome vem da lista fechada acima, nunca de fora.
-      const expressaoAtivo = !coluna
+      const base = !coluna
         ? 'NULL::boolean'
         : coluna.tipo === 'booleano'
           ? `t."${coluna.nome}"`
           : `(t."${coluna.nome}" IS NULL)`;
+      // `suspended` (confirmada em 17/08/2026) precisa entrar: cliente suspenso tem
+      // `isActive = true` e não está operando. Mostrá-lo como ativo faria o suporte
+      // tratar como cliente vigente quem está com o acesso cortado.
+      const suspensao = await this.colunaExiste(client, 'suspended');
+      const expressaoAtivo = coluna && suspensao ? `(${base} AND NOT COALESCE(t."suspended", false))` : base;
 
       const res = await client.query<{ id: string; name: string; ativo: boolean | null }>(
         `SELECT t.id, t.name, ${expressaoAtivo} AS ativo
