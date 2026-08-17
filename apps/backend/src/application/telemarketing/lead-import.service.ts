@@ -3,6 +3,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { parseCsvDeLeads, type LinhaCsv } from './lead-csv';
 import { naoAusente } from './seller-availability';
+import { decidirDonos } from './lead-distribution';
 import {
   contarLote,
   podeForcar,
@@ -168,7 +169,13 @@ export class LeadImportService {
     tenantId: string,
     batchId: string,
     sellerIds: string[],
-  ): Promise<{ distribuidos: number; porVendedor: Record<string, number> }> {
+  ): Promise<{
+    distribuidos: number;
+    porVendedor: Record<string, number>;
+    /// Quantos ficaram com o dono que o contato já tinha, fora do rodízio. É o que
+    /// explica repartição desigual sem ser defeito.
+    mantidosComDonoAtual: number;
+  }> {
     if (!sellerIds.length) {
       throw new BadRequestException('Escolha ao menos um vendedor.');
     }
@@ -213,37 +220,95 @@ export class LeadImportService {
       orderBy: { createdAt: 'asc' },
     });
 
+    const contactIds = [...new Set(fila.map((f) => f.contactId).filter(Boolean) as string[])];
+    const donoDoContato = await this.donosJaExistentes(tenantId, contactIds);
+    // Quem saiu da empresa não segura carteira: o lead volta pro rodízio em vez de
+    // ficar preso a um cadastro inativo. Ausência (férias) NÃO entra aqui de propósito
+    // — ver `decidirDonos`.
+    const donosCitados = [...new Set([...donoDoContato.values()].filter(Boolean) as string[])];
+    const aindaNaCasa = new Set(
+      (
+        await this.prisma.seller.findMany({
+          where: { id: { in: donosCitados }, tenantId, active: true },
+          select: { id: true },
+        })
+      ).map((s) => s.id),
+    );
+
+    const destinos = decidirDonos(fila, { alvos, donoDoContato, aindaNaCasa });
     const porVendedor: Record<string, number> = Object.fromEntries(alvos.map((a) => [a, 0]));
+    let respeitados = 0;
 
     // Uma transação por lead, como na importação: um $transaction único com centenas de
     // leads estoura o timeout de 5s do Prisma e desfaz o que já tinha dado certo.
-    for (let i = 0; i < fila.length; i += 1) {
-      const dono = alvos[i % alvos.length];
-      const o = fila[i];
+    for (const d of destinos) {
       try {
         await this.prisma.$transaction(async (tx) => {
           await tx.opportunity.update({
-            where: { id: o.id },
-            data: { assignedSellerId: dono },
+            where: { id: d.id },
+            data: { assignedSellerId: d.dono },
           });
           // Os dois campos de posse juntos: sem isso a resposta do lead no WhatsApp cai
           // num inbox e o trabalho fica em outro.
-          if (o.contactId) {
+          //
+          // Só quando a carteira estava vaga. Gravar sempre era o que trocava o dono do
+          // contato pelo sorteado do lote novo, deixando a oportunidade antiga com o
+          // dono antigo — o estado partido que punha dois SDRs no mesmo lead.
+          if (d.contactId && d.carteiraVaga) {
             await tx.contact.update({
-              where: { id: o.contactId },
-              data: { ownerSellerId: dono },
+              where: { id: d.contactId },
+              data: { ownerSellerId: d.dono },
             });
           }
         });
-        porVendedor[dono] += 1;
+        porVendedor[d.dono] = (porVendedor[d.dono] ?? 0) + 1;
+        if (!d.carteiraVaga) respeitados += 1;
       } catch (e: any) {
-        this.logger.warn(`lead ${o.id} não distribuído: ${e?.message ?? e}`);
+        this.logger.warn(`lead ${d.id} não distribuído: ${e?.message ?? e}`);
       }
     }
 
     const distribuidos = Object.values(porVendedor).reduce((a, b) => a + b, 0);
-    this.logger.log(`lote ${batchId}: ${distribuidos} leads distribuídos entre ${alvos.length}`);
-    return { distribuidos, porVendedor };
+    // `respeitados` explica repartição desigual: lead que já tinha dono não passa pelo
+    // rodízio. Sem o número no log, a diferença parece defeito da distribuição.
+    this.logger.log(
+      `lote ${batchId}: ${distribuidos} leads distribuídos entre ${alvos.length}` +
+        (respeitados ? ` (${respeitados} mantidos com o dono que já tinham)` : ''),
+    );
+    return { distribuidos, porVendedor, mantidosComDonoAtual: respeitados };
+  }
+
+  /**
+   * Dono que cada contato já tem. Duas fontes porque as duas existem no banco: o
+   * `ownerSellerId` do contato e o `assignedSellerId` de uma oportunidade anterior.
+   * Elas podem divergir — foi justamente o que o bug de sobrescrita produziu — então
+   * ler só uma deixaria passar metade dos casos.
+   */
+  private async donosJaExistentes(
+    tenantId: string,
+    contactIds: string[],
+  ): Promise<Map<string, string | null>> {
+    const mapa = new Map<string, string | null>();
+    if (!contactIds.length) return mapa;
+
+    const contatos = await this.prisma.contact.findMany({
+      where: { tenantId, id: { in: contactIds } },
+      select: { id: true, ownerSellerId: true },
+    });
+    for (const c of contatos) if (c.ownerSellerId) mapa.set(c.id, c.ownerSellerId);
+
+    const anteriores = await this.prisma.opportunity.findMany({
+      where: { tenantId, contactId: { in: contactIds }, assignedSellerId: { not: null } },
+      select: { contactId: true, assignedSellerId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    // A mais ANTIGA vence: é quem começou a trabalhar o lead. `orderBy asc` + só
+    // preencher o que falta faz isso sem comparar datas aqui.
+    for (const a of anteriores) {
+      if (a.contactId && !mapa.get(a.contactId)) mapa.set(a.contactId, a.assignedSellerId);
+    }
+
+    return mapa;
   }
 
   /// Histórico de lotes com os contadores. É o que responde "qual lista presta" —
