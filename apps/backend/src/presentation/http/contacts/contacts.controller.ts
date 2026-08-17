@@ -6,8 +6,8 @@ import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { escopoDeVendedor } from '@/shared/auth/seller-scope';
-import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 import { CreateContactDto, UpdateContactDto } from '@/application/contacts/dto/create-contact.dto';
+import { ListContactsQueryDto } from './dto/list-contacts.query.dto';
 
 // DTOs com validação — necessários porque o ValidationPipe global usa
 // whitelist+forbidNonWhitelisted (tipos inline `{ ids }` podiam ser ignorados).
@@ -43,17 +43,19 @@ export class ContactsController {
    * sem dono). O escopo do vendedor é derivado do token e aplicado por dentro —
    * mandar `?owner=` de outro vendedor não escapa da própria carteira.
    */
+  /**
+   * Os filtros vêm todos do MESMO DTO, e não de `@Query('x')` soltos: com
+   * `forbidNonWhitelisted`, quem manda a resposta é a classe que valida o objeto
+   * de query inteiro. Declarar o parâmetro no controller sem declarar o campo no
+   * DTO devolve 400 — foi o que aconteceu com `tag`, `owner` e `status`.
+   */
   @Get()
   findAll(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: any,
-    @Query() q: PaginationQueryDto,
-    @Query('tag') tag?: string,
-    @Query('owner') owner?: string,
-    /// `lead` (prospecção) · `cliente` (quem já usa o TMS) · ausente = os dois.
-    @Query('base') base?: string,
+    @Query() q: ListContactsQueryDto,
   ) {
-    return this.contacts.findAll(tenantId, q, tag, escopoDeVendedor(user), owner, base);
+    return this.contacts.findAll(tenantId, q, q.tag, escopoDeVendedor(user), q.owner, q.base, q.status);
   }
 
   /**

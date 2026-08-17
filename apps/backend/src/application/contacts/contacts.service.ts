@@ -37,8 +37,12 @@ export class ContactsService {
     escopo?: string,
     donoFiltro?: string,
     base?: string,
+    status?: string,
   ): Promise<Paginated<any>> {
     const where: any = { tenantId };
+    // 'Só ativos' / 'Só descadastrados' da tela. O filtro existia no seletor desde
+    // sempre e nunca chegou aqui: o parâmetro morria antes, no ValidationPipe.
+    if (status) where.status = status;
     if (q.search) {
       where.OR = [
         { name: { contains: q.search, mode: 'insensitive' } },
