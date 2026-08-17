@@ -58,7 +58,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "ioredis": "^5.4.0",
     "socket.io": "^4.7.0",
-    "uuid": "^9.0.0",
+    "uuid": "^14.0.0",
     "@sentry/node": "^8.0.0"
   },
   "devDependencies": {

@@ -132,8 +132,8 @@ importers:
         specifier: ^4.7.0
         version: 4.8.3
       uuid:
-        specifier: ^9.0.0
-        version: 9.0.1
+        specifier: ^14.0.0
+        version: 14.0.0
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.3.0
@@ -4978,6 +4978,10 @@ packages:
 
   uuid@11.0.3:
     resolution: {integrity: sha512-d0z310fCWv5dJwnX1Y/MncBAqGMKEzlBb1AOf7z9K8ALnd0utBX/msg/fA0+sbyN1ihbMsLhrBlnl1ak7Wa0rg==}
+    hasBin: true
+
+  uuid@14.0.0:
+    resolution: {integrity: sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==}
     hasBin: true
 
   uuid@9.0.1:
@@ -10224,6 +10228,8 @@ snapshots:
   uuencode@0.0.4: {}
 
   uuid@11.0.3: {}
+
+  uuid@14.0.0: {}
 
   uuid@9.0.1: {}
 
