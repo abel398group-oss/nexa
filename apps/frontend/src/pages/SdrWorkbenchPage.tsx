@@ -12,6 +12,7 @@ import {
 import { useToast } from '@/app/providers/ToastContext';
 import { useAuth } from '@/app/providers/AuthContext';
 import { podeDiscar } from '@/shared/lib/dialable';
+import { identidadeVisivel } from '@/shared/lib/conversation';
 import { getRoteiro } from '@/entities/sales-script';
 import {
   descartarLead,
@@ -246,8 +247,14 @@ function Fila({
                   (ativo ? 'bg-brand-500/10' : 'hover:bg-base-200')
                 }
               >
+                {/* Mesma cascata do card do closer: lead que entrou por e-mail não tem
+                    empresa nem nome, e a fila mostrava "Sem nome" com o endereço dele
+                    disponível ali do lado, na coluna `phone`. */}
                 <p className="truncate text-sm font-medium">
-                  {f.contact?.company ?? f.company ?? f.contact?.name ?? 'Sem nome'}
+                  {f.contact?.company ??
+                    f.company ??
+                    f.contact?.name ??
+                    (identidadeVisivel(f.phone) || 'Sem nome')}
                 </p>
                 <div className="mt-1 flex items-center gap-2">
                   <span

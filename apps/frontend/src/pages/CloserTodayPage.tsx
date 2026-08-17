@@ -13,6 +13,11 @@ import {
 import { useToast } from '@/app/providers/ToastContext';
 import { podeDiscar } from '@/shared/lib/dialable';
 import {
+  canalPeloIdentificador,
+  emailDoIdentificador,
+  identidadeVisivel,
+} from '@/shared/lib/conversation';
+import {
   adiarNegocio,
   getPainelDeHoje,
   marcarGanho,
@@ -30,6 +35,13 @@ import {
 type Acao = 'proposta' | 'reagendar' | 'ganhou' | 'perdeu' | 'adiar';
 
 const ORDEM: Bloco[] = ['agora', 'precisa_de_voce', 'esperando'];
+
+/// Canal de origem no card. Curto porque divide a linha com estágio, valor e horário.
+const ROTULO_CANAL: Record<'email' | 'whatsapp' | 'web', string> = {
+  email: 'e-mail',
+  whatsapp: 'WhatsApp',
+  web: 'web chat',
+};
 
 /**
  * Painel do closer (módulo 3). A aba padrão é o DIA, não um kanban.
@@ -213,14 +225,24 @@ function LinhaNegocio({
   const valor = moeda(n.value);
   const reuniao = hora(n.meetingAt);
   const volta = hora(n.pausedUntil);
+  const canal = canalPeloIdentificador(n.phone);
+  const email = emailDoIdentificador(n.phone);
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 border-b border-base-200 py-3 last:border-0">
       <div className="min-w-0">
+        {/* O identificador entra na cascata ANTES do "Sem nome": lead que chegou por
+            e-mail não tem empresa nem nome preenchidos, e o card virava "Sem nome" sem
+            empresa, sem telefone e sem nada para o closer agir. O endereço de e-mail é
+            uma identidade de verdade — some do card só o que não existe. */}
+        {/* `||` e não `??` no último degrau: `identidadeVisivel` devolve string VAZIA
+            quando não tem nada verdadeiro a dizer, e `??` só cai em null/undefined —
+            deixaria o título em branco em vez de "Sem nome". */}
         <p className="truncate text-sm font-medium">
-          {n.company ?? n.name ?? 'Sem nome'}
+          {n.company ?? n.name ?? (identidadeVisivel(n.phone) || 'Sem nome')}
         </p>
         <p className="text-xs text-base-content/60">
+          {canal && <span className="mr-1 rounded bg-base-200 px-1.5 py-0.5">{ROTULO_CANAL[canal]}</span>}
           {n.stage === 'proposal' ? 'proposta' : n.stage === 'paused' ? 'adiado' : 'reunião'}
           {valor && ` · ${valor}`}
           {reuniao && ` · ${reuniao}`}
@@ -245,6 +267,16 @@ function LinhaNegocio({
           <a href={`tel:${n.phone}`}>
             <Button size="xs" variant="outline">
               Ligar
+            </Button>
+          </a>
+        )}
+        {/* Lead de e-mail não tem para onde ligar. Sem este botão o card só oferecia
+            ações de DESFECHO (ganhou/perdeu/adiar) e nenhuma de contato — o closer
+            tinha que sair do sistema para responder. */}
+        {email && (
+          <a href={`mailto:${email}`}>
+            <Button size="xs" variant="outline">
+              E-mail
             </Button>
           </a>
         )}

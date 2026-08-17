@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isSupportTicket, SUPPORT_CHANNELS } from './conversation';
+import {
+  canalPeloIdentificador,
+  emailDoIdentificador,
+  identidadeVisivel,
+  isSupportTicket,
+  SUPPORT_CHANNELS,
+} from './conversation';
 
 /**
  * A trilha é o CANAL (decisão de produto, 08/08/2026): suporte vive no chat do
@@ -36,5 +42,59 @@ describe('isSupportTicket', () => {
 
   it('só dois canais fazem suporte', () => {
     expect([...SUPPORT_CHANNELS]).toEqual(['portal', 'web_chat']);
+  });
+});
+
+/**
+ * A coluna `phone` carrega três formatos, e a oportunidade não guarda canal de origem.
+ * Estes dois helpers são o que faz o card do closer dizer COM QUEM ele está lidando em
+ * vez de "Sem nome" — o caso real era `email:abel.ramos@hipertms.com.br` numa
+ * oportunidade em proposta, sem empresa, sem nome e sem telefone.
+ */
+describe('canal pelo identificador', () => {
+  it('prefixo email: é canal de e-mail', () => {
+    expect(canalPeloIdentificador('email:abel.ramos@hipertms.com.br')).toBe('email');
+  });
+
+  it('telefone BR é WhatsApp', () => {
+    expect(canalPeloIdentificador('5512988073788')).toBe('whatsapp');
+    expect(canalPeloIdentificador('(12) 98807-3788')).toBe('whatsapp');
+  });
+
+  it('UUID de sessão é web chat, não telefone', () => {
+    expect(canalPeloIdentificador('9f88be3f-5fac-4311-9d3e-ea78a4c6c295')).toBe('web');
+  });
+
+  it('sem identificador devolve null — a tela não afirma canal que não sabe', () => {
+    expect(canalPeloIdentificador(null)).toBeNull();
+    expect(canalPeloIdentificador('')).toBeNull();
+  });
+});
+
+describe('e-mail pelo identificador', () => {
+  it('extrai o endereço para o mailto', () => {
+    expect(emailDoIdentificador('email:abel.ramos@hipertms.com.br')).toBe(
+      'abel.ramos@hipertms.com.br',
+    );
+  });
+
+  it('telefone e UUID não produzem e-mail', () => {
+    expect(emailDoIdentificador('5512988073788')).toBeNull();
+    expect(emailDoIdentificador('9f88be3f-5fac-4311-9d3e-ea78a4c6c295')).toBeNull();
+    expect(emailDoIdentificador(null)).toBeNull();
+  });
+});
+
+describe('identidade do card sem nome nem empresa', () => {
+  it('o e-mail serve de título quando não há nome nem empresa', () => {
+    // É este valor que substitui o "Sem nome" no card do closer e na fila do SDR.
+    expect(identidadeVisivel('email:abel.ramos@hipertms.com.br')).toBe(
+      'abel.ramos@hipertms.com.br',
+    );
+  });
+
+  it('devolve vazio quando não há nada verdadeiro a dizer — a tela cai no "Sem nome"', () => {
+    // Por isso a cascata na tela usa `||` e não `??`: vazio não é null.
+    expect(identidadeVisivel(null)).toBe('');
   });
 });

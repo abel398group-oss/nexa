@@ -67,3 +67,29 @@ export function identidadeVisivel(
   if (isPhoneLike(phone)) return displayPhone(phone);
   return sourceChannel ? CANAL_LABEL[sourceChannel] ?? sourceChannel : '';
 }
+
+/**
+ * Por onde esse lead chegou, deduzido do próprio identificador.
+ *
+ * Oportunidade não guarda canal de origem — guarda só a coluna `phone`, e ela carrega
+ * três formatos diferentes. Isso é o que existe para responder "com quem eu estou
+ * lidando", e sem a resposta o closer vê um card sem nome, sem empresa e sem telefone e
+ * não tem o que fazer com ele.
+ *
+ * `null` quando não há nem identificador: aí a tela não tem o que afirmar, e afirmar
+ * um canal errado é pior que omitir.
+ */
+export function canalPeloIdentificador(
+  phone: string | null | undefined,
+): 'email' | 'whatsapp' | 'web' | null {
+  if (!phone) return null;
+  if (phone.startsWith('email:')) return 'email';
+  if (isPhoneLike(phone)) return 'whatsapp';
+  // Sobrou o UUID da sessão de web chat / portal — não é telefone nem e-mail.
+  return 'web';
+}
+
+/// Endereço de e-mail utilizável a partir da coluna `phone`, ou null.
+export function emailDoIdentificador(phone: string | null | undefined): string | null {
+  return phone?.startsWith('email:') ? phone.slice(6) : null;
+}
