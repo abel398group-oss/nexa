@@ -29,5 +29,43 @@
     "eslint": "^9.13.0",
     "globals": "^15.11.0",
     "typescript-eslint": "^8.10.0"
+  },
+  "pnpm": {
+    "//": "CVE em dependência TRANSITIVA — a vulnerável está dentro de outro pacote, e",
+    "// ": "esperar o pacote-pai atualizar deixa o alerta aberto por semanas. `overrides`",
+    "//  ": "resolve na árvore inteira. Só entra aqui bump de MESMA MAJOR: forçar major numa",
+    "//   ": "dependência de terceiro troca um CVE por uma quebra em runtime que ninguém pediu.",
+    "//    ": "Ver docs/security/ e o comentário de major no .github/dependabot.yml.",
+    "//     ": "ALVO COM TETO (`^`), nunca `>=`: `>=10.5.0` não tem limite superior e o pnpm",
+    "//      ": "resolve para a última publicada — pedi glob >=10.5.0 e recebi 13.0.6, três",
+    "//       ": "majors, justamente o que esta seção existe para evitar. O `^` prende na major.",
+    "//        ": "FORA daqui, de propósito, porque exigem major e cada um é uma migração:",
+    "//         ": "tar 6→7 (dentro do bcrypt, usado só na INSTALAÇÃO do binário pré-compilado),",
+    "//          ": "protobufjs 6→7 (dentro do @xenova/transformers), vitest 2→3 (a falha exige",
+    "//           ": "`vitest --ui` servindo, que não roda em CI nem em produção) e nodemailer 8→9",
+    "//            ": "(envia e-mail em runtime — major aí se testa com envio real, não com suíte),",
+    "//             _": "vite 5→6 (muda config de build) e sharp 0.32→0.35, que é 0.x mas troca o binário",
+    "//              _": "pré-compilado dentro do @xenova/transformers — quebra o modelo de IA, não o teste.",
+    "//             ": "A CHAVE leva a faixa de propósito: `pkg@>=1.0.0 <1.1.16` só casa dentro da",
+    "//              ": "major 1. Se um dia a árvore trouxer a major 2, o override não se aplica em vez",
+    "//               ": "de forçar um downgrade silencioso — a trava é a própria chave, não a memória de",
+    "//                ": "quem editar isto depois.",
+    "overrides": {
+      "glob@>=10.0.0 <10.5.0": "^10.5.0",
+      "multer@>=2.0.0 <2.2.0": "^2.2.0",
+      "picomatch@>=4.0.0 <4.0.4": "^4.0.4",
+      "lodash@>=4.0.0 <4.18.0": "^4.18.0",
+      "form-data@>=4.0.0 <4.0.6": "^4.0.6",
+      "tmp@<0.2.6": "^0.2.6",
+      "ws@>=8.0.0 <8.21.0": "^8.21.0",
+      "axios@>=1.0.0 <1.18.0": "^1.18.0",
+      "nanoid@>=3.0.0 <3.3.16": "^3.3.16",
+      "postcss@>=8.0.0 <8.5.18": "^8.5.18",
+      "js-yaml@>=4.0.0 <4.3.0": "^4.3.0",
+      "brace-expansion@>=1.0.0 <1.1.16": "^1.1.16",
+      "linkify-it@>=5.0.0 <5.0.2": "^5.0.2",
+      "fast-uri@>=3.0.0 <3.1.4": "^3.1.4",
+      "socket.io-parser@>=4.0.0 <4.2.7": "^4.2.7"
+    }
   }
 }
