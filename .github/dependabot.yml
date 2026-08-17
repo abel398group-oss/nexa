@@ -1,0 +1,88 @@
+# Dependabot — atualização de dependências e alerta de vulnerabilidade.
+#
+# Funciona em repositório PRIVADO e sem custo, diferente do CodeQL (que exige
+# GitHub Advanced Security em repo privado — ver a nota no fim deste arquivo).
+#
+# ── Sobre os caminhos ────────────────────────────────────────────────────────
+# Este é um workspace pnpm: existe UM lockfile só, na raiz (`pnpm-lock.yaml`), e
+# os manifests ficam em `/`, `/apps/backend` e `/apps/frontend`. Apontar entradas
+# para `/apps/backend` e `/apps/frontend` separadamente FALHA — o Dependabot não
+# acha lockfile lá dentro. Uma entrada em `/` cobre o workspace inteiro, porque é
+# de lá que a árvore de dependências é resolvida.
+#
+# (Cuidado com receita pronta de internet: a que circula usa `/backend` e
+# `/frontend`, caminhos que não existem aqui.)
+version: 2
+
+updates:
+  # ── Dependências npm de todo o workspace ──────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 10
+    # `git push` na master dispara DEPLOY neste repo. PR não faz deploy — ele
+    # espera revisão — mas o alvo fica explícito para ninguém apontar errado.
+    target-branch: "master"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    # Sem agrupar, dez bumps viram dez PRs por semana e ninguém lê nenhum.
+    # Agrupado por natureza da dependência, viram dois — que dá para revisar.
+    groups:
+      producao:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      desenvolvimento:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+    ignore:
+      # MAJOR de framework não entra por robô: NestJS 10→11 e React 18→19 exigem
+      # migração de código, e um PR automático desses só cria trabalho de fechar.
+      # Vulnerabilidade em major continua chegando pelo alerta de segurança, que
+      # NÃO respeita este ignore.
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      # Prisma major muda geração de client e migration ao mesmo tempo. Depois do
+      # P1002 de 16/08/2026, é atualização para fazer à mão e com o banco na mira.
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
+
+  # ── Versões das actions usadas nos workflows ───────────────────────────────
+  # Isto não estava no pedido e é o que tem melhor retorno pelo esforço: action
+  # de terceiro roda com acesso ao repositório e aos secrets, e action presa numa
+  # versão velha é vetor de supply chain. Aqui são poucas e o PR é trivial.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    target-branch: "master"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+# ── O que este arquivo NÃO faz ───────────────────────────────────────────────
+#
+# Alerta de vulnerabilidade (a aba Security) não vem daqui: é uma CHAVE nas
+# configurações do repositório, não um arquivo. Ligar em
+# Settings → Code security → "Dependabot alerts" e "Dependabot security updates".
+# Grátis em repo privado. Sem isso, este arquivo só atualiza versão — não avisa
+# de CVE.
+#
+# CodeQL (análise estática) exige GitHub Advanced Security em repositório
+# PRIVADO. Criar o workflow sem a licença deixa toda execução vermelha, o que é
+# pior que não ter: em duas semanas ninguém olha mais o X. Ver docs/security/.
