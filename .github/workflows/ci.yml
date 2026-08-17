@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # Histórico completo: o gate de migration compara com a base para saber
           # quais arquivos são NOVOS. Com o depth 1 padrão, o `git diff` não tem
@@ -29,10 +29,10 @@ jobs:
         # Sem `version:` de propósito. O v4 recusa quando a versão aparece nos dois
         # lugares (aqui e no `packageManager` do package.json) — e o package.json é a
         # fonte certa, porque é o mesmo valor que a máquina do dev usa.
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -41,7 +41,7 @@ jobs:
         run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
