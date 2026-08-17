@@ -6,6 +6,7 @@ import { naoAusente } from './seller-availability';
 import { decidirDonos } from './lead-distribution';
 import {
   contarLote,
+  empresaDoNegocio,
   podeForcar,
   preencherSemSobrescrever,
   vereditoDeBanco,
@@ -497,6 +498,19 @@ export class LeadImportService {
         contactId = criado.id;
       }
 
+      // A ficha do contato manda no nome da empresa.
+      //
+      // `preencherSemSobrescrever` acima protege o que a ficha já tem — de propósito,
+      // pra planilha não apagar o que a Lia levantou na conversa. Mas a oportunidade
+      // era criada com o valor da PLANILHA sempre, então quando os dois discordavam a
+      // ficha ficava com um nome e o negócio com outro. Na base real: o contato
+      // b79373e6 é "Hipervias (teste interno)" na ficha e "Log Minas Transportes" nas
+      // oportunidades — a fila do SDR lê a ficha, a tela de Oportunidades lê o negócio,
+      // e a mesma empresa aparece com dois nomes.
+      //
+      // Herdar da ficha quando ela já tem valor faz os dois nascerem iguais.
+      const empresaDoRegistro = empresaDoNegocio(atual?.company, linha.company);
+
       // Uma oportunidade por lead válido: é o que dá base ao funil por lote. Sem ela,
       // "qual lista presta" não tem de onde contar.
       await tx.opportunity.create({
@@ -510,7 +524,7 @@ export class LeadImportService {
           batchId,
           phone: phone || null,
           name: linha.name,
-          company: linha.company,
+          company: empresaDoRegistro,
           stage: 'new',
         },
       });

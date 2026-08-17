@@ -2,11 +2,40 @@ import { describe, expect, it } from 'vitest';
 import {
   CAMPOS_PROTEGIDOS,
   contarLote,
+  empresaDoNegocio,
   estaVazio,
   podeForcar,
   preencherSemSobrescrever,
   violaProtecao,
 } from './lead-import';
+
+/**
+ * Duas cópias do nome da empresa — ficha do contato e oportunidade — divergiam, e a
+ * mesma empresa aparecia com dois nomes dependendo da tela. A ficha manda.
+ */
+describe('nome da empresa: a ficha do contato manda', () => {
+  it('ficha preenchida ganha da planilha', () => {
+    expect(empresaDoNegocio('Hipervias (teste interno)', 'Log Minas Transportes')).toBe(
+      'Hipervias (teste interno)',
+    );
+  });
+
+  it('ficha vazia deixa a planilha valer', () => {
+    expect(empresaDoNegocio(null, 'Log Minas Transportes')).toBe('Log Minas Transportes');
+    expect(empresaDoNegocio(undefined, 'Log Minas Transportes')).toBe('Log Minas Transportes');
+  });
+
+  it('ficha em BRANCO não ganha — senão apagaria o nome que a lista trouxe', () => {
+    // `estaVazio` e não `??`: '   ' é falsy-mas-não-nulo, e `??` deixaria passar.
+    expect(empresaDoNegocio('   ', 'Log Minas Transportes')).toBe('Log Minas Transportes');
+    expect(empresaDoNegocio('', 'Log Minas Transportes')).toBe('Log Minas Transportes');
+  });
+
+  it('nenhum dos dois devolve null, não string vazia', () => {
+    expect(empresaDoNegocio(null, null)).toBeNull();
+    expect(empresaDoNegocio('  ', '')).toBeNull();
+  });
+});
 
 describe('R2 — a importação nunca sobrescreve o que a Lia coletou', () => {
   // Um teste por campo protegido: é a assertion crítica da feature, e uma

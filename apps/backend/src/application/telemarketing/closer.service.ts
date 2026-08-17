@@ -3,6 +3,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { MarketScopeService, filtroDeMercado } from '@/shared/auth/market-scope.service';
 import { agruparPorBloco } from './closer-today';
+import { empresaDoNegocio } from './lead-import';
 
 type Usuario = UsuarioComEscopo & { sellerId?: string | null };
 
@@ -54,7 +55,32 @@ export class CloserService {
       take: 500,
     });
 
-    return agruparPorBloco(negocios);
+    // A ficha do contato manda no nome. `Opportunity` não declara relação com
+    // `Contact` — só guarda o id — então a ficha vem numa segunda consulta em LOTE,
+    // nunca uma por negócio (mesmo padrão da fila do SDR).
+    //
+    // Sem isto o painel do closer lia só o `company` da oportunidade, e um negócio
+    // importado antes de 17/08/2026 mostra aqui um nome de empresa diferente do que a
+    // fila do SDR mostra para a mesma pessoa.
+    const contactIds = [...new Set(negocios.map((n) => n.contactId).filter(Boolean) as string[])];
+    const fichas = contactIds.length
+      ? await this.prisma.contact.findMany({
+          where: { tenantId, id: { in: contactIds } },
+          select: { id: true, company: true, name: true },
+        })
+      : [];
+    const porId = new Map(fichas.map((f) => [f.id, f]));
+
+    return agruparPorBloco(
+      negocios.map((n) => {
+        const ficha = n.contactId ? porId.get(n.contactId) : undefined;
+        return {
+          ...n,
+          company: empresaDoNegocio(ficha?.company, n.company),
+          name: ficha?.name ?? n.name,
+        };
+      }),
+    );
   }
 
   /// Registra a proposta com o valor estimado. `value` já existia no schema — é valor

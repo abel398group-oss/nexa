@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { Paginated, PaginationQueryDto } from '@/shared/dto/pagination.dto';
+import { empresaDoNegocio } from '@/application/telemarketing/lead-import';
 
 // F6+ seller-leads (2026-07-20): + paused (com pausedUntil) e discarded (com
 // discardReason) — stage e TEXT no banco, sem migration de enum.
@@ -36,7 +37,41 @@ export class OpportunitiesService {
       this.prisma.opportunity.findMany({ where, take: q.limit, skip: q.offset, orderBy: { updatedAt: 'desc' } }),
       this.prisma.opportunity.count({ where }),
     ]);
-    return { items, total };
+    return { items: await this.comNomeDaFicha(tenantId, items), total };
+  }
+
+  /**
+   * Troca o nome da empresa pelo da ficha do contato quando ela tem um.
+   *
+   * A oportunidade guarda uma CÓPIA do nome, feita na importação. Registro criado antes
+   * de 17/08/2026 pode ter a cópia diferente da ficha — e aí a mesma empresa aparecia
+   * como "Hipervias (teste interno)" na fila do SDR (que lê a ficha) e "Log Minas
+   * Transportes" aqui. A importação já nasce alinhada desde `empresaDoNegocio`; isto
+   * cobre o que ficou para trás, sem escrever no banco.
+   *
+   * `Opportunity` não declara relação com `Contact`, só guarda o id — então a ficha vem
+   * numa consulta em LOTE, nunca uma por linha.
+   *
+   * A BUSCA continua olhando a coluna da oportunidade: procurar por "Log Minas" tem que
+   * achar o registro que está gravado assim, senão o operador digita o que vê num
+   * relatório antigo e a tela responde que não existe.
+   */
+  private async comNomeDaFicha(tenantId: string, items: any[]): Promise<any[]> {
+    const contactIds = [...new Set(items.map((o) => o.contactId).filter(Boolean) as string[])];
+    if (!contactIds.length) return items;
+    const fichas = await this.prisma.contact.findMany({
+      where: { tenantId, id: { in: contactIds } },
+      select: { id: true, company: true, name: true },
+    });
+    const porId = new Map(fichas.map((f) => [f.id, f]));
+    return items.map((o) => {
+      const ficha = o.contactId ? porId.get(o.contactId) : undefined;
+      return {
+        ...o,
+        company: empresaDoNegocio(ficha?.company, o.company),
+        name: ficha?.name ?? o.name,
+      };
+    });
   }
 
   // Resumo do funil: contagem e valor por estagio (para o dashboard).

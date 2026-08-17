@@ -58,6 +58,31 @@ export function estaVazio(valor: unknown): boolean {
   return false;
 }
 
+/**
+ * Nome da empresa que vale para o negócio: **a ficha do contato manda**.
+ *
+ * Existem duas cópias do nome — uma na ficha do contato, uma em cada oportunidade — e
+ * elas divergiam. `preencherSemSobrescrever` protege a ficha de propósito, pra planilha
+ * não apagar o que a Lia levantou; mas a oportunidade nascia com o valor da planilha
+ * sempre. Quando os dois discordavam, a fila do SDR (que lê a ficha) e a tela de
+ * Oportunidades (que lê o negócio) mostravam a MESMA empresa com dois nomes. Na base
+ * real: contato `b79373e6` como "Hipervias (teste interno)" na ficha e "Log Minas
+ * Transportes" nas oportunidades.
+ *
+ * A ficha ganha porque é ela que a pessoa edita na tela e é ela que a Lia enriquece.
+ * A planilha é palpite de uma lista; a ficha é o que se sabe do cliente.
+ *
+ * `estaVazio` e não `??`: string em branco na ficha é ficha sem nome, e deixá-la ganhar
+ * apagaria o nome que a lista trouxe.
+ */
+export function empresaDoNegocio(
+  daFicha: string | null | undefined,
+  daLista: string | null | undefined,
+): string | null {
+  if (!estaVazio(daFicha)) return daFicha as string;
+  return estaVazio(daLista) ? null : (daLista as string);
+}
+
 /// A regra: a importação **preenche vazio, nunca sobrescreve**.
 ///
 /// Deliberadamente não olha a origem do dado (`nameSource`). "Sobrescreve se a
