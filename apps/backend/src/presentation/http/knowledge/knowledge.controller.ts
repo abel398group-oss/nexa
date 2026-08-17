@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsArray, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -15,6 +15,14 @@ class BulkDeleteDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
 }
 
+// `category` PRECISA estar aqui, e não só no `@Query('category')` do método: com
+// `forbidNonWhitelisted`, quem valida a query inteira é a classe do `@Query()` sem
+// nome. Faltando o campo, filtrar por categoria devolvia 400 e a tela mostrava
+// lista vazia — erro com cara de "não tem nada cadastrado".
+class ListKnowledgeQueryDto extends PaginationQueryDto {
+  @IsOptional() @IsString() category?: string;
+}
+
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('knowledge')
 @Controller('knowledge')
@@ -22,12 +30,8 @@ export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   @Get()
-  findAll(
-    @CurrentTenant() tenantId: string,
-    @Query() q: PaginationQueryDto,
-    @Query('category') category?: string,
-  ) {
-    return this.knowledge.findAll(tenantId, q, category);
+  findAll(@CurrentTenant() tenantId: string, @Query() q: ListKnowledgeQueryDto) {
+    return this.knowledge.findAll(tenantId, q, q.category);
   }
 
   // F8: produtos que já têm conhecimento (sugestão nos formulários). Antes de :id.

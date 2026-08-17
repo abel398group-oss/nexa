@@ -6,6 +6,15 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 
+// `stage` precisa ser declarado AQUI: com `forbidNonWhitelisted`, quem valida a query
+// inteira é a classe do `@Query()` sem nome, e um `@Query('stage')` avulso no método
+// não registra o campo. Sem isto, escolher um estágio na tela devolvia 400 e a lista
+// aparecia vazia — como se não houvesse oportunidade naquele estágio.
+// `@IsIn(OPP_STAGES)` porque a lista de estágios já existe e é a mesma da escrita.
+class ListOpportunitiesQueryDto extends PaginationQueryDto {
+  @IsOptional() @IsIn(OPP_STAGES as any) stage?: string;
+}
+
 class CreateOpportunityDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() company?: string;
@@ -61,10 +70,9 @@ export class OpportunitiesController {
   findAll(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: any,
-    @Query() q: PaginationQueryDto,
-    @Query('stage') stage?: string,
+    @Query() q: ListOpportunitiesQueryDto,
   ) {
-    return this.opps.findAll(tenantId, q, stage, sellerScopeOf(user));
+    return this.opps.findAll(tenantId, q, q.stage, sellerScopeOf(user));
   }
 
   // antes de :id para nao casar 'summary' como id

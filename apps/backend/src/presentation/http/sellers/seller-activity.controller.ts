@@ -6,6 +6,14 @@ import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import { PaginationQueryDto } from '@/shared/dto/pagination.dto';
 
+// Mesmo motivo dos outros: com `forbidNonWhitelisted`, um `@Query('opportunityId')`
+// avulso no método não registra o campo — a classe do `@Query()` sem nome é que valida
+// a query inteira. Faltando, ver o histórico de uma oportunidade devolvia 400 e a tela
+// mostrava "nenhuma atividade".
+class ListActivitiesQueryDto extends PaginationQueryDto {
+  @IsOptional() @IsString() opportunityId?: string;
+}
+
 class CreateActivityDto {
   // Ignorado quando o usuário é vendedor — o sellerId real vem do escopo do
   // JWT (ver sellerScopeOf), nunca do corpo (mesmo motivo de opportunities).
@@ -37,10 +45,9 @@ export class SellerActivityController {
   findAll(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: any,
-    @Query() q: PaginationQueryDto,
-    @Query('opportunityId') opportunityId?: string,
+    @Query() q: ListActivitiesQueryDto,
   ) {
-    return this.activities.findAll(tenantId, q, opportunityId, sellerScopeOf(user));
+    return this.activities.findAll(tenantId, q, q.opportunityId, sellerScopeOf(user));
   }
 
   @Get('summary')
