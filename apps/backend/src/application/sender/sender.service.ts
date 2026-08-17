@@ -34,6 +34,17 @@ const HEALTH_CACHE_MS = 10 * 60_000;
 // limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce
 const WARMUP_DAILY = [10, 15, 20, 30];
 
+/**
+ * Espelho dos defaults de `SenderNumber` no schema. Usado para descrever uma linha
+ * configurada que ainda não tem registro (ver `linhaSemRegistro`): sem isto, a tela
+ * teria que inventar números, e número inventado numa tela de anti-ban é pior que
+ * campo vazio.
+ *
+ * `sender-defaults.spec.ts` lê o `schema.prisma` e falha se qualquer um destes três
+ * divergir — é o que impede a tela de mentir depois de uma migration.
+ */
+export const SENDER_DEFAULTS = { dailyLimit: 30, hourlyLimit: 8, warmupStage: 0 } as const;
+
 // Chaves Redis para estado anti-ban compartilhado entre réplicas (BUG-001 fix)
 const REDIS_KEY_LAST_SENT = 'sender:lastSentAt';
 const REDIS_KEY_NEXT_DELAY = 'sender:nextDelayMs';
@@ -201,9 +212,56 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return n;
   }
 
+  /**
+   * Linha configurada que ainda não tem registro no banco.
+   *
+   * `ensureNumber` cria a linha do `senderNumber` no PRIMEIRO envio. Até lá a tela de
+   * Saúde mostrava as duas linhas conectadas no topo e listava um número só embaixo —
+   * e pior, "Enviados hoje 14/30" e "Capacidade usada 47%" descreviam só a principal,
+   * como se fossem o total. Quem acabou de parear um chip não tinha onde ver o
+   * aquecimento dele justamente no momento em que isso mais importa.
+   *
+   * Devolver aqui, e não criar o registro, porque isto é um GET: listar não escreve. O
+   * registro nasce no primeiro envio, que é quando existe algo para contar.
+   *
+   * Os valores espelham os defaults do schema (ver `sender-defaults.spec.ts`, que
+   * falha se o schema mudar e esta linha virar mentira).
+   */
+  private linhaSemRegistro(linha: string) {
+    const chaveFone =
+      linha === LINHA_PRINCIPAL
+        ? 'WAHA_SENDER_PHONE'
+        : `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_SENDER_PHONE`;
+    return {
+      id: `sem-registro:${linha}`,
+      linha,
+      // null e não um texto tipo "sem-numero-vendas": a tela sabe dizer "número ainda
+      // não identificado", e um rótulo falso com cara de telefone é pior que a ausência.
+      phone: process.env[chaveFone] ?? null,
+      active: true,
+      dailyLimit: SENDER_DEFAULTS.dailyLimit,
+      sentToday: 0,
+      hourlyLimit: SENDER_DEFAULTS.hourlyLimit,
+      sentThisHour: 0,
+      warmupStage: SENDER_DEFAULTS.warmupStage,
+      effectiveDailyLimit: this.effectiveDailyLimit({
+        dailyLimit: SENDER_DEFAULTS.dailyLimit,
+        warmupStage: SENDER_DEFAULTS.warmupStage,
+      }),
+      // Sem histórico não há saúde nem orçamento a mostrar. `null` faz a tela omitir os
+      // blocos, em vez de desenhar zeros que parecem chip ocioso.
+      health: null,
+      budget: null,
+      semRegistro: true,
+    };
+  }
+
   async listNumbers(tenantId: string) {
     const numbers = await this.prisma.senderNumber.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
     const health = await this.engagementHealth(tenantId).catch(() => null);
+    // Linha declarada no ambiente que ainda não apareceu na tabela.
+    const comRegistro = new Set(numbers.map((n: any) => n.linha ?? LINHA_PRINCIPAL));
+    const pendentes = linhasConfiguradas().filter((l) => !comRegistro.has(l));
     // `sentToday` conta só o disparo de campanha. `budget` conta o que o número
     // realmente mandou, por todos os canais — é o número que importa para risco
     // de bloqueio, e sem ele a tela de saúde mostrava um chip ocioso que na
@@ -214,14 +272,16 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // aqui reintroduziria o mesmo bug que corrigimos no NumberBudgetService.
     // enriquece com o limite diário EFETIVO (já considerando a fase de aquecimento)
     // e com a saúde de engajamento das últimas 24h (freio anti-queima).
-    return Promise.all(
+    const registrados = await Promise.all(
       numbers.map(async (n: any) => ({
         ...n,
         effectiveDailyLimit: this.effectiveDailyLimit({ dailyLimit: n.dailyLimit, warmupStage: n.warmupStage }),
         health,
         budget: (await this.budget?.snapshot(n.linha ?? 'principal').catch(() => null)) ?? null,
+        semRegistro: false,
       })),
     );
+    return [...registrados, ...pendentes.map((l) => this.linhaSemRegistro(l))];
   }
 
   /**

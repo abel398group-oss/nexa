@@ -51,7 +51,20 @@ export interface CampaignCreateResult {
 // de Saúde dos Números e (parcialmente) pelo formulário de campanha.
 export interface SenderNumber {
   id: string;
-  phone: string;
+  /**
+   * Null quando a linha foi pareada mas ainda não enviou nada e o ambiente não declara
+   * `WAHA_<LINHA>_SENDER_PHONE`. A tela diz que o número ainda não foi identificado —
+   * inventar um rótulo com cara de telefone seria pior.
+   */
+  phone: string | null;
+  /// 'principal' | 'vendas' | ... — a linha (chip) que este registro representa.
+  linha?: string | null;
+  /**
+   * Linha configurada no ambiente que ainda não tem registro no banco: o registro nasce
+   * no primeiro envio. Os limites vêm dos defaults do schema, e não há histórico de
+   * saúde nem de orçamento para mostrar.
+   */
+  semRegistro?: boolean;
   active: boolean;
   dailyLimit: number;
   sentToday: number;

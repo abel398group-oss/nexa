@@ -183,7 +183,25 @@ export function NumberHealthPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Icon name="inbox" className="h-4 w-4 text-green-600" />
-                    <span className="font-semibold text-base-content">{displayPhone(n.phone)}</span>
+                    <span className="font-semibold text-base-content">
+                      {n.phone ? displayPhone(n.phone) : 'número ainda não identificado'}
+                    </span>
+                    {n.linha && (
+                      <span className="rounded-full bg-base-200 px-2 py-0.5 text-[11px] font-medium text-base-content/60">
+                        {linhaLabel(n.linha)}
+                      </span>
+                    )}
+                    {/* Sem este selo, um chip pareado hoje aparece com "0/10 · fase 0" e
+                        parece um número que está falhando em enviar, em vez de um que
+                        ainda não foi usado. */}
+                    {n.semRegistro && (
+                      <span
+                        className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+                        title="A linha está pareada. O registro de uso nasce no primeiro envio — os limites abaixo são os de um número novo."
+                      >
+                        aguardando 1º envio
+                      </span>
+                    )}
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${n.active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-base-200 text-base-content/50'}`}>
                       {n.active ? 'ativo' : 'inativo'}
                     </span>
