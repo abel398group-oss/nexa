@@ -24,6 +24,9 @@ export async function listContacts(params: ContactListParams = {}): Promise<Cont
       // quem ainda não foi distribuído. Vendedor não precisa mandar — o backend
       // já o prende à carteira dele pelo token.
       owner: params.owner || undefined,
+      // 'lead' tira da lista quem já é cliente do TMS; 'cliente' mostra só eles.
+      // Omitido, o backend devolve os dois — não mexer no padrão do endpoint.
+      base: params.base === 'todos' ? undefined : params.base || undefined,
       limit: params.limit ?? 100,
       offset: params.offset || undefined,
     },

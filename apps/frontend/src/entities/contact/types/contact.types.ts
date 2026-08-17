@@ -59,6 +59,12 @@ export interface ContactListParams {
   status?: string; // 'active' | 'opted_out'
   /** Carteira: id do vendedor, ou 'sem-dono' para os ainda não distribuídos. */
   owner?: string;
+  /**
+   * Recorte da base. Lead e cliente do TMS dividem a tabela de contatos: quem
+   * abre o web chat do produto entra com `leadStatus = 'cliente_ativo'` e o id
+   * externo no campo do telefone. Omitido, vêm os dois.
+   */
+  base?: 'lead' | 'cliente' | 'todos';
 }
 
 // Tag com contagem de contatos (para filtros e seletor de público).

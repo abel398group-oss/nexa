@@ -50,8 +50,10 @@ export class ContactsController {
     @Query() q: PaginationQueryDto,
     @Query('tag') tag?: string,
     @Query('owner') owner?: string,
+    /// `lead` (prospecção) · `cliente` (quem já usa o TMS) · ausente = os dois.
+    @Query('base') base?: string,
   ) {
-    return this.contacts.findAll(tenantId, q, tag, escopoDeVendedor(user), owner);
+    return this.contacts.findAll(tenantId, q, tag, escopoDeVendedor(user), owner, base);
   }
 
   /**

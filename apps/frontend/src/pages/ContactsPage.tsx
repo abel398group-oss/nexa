@@ -127,6 +127,11 @@ export function ContactsPage() {
   const { user } = useAuth();
   const ehAdmin = user?.role === 'admin';
   const [ownerFilter, setOwnerFilter] = useState<string>('');
+  // Esta tela é a "Leads" do Market, e cliente do TMS mora na mesma tabela — entra
+  // pelo web chat com o id externo no lugar do telefone. Sem recorte, a base de
+  // prospecção lista quem já é cliente, com UUID na coluna do telefone. Começa em
+  // 'lead' porque é para isso que se abre a tela; os outros dois estão a um clique.
+  const [baseFiltro, setBaseFiltro] = useState<'lead' | 'cliente' | 'todos'>('lead');
   const [importOwner, setImportOwner] = useState<string>('');
   const navigate = useNavigate();
   const toast = useToast();
@@ -151,11 +156,11 @@ export function ContactsPage() {
 
   const statusParam = filtro === 'ativos' ? 'active' : filtro === 'optout' ? 'opted_out' : undefined;
   const { data, isLoading: loading } = useQuery({
-    queryKey: ['contacts', appliedSearch, tagFilter, filtro, page, ownerFilter],
+    queryKey: ['contacts', appliedSearch, tagFilter, filtro, page, ownerFilter, baseFiltro],
     queryFn: () =>
       listContacts({
         search: appliedSearch, tag: tagFilter ?? undefined, status: statusParam,
-        owner: ownerFilter || undefined, limit: PAGE, offset: page * PAGE,
+        owner: ownerFilter || undefined, base: baseFiltro, limit: PAGE, offset: page * PAGE,
       }),
   });
   const items = data?.items ?? [];
@@ -574,6 +579,16 @@ export function ContactsPage() {
         }
         extraToolbar={
           <div className="flex flex-wrap items-center gap-2">
+            <Select
+              className="!w-auto"
+              value={baseFiltro}
+              onChange={(e) => { setBaseFiltro(e.target.value as 'lead' | 'cliente' | 'todos'); setPage(0); }}
+              title="Leads de prospeccao ou clientes que ja usam o TMS"
+            >
+              <option value="lead">Leads</option>
+              <option value="cliente">Clientes do TMS</option>
+              <option value="todos">Leads e clientes</option>
+            </Select>
             <Select
               className="!w-auto"
               value={filtro}

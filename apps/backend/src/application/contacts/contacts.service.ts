@@ -6,6 +6,13 @@ import { normalizePhone } from '@/shared/utils/phone.util';
 import { OptOutRegistryService } from './opt-out-registry.service';
 import { comEscopo } from '@/shared/auth/seller-scope';
 
+/**
+ * Marca do cliente do TMS dentro da tabela de contatos. É gravada num lugar só —
+ * `conversations.service.ts`, quando o cliente abre o web chat do produto — e é o
+ * que separa "quem já paga" de "quem a gente quer vender".
+ */
+export const CLIENTE_DO_TMS = 'cliente_ativo';
+
 @Injectable()
 export class ContactsService {
   private readonly logger = new Logger('Contacts');
@@ -29,6 +36,7 @@ export class ContactsService {
     tag?: string,
     escopo?: string,
     donoFiltro?: string,
+    base?: string,
   ): Promise<Paginated<any>> {
     const where: any = { tenantId };
     if (q.search) {
@@ -42,6 +50,24 @@ export class ContactsService {
     // 'sem-dono' é a opção da tela para achar quem ainda não foi distribuído.
     if (donoFiltro) {
       where.ownerSellerId = donoFiltro === 'sem-dono' ? null : donoFiltro;
+    }
+    // Cliente do TMS e lead de prospecção moram na MESMA tabela: quem fala pelo web
+    // chat entra por upsert com o id externo no lugar do telefone e `cliente_ativo`
+    // (ver `conversations.service.ts`, garantirConversaWebChat). Sem este filtro a
+    // tela de Leads do Market lista cliente do TMS com um UUID na coluna telefone.
+    //
+    // O default segue 'todos' de propósito: mudar o padrão do endpoint esconderia
+    // gente de todo mundo que já chama GET /contacts. Quem quer o recorte pede.
+    if (base === 'lead' || base === 'cliente') {
+      // `{ not: 'cliente_ativo' }` sozinho não serve: `leadStatus` é nulo na maioria
+      // dos leads importados, e em SQL `<> 'x'` sobre NULL não dá verdadeiro — os
+      // leads sumiriam justamente da tela de leads.
+      where.AND = [
+        ...(where.AND ?? []),
+        base === 'cliente'
+          ? { leadStatus: CLIENTE_DO_TMS }
+          : { OR: [{ leadStatus: null }, { leadStatus: { not: CLIENTE_DO_TMS } }] },
+      ];
     }
 
     const comTrava = comEscopo(where, escopo);
