@@ -207,6 +207,58 @@ export class MarketsService {
   }
 
   /**
+   * Edita a identidade do mercado — a "cara" dele no e-mail.
+   *
+   * O `create` acima diz "Editável depois na configuração do mercado", e essa
+   * configuração nunca existiu: até 17/08/2026 nenhuma rota escrevia
+   * `displayName`, `senderName`, `brandTagline`, `brandColor` ou `signupUrl`
+   * depois da criação. A trava de liberação EXIGE identidade
+   * (`temIdentidade`), então o sistema pedia uma coisa que ele mesmo não
+   * deixava fazer.
+   *
+   * Quem sentiu foi o HiperTMS: criado antes do `create` passar a preencher os
+   * dois campos, ficou com ambos NULL. E em `email-market-identity.ts` o
+   * `if (!displayName) return {}` faz o e-mail sair SEM marca nenhuma — sem
+   * assinatura da Lia, sem cor, sem link. O disparo funciona e chega
+   * descaracterizado, que é o pior jeito de falhar: ninguém percebe.
+   *
+   * Campo ausente no corpo não é tocado; `null` limpa de propósito (voltar à
+   * marca padrão é uma decisão legítima). Por isso a distinção entre
+   * `undefined` e `null` importa aqui.
+   */
+  async updateIdentidade(
+    _tenantId: string,
+    code: string,
+    dto: {
+      name?: string;
+      displayName?: string | null;
+      senderName?: string | null;
+      brandTagline?: string | null;
+      brandColor?: string | null;
+      signupUrl?: string | null;
+    },
+  ) {
+    const market = await this.prisma.product.findUnique({ where: { code } });
+    if (!market) throw new NotFoundException('Mercado não encontrado');
+
+    // Só o que veio no corpo entra no update — `undefined` é "não mexe".
+    const data: Record<string, unknown> = {};
+    for (const campo of ['name', 'displayName', 'senderName', 'brandTagline', 'brandColor', 'signupUrl'] as const) {
+      if (dto[campo] !== undefined) {
+        const v = dto[campo];
+        // String vazia vira NULL: o gate lê `!!displayName`, e `''` passaria por
+        // preenchido sendo vazio — mercado "com identidade" e e-mail sem marca.
+        data[campo] = typeof v === 'string' && v.trim() === '' ? null : v;
+      }
+    }
+    if (!Object.keys(data).length) return market;
+
+    const atualizado = await this.prisma.product.update({ where: { code }, data: data as any });
+    this.logger.log(`Mercado ${code}: identidade atualizada (${Object.keys(data).join(', ')})`);
+    return atualizado;
+  }
+
+  /**
    * Libera o mercado para o disparo.
    *
    * Recusa quando a trava aponta bloqueio — e devolve o motivo, não um "não pode"

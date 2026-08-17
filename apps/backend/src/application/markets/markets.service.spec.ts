@@ -74,3 +74,94 @@ describe('MarketsService.create', () => {
     expect(data.name).toBe('Agabê');
   });
 });
+
+/**
+ * A identidade do mercado não tinha como ser preenchida (17/08/2026).
+ *
+ * O `create` acima promete "editável depois na configuração do mercado" e essa
+ * configuração nunca existiu: nenhuma rota escrevia `displayName`/`senderName`
+ * depois da criação. A trava de liberação EXIGE os dois (`temIdentidade`), então o
+ * sistema cobrava algo que ele mesmo não deixava fazer — e o HiperTMS, criado antes
+ * do `create` passar a preenchê-los, ficou com ambos NULL.
+ *
+ * O custo é silencioso: `email-market-identity.ts` faz `if (!displayName) return {}`,
+ * e o e-mail sai SEM marca — sem assinatura, sem cor, sem link. Chega, e chega errado.
+ */
+function makeSvcUpdate(mercado: any = { id: 'p1', code: 'hipertms', name: 'HiperTMS' }) {
+  const prisma = {
+    product: {
+      findUnique: vi.fn().mockResolvedValue(mercado),
+      update: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...mercado, ...data })),
+    },
+  };
+  const svc: any = new MarketsService(prisma as any);
+  svc['logger'] = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  return { svc, prisma };
+}
+
+describe('MarketsService.updateIdentidade', () => {
+  it('grava a identidade que a trava de liberação exige', async () => {
+    const { svc, prisma } = makeSvcUpdate();
+
+    await svc.updateIdentidade('t1', 'hipertms', {
+      displayName: 'HiperTMS',
+      senderName: 'Lia',
+      brandTagline: 'O TMS feito para vender frete.',
+      brandColor: '#FF5A1F',
+    });
+
+    expect(prisma.product.update.mock.calls[0][0].data).toEqual({
+      displayName: 'HiperTMS',
+      senderName: 'Lia',
+      brandTagline: 'O TMS feito para vender frete.',
+      brandColor: '#FF5A1F',
+    });
+  });
+
+  // PATCH: o que não veio no corpo não pode ser apagado. Mandar só a cor não
+  // pode zerar o nome de exibição e derrubar o mercado da trava.
+  it('campo ausente não é tocado', async () => {
+    const { svc, prisma } = makeSvcUpdate();
+
+    await svc.updateIdentidade('t1', 'hipertms', { brandColor: '#000000' });
+
+    expect(prisma.product.update.mock.calls[0][0].data).toEqual({ brandColor: '#000000' });
+  });
+
+  // A trava lê `!!displayName`, e `''` é falsy — mas gravar string vazia deixaria o
+  // campo "preenchido" para quem olha o banco e vazio para quem envia. NULL é honesto.
+  it('string vazia vira NULL, não vazio', async () => {
+    const { svc, prisma } = makeSvcUpdate();
+
+    await svc.updateIdentidade('t1', 'hipertms', { displayName: '   ', signupUrl: '' });
+
+    expect(prisma.product.update.mock.calls[0][0].data).toEqual({
+      displayName: null,
+      signupUrl: null,
+    });
+  });
+
+  // Limpar é decisão legítima: volta à marca padrão do HiperTMS.
+  it('null explícito limpa o campo', async () => {
+    const { svc, prisma } = makeSvcUpdate();
+
+    await svc.updateIdentidade('t1', 'hipertms', { brandTagline: null });
+
+    expect(prisma.product.update.mock.calls[0][0].data).toEqual({ brandTagline: null });
+  });
+
+  it('corpo vazio não chama update', async () => {
+    const { svc, prisma } = makeSvcUpdate();
+
+    await svc.updateIdentidade('t1', 'hipertms', {});
+
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+
+  it('mercado inexistente: 404 antes de tentar gravar', async () => {
+    const { svc, prisma } = makeSvcUpdate(null);
+
+    await expect(svc.updateIdentidade('t1', 'nao-existe', { displayName: 'X' })).rejects.toThrow();
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+});

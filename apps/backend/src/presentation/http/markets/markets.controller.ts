@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { MarketsService } from '@/application/markets/markets.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
@@ -30,6 +30,57 @@ class CreateMarketDto {
   slug!: string;
 }
 
+/**
+ * Identidade do mercado — a "cara" dele no e-mail.
+ *
+ * Todo campo é opcional porque a rota é PATCH: ausente = não mexe. `null` é
+ * aceito de propósito, e significa limpar (voltar à marca padrão do HiperTMS).
+ *
+ * `@IsOptional()` do class-validator pula tanto `undefined` quanto `null`, que é
+ * exatamente a semântica desejada aqui.
+ */
+class UpdateMarketDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'O nome do mercado não pode ficar vazio.' })
+  @MaxLength(80)
+  name?: string;
+
+  /// Como a Lia se apresenta. É o campo que o gate de liberação exige, e o que
+  /// `email-market-identity.ts` checa antes de montar a marca do e-mail.
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  displayName?: string | null;
+
+  /// Nome do remetente ("Lia"). Segundo campo exigido pelo gate.
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  senderName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  brandTagline?: string | null;
+
+  /// Hex de 3 ou 6 dígitos. Validado aqui porque vai direto para o `style` do
+  /// e-mail: valor torto não quebra o envio, só sai sem cor — e ninguém percebe.
+  @IsOptional()
+  @IsString()
+  @Matches(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, {
+    message: 'A cor deve ser um hex como #FF5A1F.',
+  })
+  brandColor?: string | null;
+
+  /// Destino do CTA e origem do domínio que aparece na assinatura (`dominioDe`).
+  @IsOptional()
+  @IsString()
+  @Matches(/^https?:\/\/.+/, { message: 'O link de cadastro deve começar com http:// ou https://.' })
+  @MaxLength(300)
+  signupUrl?: string | null;
+}
+
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('markets')
 export class MarketsController {
@@ -56,6 +107,25 @@ export class MarketsController {
   @RequirePerm('settings')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateMarketDto) {
     return this.markets.create(tenantId, dto);
+  }
+
+  /**
+   * Edita a identidade do mercado. Atrás de 'settings' como liberar/suspender:
+   * é quem monta a operação, não quem dispara.
+   *
+   * Declarada ANTES de `:code/readiness` e das outras `:code/...` por clareza —
+   * `PATCH /markets/hipertms` não colide com elas (métodos diferentes), mas
+   * deixar as rotas do mesmo recurso juntas evita que alguém introduza um
+   * curinga depois e quebre isto sem perceber.
+   */
+  @Patch(':code')
+  @RequirePerm('settings')
+  update(
+    @CurrentTenant() tenantId: string,
+    @Param('code') code: string,
+    @Body() dto: UpdateMarketDto,
+  ) {
+    return this.markets.updateIdentidade(tenantId, code, dto);
   }
 
   @Get(':code/readiness')
