@@ -34,6 +34,15 @@ const VAZIO = {
   nome: '',
   slug: '',
   displayName: '',
+  /**
+   * Quem assina o e-mail. Não tem campo na tela de criação de propósito — é sempre
+   * "Lia" e nunca foi uma pergunta de quem está montando a campanha. Mas continua
+   * indo no payload: a trava de liberação exige `senderName`, e um mercado nascendo
+   * sem ele nasceria reprovado por uma pergunta que o formulário não fez.
+   *
+   * Quem precisar de outro nome muda em Mercados → Identidade, onde a identidade
+   * inteira é editada.
+   */
   senderName: 'Lia',
   brandTagline: '',
   brandColor: '',
@@ -268,10 +277,6 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
             <label className="block">
               <span className="mb-1 block text-[11px] text-base-content/60">Nome de exibição</span>
               <Input className="!h-9 text-sm" placeholder={f.nome || 'HiperTMS'} {...campo('displayName')} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] text-base-content/60">Assina como</span>
-              <Input className="!h-9 text-sm" placeholder="Lia" {...campo('senderName')} />
             </label>
             <CampoCor valor={f.brandColor} aoMudar={(v) => setF((s) => ({ ...s, brandColor: v }))} />
             <label className="block sm:col-span-2">

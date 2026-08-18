@@ -36,22 +36,40 @@ export function Modal({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Fecha no Esc e implementa focus trap dentro do diálogo.
+  /**
+   * `onClose` guardado em ref para NÃO entrar nas dependências dos efeitos.
+   *
+   * Quase todo chamador passa uma arrow (`onClose={() => setAberto(false)}`), que é
+   * uma referência NOVA a cada render do pai. Com ela nas dependências, todo render
+   * refazia o efeito — e o efeito começa mandando o foco para o primeiro campo.
+   *
+   * O estrago aparecia ao digitar: cada tecla re-renderizava o formulário, o efeito
+   * rodava de novo e o cursor pulava do campo para o primeiro elemento do diálogo.
+   * Digitar o nome do mercado era impossível. Visto em 18/08/2026 na criação de
+   * mercado, mas valia para todo diálogo do sistema.
+   */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Foco inicial: só ao ABRIR. Depender de qualquer outra coisa devolve o bug —
+  // este efeito rouba o foco de quem estiver digitando toda vez que roda.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+  }, [open]);
+
+  // Esc fecha; Tab / Shift+Tab circulam dentro do diálogo.
   useEffect(() => {
     if (!open) return;
 
-    // Move o foco para o primeiro elemento focável dentro do modal.
-    const panel = panelRef.current;
-    if (panel) {
-      const first = panel.querySelector<HTMLElement>(FOCUSABLE);
-      first?.focus();
-    }
-
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
 
-      // Focus trap: Tab / Shift+Tab circula dentro do diálogo.
+      const panel = panelRef.current;
       if (e.key === 'Tab' && panel) {
+        // Lido a cada Tab, e não uma vez só: o conteúdo do diálogo muda enquanto ele
+        // está aberto (campo que aparece, lista que carrega), e uma lista congelada na
+        // montagem prenderia o Tab nos elementos que existiam no começo.
         const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
         if (focusable.length === 0) { e.preventDefault(); return; }
         const first = focusable[0];
@@ -66,7 +84,7 @@ export function Modal({
 
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
