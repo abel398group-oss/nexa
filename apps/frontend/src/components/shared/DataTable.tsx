@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/shared/lib/cn';
 import { EmptyState } from '@/components/ui/EmptyState';
 
@@ -238,51 +239,118 @@ export function DataTable<T>({
 
 // ─── Dropdown de ações da linha ───────────────────────────────────────────────
 
+/** Altura estimada de um item + a borda do menu — só para decidir se abre pra cima. */
+const ALTURA_ITEM = 36;
+
+/**
+ * Menu "⋮" da linha.
+ *
+ * Vai num PORTAL com posição `fixed`, e não `absolute` dentro da célula, porque a
+ * tabela mora dentro de contêineres que cortam: o wrapper de rolagem horizontal
+ * (`overflow-x-auto`) e o card (`overflow-hidden rounded-2xl`). Com poucas linhas o
+ * card tem a altura das linhas — 79px numa tabela de um item — e o menu, que desce
+ * ~90px, era recortado inteiro. Clicar nos três pontinhos não fazia nada visível:
+ * o menu abria, existia no DOM, e estava fora da área desenhada. Achado em
+ * 18/08/2026 na tela de Parceiros de indicação, mas valia para todas as quatro
+ * telas com ação de linha.
+ *
+ * Abre para cima quando não cabe abaixo — a última linha da tabela é justamente a
+ * que fica mais perto do fim da janela.
+ */
 function RowActionsDropdown({ items }: { items: RowAction[] }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const botaoRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const open = pos !== null;
+
+  const fechar = React.useCallback(() => setPos(null), []);
+
+  function abrir() {
+    const b = botaoRef.current;
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    // `right` medido a partir da borda direita da janela mantém o alinhamento à
+    // direita do botão sem precisar saber a largura do menu antes de montá-lo.
+    const right = Math.max(8, window.innerWidth - r.right);
+    const alturaMenu = items.length * ALTURA_ITEM + 8;
+    const cabeAbaixo = r.bottom + alturaMenu + 8 <= window.innerHeight;
+    setPos(
+      cabeAbaixo
+        ? { top: r.bottom + 4, right }
+        : { bottom: window.innerHeight - r.top + 4, right },
+    );
+  }
 
   React.useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    // O menu está FORA da árvore do botão agora (portal), então o teste de "clicou
+    // fora" precisa perguntar aos dois. Sem o menuRef aqui, o `mousedown` fechava o
+    // menu antes do `click` do item chegar — e nenhuma ação executava.
+    const aoApertar = (e: MouseEvent) => {
+      const alvo = e.target as Node;
+      if (botaoRef.current?.contains(alvo) || menuRef.current?.contains(alvo)) return;
+      fechar();
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') fechar();
+    };
+    // Posição fixa não acompanha rolagem: em vez de mostrar o menu descolado da
+    // linha, fecha. `capture` pega a rolagem de qualquer contêiner interno.
+    document.addEventListener('mousedown', aoApertar);
+    document.addEventListener('keydown', aoTeclar);
+    window.addEventListener('scroll', fechar, true);
+    window.addEventListener('resize', fechar);
+    return () => {
+      document.removeEventListener('mousedown', aoApertar);
+      document.removeEventListener('keydown', aoTeclar);
+      window.removeEventListener('scroll', fechar, true);
+      window.removeEventListener('resize', fechar);
+    };
+  }, [open, fechar]);
 
   if (items.length === 0) return null;
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
       <button
+        ref={botaoRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? fechar() : abrir())}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content"
         aria-label="Ações"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {/* ⋮ vertical ellipsis */}
         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
           <path d="M10 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm-2 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute right-0 z-50 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-base-300 bg-[var(--surface-elevated,var(--surface))] shadow-lg">
-          {items.map((item, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => { item.onClick(); setOpen(false); }}
-              className={cn(
-                'flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-base-100',
-                item.destructive ? 'text-red-600' : 'text-base-content',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, right: pos.right }}
+            className="z-50 min-w-[10rem] overflow-hidden rounded-xl border border-base-300 bg-[var(--surface-elevated,var(--surface))] shadow-lg"
+          >
+            {items.map((item, i) => (
+              <button
+                key={i}
+                type="button"
+                role="menuitem"
+                onClick={() => { item.onClick(); fechar(); }}
+                className={cn(
+                  'flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-base-100',
+                  item.destructive ? 'text-red-600' : 'text-base-content',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
