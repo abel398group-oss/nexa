@@ -82,3 +82,14 @@ export async function updateMarket(
   const r = await api.patch(`/markets/${code}`, dto);
   return r.data;
 }
+
+/**
+ * Exclui um mercado criado por engano.
+ *
+ * O servidor só aceita rascunho sem conhecimento, sem modelo e sem lista de
+ * lead — mercado que já rodou não é engano, é história, e sai com "Suspender".
+ * A recusa vem com o motivo em `message`; mostre-a, não troque por um genérico.
+ */
+export async function deleteMarket(code: string): Promise<void> {
+  await api.delete(`/markets/${code}`);
+}

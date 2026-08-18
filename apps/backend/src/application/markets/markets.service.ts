@@ -259,6 +259,60 @@ export class MarketsService {
   }
 
   /**
+   * Apaga um mercado criado por engano.
+   *
+   * Existe porque criar mercado é um clique e desfazer não era nenhum: um nome
+   * digitado errado ficava para sempre no seletor de todo mundo. Mas apagar
+   * mercado é o tipo de botão que, sem trava, um dia leva junto a operação
+   * inteira — o `productCode` é a chave de conhecimento, campanha e conector.
+   *
+   * Por isso só sai o que ainda não é história: rascunho, sem conhecimento, sem
+   * modelo de mensagem, sem lista de lead. Mercado que já foi liberado não é
+   * engano — é operação, e some com "suspender", que preserva o que rodou.
+   *
+   * O vínculo de vendedor não bloqueia: ele é configuração do mercado, não
+   * registro do que aconteceu, e vai junto.
+   */
+  async remove(tenantId: string, code: string) {
+    const market = await this.prisma.product.findUnique({ where: { code } });
+    if (!market) throw new NotFoundException('Mercado não encontrado');
+
+    if (market.status !== 'draft') {
+      throw new BadRequestException(
+        'Só dá para excluir mercado em rascunho. Este já foi liberado — use "Suspender", que preserva o histórico.',
+      );
+    }
+
+    const [kb, modelos, lotes] = await Promise.all([
+      this.prisma.aiKnowledgeBase.count({ where: { tenantId, productCode: code } }),
+      this.prisma.messageTemplate.count({ where: { tenantId, productCode: code } }),
+      this.prisma.leadBatch.count({ where: { tenantId, productCode: code } }),
+    ]);
+
+    const usos = [
+      kb > 0 ? `${kb} artigo(s) de conhecimento` : null,
+      modelos > 0 ? `${modelos} modelo(s) de mensagem` : null,
+      lotes > 0 ? `${lotes} lista(s) de lead` : null,
+    ].filter(Boolean);
+
+    if (usos.length) {
+      throw new BadRequestException(
+        `Este mercado já tem ${usos.join(', ')}. Apague isso antes, ou deixe-o em rascunho.`,
+      );
+    }
+
+    // Vínculo de vendedor sai junto, na mesma transação: apagar o mercado e
+    // deixar a ligação órfã é pior que não apagar.
+    await this.prisma.$transaction([
+      this.prisma.sellerMarket.deleteMany({ where: { tenantId, productCode: code } }),
+      this.prisma.product.delete({ where: { code } }),
+    ]);
+
+    this.logger.warn(`Mercado ${code} excluído (rascunho, sem conteúdo).`);
+    return { ok: true, code };
+  }
+
+  /**
    * Libera o mercado para o disparo.
    *
    * Recusa quando a trava aponta bloqueio — e devolve o motivo, não um "não pode"

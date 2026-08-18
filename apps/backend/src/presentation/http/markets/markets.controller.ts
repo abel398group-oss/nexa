@@ -128,6 +128,18 @@ export class MarketsController {
     return this.markets.updateIdentidade(tenantId, code, dto);
   }
 
+  /**
+   * Exclui mercado criado por engano. `settings`, como criar.
+   *
+   * A trava de verdade está no service (só rascunho e só sem conteúdo) — aqui é
+   * só o caminho HTTP.
+   */
+  @Delete(':code')
+  @RequirePerm('settings')
+  remove(@CurrentTenant() tenantId: string, @Param('code') code: string) {
+    return this.markets.remove(tenantId, code);
+  }
+
   @Get(':code/readiness')
   @RequirePerm('settings')
   readiness(@CurrentTenant() tenantId: string, @Param('code') code: string) {

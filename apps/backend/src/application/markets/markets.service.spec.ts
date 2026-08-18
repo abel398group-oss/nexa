@@ -165,3 +165,76 @@ describe('MarketsService.updateIdentidade', () => {
     expect(prisma.product.update).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Exclusão de mercado.
+ *
+ * O que estes testes protegem não é o caminho feliz — é a trava. `productCode` é a
+ * chave que separa conhecimento, campanha e conector em todo o sistema, então um
+ * "Excluir" solto na tela é a distância de um clique entre desfazer um nome digitado
+ * errado e apagar a operação. Por isso quase tudo aqui afirma que NÃO apagou.
+ */
+function makeSvcRemove(
+  mercado: any = { id: 'p1', code: 'd', name: 'agabe', status: 'draft' },
+  counts = { kb: 0, modelos: 0, lotes: 0 },
+) {
+  const prisma = {
+    product: {
+      findUnique: vi.fn().mockResolvedValue(mercado),
+      delete: vi.fn().mockResolvedValue(mercado),
+    },
+    aiKnowledgeBase: { count: vi.fn().mockResolvedValue(counts.kb) },
+    messageTemplate: { count: vi.fn().mockResolvedValue(counts.modelos) },
+    leadBatch: { count: vi.fn().mockResolvedValue(counts.lotes) },
+    sellerMarket: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    $transaction: vi.fn().mockResolvedValue([{ count: 1 }, mercado]),
+  };
+  return { svc: new MarketsService(prisma as any), prisma };
+}
+
+describe('MarketsService.remove', () => {
+  it('rascunho vazio sai, e o vínculo do vendedor sai junto na mesma transação', async () => {
+    const { svc, prisma } = makeSvcRemove();
+
+    await expect(svc.remove('t1', 'd')).resolves.toEqual({ ok: true, code: 'd' });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.sellerMarket.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', productCode: 'd' },
+    });
+    expect(prisma.product.delete).toHaveBeenCalledWith({ where: { code: 'd' } });
+  });
+
+  // Mercado liberado já mandou e-mail para gente de verdade. Some com "Suspender".
+  it('recusa mercado que já foi liberado, e manda suspender', async () => {
+    const { svc, prisma } = makeSvcRemove({ id: 'p1', code: 'hipertms', name: 'HiperTMS', status: 'active' });
+
+    await expect(svc.remove('t1', 'hipertms')).rejects.toThrow(BadRequestException);
+    await expect(svc.remove('t1', 'hipertms')).rejects.toThrow(/Suspender/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  // A recusa precisa dizer O QUE impede: quem clicou tem que saber onde ir apagar.
+  it('recusa rascunho com conteúdo, listando o que existe', async () => {
+    const { svc, prisma } = makeSvcRemove(undefined, { kb: 1483, modelos: 4, lotes: 3 });
+
+    await expect(svc.remove('t1', 'd')).rejects.toThrow(
+      /1483 artigo\(s\) de conhecimento, 4 modelo\(s\) de mensagem, 3 lista\(s\) de lead/,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('um único uso já basta para segurar', async () => {
+    const { svc, prisma } = makeSvcRemove(undefined, { kb: 0, modelos: 1, lotes: 0 });
+
+    await expect(svc.remove('t1', 'd')).rejects.toThrow(/1 modelo\(s\) de mensagem/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('código inexistente é 404, não sucesso silencioso', async () => {
+    const { svc, prisma } = makeSvcRemove(null);
+
+    await expect(svc.remove('t1', 'nao-existe')).rejects.toThrow('Mercado não encontrado');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});

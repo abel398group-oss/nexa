@@ -12,6 +12,7 @@ export {
   listMarkets,
   createMarket,
   updateMarket,
+  deleteMarket,
   getMarketReadiness,
   releaseMarket,
   pauseMarket,

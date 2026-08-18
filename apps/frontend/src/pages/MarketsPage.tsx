@@ -8,6 +8,7 @@ import {
   updateMarket,
   releaseMarket,
   pauseMarket,
+  deleteMarket,
   getMarketSellers,
   linkMarketSeller,
   unlinkMarketSeller,
@@ -331,6 +332,30 @@ export function MarketsPage() {
     onError: () => toast.error('Não foi possível suspender.'),
   });
 
+  const excluir = useMutation({
+    mutationFn: (code: string) => deleteMarket(code),
+    onSuccess: () => {
+      toast.info('Mercado excluído.');
+      void qc.invalidateQueries({ queryKey: ['markets'] });
+    },
+    // A recusa do servidor diz O QUE impede (já tem conhecimento, já foi
+    // liberado). Trocar isso por um genérico manda procurar defeito onde não há.
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não foi possível excluir este mercado.'),
+  });
+
+  async function pedirExclusao(m: Market) {
+    const ok = await confirm({
+      title: `Excluir ${m.displayName || m.name}?`,
+      message:
+        'Só é possível porque este mercado ainda está em rascunho e não tem conhecimento, ' +
+        'modelo de mensagem nem lista de lead. Não dá para desfazer.',
+      confirmLabel: 'Excluir',
+      variant: 'danger',
+    });
+    if (ok) excluir.mutate(m.code);
+  }
+
   async function pedirSuspensao(m: Market) {
     const ok = await confirm({
       title: `Suspender ${m.name}?`,
@@ -403,6 +428,18 @@ export function MarketsPage() {
                   <Button size="sm" variant="ghost" onClick={() => void pedirSuspensao(m)}>
                     Suspender
                   </Button>
+                )}
+                {/* Excluir só aparece em rascunho — é o desfazer do "Criar Novo
+                    Market", não uma segunda forma de tirar do ar. */}
+                {m.status !== 'active' && (
+                  <button
+                    type="button"
+                    className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
+                    disabled={excluir.isPending}
+                    onClick={() => void pedirExclusao(m)}
+                  >
+                    Excluir
+                  </button>
                 )}
                 <button
                   type="button"
