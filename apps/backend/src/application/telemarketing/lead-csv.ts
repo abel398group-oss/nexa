@@ -13,9 +13,16 @@ import type { LinhaAvaliada, MotivoDescarte } from './lead-import';
 /// Cabeçalhos aceitos por campo. A lista vem de fora — feira, indicação, planilha
 /// que alguém montou no Excel — então o parser aceita as variações em vez de exigir
 /// um formato que o operador vai errar e nem saber por quê.
+/// Comparadas já normalizadas (ver `chaveDoCabecalho`): minúsculas, sem acento e com
+/// `_` virando espaço. Por isso `razao social` cobre `razao_social` e `RAZÃO SOCIAL`.
 const CABECALHOS: Record<string, readonly string[]> = {
   name: ['nome', 'name', 'contato', 'responsavel'],
-  company: ['empresa', 'company', 'razao social', 'razao', 'transportadora'],
+  // `nome fantasia` é da EMPRESA, não da pessoa — e precisa vir aqui explicitamente,
+  // porque o casamento é exato: sozinho ele não cai nem em `nome` nem em `empresa`.
+  company: [
+    'empresa', 'company', 'razao social', 'razao', 'transportadora',
+    'nome fantasia', 'fantasia',
+  ],
   phone: ['telefone', 'fone', 'phone', 'celular', 'whatsapp', 'zap'],
   email: ['email', 'e-mail', 'mail'],
   fleetSize: ['frota', 'fleet', 'caminhoes', 'veiculos'],
@@ -88,7 +95,15 @@ function chaveDoCabecalho(bruto: string): string | null {
     .toLowerCase()
     .replace(/^\uFEFF/, '') // BOM do Excel
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, ''); // acento: "razão" → "razao"
+    .replace(/[̀-ͯ]/g, '') // acento: "razão" → "razao"
+    // Underline vira espaço: exportação de sistema sai em `razao_social`,
+    // `nome_fantasia`, `lead_email`. Sem isto, `campanha_sp_completa.csv` — 31.906
+    // linhas vindas da base da Receita — entrava com e-mail e telefone e SEM empresa
+    // nenhuma: 27.607 leads anônimos. O estrago não é o campo vazio, é o e-mail sair
+    // sem nada que mostre que a gente sabe com quem está falando.
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   for (const [campo, variacoes] of Object.entries(CABECALHOS)) {
     if (variacoes.includes(limpo)) return campo;
@@ -153,8 +168,16 @@ export function parseCsvDeLeads(conteudo: string): ResultadoCsv {
   for (let i = 1; i < brutas.length; i += 1) {
     const celulas = dividir(brutas[i], sep);
     const campos: Record<string, string | null> = {};
+    // Duas colunas podem cair no MESMO campo — `razao_social` e `nome_fantasia` são
+    // as duas empresa; `whatsapp` e `telefone` são os dois telefone. Vence a primeira
+    // PREENCHIDA, não a última: antes, uma coluna vazia mais à direita apagava o valor
+    // que a da esquerda tinha trazido. Em `campanha_sp_completa.csv` o `nome_fantasia`
+    // em branco zerava a razão social de 13.846 linhas que estavam certas.
+    //
+    // Como efeito, `whatsapp` passa a ganhar de `telefone` quando os dois vêm — e é o
+    // que se quer: o SDR trabalha no zap, e a outra coluna costuma ser o fixo.
     mapa.forEach((campo, idx) => {
-      if (!campo) return;
+      if (!campo || campos[campo]) return;
       const valor = (celulas[idx] ?? '').trim();
       campos[campo] = valor.length > 0 ? valor : null;
     });
