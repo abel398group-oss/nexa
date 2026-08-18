@@ -36,6 +36,7 @@ import {
  */
 
 const EXT_TEXTO = ['.md', '.txt', '.markdown'];
+const TIPOS_PORTFOLIO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 function ehTexto(nome: string): boolean {
   return EXT_TEXTO.some((e) => nome.toLowerCase().endsWith(e));
@@ -51,8 +52,11 @@ export function CampaignValidationPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [arrastando, setArrastando] = useState(false);
+  const refRoteiro = useRef<HTMLInputElement>(null);
+  const refPortfolio = useRef<HTMLInputElement>(null);
+  /// Qual área está recebendo o arrasto — ou null. Guardado por área, e não como
+  /// booleano único, para a moldura acender só embaixo do cursor.
+  const [arrastando, setArrastando] = useState<'plan' | 'portfolio' | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   /// Rascunho da correção. `null` = só lendo; objeto = editando este arquivo.
   const [edicao, setEdicao] = useState<{ id: string; name: string; content: string } | null>(null);
@@ -166,6 +170,44 @@ export function CampaignValidationPage() {
     if (arquivos.length) subir.mutate(arquivos);
   }
 
+  /**
+   * Duas áreas, porque são duas coisas.
+   *
+   * O tipo do arquivo continua mandando de verdade — soltar um PDF na área de roteiro
+   * o manda para portfólio do mesmo jeito, e o contrário também. As duas existem para
+   * DIZER o que cabe em cada uma, não para policiar: quem chega com a pasta bagunçada
+   * não deveria descobrir que errou só depois de arrastar.
+   */
+  function AreaDeSoltar({ kind, titulo, detalhe, accept }: {
+    kind: 'plan' | 'portfolio'; titulo: string; detalhe: string; accept: string;
+  }) {
+    const ref = kind === 'plan' ? refRoteiro : refPortfolio;
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); setArrastando(kind); }}
+        onDragLeave={() => setArrastando(null)}
+        onDrop={(e) => { e.preventDefault(); setArrastando(null); receber(e.dataTransfer.files); }}
+        onClick={() => ref.current?.click()}
+        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
+          arrastando === kind ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
+        }`}
+      >
+        <Icon name={kind === 'plan' ? 'mail' : 'eye'} className="mx-auto h-6 w-6 text-base-content/40" />
+        <p className="mt-1.5 text-sm text-base-content/75">{subir.isPending ? 'Subindo…' : titulo}</p>
+        <p className="mt-0.5 text-[11px] text-base-content/45">{detalhe}</p>
+        <input
+          ref={ref}
+          type="file"
+          multiple
+          accept={accept}
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { receber(e.target.files); e.target.value = ''; }}
+        />
+      </div>
+    );
+  }
+
   const pendentes = itens.filter((a) => a.status === 'pending');
   const aprovados = itens.filter((a) => a.status === 'approved');
 
@@ -184,31 +226,21 @@ export function CampaignValidationPage() {
         }
       />
 
-      {/* ── A pilha entra aqui ─────────────────────────────────────────────── */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
-        onDragLeave={() => setArrastando(false)}
-        onDrop={(e) => { e.preventDefault(); setArrastando(false); receber(e.dataTransfer.files); }}
-        onClick={() => inputRef.current?.click()}
-        className={`mb-4 cursor-pointer rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
-          arrastando ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
-        }`}
-      >
-        <Icon name="upload" className="mx-auto h-7 w-7 text-base-content/40" />
-        <p className="mt-2 text-sm text-base-content/70">
-          {subir.isPending ? 'Subindo…' : 'Arraste tudo aqui de uma vez'}
-        </p>
-        <p className="mt-0.5 text-[11px] text-base-content/45">
-          Texto (.md, .txt) vira roteiro · PDF e imagem viram portfólio — eu separo pelo tipo
-        </p>
+      {/* ── A pilha entra aqui, cada coisa na sua área ────────────────────── */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <AreaDeSoltar
+          kind="plan"
+          titulo="Roteiro da campanha"
+          detalhe=".md ou .txt — é o que a Lia lê"
+          accept={EXT_TEXTO.join(',')}
+        />
+        <AreaDeSoltar
+          kind="portfolio"
+          titulo="Portfólio, folder e fotos"
+          detalhe="PDF, JPG, PNG — é o que o lead vê"
+          accept={TIPOS_PORTFOLIO.join(',')}
+        />
       </div>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(e) => { receber(e.target.files); e.target.value = ''; }}
-      />
 
       {/* ── Fila à esquerda, leitura à direita ─────────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
@@ -276,20 +308,24 @@ export function CampaignValidationPage() {
                     {/* Corrigir fica ao lado de aprovar de propósito: quem lê é quem
                         vê o erro, e mandar essa pessoa voltar ao computador para
                         editar o arquivo é o que faz ela aprovar assim mesmo. */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setEdicao({
-                          id: selecionado.id,
-                          name: selecionado.name,
-                          content: texto?.content ?? '',
-                        })
-                      }
-                      disabled={selecionado.kind === 'plan' && lendo}
-                    >
-                      <Icon name="edit" className="h-4 w-4" /> Corrigir
-                    </Button>
+                    {/* Só no roteiro. Portfólio é arquivo pronto: o que se corrige
+                        num PDF é o PDF, e isso é subir de novo. */}
+                    {selecionado.kind === 'plan' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={lendo}
+                        onClick={() =>
+                          setEdicao({
+                            id: selecionado.id,
+                            name: selecionado.name,
+                            content: texto?.content ?? '',
+                          })
+                        }
+                      >
+                        <Icon name="edit" className="h-4 w-4" /> Corrigir
+                      </Button>
+                    )}
                     {selecionado.status === 'pending' ? (
                       <Button size="sm" disabled={aprovar.isPending} onClick={() => aprovar.mutate(selecionado.id)}>
                         <Icon name="check" className="h-4 w-4" /> Aprovar
@@ -301,7 +337,7 @@ export function CampaignValidationPage() {
                     )}
                     <button
                       type="button"
-                      className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
+                      className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
                       onClick={() => void pedirRemocao(selecionado)}
                     >
                       Remover

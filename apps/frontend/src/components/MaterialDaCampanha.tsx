@@ -248,7 +248,7 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
                   )}
                   <button
                     type="button"
-                    className="rounded-lg px-1.5 py-0.5 text-[11px] text-base-content/40 hover:bg-red-50 hover:text-red-500"
+                    className="rounded-lg px-1.5 py-0.5 text-[11px] text-base-content/40 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
                     onClick={() => void pedirRemocao(a)}
                   >
                     Remover

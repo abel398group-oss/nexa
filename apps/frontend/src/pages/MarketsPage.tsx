@@ -486,7 +486,7 @@ export function MarketsPage() {
                 {m.status !== 'active' && (
                   <button
                     type="button"
-                    className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
+                    className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
                     disabled={excluir.isPending}
                     onDoubleClick={(e) => e.stopPropagation()}
                     onClick={() => void pedirExclusao(m)}

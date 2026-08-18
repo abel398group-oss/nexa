@@ -424,6 +424,22 @@ html.dark textarea {
 html.dark input::placeholder,
 html.dark textarea::placeholder { color: var(--text-muted) !important; }
 
+/* A LISTA aberta do select, e não só a caixa fechada.
+ *
+ * A regra acima pinta o `select`, mas o `option` seguia com fundo transparente. A
+ * lista suspensa é desenhada pelo sistema operacional, e sem fundo declarado o
+ * Windows a pinta de branco — com a letra herdando o branco-gelo do tema escuro.
+ * Resultado: a lista abria em branco, sem nada legível dentro. Achado em
+ * 18/08/2026 nos seletores de parceiro e de mercado.
+ *
+ * `background-color` (e não `background`) porque só a cor precisa mudar, e
+ * `!important` porque o valor default vem do agente do usuário. */
+html.dark select option,
+html.dark select optgroup {
+  background-color: var(--surface-input) !important;
+  color: var(--text-primary) !important;
+}
+
 /* ===== DARK: superfícies base-* e zinc-* ===== */
 /* bg-base-* dark — resolvem via variáveis CSS que já estão corretas em html.dark */
 .dark .bg-base-100, .dark .bg-zinc-50  { background-color: var(--app-base-100) !important; }
