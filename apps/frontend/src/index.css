@@ -207,6 +207,18 @@ html.dark {
   --app-base-300:    #282c36;   /* bordas, divisores */
   --app-base-content:#fafaf9;
 
+  /* O MESMO token que o Tailwind usa para gerar `text-base-content`.
+   *
+   * Sem esta linha, o tema escuro só consertava a cor pela lista explícita de
+   * classes lá embaixo (`.dark .text-base-content\/70`, `/60`, `/50`…), e qualquer
+   * opacidade fora daquela lista continuava usando o valor CLARO — #16181d, quase
+   * preto — sobre o card escuro. Foi o que aconteceu com `/75` no texto do roteiro
+   * e com `/65`: o texto ficava ilegível e nada na lista explicava por quê.
+   *
+   * Corrigido no token, `text-base-content/QUALQUER-COISA` passa a funcionar. A
+   * lista de classes abaixo vira redundância inofensiva. Achado em 18/08/2026. */
+  --color-base-content: #fafaf9;
+
   --surface:          #1f222a;   /* cards — visíveis sobre bg-base-100 */
   --surface-muted:    #0e0f13;   /* body bg — mais escuro (base) */
   --surface-elevated: #282c36;   /* dropdowns, modais — mais claro */

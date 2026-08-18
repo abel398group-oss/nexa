@@ -107,12 +107,29 @@ export function CampaignValidationPage() {
    * recusa individual em N erros simultâneos, sem dizer qual arquivo é qual.
    */
   const subir = useMutation({
-    mutationFn: async (arquivos: File[]) => {
+    mutationFn: async ({ arquivos, kind }: { arquivos: File[]; kind: 'plan' | 'portfolio' }) => {
       const aceitos: string[] = [];
       const recusados: string[] = [];
       for (const f of arquivos) {
+        // A ÁREA decide o grupo, não o tipo do arquivo. O que entra pelo Roteiro fica
+        // sob o título Roteiro. Antes o tipo mandava, e um PDF solto na área de texto
+        // reaparecia calado no outro grupo — a área dizia uma coisa e a lista, outra.
+        //
+        // Não cabendo, é RECUSA com o nome do arquivo e para onde ele deveria ir. Um
+        // `.md` não vira portfólio (o texto some do que a Lia lê) e um PDF não vira
+        // roteiro (binário não cabe na coluna de texto): remanejar em silêncio seria
+        // trocar um erro visível por um escondido.
+        const ehArquivoDeTexto = ehTexto(f.name);
+        if (kind === 'plan' && !ehArquivoDeTexto) {
+          recusados.push(`${f.name} (não é texto — solte em Portfólio e materiais)`);
+          continue;
+        }
+        if (kind === 'portfolio' && ehArquivoDeTexto) {
+          recusados.push(`${f.name} (é texto — solte em Roteiro da campanha)`);
+          continue;
+        }
         try {
-          if (ehTexto(f.name)) await uploadMarketAsset(code, { name: f.name, content: await f.text() });
+          if (kind === 'plan') await uploadMarketAsset(code, { name: f.name, content: await f.text() });
           else await uploadMarketPortfolio(code, f);
           aceitos.push(f.name);
         } catch (e: any) {
@@ -176,18 +193,18 @@ export function CampaignValidationPage() {
     if (ok) remover.mutate(a.id);
   }
 
-  function receber(lista: FileList | null) {
+  function receber(lista: FileList | null, kind: 'plan' | 'portfolio') {
     const arquivos = Array.from(lista ?? []);
-    if (arquivos.length) subir.mutate(arquivos);
+    if (arquivos.length) subir.mutate({ arquivos, kind });
   }
 
   /**
-   * Duas áreas, porque são duas coisas.
+   * Duas áreas, porque são duas coisas — e a área é que MANDA.
    *
-   * O tipo do arquivo continua mandando de verdade — soltar um PDF na área de roteiro
-   * o manda para portfólio do mesmo jeito, e o contrário também. As duas existem para
-   * DIZER o que cabe em cada uma, não para policiar: quem chega com a pasta bagunçada
-   * não deveria descobrir que errou só depois de arrastar.
+   * O que entra pelo Roteiro fica sob o título Roteiro; o que entra pelo Portfólio,
+   * sob o dele. O arquivo que não couber é recusado dizendo o nome e para onde ir,
+   * em vez de reaparecer calado no outro grupo: a área prometendo uma coisa e a
+   * lista mostrando outra é pior do que uma recusa clara.
    */
   function AreaDeSoltar({ kind, titulo, detalhe, accept }: {
     kind: 'plan' | 'portfolio'; titulo: string; detalhe: string; accept: string;
@@ -197,7 +214,7 @@ export function CampaignValidationPage() {
       <div
         onDragOver={(e) => { e.preventDefault(); setArrastando(kind); }}
         onDragLeave={() => setArrastando(null)}
-        onDrop={(e) => { e.preventDefault(); setArrastando(null); receber(e.dataTransfer.files); }}
+        onDrop={(e) => { e.preventDefault(); setArrastando(null); receber(e.dataTransfer.files, kind); }}
         onClick={() => ref.current?.click()}
         className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
           arrastando === kind ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
@@ -213,7 +230,7 @@ export function CampaignValidationPage() {
           accept={accept}
           className="hidden"
           onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { receber(e.target.files); e.target.value = ''; }}
+          onChange={(e) => { receber(e.target.files, kind); e.target.value = ''; }}
         />
       </div>
     );
