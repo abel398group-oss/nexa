@@ -234,8 +234,26 @@ export function comCidadesEncontradas(
   };
 }
 
-/// Tudo que o TMS precisa para calcular e criar o rascunho. `null` = ainda falta campo.
-export function dadosDaCotacao(estado: EstadoCotacao) {
+/**
+ * O corpo que vai para `POST /nexa/quote`.
+ *
+ * Tudo em INGLÊS, e não misturado como na primeira versão: o padrão da API do TMS é
+ * inglês, e o PRD deles já fala `originCode`, `merchandiseValue`, `distanceKm`. Contrato
+ * bilíngue é o tipo de coisa que se paga caro para desfazer depois — o próprio time do
+ * TMS lembrou que mudança unilateral de contrato derrubou o suporte em 09/07/2026.
+ *
+ * `null` = ainda falta campo, e quem chama não deve mandar nada.
+ */
+export interface CorpoDaCotacao {
+  originCode: string;
+  destCode: string;
+  freightMode: 'DEDICATED' | 'FRACTIONAL';
+  vehicleType: Veiculo | null;
+  weightKg: number | null;
+  merchandiseValue: number;
+}
+
+export function dadosDaCotacao(estado: EstadoCotacao): CorpoDaCotacao | null {
   if (estado.etapa !== 'pronto') return null;
   if (!estado.origem || !estado.destino || !estado.modalidade || !estado.valorMercadoria) {
     return null;
@@ -243,7 +261,7 @@ export function dadosDaCotacao(estado: EstadoCotacao) {
   return {
     originCode: estado.origem.code,
     destCode: estado.destino.code,
-    modalidade: estado.modalidade,
+    freightMode: estado.modalidade === 'dedicado' ? 'DEDICATED' : 'FRACTIONAL',
     vehicleType: estado.veiculo ?? null,
     weightKg: estado.pesoKg ?? null,
     merchandiseValue: estado.valorMercadoria,

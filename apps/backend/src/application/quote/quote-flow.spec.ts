@@ -156,7 +156,7 @@ describe('dados para o TMS', () => {
     expect(dadosDaCotacao(p.estado)).toEqual({
       originCode: CAMPINAS.code,
       destCode: BH.code,
-      modalidade: 'dedicado',
+      freightMode: 'DEDICATED',
       vehicleType: 'carreta',
       weightKg: null,
       merchandiseValue: 80000,
@@ -172,7 +172,7 @@ describe('dados para o TMS', () => {
     const valor = responder(peso.estado, '12000');
     if (valor.tipo !== 'seguir') throw new Error('valor');
     expect(dadosDaCotacao(valor.estado)).toMatchObject({
-      modalidade: 'fracionado',
+      freightMode: 'FRACTIONAL',
       vehicleType: null,
       weightKg: 500,
       merchandiseValue: 12000,
