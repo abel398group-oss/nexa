@@ -212,7 +212,7 @@ describe('MarketsService.updateIdentidade', () => {
  */
 function makeSvcRemove(
   mercado: any = { id: 'p1', code: 'd', name: 'agabe', status: 'draft' },
-  counts = { kb: 0, modelos: 0, lotes: 0 },
+  counts: any = { kb: 0, modelos: 0, lotes: 0, materiais: 0 },
 ) {
   const prisma = {
     product: {
@@ -220,6 +220,7 @@ function makeSvcRemove(
       delete: vi.fn().mockResolvedValue(mercado),
     },
     aiKnowledgeBase: { count: vi.fn().mockResolvedValue(counts.kb) },
+    marketAsset: { count: vi.fn().mockResolvedValue(counts.materiais ?? 0) },
     messageTemplate: { count: vi.fn().mockResolvedValue(counts.modelos) },
     leadBatch: { count: vi.fn().mockResolvedValue(counts.lotes) },
     sellerMarket: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -272,5 +273,32 @@ describe('MarketsService.remove', () => {
 
     await expect(svc.remove('t1', 'nao-existe')).rejects.toThrow('Mercado não encontrado');
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A trava de exclusão contra as tabelas que nasceram DEPOIS dela.
+ *
+ * `market_assets` é de 18/08/2026 e a trava é de 17/08 — ninguém a atualizou, e no
+ * primeiro teste de tela um mercado com roteiro dentro foi apagado sem uma palavra.
+ * O texto ficou órfão na tabela; fosse portfólio, o arquivo teria ficado largado em
+ * `uploads/` sem nada que o alcançasse.
+ *
+ * Este teste é a lembrança: toda tabela nova com `productCode` entra na contagem.
+ */
+describe('MarketsService.remove — material de campanha segura', () => {
+  it('rascunho com roteiro dentro não é apagado', async () => {
+    const { svc, prisma } = makeSvcRemove(undefined, { kb: 0, modelos: 0, lotes: 0, materiais: 1 });
+
+    await expect(svc.remove('t1', 'd')).rejects.toThrow(/1 arquivo\(s\) de campanha/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('o material aparece junto dos outros motivos, não no lugar deles', async () => {
+    const { svc } = makeSvcRemove(undefined, { kb: 3, modelos: 0, lotes: 0, materiais: 2 });
+
+    await expect(svc.remove('t1', 'd')).rejects.toThrow(
+      /3 artigo\(s\) de conhecimento, 2 arquivo\(s\) de campanha/,
+    );
   });
 });

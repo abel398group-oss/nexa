@@ -6,6 +6,7 @@ import { useToast } from '@/app/providers/ToastContext';
 import { createMarket } from '@/entities/market';
 import { listPartners } from '@/entities/partner';
 import { CampoCor } from './CampoCor';
+import { MaterialDaCampanha } from './MaterialDaCampanha';
 
 interface NewMarketModalProps {
   open: boolean;
@@ -56,6 +57,16 @@ const VAZIO = {
  *
  * Nome e identificador ficam separados do resto por uma linha porque são a única
  * parte que NÃO muda depois — o `code` entra em conhecimento, campanha e conector.
+ *
+ * ## Por que a modal não fecha ao criar
+ *
+ * Ela tem DOIS passos. Criar era o fim, e o operador caía de volta na lista tendo
+ * que achar o mercado que acabou de criar, abrir a gaveta e só então arrastar o
+ * roteiro — três cliques para continuar exatamente o que estava fazendo.
+ *
+ * Só que o upload precisa do mercado existindo: a rota é `/markets/:code/assets`.
+ * Então a modal cria de verdade e SEGUE ABERTA no passo de subir. Fechar no meio não
+ * perde nada — o mercado está criado e os arquivos que já entraram estão lá.
  */
 export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
   const toast = useToast();
@@ -91,10 +102,14 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
     setSlugEditado(false);
   }
 
+  /// Preenchido quando o mercado já existe: é o que troca o passo da modal.
+  const [criado, setCriado] = useState<{ code: string; name: string } | null>(null);
+
   function fechar() {
     setF(VAZIO);
     setSlugEditado(false);
     setParceiro('');
+    setCriado(null);
     onClose();
   }
 
@@ -117,8 +132,9 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
       // Mesma queryKey que a MarketsPage consome — sem isto o mercado só apareceria
       // depois de um F5.
       void qc.invalidateQueries({ queryKey: ['markets'] });
-      toast.success(`${m.name} criado em rascunho — libere quando estiver montado.`);
-      fechar();
+      toast.success(`${m.name} criado em rascunho.`);
+      // Não fecha: segue para o passo de subir o material, com o mercado já existindo.
+      setCriado({ code: m.code, name: m.name });
     },
     // O servidor diz QUAL regra falhou (slug duplicado, formato inválido). Mostrar a
     // mensagem dele vale mais que um "erro ao criar" genérico.
@@ -134,6 +150,29 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
   });
 
   const podeSalvar = !!parceiro && f.nome.trim().length > 0 && slug.length > 0;
+
+  // ── Passo 2: o mercado existe, agora entra o material ───────────────────
+  if (criado) {
+    return (
+      <Modal open={open} onClose={fechar} title={`${criado.name} — material da campanha`} size="lg">
+        <div className="space-y-3">
+          <p className="rounded-lg bg-base-100 px-3 py-2 text-[11px] text-base-content/60">
+            Mercado criado em <strong>rascunho</strong>. Arraste agora o roteiro e o portfólio —
+            ou feche e faça depois em Mercados, que o que já entrou fica salvo.
+          </p>
+
+          {/* O mesmo componente da tela de Mercados: sobe pendente e é aprovado ali
+              ou aqui, sem diferença. Uma segunda versão do upload seria uma segunda
+              chance de as duas divergirem. */}
+          <MaterialDaCampanha code={criado.code} />
+
+          <div className="flex justify-end pt-1">
+            <Button type="button" onClick={fechar}>Concluir</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal open={open} onClose={fechar} title="Criar novo mercado" size="lg">
@@ -252,8 +291,7 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
 
         <p className="rounded-lg bg-base-100 px-3 py-2 text-[11px] text-base-content/50">
           O mercado nasce em <strong>rascunho</strong>: não aparece no Disparo até você liberá-lo.
-          Para liberar ainda vão faltar conhecimento, uma mensagem pronta e um vendedor — a lista
-          mostra o que falta.
+          Depois de criar, esta mesma janela abre para você subir o roteiro e o portfólio.
         </p>
 
         <div className="flex justify-end gap-2">
@@ -261,7 +299,7 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
             Cancelar
           </Button>
           <Button type="submit" loading={criar.isPending} disabled={!podeSalvar}>
-            Criar mercado
+            Criar e subir material
           </Button>
         </div>
       </form>

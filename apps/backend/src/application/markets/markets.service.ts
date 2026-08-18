@@ -297,16 +297,23 @@ export class MarketsService {
       );
     }
 
-    const [kb, modelos, lotes] = await Promise.all([
+    // `market_assets` entra aqui porque a tabela nasceu DEPOIS desta trava, e ficou de
+    // fora dela: em 18/08/2026 um mercado com roteiro dentro foi apagado sem uma
+    // palavra, deixando o texto órfão na tabela — e, no caso do portfólio, o arquivo
+    // largado em `uploads/` sem nada que o alcance. Toda tabela nova com `productCode`
+    // precisa ser lembrada aqui.
+    const [kb, modelos, lotes, materiais] = await Promise.all([
       this.prisma.aiKnowledgeBase.count({ where: { tenantId, productCode: code } }),
       this.prisma.messageTemplate.count({ where: { tenantId, productCode: code } }),
       this.prisma.leadBatch.count({ where: { tenantId, productCode: code } }),
+      this.prisma.marketAsset.count({ where: { tenantId, productCode: code } }),
     ]);
 
     const usos = [
       kb > 0 ? `${kb} artigo(s) de conhecimento` : null,
       modelos > 0 ? `${modelos} modelo(s) de mensagem` : null,
       lotes > 0 ? `${lotes} lista(s) de lead` : null,
+      materiais > 0 ? `${materiais} arquivo(s) de campanha` : null,
     ].filter(Boolean);
 
     if (usos.length) {
