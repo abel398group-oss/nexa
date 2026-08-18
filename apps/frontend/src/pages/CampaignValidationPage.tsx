@@ -261,6 +261,7 @@ export function CampaignValidationPage() {
             aberto={aberto}
             onAbrir={abrir}
             carregando={isLoading}
+            recolhivel
           />
         </div>
 
@@ -383,8 +384,19 @@ export function CampaignValidationPage() {
   );
 }
 
+/**
+ * Uma fila de material.
+ *
+ * `recolhivel` é o "já aprovado": ele nasce FECHADO, mostrando só a contagem. Este
+ * painel é fila de trabalho, e o aprovado é histórico — precisa estar alcançável
+ * (para conferir, ou para puxar de volta), não precisa ocupar a tela. Com as duas
+ * listas abertas e coladas, a de baixo empurrava a de cima para fora da vista
+ * justamente quando havia mais coisa aprovada, que é quando ela menos importa.
+ *
+ * Some da tela, não some do sistema: um clique traz de volta.
+ */
 function FilaDeMaterial({
-  titulo, vazio, itens, aberto, onAbrir, carregando, destacar,
+  titulo, vazio, itens, aberto, onAbrir, carregando, destacar, recolhivel,
 }: {
   titulo: string;
   vazio: string;
@@ -393,16 +405,44 @@ function FilaDeMaterial({
   onAbrir: (id: string) => void;
   carregando: boolean;
   destacar?: boolean;
+  recolhivel?: boolean;
 }) {
+  const [recolhido, setRecolhido] = useState(!!recolhivel);
+  // O arquivo aberto no leitor está nesta lista: mantê-la fechada esconderia de qual
+  // fila veio o que se está lendo.
+  const contemOAberto = itens.some((a) => a.id === aberto);
+  const fechado = recolhido && !contemOAberto;
+
+  const cabecalho = (
+    <>
+      <span className="text-xs font-medium text-base-content">{titulo}</span>
+      <span className={`text-[11px] ${destacar && itens.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}>
+        {itens.length}
+        {recolhivel && (
+          <Icon
+            name="chevronDown"
+            className={`ml-1 inline h-3.5 w-3.5 transition-transform ${fechado ? '' : 'rotate-180'}`}
+          />
+        )}
+      </span>
+    </>
+  );
+
   return (
     <Card className="p-0">
-      <div className="flex items-baseline justify-between border-b border-base-200 px-4 py-2">
-        <span className="text-xs font-medium text-base-content">{titulo}</span>
-        <span className={`text-[11px] ${destacar && itens.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}>
-          {itens.length}
-        </span>
-      </div>
-      {carregando ? (
+      {recolhivel ? (
+        <button
+          type="button"
+          onClick={() => setRecolhido((v) => !v)}
+          aria-expanded={!fechado}
+          className="flex w-full items-baseline justify-between border-b border-base-200 px-4 py-2 hover:bg-base-100"
+        >
+          {cabecalho}
+        </button>
+      ) : (
+        <div className="flex items-baseline justify-between border-b border-base-200 px-4 py-2">{cabecalho}</div>
+      )}
+      {fechado ? null : carregando ? (
         <p className="px-4 py-3 text-[11px] text-base-content/40">Carregando…</p>
       ) : itens.length === 0 ? (
         <p className="px-4 py-3 text-[11px] text-base-content/40">{vazio}</p>
