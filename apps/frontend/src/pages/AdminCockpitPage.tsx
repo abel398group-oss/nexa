@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { MarketsPage } from './MarketsPage';
+import { CampaignValidationPage } from './CampaignValidationPage';
 import { LeadBatchesPage } from './LeadBatchesPage';
 import { CampaignsPage } from './CampaignsPage';
 import { PlaybookMessagesTab } from './PlaybookMessagesTab';
@@ -41,6 +42,14 @@ export function AdminCockpitPage() {
       // dois títulos empilhados ("Markets" e "Mercados") dizendo a mesma coisa com
       // palavras diferentes.
       render: () => <MarketsPage />,
+    },
+    {
+      id: 'validacao',
+      label: '✅ Validação de campanha',
+      // Mesma permissão de Markets: aprovar material é de quem monta a operação e
+      // responde por ela, não de quem dispara.
+      perm: 'settings',
+      render: () => <CampaignValidationPage />,
     },
     {
       id: 'playbook',

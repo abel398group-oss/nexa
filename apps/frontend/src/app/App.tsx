@@ -28,6 +28,7 @@ const CampaignsPage = lazy(() => import('@/pages/CampaignsPage').then((m) => ({ 
 const NumberHealthPage = lazy(() => import('@/pages/NumberHealthPage').then((m) => ({ default: m.NumberHealthPage })));
 const CliquesPage = lazy(() => import('@/pages/CliquesPage').then((m) => ({ default: m.CliquesPage })));
 const SiteAudiencePage = lazy(() => import('@/pages/SiteAudiencePage').then((m) => ({ default: m.SiteAudiencePage })));
+const CampaignValidationPage = lazy(() => import('@/pages/CampaignValidationPage').then((m) => ({ default: m.CampaignValidationPage })));
 const MarketsPage = lazy(() => import('@/pages/MarketsPage').then((m) => ({ default: m.MarketsPage })));
 const MessageTemplatesPage = lazy(() => import('@/pages/MessageTemplatesPage').then((m) => ({ default: m.MessageTemplatesPage })));
 const LeadBatchesPage = lazy(() => import('@/pages/LeadBatchesPage').then((m) => ({ default: m.LeadBatchesPage })));
@@ -107,6 +108,7 @@ export default function App() {
                     <Route path="/site/audiencia" element={<Perm perm="campaigns"><SiteAudiencePage /></Perm>} />
                     {/* Liberar mercado muda o que o vendedor enxerga — fica atrás de settings, não de campaigns. */}
                     <Route path="/markets" element={<Perm perm="settings"><MarketsPage /></Perm>} />
+                    <Route path="/validacao" element={<Perm perm="settings"><CampaignValidationPage /></Perm>} />
                     <Route path="/messages" element={<Perm perm="campaigns"><MessageTemplatesPage /></Perm>} />
                     {/* Importar lista cria contatos e oportunidades — perm própria, não `campaigns`. */}
                     <Route path="/lead-batches" element={<Perm perm="lead_batches"><LeadBatchesPage /></Perm>} />
