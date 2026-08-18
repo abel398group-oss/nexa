@@ -42,6 +42,11 @@ function ehTexto(nome: string): boolean {
   return EXT_TEXTO.some((e) => nome.toLowerCase().endsWith(e));
 }
 
+/** O nome da área de onde o arquivo veio — o mesmo texto das áreas de soltar. */
+function rotuloDoTipo(kind: string): string {
+  return kind === 'plan' ? 'Roteiro da campanha' : 'Portfólio e materiais';
+}
+
 function tamanho(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -265,7 +270,11 @@ export function CampaignValidationPage() {
           />
         </div>
 
-        <Card className="p-0">
+        {/* A moldura azul é o sinal de que se está ESCREVENDO, e não lendo.
+            Antes, "Corrigir" trocava um <pre> por um <textarea> e o resto da tela
+            ficava igual — dava para não saber em que modo se estava, e um clique
+            fora perdia o que tinha sido digitado sem aviso. */}
+        <Card className={`p-0 ${editando ? 'ring-2 ring-blue-400 dark:ring-blue-500' : ''}`}>
           {!selecionado ? (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center">
               <Icon name="knowledge" className="h-8 w-8 text-base-content/20" />
@@ -276,7 +285,11 @@ export function CampaignValidationPage() {
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b border-base-200 px-4 py-2.5">
+              <div
+                className={`flex flex-wrap items-center gap-2 border-b border-base-200 px-4 py-2.5 ${
+                  editando ? 'bg-blue-50 dark:bg-blue-500/10' : ''
+                }`}
+              >
                 <div className="min-w-0 flex-1">
                   {editando ? (
                     <input
@@ -289,14 +302,20 @@ export function CampaignValidationPage() {
                     <div className="truncate text-sm font-medium text-base-content">{selecionado.name}</div>
                   )}
                   <div className="text-[11px] text-base-content/50">
-                    {selecionado.kind === 'plan' ? 'Roteiro' : 'Portfólio'} · {tamanho(selecionado.sizeBytes)}
+                    {rotuloDoTipo(selecionado.kind)} · {tamanho(selecionado.sizeBytes)}
                     {selecionado.approvedAt &&
                       ` · aprovado em ${new Date(selecionado.approvedAt).toLocaleDateString('pt-BR')}`}
                   </div>
                 </div>
-                <StatusBadge tone={selecionado.status === 'pending' ? 'warning' : 'success'}>
-                  {selecionado.status === 'pending' ? 'Aguardando' : 'Aprovado'}
-                </StatusBadge>
+                {editando ? (
+                  <StatusBadge tone="info">
+                    <Icon name="edit" className="mr-1 inline h-3 w-3" /> Editando
+                  </StatusBadge>
+                ) : (
+                  <StatusBadge tone={selecionado.status === 'pending' ? 'warning' : 'success'}>
+                    {selecionado.status === 'pending' ? 'Aguardando' : 'Aprovado'}
+                  </StatusBadge>
+                )}
                 {editando ? (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => setEdicao(null)}>Cancelar</Button>
@@ -356,6 +375,12 @@ export function CampaignValidationPage() {
                     onChange={(e) => setEdicao((v) => v && { ...v, content: e.target.value })}
                     aria-label="Texto do roteiro"
                   />
+                ) : null}
+                {editando && selecionado.kind === 'plan' ? (
+                  <p className="mt-2 text-[11px] text-base-content/50">
+                    Salvar devolve o arquivo para a fila — você aprova de novo com o texto novo na
+                    frente. Cancelar descarta o que foi digitado.
+                  </p>
                 ) : selecionado.kind === 'plan' ? (
                   lendo ? (
                     <p className="text-xs text-base-content/40">Abrindo…</p>
@@ -463,7 +488,7 @@ function FilaDeMaterial({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs text-base-content">{a.name}</span>
               <span className="block text-[11px] text-base-content/45">
-                {a.kind === 'plan' ? 'Roteiro' : 'Portfólio'} · {tamanho(a.sizeBytes)}
+                {rotuloDoTipo(a.kind)} · {tamanho(a.sizeBytes)}
               </span>
             </span>
           </button>
