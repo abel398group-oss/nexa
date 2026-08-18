@@ -443,6 +443,18 @@ export class WhatsappService {
     // (regra do repo: nenhum drop silencioso).
     const internal = await this.internalNumbers.classify(n.phone);
     if (internal.internal) {
+      // COTAÇÃO POR WHATSAPP — o gancho fica AQUI DENTRO do descarte, não antes dele.
+      //
+      // Quem cota é exatamente quem recebe alerta: usuário do TMS cadastrado como contato
+      // do Monitor. Esses números são internos por definição, e a regra abaixo joga a
+      // mensagem deles fora. Depois do `return` seria código morto; antes do gate faria
+      // lead virar cotação.
+      //
+      // `tentarCotacao` devolve false quando a mensagem não é de cotação — e aí o
+      // descarte segue exatamente como sempre foi. Ver `QuoteConversationService`.
+      const virouCotacao = await this.tentarCotacao(n.phone, n.text, linha);
+      if (virouCotacao) return { ignored: false, cotacao: true, phone: n.phone };
+
       this.logger.warn(
         `inbound descartado: número interno (${internal.reason}) — ${n.phone} não vira lead/conversa`,
       );

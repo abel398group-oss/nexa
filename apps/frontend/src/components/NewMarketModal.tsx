@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Modal, Input, Button } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { createMarket } from '@/entities/market';
+import { listPartners } from '@/entities/partner';
 import { CampoCor } from './CampoCor';
 
 interface NewMarketModalProps {
@@ -40,14 +42,17 @@ const VAZIO = {
 /**
  * Criar mercado.
  *
- * Pedia duas coisas — nome e identificador — e o mercado nascia com uma pendência
- * vermelha na lista: "falta o nome de exibição e o remetente". Quem acabou de
- * preencher um formulário não entende ser cobrado por um campo que o formulário não
- * ofereceu. A identidade entra aqui porque é onde o operador já está pensando na
- * marca do mercado que está criando.
+ * O primeiro campo é o PARCEIRO, e não um nome digitado, porque é assim que a coisa
+ * funciona de verdade: cadastra-se a empresa em Parceiros de indicação e vende-se o
+ * produto dela. Digitar o nome de novo aqui é a chance de escrever "HiperTms" numa
+ * tela e "HiperTMS" na outra, e ninguém descobrir que são a mesma empresa.
  *
- * Continua tudo opcional: vazio cai no nome do mercado, do lado do servidor, e a
- * tela de Mercados edita depois. O que mudou é que agora dá para nascer pronto.
+ * "Outro" continua existindo: nem todo mercado é um parceiro cadastrado — pode ser
+ * um produto próprio, ou um teste antes de formalizar a empresa.
+ *
+ * A identidade também está aqui. Antes o formulário pedia duas coisas e o mercado
+ * nascia com uma pendência vermelha cobrando uma terceira: quem acabou de preencher
+ * não entende ser cobrado por um campo que a tela não ofereceu.
  *
  * Nome e identificador ficam separados do resto por uma linha porque são a única
  * parte que NÃO muda depois — o `code` entra em conhecimento, campanha e conector.
@@ -58,10 +63,38 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
   const [f, setF] = useState(VAZIO);
   // Enquanto o usuário não editar o slug à mão, ele acompanha o nome.
   const [slugEditado, setSlugEditado] = useState(false);
+  /// '' = ainda não escolheu · 'outro' = mercado que não é parceiro cadastrado.
+  const [parceiro, setParceiro] = useState('');
+
+  // Quem tem `settings` pode não ter `partners`, e aí esta lista devolve 403. Não é
+  // erro a mostrar: o formulário continua inteiro pelo caminho "Outro". Sem
+  // `retry: false` o axios ainda tentaria de novo um 403 que nunca vai virar 200.
+  const { data: parceiros = [], isError: semAcesso } = useQuery({
+    queryKey: ['partners'],
+    queryFn: () => listPartners(),
+    enabled: open,
+    retry: false,
+  });
+  const ativos = parceiros.filter((p) => p.active);
+
+  /** Escolher o parceiro preenche o resto — continua tudo editável depois. */
+  function escolherParceiro(id: string) {
+    setParceiro(id);
+    if (id === 'outro' || !id) {
+      setF((v) => ({ ...v, nome: '', slug: '', displayName: '' }));
+      setSlugEditado(false);
+      return;
+    }
+    const p = ativos.find((x) => x.id === id);
+    if (!p) return;
+    setF((v) => ({ ...v, nome: p.name, slug: derivarSlug(p.name), displayName: p.name }));
+    setSlugEditado(false);
+  }
 
   function fechar() {
     setF(VAZIO);
     setSlugEditado(false);
+    setParceiro('');
     onClose();
   }
 
@@ -100,7 +133,7 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setF((v) => ({ ...v, [k]: e.target.value })),
   });
 
-  const podeSalvar = f.nome.trim().length > 0 && slug.length > 0;
+  const podeSalvar = !!parceiro && f.nome.trim().length > 0 && slug.length > 0;
 
   return (
     <Modal open={open} onClose={fechar} title="Criar novo mercado" size="lg">
@@ -111,6 +144,42 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
           if (podeSalvar) criar.mutate();
         }}
       >
+        {/* ── De quem é este mercado ─────────────────────────────────────── */}
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-base-content/60">Parceiro</span>
+          <select
+            className="input w-full text-sm"
+            value={parceiro}
+            onChange={(e) => escolherParceiro(e.target.value)}
+            autoFocus
+          >
+            <option value="">Escolha o parceiro…</option>
+            {ativos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.type ? ` · ${p.type}` : ''}
+              </option>
+            ))}
+            <option value="outro">Outro — produto próprio ou ainda sem cadastro</option>
+          </select>
+          {/* Lista vazia não é a mesma coisa que lista negada: uma manda cadastrar,
+              a outra manda seguir sem. Dizer "nenhum parceiro" a quem não tem
+              permissão o faria procurar um cadastro que existe. */}
+          {semAcesso ? (
+            <p className="mt-1 text-[11px] text-base-content/40">
+              Não consigo listar os parceiros com o seu acesso — siga por "Outro".
+            </p>
+          ) : ativos.length === 0 ? (
+            <p className="mt-1 text-[11px] text-base-content/40">
+              Nenhum parceiro ativo ainda.{' '}
+              <Link to="/partners" className="underline" onClick={fechar}>
+                Cadastre a empresa
+              </Link>{' '}
+              ou siga por "Outro".
+            </p>
+          ) : null}
+        </label>
+
         {/* ── O que não muda depois ──────────────────────────────────────── */}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -125,8 +194,12 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
                 }))
               }
               placeholder="Agabê Óleos"
-              autoFocus
             />
+            {parceiro && parceiro !== 'outro' && (
+              // Veio do cadastro, mas segue editável: o nome do mercado pode ser mais
+              // curto que a razão social do parceiro.
+              <p className="mt-1 text-[11px] text-base-content/40">Veio do parceiro — dá para ajustar.</p>
+            )}
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-base-content/60">Identificador</span>
