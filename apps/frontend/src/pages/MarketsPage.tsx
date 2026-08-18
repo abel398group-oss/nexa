@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge } from '@/shared/ui';
+import { Button, Card, Input, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import {
   listMarkets,
+  updateMarket,
   releaseMarket,
   pauseMarket,
   getMarketSellers,
@@ -70,6 +71,115 @@ function LinhaPendencia({ p }: { p: MarketPendencia }) {
  * Fica dentro do painel expandido do mercado de propósito — é configuração de quem
  * monta a operação, na mesma gaveta das outras pendências dele.
  */
+/**
+ * Identidade do mercado — a cara dele no e-mail que o lead recebe.
+ *
+ * Até 17/08/2026 estes campos não tinham tela. O `create` do backend dizia
+ * "editável depois na configuração do mercado", essa configuração nunca foi
+ * feita, e a trava de liberação exigia a identidade preenchida — o sistema
+ * cobrava algo que ele mesmo não deixava fazer.
+ *
+ * O HiperTMS pagou: criado antes do `create` passar a semear os campos, ficou com
+ * `displayName` e `senderName` NULL. E `email-market-identity.ts` faz
+ * `if (!displayName) return {}` — o disparo saía SEM marca nenhuma: sem
+ * assinatura, sem cor, sem link. Chegava, e chegava descaracterizado.
+ *
+ * Só grava no `submit`, não a cada tecla: `readiness` é recalculado no servidor a
+ * cada gravação, e salvar por caractere faria a lista inteira piscar enquanto se
+ * digita.
+ */
+function IdentidadeDoMercado({ market }: { market: Market }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    displayName: market.displayName ?? '',
+    senderName: market.senderName ?? '',
+    brandTagline: market.brandTagline ?? '',
+    brandColor: market.brandColor ?? '',
+    signupUrl: market.signupUrl ?? '',
+  });
+
+  const salvar = useMutation({
+    mutationFn: () => updateMarket(market.code, form),
+    onSuccess: () => {
+      // A lista inteira volta do servidor: gravar identidade muda o `readiness`,
+      // e a pendência tem que sumir na hora — senão a tela segue cobrando o que
+      // acabou de ser preenchido.
+      void qc.invalidateQueries({ queryKey: ['markets'] });
+      toast.success('Identidade salva.');
+    },
+    onError: (e: any) => {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(', ') : m || 'Erro ao salvar a identidade.');
+    },
+  });
+
+  const campo = (k: keyof typeof form) => ({
+    value: form[k],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value })),
+  });
+
+  return (
+    <form
+      className="mt-3 border-t border-base-200 pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        salvar.mutate();
+      }}
+    >
+      <p className="text-xs font-medium text-base-content">Identidade</p>
+      <p className="mb-2 text-[11px] text-base-content/50">
+        A cara deste mercado no e-mail que o lead recebe.
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label className="block">
+          <span className="text-[11px] text-base-content/60">Nome de exibição</span>
+          <Input className="!h-8 text-xs" placeholder="HiperTMS" {...campo('displayName')} />
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-base-content/60">Remetente</span>
+          <Input className="!h-8 text-xs" placeholder="Lia" {...campo('senderName')} />
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-base-content/60">Cor da faixa</span>
+          <div className="flex items-center gap-2">
+            {/* O quadradinho é a única forma de saber se o hex é a cor certa sem
+                disparar um e-mail de teste. */}
+            <span
+              className="h-4 w-4 shrink-0 rounded border border-base-300"
+              style={{ background: /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(form.brandColor) ? form.brandColor : 'transparent' }}
+            />
+            <Input className="!h-8 text-xs" placeholder="#FF5A1F" {...campo('brandColor')} />
+          </div>
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-[11px] text-base-content/60">Punchline</span>
+          <Input className="!h-8 text-xs" placeholder="O TMS feito para vender frete." {...campo('brandTagline')} />
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-base-content/60">Link de cadastro</span>
+          <Input className="!h-8 text-xs" placeholder="https://..." {...campo('signupUrl')} />
+        </label>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <Button size="sm" variant="outline" loading={salvar.isPending}>
+          Salvar identidade
+        </Button>
+        {/* Diz o custo de deixar vazio, em vez de só marcar campo obrigatório: sem
+            estes dois o e-mail sai sem marca nenhuma, e isso não aparece em lugar
+            nenhum depois. */}
+        {(!form.displayName.trim() || !form.senderName.trim()) && (
+          <span className="text-[11px] text-amber-600 dark:text-amber-400">
+            Sem nome de exibição e remetente, o e-mail sai sem a marca deste mercado.
+          </span>
+        )}
+      </div>
+    </form>
+  );
+}
+
 function VendedoresDoMercado({ code }: { code: string }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -330,6 +440,7 @@ export function MarketsPage() {
                   ) : (
                     pend.map((p, i) => <LinhaPendencia key={`${p.campo}-${i}`} p={p} />)
                   )}
+                  <IdentidadeDoMercado market={m} />
                   <VendedoresDoMercado code={m.code} />
                 </div>
               )}

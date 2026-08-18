@@ -64,3 +64,21 @@ export async function createMarket(data: { name: string; slug: string }): Promis
   const r = await api.post('/markets', data);
   return r.data;
 }
+
+/**
+ * Edita a identidade do mercado — a cara dele no e-mail que o lead recebe.
+ *
+ * PATCH: campo ausente não é tocado. String vazia chega como limpeza (o backend
+ * grava NULL), que é o que permite voltar à marca padrão do HiperTMS.
+ *
+ * Existe desde 17/08/2026. Antes disso o `create` do backend dizia "editável
+ * depois na configuração do mercado" e essa configuração nunca tinha sido feita
+ * — enquanto a trava de liberação exigia a identidade preenchida.
+ */
+export async function updateMarket(
+  code: string,
+  dto: Partial<Pick<Market, 'name' | 'displayName' | 'senderName' | 'brandTagline' | 'brandColor' | 'signupUrl'>>,
+): Promise<Market> {
+  const r = await api.patch(`/markets/${code}`, dto);
+  return r.data;
+}
