@@ -42,6 +42,22 @@ function ehTexto(nome: string): boolean {
   return EXT_TEXTO.some((e) => nome.toLowerCase().endsWith(e));
 }
 
+/**
+ * Completa a extensão de um roteiro escrito à mão.
+ *
+ * Quem digita um nome está pensando no assunto ("eixo de pneus"), não no formato do
+ * arquivo. Mas a extensão é o que decide o tipo no servidor, e sem ela a criação era
+ * recusada — depois de o texto inteiro estar escrito, que é o pior momento para
+ * descobrir uma regra dessas.
+ *
+ * O nome completo aparece embaixo do campo enquanto se digita: completar em silêncio
+ * e mostrar outra coisa na lista seria trocar uma recusa por uma surpresa.
+ */
+function nomeDeRoteiro(nome: string): string {
+  const limpo = nome.trim();
+  return !limpo || ehTexto(limpo) ? limpo : `${limpo}.md`;
+}
+
 /** Os grupos da fila, na mesma ordem e com o mesmo nome das áreas de soltar. */
 const GRUPOS = [
   { kind: 'plan', titulo: 'Roteiro da campanha', icone: 'mail' },
@@ -168,7 +184,7 @@ export function CampaignValidationPage() {
     // seriam duas chances de divergirem.
     mutationFn: () =>
       edicao!.id === null
-        ? uploadMarketAsset(code, { name: edicao!.name.trim(), content: edicao!.content })
+        ? uploadMarketAsset(code, { name: nomeDeRoteiro(edicao!.name), content: edicao!.content })
         : editMarketAsset(code, edicao!.id, {
             ...(edicao!.name !== selecionado?.name && { name: edicao!.name }),
             ...(selecionado?.kind === 'plan' && { content: edicao!.content }),
@@ -364,7 +380,10 @@ export function CampaignValidationPage() {
                             ? ` · aprovado em ${new Date(selecionado.approvedAt).toLocaleDateString('pt-BR')}`
                             : ''
                         }`
-                      : 'Roteiro da campanha · ainda não salvo'}
+                      : // Mostra o nome COM a extensão que vai ser gravada. Completar em
+                        // silêncio e a lista exibir outra coisa seria trocar a recusa
+                        // por uma surpresa.
+                        `Roteiro da campanha · salva como ${nomeDeRoteiro(editando?.name ?? '') || '…'}`}
                   </div>
                 </div>
                 {editando ? (
@@ -452,7 +471,7 @@ export function CampaignValidationPage() {
                 {editando ? (
                   <p className="mt-2 text-[11px] text-base-content/70">
                     {novo
-                      ? 'O roteiro entra na fila como pendente — você lê de novo e aprova. O nome precisa terminar em .md ou .txt.'
+                      ? 'O roteiro entra na fila como pendente — você lê de novo e aprova. Se o nome não terminar em .md ou .txt, eu completo com .md.'
                       : 'Salvar devolve o arquivo para a fila — você aprova de novo com o texto novo na frente. Cancelar descarta o que foi digitado.'}
                   </p>
                 ) : !selecionado ? null : selecionado.kind === 'plan' ? (
