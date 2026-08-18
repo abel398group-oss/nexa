@@ -28,6 +28,38 @@ class CreateMarketDto {
     message: 'O identificador deve ter apenas letras minúsculas, números e hífen (ex.: agabe, oleo-lubrificante).',
   })
   slug!: string;
+
+  // A identidade também entra na criação. Ela não é enfeite: sem `displayName` e
+  // `senderName` o mercado nasce reprovado pela própria trava de liberação, e o
+  // operador só descobre depois, na lista, como uma pendência vermelha. As regras
+  // são as mesmas do PATCH de propósito — divergir aqui deixaria passar na criação
+  // um valor que a edição recusa.
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  senderName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  brandTagline?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, { message: 'A cor deve ser um hex como #FF5A1F.' })
+  brandColor?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^https?:\/\/.+/, { message: 'O link de cadastro deve começar com http:// ou https://.' })
+  @MaxLength(300)
+  signupUrl?: string;
 }
 
 /**

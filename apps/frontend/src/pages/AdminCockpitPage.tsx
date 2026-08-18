@@ -6,7 +6,6 @@ import { PlaybookMessagesTab } from './PlaybookMessagesTab';
 import { NumberHealthPage } from './NumberHealthPage';
 import { AbuseGuardPage } from './AbuseGuardPage';
 import { SellersPage } from './SellersPage';
-import { NewMarketModal } from '@/components/NewMarketModal';
 import { SeletorDeMarket } from '@/components/SeletorDeMarket';
 import { useAuth } from '@/app/providers/AuthContext';
 import { temPerm } from '@/shared/lib/perms';
@@ -31,34 +30,17 @@ interface Aba {
 
 export function AdminCockpitPage() {
   const { user } = useAuth();
-  const [newMarketOpen, setNewMarketOpen] = useState(false);
 
   const ABAS: Aba[] = [
     {
       id: 'markets',
       label: '📊 Markets',
       perm: 'settings', // era /markets
-      render: () => (
-        <div>
-          <div className="bg-base-50 border-b p-6">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Markets</h2>
-              <button
-                onClick={() => setNewMarketOpen(true)}
-                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"
-              >
-                + Criar Novo Market
-              </button>
-            </div>
-            <p className="text-sm text-base-content/60">
-              Cada market é um cliente ou produto que opera independentemente no Nexa.
-              Configure sua operação por market: roteiros, disparos, números e times de vendas.
-            </p>
-          </div>
-          <MarketsPage />
-          <NewMarketModal open={newMarketOpen} onClose={() => setNewMarketOpen(false)} />
-        </div>
-      ),
+      // Sem cabeçalho próprio: a MarketsPage já traz o dela, com o botão de criar
+      // junto da lista que ele muda. Enquanto os dois existiam, a aba abria com
+      // dois títulos empilhados ("Markets" e "Mercados") dizendo a mesma coisa com
+      // palavras diferentes.
+      render: () => <MarketsPage />,
     },
     {
       id: 'playbook',

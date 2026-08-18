@@ -59,8 +59,20 @@ export async function unlinkMarketSeller(
  * campanha e conector — então o servidor recusa qualquer coisa fora de
  * `letras-minusculas-com-hifen`. Nasce em rascunho: só aparece no Disparo depois de
  * liberado.
+ *
+ * A identidade é opcional aqui, mas não é acessório: sem `displayName` e
+ * `senderName` o mercado nasce com uma pendência vermelha que ele mesmo poderia
+ * ter evitado. Vazio cai no nome do mercado, do lado do servidor.
  */
-export async function createMarket(data: { name: string; slug: string }): Promise<Market> {
+export async function createMarket(data: {
+  name: string;
+  slug: string;
+  displayName?: string;
+  senderName?: string;
+  brandTagline?: string;
+  brandColor?: string;
+  signupUrl?: string;
+}): Promise<Market> {
   const r = await api.post('/markets', data);
   return r.data;
 }

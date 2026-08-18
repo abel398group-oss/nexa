@@ -16,7 +16,7 @@ const campos = (c: MarketCounts) => avaliarMercado(c).pendencias.map((p) => p.ca
 
 describe('avaliarMercado — quando libera', () => {
   it('mercado completo está pronto', () => {
-    expect(avaliarMercado(PRONTO)).toEqual({ pronto: true, pendencias: [] });
+    expect(avaliarMercado(PRONTO)).toEqual({ pronto: true, pendencias: [], counts: PRONTO });
   });
 
   it('exatamente no mínimo de conhecimento já passa', () => {

@@ -3,6 +3,7 @@
 export type {
   Market,
   MarketReadiness,
+  MarketCounts,
   MarketPendencia,
   MarketSeller,
   MarketSellers,

@@ -54,6 +54,42 @@ describe('MarketsService.create', () => {
     expect(data.senderName).toBe('Pneus');
   });
 
+  // O formulário de criação passou a oferecer a identidade (18/08/2026). Antes, o
+  // mercado nascia com uma pendência vermelha por um campo que a tela nem mostrava.
+  it('grava a identidade vinda do formulário quando ela veio', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.create('t1', {
+      name: 'Agabê',
+      slug: 'agabe',
+      displayName: 'Agabê Óleos',
+      senderName: 'Lia',
+      brandTagline: 'Óleo que roda mais',
+      brandColor: '#FF5A1F',
+      signupUrl: 'https://agabe.com.br',
+    });
+
+    const { data } = prisma.product.create.mock.calls[0][0];
+    expect(data.displayName).toBe('Agabê Óleos');
+    expect(data.senderName).toBe('Lia');
+    expect(data.brandTagline).toBe('Óleo que roda mais');
+    expect(data.brandColor).toBe('#FF5A1F');
+    expect(data.signupUrl).toBe('https://agabe.com.br');
+  });
+
+  // Espaço em branco é campo vazio disfarçado. Deixar `displayName: '   '` passar
+  // satisfaria a trava de liberação (`!!displayName`) sem identidade nenhuma — e o
+  // e-mail sairia sem marca, que é exatamente o que a trava existe para evitar.
+  it('campo só com espaço cai no nome, não passa por preenchido', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.create('t1', { name: 'Pneus', slug: 'pneus', displayName: '   ', brandColor: '  ' });
+
+    const { data } = prisma.product.create.mock.calls[0][0];
+    expect(data.displayName).toBe('Pneus');
+    expect(data.brandColor).toBeNull();
+  });
+
   it('recusa slug já usado com o nome do dono, em vez de deixar virar 500', async () => {
     const { svc, prisma } = makeSvc({ name: 'Agabê' });
 

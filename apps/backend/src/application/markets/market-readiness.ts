@@ -43,6 +43,15 @@ export interface MarketPendencia {
 export interface MarketReadiness {
   pronto: boolean;
   pendencias: MarketPendencia[];
+  /**
+   * O que foi contado para chegar ao veredito.
+   *
+   * Vai junto porque a lista de mercados só sabia dizer o que FALTA. Um mercado
+   * sem pendência nenhuma virava uma linha muda — "completo", e nada sobre o
+   * tamanho do que existe atrás dele. Com os números na linha, dá para ver de
+   * relance que um mercado tem 1483 fatos e o outro tem 3.
+   */
+  counts: MarketCounts;
 }
 
 /** Mínimo de artigos úteis para a Lia não depender de improviso. */
@@ -97,5 +106,5 @@ export function avaliarMercado(c: MarketCounts): MarketReadiness {
     });
   }
 
-  return { pronto: !pendencias.some((p) => p.bloqueia), pendencias };
+  return { pronto: !pendencias.some((p) => p.bloqueia), pendencias, counts: c };
 }

@@ -77,7 +77,18 @@ export class MarketsService {
    * Não recebe `tenantId`: `products` é global (ver `list()`, que busca sem filtro de
    * tenant). O parâmetro entra só para manter a assinatura dos outros métodos.
    */
-  async create(_tenantId: string, dto: { name: string; slug: string }) {
+  async create(
+    _tenantId: string,
+    dto: {
+      name: string;
+      slug: string;
+      displayName?: string;
+      senderName?: string;
+      brandTagline?: string;
+      brandColor?: string;
+      signupUrl?: string;
+    },
+  ) {
     const code = dto.slug.trim().toLowerCase();
     const name = dto.name.trim();
 
@@ -100,11 +111,14 @@ export class MarketsService {
         name,
         connector: 'none',
         status: 'draft',
-        // A identidade do e-mail começa com o nome do mercado para o primeiro disparo
-        // não sair com a marca do HiperTMS na cara do lead de outro parceiro
-        // (email-market-identity.ts). Editável depois na configuração do mercado.
-        displayName: name,
-        senderName: name,
+        // A identidade vem do formulário quando preenchida; senão cai no nome do
+        // mercado, para o primeiro disparo não sair com a marca do HiperTMS na cara
+        // do lead de outro parceiro (email-market-identity.ts). Editável depois.
+        displayName: dto.displayName?.trim() || name,
+        senderName: dto.senderName?.trim() || name,
+        brandTagline: dto.brandTagline?.trim() || null,
+        brandColor: dto.brandColor?.trim() || null,
+        signupUrl: dto.signupUrl?.trim() || null,
       },
     });
     this.logger.log(`Mercado "${market.name}" (${code}) criado em rascunho`);

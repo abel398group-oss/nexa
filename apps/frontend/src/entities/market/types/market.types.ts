@@ -25,9 +25,19 @@ export interface MarketSellers {
   disponiveis: MarketSeller[];
 }
 
+/** O que o servidor contou para decidir — o que EXISTE, não só o que falta. */
+export interface MarketCounts {
+  conhecimentoUtil: number;
+  conhecimentoSemFonte: number;
+  modelos: number;
+  vendedores: number;
+  temIdentidade: boolean;
+}
+
 export interface MarketReadiness {
   pronto: boolean;
   pendencias: MarketPendencia[];
+  counts: MarketCounts;
 }
 
 export interface Market {

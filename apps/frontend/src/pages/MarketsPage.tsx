@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Input, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
+import { CampoCor } from '@/components/CampoCor';
+import { NewMarketModal } from '@/components/NewMarketModal';
 import {
   listMarkets,
   updateMarket,
@@ -15,6 +17,7 @@ import {
   type Market,
   type MarketPendencia,
   type MarketSellers,
+  type MarketCounts,
 } from '@/entities/market';
 
 /**
@@ -142,18 +145,7 @@ function IdentidadeDoMercado({ market }: { market: Market }) {
           <span className="text-[11px] text-base-content/60">Remetente</span>
           <Input className="!h-8 text-xs" placeholder="Lia" {...campo('senderName')} />
         </label>
-        <label className="block">
-          <span className="text-[11px] text-base-content/60">Cor da faixa</span>
-          <div className="flex items-center gap-2">
-            {/* O quadradinho é a única forma de saber se o hex é a cor certa sem
-                disparar um e-mail de teste. */}
-            <span
-              className="h-4 w-4 shrink-0 rounded border border-base-300"
-              style={{ background: /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(form.brandColor) ? form.brandColor : 'transparent' }}
-            />
-            <Input className="!h-8 text-xs" placeholder="#FF5A1F" {...campo('brandColor')} />
-          </div>
-        </label>
+        <CampoCor valor={form.brandColor} aoMudar={(v) => setForm((f) => ({ ...f, brandColor: v }))} />
         <label className="block sm:col-span-2">
           <span className="text-[11px] text-base-content/60">Punchline</span>
           <Input className="!h-8 text-xs" placeholder="O TMS feito para vender frete." {...campo('brandTagline')} />
@@ -178,6 +170,38 @@ function IdentidadeDoMercado({ market }: { market: Market }) {
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * O que este mercado já tem, em números.
+ *
+ * A lista só sabia falar do que FALTA. Mercado sem pendência virava uma linha muda
+ * — "completo", e nada sobre o tamanho da operação atrás dele. De relance dá para
+ * ver que um tem 1483 fatos e o outro tem 3, o que é a diferença entre a Lia
+ * responder e a Lia improvisar.
+ */
+function ResumoDoMercado({ c }: { c: MarketCounts }) {
+  const itens = [
+    { n: c.conhecimentoUtil, rotulo: 'fato', icone: 'knowledge' },
+    { n: c.modelos, rotulo: 'mensagem', icone: 'mail' },
+    { n: c.vendedores, rotulo: 'vendedor', icone: 'sellers' },
+  ];
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+      {itens.map((i) => (
+        <span
+          key={i.rotulo}
+          // Zero em cinza claro somiria justamente onde está a informação mais
+          // importante da linha. Fica âmbar, do lado do número.
+          className={`flex items-center gap-1 text-[11px] ${i.n === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}
+        >
+          <Icon name={i.icone as any} className="h-3.5 w-3.5" />
+          {i.n} {i.rotulo}
+          {i.n === 1 ? '' : 's'}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -305,6 +329,11 @@ export function MarketsPage() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const [aberto, setAberto] = useState<string | null>(null);
+  // O modal mora aqui, e não no cockpit que embute esta tela: quem cria precisa ver
+  // a lista mudar, e a rota /markets também tem que poder criar. Antes o cockpit
+  // tinha o botão e o próprio título, e a tela abria com dois cabeçalhos empilhados
+  // dizendo a mesma coisa.
+  const [criando, setCriando] = useState(false);
 
   const { data: mercados = [], isLoading } = useQuery({
     queryKey: ['markets'],
@@ -374,15 +403,18 @@ export function MarketsPage() {
       <PageHeader
         title="Mercados"
         subtitle="Cada mercado é um cliente ou produto que o Nexa prospecta. O vendedor só enxerga os liberados."
+        actions={<Button onClick={() => setCriando(true)}>+ Criar mercado</Button>}
       />
+      <NewMarketModal open={criando} onClose={() => setCriando(false)} />
 
       {isLoading && <p className="text-sm text-base-content/50">Carregando mercados…</p>}
 
       {!isLoading && mercados.length === 0 && (
         <Card>
-          <p className="text-sm text-base-content/60">
-            Nenhum mercado cadastrado ainda.
-          </p>
+          <p className="text-sm text-base-content/60">Nenhum mercado cadastrado ainda.</p>
+          <Button className="mt-3" size="sm" onClick={() => setCriando(true)}>
+            + Criar o primeiro
+          </Button>
         </Card>
       )}
 
@@ -395,7 +427,14 @@ export function MarketsPage() {
 
           return (
             <Card key={m.id} className="p-0">
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              {/* Duplo clique abre e fecha, como linha de planilha. O chevron continua
+                  ali para quem não descobre isso sozinho — e é ele que carrega o
+                  aria-label, porque duplo clique não é alcançável pelo teclado. */}
+              <div
+                className="flex flex-wrap items-center gap-3 px-4 py-3 select-none"
+                onDoubleClick={() => setAberto(expandido ? null : m.code)}
+                title={expandido ? 'Clique duas vezes para fechar' : 'Clique duas vezes para editar'}
+              >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-base-200 text-xs font-medium text-base-content/70">
                   {iniciais(m.displayName || m.name)}
                 </div>
@@ -408,6 +447,7 @@ export function MarketsPage() {
                     {m.code}
                     {m.releasedAt && ` · no ar desde ${new Date(m.releasedAt).toLocaleDateString('pt-BR')}`}
                   </div>
+                  {m.readiness?.counts && <ResumoDoMercado c={m.readiness.counts} />}
                 </div>
 
                 <StatusBadge tone={st.tom}>{st.texto}</StatusBadge>
@@ -419,13 +459,22 @@ export function MarketsPage() {
                     size="sm"
                     variant="outline"
                     disabled={!m.readiness?.pronto || liberar.isPending}
+                    // stopPropagation em todos os botões da linha: sem isto, dois
+                    // cliques rápidos em "Liberar" também abrem o painel embaixo, e a
+                    // tela pula no meio da ação.
+                    onDoubleClick={(e) => e.stopPropagation()}
                     onClick={() => liberar.mutate(m.code)}
                   >
                     <Icon name="check" className="h-4 w-4" /> Liberar
                   </Button>
                 )}
                 {m.status === 'active' && (
-                  <Button size="sm" variant="ghost" onClick={() => void pedirSuspensao(m)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onClick={() => void pedirSuspensao(m)}
+                  >
                     Suspender
                   </Button>
                 )}
@@ -436,6 +485,7 @@ export function MarketsPage() {
                     type="button"
                     className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
                     disabled={excluir.isPending}
+                    onDoubleClick={(e) => e.stopPropagation()}
                     onClick={() => void pedirExclusao(m)}
                   >
                     Excluir
@@ -445,6 +495,7 @@ export function MarketsPage() {
                   type="button"
                   aria-label={expandido ? 'Recolher pendências' : 'Ver pendências'}
                   className="rounded-lg p-1 text-base-content/40 hover:bg-base-100"
+                  onDoubleClick={(e) => e.stopPropagation()}
                   onClick={() => setAberto(expandido ? null : m.code)}
                 >
                   <Icon name="chevronDown" className={`h-4 w-4 transition-transform ${expandido ? 'rotate-180' : ''}`} />
