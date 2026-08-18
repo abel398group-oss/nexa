@@ -42,6 +42,12 @@ function ehTexto(nome: string): boolean {
   return EXT_TEXTO.some((e) => nome.toLowerCase().endsWith(e));
 }
 
+/** Os grupos da fila, na mesma ordem e com o mesmo nome das áreas de soltar. */
+const GRUPOS = [
+  { kind: 'plan', titulo: 'Roteiro da campanha', icone: 'mail' },
+  { kind: 'portfolio', titulo: 'Portfólio e materiais', icone: 'eye' },
+] as const;
+
 /** O nome da área de onde o arquivo veio — o mesmo texto das áreas de soltar. */
 function rotuloDoTipo(kind: string): string {
   return kind === 'plan' ? 'Roteiro da campanha' : 'Portfólio e materiais';
@@ -197,9 +203,9 @@ export function CampaignValidationPage() {
           arrastando === kind ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
         }`}
       >
-        <Icon name={kind === 'plan' ? 'mail' : 'eye'} className="mx-auto h-6 w-6 text-base-content/40" />
+        <Icon name={kind === 'plan' ? 'mail' : 'eye'} className="mx-auto h-6 w-6 text-base-content/60" />
         <p className="mt-1.5 text-sm text-base-content/75">{subir.isPending ? 'Subindo…' : titulo}</p>
-        <p className="mt-0.5 text-[11px] text-base-content/45">{detalhe}</p>
+        <p className="mt-0.5 text-[11px] text-base-content/65">{detalhe}</p>
         <input
           ref={ref}
           type="file"
@@ -278,8 +284,8 @@ export function CampaignValidationPage() {
           {!selecionado ? (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center">
               <Icon name="knowledge" className="h-8 w-8 text-base-content/20" />
-              <p className="text-sm text-base-content/50">Escolha um arquivo para ler.</p>
-              <p className="max-w-xs text-[11px] text-base-content/40">
+              <p className="text-sm text-base-content/70">Escolha um arquivo para ler.</p>
+              <p className="max-w-xs text-[11px] text-base-content/60">
                 O botão de aprovar aparece aqui, ao lado do que você está lendo.
               </p>
             </div>
@@ -301,7 +307,7 @@ export function CampaignValidationPage() {
                   ) : (
                     <div className="truncate text-sm font-medium text-base-content">{selecionado.name}</div>
                   )}
-                  <div className="text-[11px] text-base-content/50">
+                  <div className="text-[11px] text-base-content/70">
                     {rotuloDoTipo(selecionado.kind)} · {tamanho(selecionado.sizeBytes)}
                     {selecionado.approvedAt &&
                       ` · aprovado em ${new Date(selecionado.approvedAt).toLocaleDateString('pt-BR')}`}
@@ -357,7 +363,7 @@ export function CampaignValidationPage() {
                     )}
                     <button
                       type="button"
-                      className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
+                      className="rounded-lg px-2 py-1 text-xs text-base-content/60 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
                       onClick={() => void pedirRemocao(selecionado)}
                     >
                       Remover
@@ -377,13 +383,13 @@ export function CampaignValidationPage() {
                   />
                 ) : null}
                 {editando && selecionado.kind === 'plan' ? (
-                  <p className="mt-2 text-[11px] text-base-content/50">
+                  <p className="mt-2 text-[11px] text-base-content/70">
                     Salvar devolve o arquivo para a fila — você aprova de novo com o texto novo na
                     frente. Cancelar descarta o que foi digitado.
                   </p>
                 ) : selecionado.kind === 'plan' ? (
                   lendo ? (
-                    <p className="text-xs text-base-content/40">Abrindo…</p>
+                    <p className="text-xs text-base-content/60">Abrindo…</p>
                   ) : (
                     // Texto cru: é o que a Lia lê, e é o que está sendo julgado.
                     // Renderizar o markdown mostraria outra coisa.
@@ -441,7 +447,7 @@ function FilaDeMaterial({
   const cabecalho = (
     <>
       <span className="text-xs font-medium text-base-content">{titulo}</span>
-      <span className={`text-[11px] ${destacar && itens.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}>
+      <span className={`text-[11px] ${destacar && itens.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/70'}`}>
         {itens.length}
         {recolhivel && (
           <Icon
@@ -468,30 +474,48 @@ function FilaDeMaterial({
         <div className="flex items-baseline justify-between border-b border-base-200 px-4 py-2">{cabecalho}</div>
       )}
       {fechado ? null : carregando ? (
-        <p className="px-4 py-3 text-[11px] text-base-content/40">Carregando…</p>
+        <p className="px-4 py-3 text-[11px] text-base-content/60">Carregando…</p>
       ) : itens.length === 0 ? (
-        <p className="px-4 py-3 text-[11px] text-base-content/40">{vazio}</p>
+        <p className="px-4 py-3 text-[11px] text-base-content/60">{vazio}</p>
       ) : (
-        itens.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => onAbrir(a.id)}
-            className={`flex w-full items-center gap-2 border-b border-base-200 px-3 py-2 text-left last:border-0 ${
-              aberto === a.id ? 'bg-blue-50 dark:bg-blue-500/10' : 'hover:bg-base-100'
-            }`}
-          >
-            <Icon
-              name={a.kind === 'plan' ? 'mail' : 'knowledge'}
-              className={`h-4 w-4 shrink-0 ${destacar ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/35'}`}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs text-base-content">{a.name}</span>
-              <span className="block text-[11px] text-base-content/45">
-                {rotuloDoTipo(a.kind)} · {tamanho(a.sizeBytes)}
+        // Agrupado pela origem. Com oito arquivos do mesmo tipo, repetir "Roteiro da
+        // campanha" em cada linha é oito vezes a mesma informação; dito uma vez no
+        // topo do grupo, a linha fica só com o que muda — nome e tamanho.
+        //
+        // Grupo sem arquivo não aparece: a fila mostra o que existe, não o que
+        // poderia existir.
+        GRUPOS.filter((g) => itens.some((a) => a.kind === g.kind)).map((g) => (
+          <div key={g.kind}>
+            <div className="flex items-center gap-1.5 border-b border-base-200 bg-base-100 px-3 py-1.5">
+              <Icon
+                name={g.icone as any}
+                className={`h-3.5 w-3.5 ${destacar ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/70'}`}
+              />
+              <span className="text-[11px] font-medium uppercase tracking-wide text-base-content/70">
+                {g.titulo}
               </span>
-            </span>
-          </button>
+              <span className="ml-auto text-[11px] text-base-content/60">
+                {itens.filter((a) => a.kind === g.kind).length}
+              </span>
+            </div>
+            {itens
+              .filter((a) => a.kind === g.kind)
+              .map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onAbrir(a.id)}
+                  className={`flex w-full items-center gap-2 border-b border-base-200 py-2 pl-5 pr-3 text-left last:border-0 ${
+                    aberto === a.id ? 'bg-blue-50 dark:bg-blue-500/10' : 'hover:bg-base-100'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs text-base-content">{a.name}</span>
+                    <span className="block text-[11px] text-base-content/60">{tamanho(a.sizeBytes)}</span>
+                  </span>
+                </button>
+              ))}
+          </div>
         ))
       )}
     </Card>

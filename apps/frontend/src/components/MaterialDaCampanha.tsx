@@ -171,12 +171,12 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
     <div className="mt-3 border-t border-base-200 pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs font-medium text-base-content">{titulo}</p>
-        <span className="text-[11px] text-base-content/50">
+        <span className="text-[11px] text-base-content/70">
           {itens.length} arquivo(s)
           {pendentes > 0 && <span className="text-amber-600 dark:text-amber-400"> · {pendentes} aguardando</span>}
         </span>
       </div>
-      <p className="mb-2 text-[11px] text-base-content/50">{explicacao}</p>
+      <p className="mb-2 text-[11px] text-base-content/70">{explicacao}</p>
 
       <div
         onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
@@ -187,7 +187,7 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
           arrastando ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
         }`}
       >
-        <Icon name={ehRoteiro ? 'upload' : 'building'} className="mx-auto h-5 w-5 text-base-content/40" />
+        <Icon name={ehRoteiro ? 'upload' : 'building'} className="mx-auto h-5 w-5 text-base-content/60" />
         <p className="mt-1 text-[11px] text-base-content/60">{subir.isPending ? 'Subindo…' : convite}</p>
       </div>
       <input
@@ -200,9 +200,9 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
       />
 
       {isLoading ? (
-        <p className="text-[11px] text-base-content/40">Carregando…</p>
+        <p className="text-[11px] text-base-content/60">Carregando…</p>
       ) : itens.length === 0 ? (
-        <p className="text-[11px] text-base-content/40">{vazio}</p>
+        <p className="text-[11px] text-base-content/60">{vazio}</p>
       ) : (
         <div className="overflow-hidden rounded-lg border border-base-200">
           {itens.map((a) => {
@@ -214,11 +214,11 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
                 <div className={`flex flex-wrap items-center gap-2 px-3 py-2 ${pendente ? 'bg-amber-50/60 dark:bg-amber-500/10' : ''}`}>
                   <Icon
                     name={ehRoteiro ? 'mail' : ehImagem ? 'eye' : 'knowledge'}
-                    className={`h-4 w-4 shrink-0 ${pendente ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/40'}`}
+                    className={`h-4 w-4 shrink-0 ${pendente ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/60'}`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs text-base-content">{a.name}</div>
-                    <div className="truncate text-[11px] text-base-content/50">
+                    <div className="truncate text-[11px] text-base-content/70">
                       {tamanho(a.sizeBytes)}
                       {a.approvedAt && ` · aprovado em ${new Date(a.approvedAt).toLocaleDateString('pt-BR')}`}
                     </div>
@@ -232,7 +232,7 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
                       exatamente o que a aprovação existe para impedir. */}
                   <button
                     type="button"
-                    className="text-[11px] text-base-content/40 underline"
+                    className="text-[11px] text-base-content/60 underline"
                     onClick={() => setAberto(expandido ? null : a.id)}
                   >
                     {expandido ? 'Fechar' : ehRoteiro ? 'Ler' : 'Ver'}
@@ -242,13 +242,13 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
                       Aprovar
                     </Button>
                   ) : (
-                    <button type="button" className="text-[11px] text-base-content/40 underline" onClick={() => reprovar.mutate(a.id)}>
+                    <button type="button" className="text-[11px] text-base-content/60 underline" onClick={() => reprovar.mutate(a.id)}>
                       Reprovar
                     </button>
                   )}
                   <button
                     type="button"
-                    className="rounded-lg px-1.5 py-0.5 text-[11px] text-base-content/40 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
+                    className="rounded-lg px-1.5 py-0.5 text-[11px] text-base-content/60 hover:bg-red-50 dark:hover:bg-red-500/15 hover:text-red-500"
                     onClick={() => void pedirRemocao(a)}
                   >
                     Remover
@@ -259,7 +259,7 @@ function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accep
                   <div className="border-t border-base-200 bg-base-100 px-3 py-2">
                     {ehRoteiro ? (
                       lendo ? (
-                        <p className="text-[11px] text-base-content/40">Abrindo…</p>
+                        <p className="text-[11px] text-base-content/60">Abrindo…</p>
                       ) : (
                         // Texto cru. Renderizar o markdown mostraria algo diferente do
                         // que a Lia lê — e é o que ela lê que está sendo aprovado.
