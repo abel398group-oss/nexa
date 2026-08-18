@@ -64,6 +64,12 @@ export function MessageTemplatesPage() {
       toast.success('Modelo salvo. Já aparece no Disparo deste mercado.');
       setNome(''); setAssunto(''); setCorpo(''); setPrevia(null);
       void qc.invalidateQueries({ queryKey: ['message-templates', codigo] });
+      // "Nenhuma mensagem pronta" é uma das quatro travas de liberação, e ela é
+      // calculada dentro do `readiness` que vem junto da lista de mercados. Sem
+      // invalidar aqui, o operador salva o primeiro modelo, volta para Markets e
+      // continua lendo que falta modelo — e conclui que não salvou. Visto em
+      // 17/08/2026, com a trava já satisfeita no banco. Ver `avaliarMercado`.
+      void qc.invalidateQueries({ queryKey: ['markets'] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Não consegui salvar o modelo.'),
   });
@@ -91,6 +97,9 @@ export function MessageTemplatesPage() {
     await archiveTemplate(t.id);
     toast.info('Modelo arquivado.');
     void qc.invalidateQueries({ queryKey: ['message-templates', codigo] });
+    // Mesmo motivo do salvar, no sentido contrário: arquivar o ÚLTIMO modelo faz a
+    // trava voltar, e o Markets precisa passar a cobrar de novo.
+    void qc.invalidateQueries({ queryKey: ['markets'] });
   }
 
   const podeGerar = corpo.trim().length > 0;
