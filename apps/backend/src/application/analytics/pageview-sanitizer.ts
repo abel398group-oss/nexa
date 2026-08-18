@@ -214,3 +214,69 @@ export function localizacaoDoHeader(
     region: ler('x-vercel-ip-country-region') ?? ler('x-geo-region') ?? null,
   };
 }
+
+/**
+ * Rotas do PAINEL. Acesso a elas é o time entrando no sistema, não audiência de site.
+ *
+ * Medido em 18/08/2026: de 40 visitas em 7 dias, 19 eram `/login`. Quase metade do
+ * número que a tela usa para responder "a campanha trouxe gente ao site?" era o próprio
+ * time logando — e ninguém tinha como perceber, porque o total não se separava.
+ *
+ * `/signup` fica de FORA desta lista de propósito: é a página de cadastro, o resultado
+ * que a campanha existe para produzir. Contá-la como app esconderia justamente a
+ * conversão.
+ *
+ * Lista do que É app, e não do que é site: rota pública nova (institucional, blog,
+ * landing de campanha) precisa aparecer sozinha. Se a régua fosse a inversa, cada
+ * página nova nasceria invisível até alguém lembrar de cadastrá-la.
+ */
+const ROTAS_DO_APP = [
+  '/login',
+  '/inbox',
+  '/dashboard',
+  '/support',
+  '/campaigns',
+  '/contacts',
+  '/opportunities',
+  '/sellers',
+  '/settings',
+  '/users',
+  '/markets',
+  '/knowledge',
+  '/playbook',
+  '/sdr',
+  '/closer',
+  '/fila',
+  '/partners',
+  '/lead-batches',
+  '/messages',
+  '/roteiro',
+  '/site',
+  '/vendas',
+  '/admin-cockpit',
+  '/sdr-cockpit',
+  '/closer-cockpit',
+  '/portal',
+];
+
+/** O acesso é ao painel (time) e não ao site público (audiência)? */
+export function ehRotaDoApp(path?: string | null): boolean {
+  const p = (path ?? '').trim().toLowerCase();
+  if (!p) return false;
+  // Prefixo + fronteira: `/settings/email-channel` conta, `/signup` NÃO pode casar com
+  // um eventual `/sign`. Sem a fronteira, a régua pegaria página pública por acidente.
+  return ROTAS_DO_APP.some((r) => p === r || p.startsWith(r + '/') || p.startsWith(r + '?'));
+}
+
+/**
+ * O referrer é o próprio site? Então não é origem — é navegação interna.
+ *
+ * `hipertms.com.br → hipertms.com.br` aparecia na lista "Vieram de" como se fosse
+ * alguém chegando de fora. Quatro das 40 visitas eram isso.
+ */
+export function ehReferrerProprio(dominio?: string | null, host?: string | null): boolean {
+  const d = (dominio ?? '').trim().toLowerCase().replace(/^www\./, '');
+  const h = (host ?? '').trim().toLowerCase().replace(/^www\./, '');
+  if (!d || !h) return false;
+  return d === h || d.endsWith('.' + h) || h.endsWith('.' + d);
+}

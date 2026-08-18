@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   QUERY_PERMITIDA, detectarCliente, dominioDoReferrer, ehBot, hashVisitante, higienizarUrl,
-  ipParaGravar, localizacaoDoHeader,
+  ipParaGravar, localizacaoDoHeader, ehRotaDoApp, ehReferrerProprio,
 } from './pageview-sanitizer';
 
 describe('higienizarUrl — allowlist de query', () => {
@@ -227,5 +227,58 @@ describe('localizacaoDoHeader', () => {
 
   it('corta valor longo', () => {
     expect(localizacaoDoHeader({ 'cf-ipcountry': 'A'.repeat(200) }).country!.length).toBe(60);
+  });
+});
+
+// ─── Site × app (18/08/2026) ────────────────────────────────────────────────
+//
+// A régua nasceu de um número medido: 19 das 40 visitas de 7 dias eram `/login`. A tela
+// existe para responder "a campanha trouxe gente?", e metade do total era o time logando.
+describe('ehRotaDoApp', () => {
+  it('rota do painel é app', () => {
+    for (const p of ['/login', '/inbox', '/dashboard', '/settings/email-channel', '/sdr-cockpit']) {
+      expect(ehRotaDoApp(p)).toBe(true);
+    }
+  });
+
+  // O ponto da separação: cadastro é o RESULTADO que a campanha produz. Contá-lo como
+  // app esconderia a conversão, que é o único número que diz se o site funcionou.
+  it('/signup NÃO é app — é a conversão', () => {
+    expect(ehRotaDoApp('/signup')).toBe(false);
+    expect(ehRotaDoApp('/signup?utm_source=zap')).toBe(false);
+  });
+
+  it('home e páginas públicas não são app', () => {
+    for (const p of ['/', '/precos', '/blog/como-emitir-cte']) expect(ehRotaDoApp(p)).toBe(false);
+  });
+
+  // Sem fronteira de prefixo, um `/site-institucional` casaria com `/site` e sumiria.
+  it('respeita a fronteira do prefixo', () => {
+    expect(ehRotaDoApp('/settings')).toBe(true);
+    expect(ehRotaDoApp('/settingsx')).toBe(false);
+    expect(ehRotaDoApp('/loginha')).toBe(false);
+  });
+
+  it('vazio não é app', () => {
+    expect(ehRotaDoApp('')).toBe(false);
+    expect(ehRotaDoApp(null)).toBe(false);
+  });
+});
+
+describe('ehReferrerProprio', () => {
+  it('mesmo domínio é navegação interna, não origem', () => {
+    expect(ehReferrerProprio('hipertms.com.br', 'hipertms.com.br')).toBe(true);
+    expect(ehReferrerProprio('www.hipertms.com.br', 'hipertms.com.br')).toBe(true);
+    expect(ehReferrerProprio('app.hipertms.com.br', 'hipertms.com.br')).toBe(true);
+  });
+
+  it('domínio de fora continua sendo origem', () => {
+    expect(ehReferrerProprio('google.com', 'hipertms.com.br')).toBe(false);
+    expect(ehReferrerProprio('hipertms.com.br.evil.com', 'hipertms.com.br')).toBe(false);
+  });
+
+  it('sem um dos lados não decide nada', () => {
+    expect(ehReferrerProprio(null, 'hipertms.com.br')).toBe(false);
+    expect(ehReferrerProprio('hipertms.com.br', null)).toBe(false);
   });
 });

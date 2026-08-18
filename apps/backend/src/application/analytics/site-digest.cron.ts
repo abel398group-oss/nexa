@@ -69,8 +69,15 @@ export class SiteDigestCron {
       for (const site of sites) {
         try {
           const r = await this.stats.resumoDoDia(site.tenantId, ontem);
+          // `visitas` é o SITE, fora as rotas do painel (18/08/2026). Dia em que só o
+          // time entrou no sistema não gera resumo — antes gerava, porque o acesso ao
+          // painel contava como visita e o dono recebia "7 visitas" de tráfego que era
+          // dele mesmo.
           if (r.visitas === 0) {
-            this.logger.log(`Sem visitas em ${r.dia} (${site.domain}) — nada enviado`);
+            this.logger.log(
+              `Sem visitas ao site em ${r.dia} (${site.domain}) — nada enviado` +
+              (r.acessosApp > 0 ? ` (${r.acessosApp} acesso(s) ao painel, não contam)` : ''),
+            );
             continue;
           }
           await this.alerta.notifyAdmin(
@@ -103,9 +110,22 @@ export class SiteDigestCron {
    * nenhum a conta seria divisão por zero.
    */
   private corpo(r: ResumoDiario): string {
-    const linhas = [`Visitas: ${r.visitas}${this.variacao(r)}`, `Visitantes únicos: ${r.unicos}`];
-    if (r.topOrigem) linhas.push(`Top origem: ${r.topOrigem.rotulo} (${r.topOrigem.visitas})`);
-    if (r.topPagina) linhas.push(`Página mais vista: ${r.topPagina.rotulo} (${r.topPagina.visitas})`);
+    const pessoas = r.unicos === 1 ? '1 pessoa' : `${r.unicos} pessoas`;
+    const linhas = [`Site: ${r.visitas} visitas, ${pessoas}${this.variacao(r)}`];
+
+    // Campanha vem SEMPRE, inclusive zerada — a tela existe para responder "a campanha
+    // trouxe gente?", e "nenhuma" é a resposta, não a ausência dela. Antes esta linha
+    // simplesmente não existia e o dono ficava sem saber se o disparo tinha rendido.
+    linhas.push(
+      r.deCampanha > 0
+        ? `Campanha: ${r.deCampanha} visitas${r.topCampanha ? ` de "${r.topCampanha.rotulo}"` : ''}`
+        : 'Campanha: nenhuma visita',
+    );
+    linhas.push(r.cadastros > 0 ? `Cadastro: ${r.cadastros} em /signup` : 'Cadastro: nenhum');
+
+    // O acesso do time fica no fim e dito como o que é. Antes ele entrava somado ao
+    // total, e metade do número do dia era o próprio time logando.
+    if (r.acessosApp > 0) linhas.push('', `App: ${r.acessosApp} acessos do time`);
     return linhas.join('\n');
   }
 

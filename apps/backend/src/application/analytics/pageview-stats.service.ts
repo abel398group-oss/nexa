@@ -17,6 +17,7 @@
  * precisão que o dado não tem. O painel precisa rotular isso como "únicos/dia".
  */
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
 export interface Periodo {
@@ -39,6 +40,17 @@ export interface VisaoGeral {
   visitas: number;
   /** Soma dos únicos diários — ver nota no topo do arquivo. */
   unicosPorDia: number;
+  /**
+   * Recortes do período (18/08/2026). `visitas` acima conta TUDO, inclusive o time
+   * entrando no painel — medido: 19 de 40 num período de 7 dias eram `/login`. Estes
+   * quatro separam o que a tela precisa para responder "a campanha trouxe gente?".
+   */
+  visitasSite: number;
+  /** Pessoas distintas no período — não a soma por dia. */
+  pessoasSite: number;
+  acessosApp: number;
+  deCampanha: number;
+  cadastros: number;
   serie: PontoDiario[];
   topPaginas: ItemContado[];
   topOrigens: ItemContado[];
@@ -55,7 +67,8 @@ export class PageviewStatsService {
   async visaoGeral(tenantId: string, p: Periodo): Promise<VisaoGeral> {
     // Uma ida ao banco por recorte, todas em paralelo — são queries independentes
     // e serializá-las só somaria latência.
-    const [serie, topPaginas, topOrigens, topCampanhas, topReferrers, dispositivos] = await Promise.all([
+    const [serie, topPaginas, topOrigens, topCampanhas, topReferrers, dispositivos,
+           site, app, campanha, cadastro] = await Promise.all([
       this.serieDiaria(tenantId, p),
       this.topPor(tenantId, p, 'path'),
       this.topPor(tenantId, p, 'utm_source'),
@@ -64,11 +77,20 @@ export class PageviewStatsService {
       this.topPor(tenantId, p, 'utm_campaign'),
       this.topPor(tenantId, p, 'referrer_domain'),
       this.topPor(tenantId, p, 'device'),
+      this.contarIntervalo(tenantId, p.from, p.to, 'site'),
+      this.contarIntervalo(tenantId, p.from, p.to, 'app'),
+      this.contarIntervalo(tenantId, p.from, p.to, 'campanha'),
+      this.contarIntervalo(tenantId, p.from, p.to, 'cadastro'),
     ]);
 
     return {
       visitas: serie.reduce((s, d) => s + d.visitas, 0),
       unicosPorDia: serie.reduce((s, d) => s + d.unicos, 0),
+      visitasSite: site.visitas,
+      pessoasSite: site.unicos,
+      acessosApp: app.visitas,
+      deCampanha: campanha.visitas,
+      cadastros: cadastro.visitas,
       serie,
       topPaginas,
       topOrigens,
@@ -238,41 +260,91 @@ export class PageviewStatsService {
     const fim = new Date(inicio.getTime() + 24 * 3600 * 1000);
     const inicioAnterior = new Date(inicio.getTime() - 24 * 3600 * 1000);
 
-    const [hoje, anterior, paginas, origens] = await Promise.all([
-      this.contarIntervalo(tenantId, inicio, fim),
-      this.contarIntervalo(tenantId, inicioAnterior, inicio),
+    const [site, anterior, app, campanha, cadastros, paginas, origens, campanhas] = await Promise.all([
+      this.contarIntervalo(tenantId, inicio, fim, 'site'),
+      this.contarIntervalo(tenantId, inicioAnterior, inicio, 'site'),
+      this.contarIntervalo(tenantId, inicio, fim, 'app'),
+      this.contarIntervalo(tenantId, inicio, fim, 'campanha'),
+      this.contarIntervalo(tenantId, inicio, fim, 'cadastro'),
       this.topPor(tenantId, { from: inicio, to: fim }, 'path', 1),
       this.topPor(tenantId, { from: inicio, to: fim }, 'utm_source', 1),
+      this.topPor(tenantId, { from: inicio, to: fim }, 'utm_campaign', 1),
     ]);
 
     return {
       dia: inicio.toISOString().slice(0, 10),
-      visitas: hoje.visitas,
-      unicos: hoje.unicos,
+      visitas: site.visitas,
+      unicos: site.unicos,
       visitasDiaAnterior: anterior.visitas,
+      acessosApp: app.visitas,
+      deCampanha: campanha.visitas,
+      topCampanha: campanhas[0] ?? null,
+      cadastros: cadastros.visitas,
       topPagina: paginas[0] ?? null,
       topOrigem: origens[0] ?? null,
     };
   }
 
-  private async contarIntervalo(tenantId: string, de: Date, ate: Date) {
+  /**
+   * Conta visitas no intervalo, por RECORTE.
+   *
+   * - `site`: fora as rotas do painel — é a audiência de verdade
+   * - `app`: o time entrando no sistema, que antes inflava o total
+   * - `campanha`: só quem chegou com utm_campaign
+   * - `cadastro`: /signup, o resultado que a campanha existe para produzir
+   *
+   * A régua das rotas do painel espelha `ehRotaDoApp` (pageview-sanitizer), e a
+   * duplicação é deliberada: esta roda no Postgres sobre a tabela inteira, e trazer as
+   * linhas para o Node só para reusar a função custaria mais do que a cópia. O teste do
+   * sanitizer guarda a regra; se as duas divergirem, é lá que a decisão está escrita.
+   */
+  private async contarIntervalo(
+    tenantId: string,
+    de: Date,
+    ate: Date,
+    recorte: 'site' | 'app' | 'campanha' | 'cadastro' = 'site',
+  ) {
+    // `(/|\?|$)` é a fronteira do prefixo: sem ela `/site` casaria com um futuro
+    // `/site-institucional`, e uma página pública nasceria contada como painel.
+    const APP =
+      "path ~ '^/(login|inbox|dashboard|support|campaigns|contacts|opportunities|sellers" +
+      "|settings|users|markets|knowledge|playbook|sdr|closer|fila|partners|lead-batches" +
+      "|messages|roteiro|site|vendas|admin-cockpit|sdr-cockpit|closer-cockpit|portal)(/|\\?|$)'";
+    const SIGNUP = "path ~ '^/signup(/|\\?|$)'";
+
+    const cond =
+      recorte === 'app' ? APP
+      : recorte === 'campanha' ? `NOT ${APP} AND utm_campaign IS NOT NULL AND utm_campaign <> ''`
+      : recorte === 'cadastro' ? SIGNUP
+      : `NOT ${APP}`;
+
     const rows = await this.prisma.$queryRaw<{ visitas: bigint; unicos: bigint }[]>`
       SELECT count(*) AS visitas, count(DISTINCT visitor_hash) AS unicos
         FROM page_views
-       WHERE tenant_id = ${tenantId} AND created_at >= ${de} AND created_at < ${ate}`;
+       WHERE tenant_id = ${tenantId} AND created_at >= ${de} AND created_at < ${ate}
+         AND ${Prisma.raw(cond)}`;
     return { visitas: Number(rows[0]?.visitas ?? 0), unicos: Number(rows[0]?.unicos ?? 0) };
   }
 }
 
 export interface ResumoDiario {
   dia: string;
+  /** Visitas ao SITE — fora as rotas do painel. Ver `ehRotaDoApp` no sanitizer. */
   visitas: number;
+  /** Pessoas distintas no dia. */
   unicos: number;
   visitasDiaAnterior: number;
+  /** Acessos ao painel pelo time. Sai do total do site e aparece à parte. */
+  acessosApp: number;
+  /** Visitas com utm_campaign — a pergunta que o resumo existe para responder. */
+  deCampanha: number;
+  /** Campanha que mais trouxe, quando houve. */
+  topCampanha: ItemContado | null;
+  /** Visitas em /signup: o resultado, não o tráfego. */
+  cadastros: number;
   topPagina: ItemContado | null;
   topOrigem: ItemContado | null;
 }
-
 /** Um clique com nome e telefone — é com isto que o vendedor liga. */
 export interface CliqueDeLead {
   nome: string | null;

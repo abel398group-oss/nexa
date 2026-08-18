@@ -164,38 +164,34 @@ export function SiteAudiencePage() {
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Card className="p-4">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Visitas</div>
-              <div className="mt-0.5 text-2xl font-bold text-base-content">{data.visitas}</div>
+            {/* A ORDEM é a resposta, não o tráfego. A pergunta desta tela é "a campanha
+                trouxe gente?" — antes ela ficava num card lateral enquanto o número
+                grande era o total, dominado pelo time entrando no painel. */}
+            <Card className="border-l-2 border-l-brand-500 p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">De campanha</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content">{data.deCampanha}</div>
               <div className="mt-0.5 text-xs text-base-content/40">
-                {dias === 1 ? 'hoje' : `últimos ${dias} dias`}
+                {data.deCampanha === 0 ? 'nenhum link clicado' : 'visitas com utm_campaign'}
               </div>
             </Card>
             <Card className="p-4">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Visitantes</div>
-              <div className="mt-0.5 text-2xl font-bold text-base-content">{data.unicosPorDia}</div>
-              {/* Rótulo honesto: o hash do visitante muda à meia-noite, então em
-                  período este número é a soma dos únicos de cada dia. Chamar de
-                  "visitantes únicos" seco seria vender precisão que o dado não tem. */}
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Cadastro</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content">{data.cadastros}</div>
+              <div className="mt-0.5 text-xs text-base-content/40">visitas em /signup</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Visitas ao site</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content">{data.visitasSite}</div>
+              {/* `pessoasSite` é distinct do período inteiro, não a soma por dia — o
+                  número antigo contava três vezes quem voltou em três dias. */}
               <div className="mt-0.5 text-xs text-base-content/40">
-                {dias === 1 ? 'distintos hoje' : 'soma dos únicos por dia'}
+                {data.pessoasSite} {data.pessoasSite === 1 ? 'pessoa' : 'pessoas'} · {dias === 1 ? 'hoje' : `${dias} dias`}
               </div>
             </Card>
             <Card className="p-4">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Visitas por dia</div>
-              <div className="mt-0.5 text-2xl font-bold text-base-content">
-                {Math.round(data.visitas / Math.max(1, data.serie.length))}
-              </div>
-              <div className="mt-0.5 text-xs text-base-content/40">média do período</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Mobile</div>
-              <div className="mt-0.5 text-2xl font-bold text-base-content">
-                {totalDisp > 0 ? Math.round((mobile / totalDisp) * 100) : 0}%
-              </div>
-              <div className="mt-0.5 text-xs text-base-content/40">
-                {desktop} desktop · {mobile} mobile{tablet ? ` · ${tablet} tablet` : ''}
-              </div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50">Acessos ao app</div>
+              <div className="mt-0.5 text-2xl font-bold text-base-content/60">{data.acessosApp}</div>
+              <div className="mt-0.5 text-xs text-base-content/40">o time · fora da conta acima</div>
             </Card>
           </div>
 

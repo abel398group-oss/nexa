@@ -24,6 +24,17 @@ export interface VisaoGeralSite {
    * rotular isso, e não chamar de "visitantes únicos" seco.
    */
   unicosPorDia: number;
+  /**
+   * Recortes do período (18/08/2026). `visitas` acima é TUDO, incluindo o time entrando
+   * no painel — no HiperTMS eram 19 de 40 num período de 7 dias. Estes quatro é que
+   * respondem a pergunta da tela: a campanha trouxe gente?
+   */
+  visitasSite: number;
+  /** Gente distinta no período — diferente de `unicosPorDia`, que soma por dia. */
+  pessoasSite: number;
+  acessosApp: number;
+  deCampanha: number;
+  cadastros: number;
   serie: PontoDiario[];
   topPaginas: ItemContado[];
   topOrigens: ItemContado[];
