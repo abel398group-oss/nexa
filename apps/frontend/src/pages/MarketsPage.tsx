@@ -5,6 +5,7 @@ import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { CampoCor } from '@/components/CampoCor';
 import { NewMarketModal } from '@/components/NewMarketModal';
+import { MaterialDaCampanha } from '@/components/MaterialDaCampanha';
 import {
   listMarkets,
   updateMarket,
@@ -531,6 +532,7 @@ export function MarketsPage() {
                     pend.map((p, i) => <LinhaPendencia key={`${p.campo}-${i}`} p={p} />)
                   )}
                   <IdentidadeDoMercado market={m} />
+                  <MaterialDaCampanha code={m.code} />
                   <VendedoresDoMercado code={m.code} />
                 </div>
               )}

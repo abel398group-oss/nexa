@@ -105,3 +105,62 @@ export async function updateMarket(
 export async function deleteMarket(code: string): Promise<void> {
   await api.delete(`/markets/${code}`);
 }
+
+// ─── Material de campanha do mercado (ADR 037) ──────────────────────────────
+
+export interface MarketAsset {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  /** pending = subiu e ninguém leu · approved = revisado, a Lia pode usar. */
+  status: 'pending' | 'approved';
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** O texto vem só aqui — a listagem devolve nome e tamanho, nunca o conteúdo. */
+export interface MarketAssetContent extends MarketAsset {
+  content: string;
+}
+
+export async function listMarketAssets(code: string): Promise<MarketAsset[]> {
+  const r = await api.get(`/markets/${code}/assets`);
+  return r.data;
+}
+
+export async function readMarketAsset(code: string, id: string): Promise<MarketAssetContent> {
+  const r = await api.get(`/markets/${code}/assets/${id}`);
+  return r.data;
+}
+
+/**
+ * Sobe um arquivo de texto já LIDO pelo navegador.
+ *
+ * Vai como JSON, não `multipart`: o `FileReader` já decodificou o `.md` para mostrar
+ * o tamanho antes de enviar, e remontar bytes para o servidor decodificar de novo
+ * seria trabalho a troco de nada. Muda quando entrar PDF, que o navegador não lê.
+ *
+ * Reenviar o mesmo nome ATUALIZA e derruba a aprovação — é correção, não cópia.
+ */
+export async function uploadMarketAsset(
+  code: string,
+  file: { name: string; content: string },
+): Promise<MarketAsset> {
+  const r = await api.post(`/markets/${code}/assets`, file);
+  return r.data;
+}
+
+export async function approveMarketAsset(code: string, id: string): Promise<MarketAsset> {
+  const r = await api.post(`/markets/${code}/assets/${id}/approve`);
+  return r.data;
+}
+
+export async function rejectMarketAsset(code: string, id: string): Promise<MarketAsset> {
+  const r = await api.post(`/markets/${code}/assets/${id}/reject`);
+  return r.data;
+}
+
+export async function deleteMarketAsset(code: string, id: string): Promise<void> {
+  await api.delete(`/markets/${code}/assets/${id}`);
+}

@@ -9,6 +9,8 @@ export type {
   MarketSellers,
 } from './types/market.types';
 
+export type { MarketAsset, MarketAssetContent } from './api/market.api';
+
 export {
   listMarkets,
   createMarket,
@@ -20,4 +22,10 @@ export {
   getMarketSellers,
   linkMarketSeller,
   unlinkMarketSeller,
+  listMarketAssets,
+  readMarketAsset,
+  uploadMarketAsset,
+  approveMarketAsset,
+  rejectMarketAsset,
+  deleteMarketAsset,
 } from './api/market.api';

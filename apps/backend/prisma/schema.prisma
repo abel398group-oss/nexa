@@ -1612,3 +1612,37 @@ model PageView {
   @@index([tenantId, ip])
   @@map("page_views")
 }
+
+/// Material de campanha de um mercado (ADR 037).
+///
+/// É o que a operação escreveu ANTES de virar mensagem: o plano de campanha por
+/// eixo, o roteiro, o briefing. Vive no mercado porque é dele que a Lia tira o
+/// que pode afirmar, e porque plano de pneus não pode vazar para transportadora.
+///
+/// O conteúdo fica na própria linha, em texto. É `.md`/`.txt` de alguns KB — pôr
+/// num armazenamento de arquivo custaria uma dependência nova para guardar o que
+/// cabe numa coluna. PDF de portfólio é outro caso e não entra aqui: é binário,
+/// e precisa de lugar próprio.
+model MarketAsset {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  productCode String   @map("product_code")
+  /// Nome do arquivo como veio: `02_eixo_cotacoes.md`. É o que o operador
+  /// reconhece — renomear aqui quebraria a ligação com o que ele tem no disco.
+  name        String
+  content     String
+  sizeBytes   Int      @map("size_bytes")
+  /// pending = subiu e ninguém leu · approved = revisado, a Lia pode usar.
+  /// Nasce sempre em `pending`: material que entra valendo é material que ninguém
+  /// conferiu falando com o lead.
+  status      String   @default("pending")
+  approvedAt  DateTime? @map("approved_at")
+  approvedBy  String?   @map("approved_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  /// Mesmo arquivo não entra duas vezes no mesmo mercado — subir de novo atualiza.
+  @@unique([tenantId, productCode, name])
+  @@index([tenantId, productCode, status])
+  @@map("market_assets")
+}
