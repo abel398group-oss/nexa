@@ -10,6 +10,7 @@ import {
   readMarketAsset,
   uploadMarketAsset,
   uploadMarketPortfolio,
+  editMarketAsset,
   approveMarketAsset,
   rejectMarketAsset,
   deleteMarketAsset,
@@ -53,6 +54,8 @@ export function CampaignValidationPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [arrastando, setArrastando] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
+  /// Rascunho da correção. `null` = só lendo; objeto = editando este arquivo.
+  const [edicao, setEdicao] = useState<{ id: string; name: string; content: string } | null>(null);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
@@ -66,6 +69,14 @@ export function CampaignValidationPage() {
   });
 
   const selecionado = itens.find((a) => a.id === aberto) ?? null;
+  const editando = edicao?.id === aberto ? edicao : null;
+
+  function abrir(id: string) {
+    // Trocar de arquivo descarta o rascunho: sem isto o texto de um apareceria no
+    // editor do outro, e salvar gravaria no arquivo errado.
+    setEdicao(null);
+    setAberto(id);
+  }
   const { data: texto, isLoading: lendo } = useQuery({
     queryKey: [...chave, aberto, 'conteudo'],
     queryFn: () => readMarketAsset(code, aberto!),
@@ -102,6 +113,24 @@ export function CampaignValidationPage() {
       if (recusados.length) toast.error(`Fora: ${recusados.join(' · ')}`);
     },
     onError: () => toast.error('Não consegui subir os arquivos.'),
+  });
+
+  const salvar = useMutation({
+    mutationFn: () =>
+      editMarketAsset(code, edicao!.id, {
+        ...(edicao!.name !== selecionado?.name && { name: edicao!.name }),
+        ...(selecionado?.kind === 'plan' && { content: edicao!.content }),
+      }),
+    onSuccess: () => {
+      recarregar();
+      void qc.invalidateQueries({ queryKey: [...chave, aberto, 'conteudo'] });
+      setEdicao(null);
+      toast.success('Corrigido — voltou para a fila, é só aprovar.');
+    },
+    onError: (e: any) => {
+      const m = e?.response?.data?.message;
+      toast.error(Array.isArray(m) ? m.join(' · ') : m ?? 'Não consegui salvar a correção.');
+    },
   });
 
   const aprovar = useMutation({
@@ -190,7 +219,7 @@ export function CampaignValidationPage() {
             itens={pendentes}
             aberto={aberto}
             destacar
-            onAbrir={setAberto}
+            onAbrir={abrir}
             carregando={isLoading}
           />
           <FilaDeMaterial
@@ -198,7 +227,7 @@ export function CampaignValidationPage() {
             vazio="Nada aprovado ainda."
             itens={aprovados}
             aberto={aberto}
-            onAbrir={setAberto}
+            onAbrir={abrir}
             carregando={isLoading}
           />
         </div>
@@ -216,7 +245,16 @@ export function CampaignValidationPage() {
             <>
               <div className="flex flex-wrap items-center gap-2 border-b border-base-200 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-base-content">{selecionado.name}</div>
+                  {editando ? (
+                    <input
+                      className="input !h-8 w-full text-sm"
+                      value={editando.name}
+                      onChange={(e) => setEdicao((v) => v && { ...v, name: e.target.value })}
+                      aria-label="Nome do arquivo"
+                    />
+                  ) : (
+                    <div className="truncate text-sm font-medium text-base-content">{selecionado.name}</div>
+                  )}
                   <div className="text-[11px] text-base-content/50">
                     {selecionado.kind === 'plan' ? 'Roteiro' : 'Portfólio'} · {tamanho(selecionado.sizeBytes)}
                     {selecionado.approvedAt &&
@@ -226,26 +264,62 @@ export function CampaignValidationPage() {
                 <StatusBadge tone={selecionado.status === 'pending' ? 'warning' : 'success'}>
                   {selecionado.status === 'pending' ? 'Aguardando' : 'Aprovado'}
                 </StatusBadge>
-                {selecionado.status === 'pending' ? (
-                  <Button size="sm" disabled={aprovar.isPending} onClick={() => aprovar.mutate(selecionado.id)}>
-                    <Icon name="check" className="h-4 w-4" /> Aprovar
-                  </Button>
+                {editando ? (
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => setEdicao(null)}>Cancelar</Button>
+                    <Button size="sm" loading={salvar.isPending} onClick={() => salvar.mutate()}>
+                      Salvar correção
+                    </Button>
+                  </>
                 ) : (
-                  <Button size="sm" variant="ghost" onClick={() => reprovar.mutate(selecionado.id)}>
-                    Reprovar
-                  </Button>
+                  <>
+                    {/* Corrigir fica ao lado de aprovar de propósito: quem lê é quem
+                        vê o erro, e mandar essa pessoa voltar ao computador para
+                        editar o arquivo é o que faz ela aprovar assim mesmo. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setEdicao({
+                          id: selecionado.id,
+                          name: selecionado.name,
+                          content: texto?.content ?? '',
+                        })
+                      }
+                      disabled={selecionado.kind === 'plan' && lendo}
+                    >
+                      <Icon name="edit" className="h-4 w-4" /> Corrigir
+                    </Button>
+                    {selecionado.status === 'pending' ? (
+                      <Button size="sm" disabled={aprovar.isPending} onClick={() => aprovar.mutate(selecionado.id)}>
+                        <Icon name="check" className="h-4 w-4" /> Aprovar
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => reprovar.mutate(selecionado.id)}>
+                        Reprovar
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
+                      onClick={() => void pedirRemocao(selecionado)}
+                    >
+                      Remover
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-1 text-xs text-base-content/40 hover:bg-red-50 hover:text-red-500"
-                  onClick={() => void pedirRemocao(selecionado)}
-                >
-                  Remover
-                </button>
               </div>
 
               <div className="p-3">
-                {selecionado.kind === 'plan' ? (
+                {editando && selecionado.kind === 'plan' ? (
+                  <textarea
+                    className="input h-[32rem] w-full py-2 font-mono text-xs leading-relaxed"
+                    style={{ resize: 'vertical' }}
+                    value={editando.content}
+                    onChange={(e) => setEdicao((v) => v && { ...v, content: e.target.value })}
+                    aria-label="Texto do roteiro"
+                  />
+                ) : selecionado.kind === 'plan' ? (
                   lendo ? (
                     <p className="text-xs text-base-content/40">Abrindo…</p>
                   ) : (

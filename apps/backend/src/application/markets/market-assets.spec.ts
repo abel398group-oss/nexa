@@ -254,3 +254,96 @@ describe('MarketAssetsService.listar por tipo', () => {
     expect(prisma.marketAsset.findMany.mock.calls[0][0].where).not.toHaveProperty('kind');
   });
 });
+
+/**
+ * Correção durante a revisão.
+ *
+ * Quem está lendo para aprovar é quem vê o erro de digitação. Sem editar aqui, o
+ * caminho é fechar, voltar ao computador, mexer no `.md` e arrastar de novo — e o
+ * caminho mais curto passa a ser aprovar assim mesmo. A edição existe para o erro
+ * ser corrigido em vez de aceito.
+ */
+describe('MarketAssetsService.editar', () => {
+  const roteiro = {
+    id: 'a1', name: '02_eixo_cotacoes.md', productCode: 'hipertms',
+    kind: 'plan', status: 'approved', content: 'texto velho',
+  };
+
+  it('editar o texto derruba a aprovação', async () => {
+    const { svc, prisma } = makeSvc(undefined, roteiro);
+
+    await svc.editar('t1', 'a1', { content: 'texto corrigido' });
+
+    const { data } = prisma.marketAsset.update.mock.calls[0][0];
+    expect(data.content).toBe('texto corrigido');
+    // O que foi lido e o que está gravado têm que ser a mesma coisa.
+    expect(data.status).toBe('pending');
+    expect(data.approvedAt).toBeNull();
+  });
+
+  it('o tamanho é recalculado, não herdado', async () => {
+    const { svc, prisma } = makeSvc(undefined, roteiro);
+
+    await svc.editar('t1', 'a1', { content: 'ção' }); // 5 bytes, 3 caracteres
+
+    expect(prisma.marketAsset.update.mock.calls[0][0].data.sizeBytes).toBe(5);
+  });
+
+  it('renomear também derruba a aprovação, porque o nome é o que se reconhece na lista', async () => {
+    const { svc, prisma } = makeSvc(undefined, roteiro);
+    prisma.marketAsset.findFirst
+      .mockResolvedValueOnce(roteiro)   // busca o próprio
+      .mockResolvedValueOnce(null);     // ninguém com o nome novo
+
+    await svc.editar('t1', 'a1', { name: '02_cotacoes_revisado.md' });
+
+    const { data } = prisma.marketAsset.update.mock.calls[0][0];
+    expect(data.name).toBe('02_cotacoes_revisado.md');
+    expect(data.status).toBe('pending');
+  });
+
+  // A extensão manda no tipo: um roteiro renomeado para `.pdf` viraria um texto que a
+  // tela tenta abrir num visualizador de PDF.
+  it('roteiro não pode ser renomeado para fora de texto', async () => {
+    const { svc } = makeSvc(undefined, roteiro);
+    await expect(svc.editar('t1', 'a1', { name: 'virou.pdf' })).rejects.toThrow(/\.md/);
+  });
+
+  it('nome já usado no mercado é recusado com o nome, não com um 500', async () => {
+    const { svc, prisma } = makeSvc(undefined, roteiro);
+    prisma.marketAsset.findFirst
+      .mockResolvedValueOnce(roteiro)
+      .mockResolvedValueOnce({ id: 'outro' }); // o nome novo já existe
+
+    await expect(svc.editar('t1', 'a1', { name: '04_financeiro.md' })).rejects.toThrow(
+      /Já existe "04_financeiro\.md"/,
+    );
+    expect(prisma.marketAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('portfólio recusa edição de texto — os bytes não se editam por aqui', async () => {
+    const { svc } = makeSvc(undefined, { ...roteiro, kind: 'portfolio', content: null });
+    await expect(svc.editar('t1', 'a1', { content: 'x' })).rejects.toThrow(/suba o arquivo novo/);
+  });
+
+  it('portfólio aceita renomear', async () => {
+    const pdf = { ...roteiro, name: 'folder.pdf', kind: 'portfolio', content: null };
+    const { svc, prisma } = makeSvc(undefined, pdf);
+    prisma.marketAsset.findFirst.mockResolvedValueOnce(pdf).mockResolvedValueOnce(null);
+
+    await svc.editar('t1', 'a1', { name: 'folder_2026.pdf' });
+
+    expect(prisma.marketAsset.update.mock.calls[0][0].data.name).toBe('folder_2026.pdf');
+  });
+
+  it('texto vazio não passa — apagaria o roteiro sem dizer', async () => {
+    const { svc } = makeSvc(undefined, roteiro);
+    await expect(svc.editar('t1', 'a1', { content: '' })).rejects.toThrow(/vazio/);
+  });
+
+  it('corpo vazio não escreve nada', async () => {
+    const { svc, prisma } = makeSvc(undefined, roteiro);
+    await svc.editar('t1', 'a1', {});
+    expect(prisma.marketAsset.update).not.toHaveBeenCalled();
+  });
+});

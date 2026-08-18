@@ -1,12 +1,12 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, Param, Post, Query,
+  BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query,
   UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { MarketAssetsService } from '@/application/markets/market-assets.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -33,6 +33,27 @@ class SubirAssetDto {
   @IsNotEmpty({ message: 'O arquivo está vazio.' })
   @MaxLength(1_000_000)
   content!: string;
+}
+
+/**
+ * Correção durante a revisão. PATCH: campo ausente não é tocado.
+ *
+ * As regras de verdade (extensão do roteiro, nome repetido, tamanho em bytes) ficam
+ * no service — aqui só o formato. `@IsOptional()` pula `undefined`, que é
+ * exatamente "não mexe neste campo".
+ */
+class EditarAssetDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'O nome não pode ficar vazio.' })
+  @MaxLength(200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'O texto não pode ficar vazio.' })
+  @MaxLength(1_000_000)
+  content?: string;
 }
 
 /// Mesmo destino do anexo de campanha (sender.controller): `uploads/` na raiz do
@@ -122,6 +143,16 @@ export class MarketAssetsController {
       mimeType: file.mimetype,
       sizeBytes: file.size,
     });
+  }
+
+  @Patch(':id')
+  @RequirePerm('settings')
+  editar(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: EditarAssetDto,
+  ) {
+    return this.assets.editar(tenantId, id, dto);
   }
 
   @Post(':id/approve')

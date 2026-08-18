@@ -185,3 +185,18 @@ export async function rejectMarketAsset(code: string, id: string): Promise<Marke
 export async function deleteMarketAsset(code: string, id: string): Promise<void> {
   await api.delete(`/markets/${code}/assets/${id}`);
 }
+
+/**
+ * Corrige um material durante a revisão. PATCH: campo ausente não é tocado.
+ *
+ * Editar derruba a aprovação — o que foi lido e o que está gravado precisam ser a
+ * mesma coisa. Quem corrigiu está com o texto na frente, então reaprovar é um clique.
+ */
+export async function editMarketAsset(
+  code: string,
+  id: string,
+  dto: { name?: string; content?: string },
+): Promise<MarketAsset> {
+  const r = await api.patch(`/markets/${code}/assets/${id}`, dto);
+  return r.data;
+}

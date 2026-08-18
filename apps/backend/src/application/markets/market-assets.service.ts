@@ -164,6 +164,79 @@ export class MarketAssetsService {
   }
 
   /**
+   * Corrige um material sem sair da revisão.
+   *
+   * É o caso comum: lendo para aprovar, aparece um erro de digitação, um número
+   * errado, um nome de arquivo confuso. Mandar a pessoa voltar ao computador, editar
+   * o `.md` e arrastar de novo é o caminho que faz ela aprovar assim mesmo.
+   *
+   * Editar DERRUBA a aprovação, pelo mesmo motivo que reenviar derruba: o que foi
+   * lido e o que está gravado precisam ser a mesma coisa. Quem corrige está com o
+   * texto na frente, então reaprovar é um clique — e não perde a garantia.
+   *
+   * Portfólio só aceita renomear: os bytes do PDF não se editam por aqui, e trocar o
+   * arquivo é subir de novo.
+   */
+  async editar(
+    tenantId: string,
+    id: string,
+    dto: { name?: string; content?: string },
+  ) {
+    const asset = await this.prisma.marketAsset.findFirst({ where: { id, tenantId } });
+    if (!asset) throw new NotFoundException('Material não encontrado');
+
+    const data: Record<string, unknown> = {};
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) throw new BadRequestException('O nome não pode ficar vazio.');
+
+      // A extensão continua mandando no tipo: um roteiro renomeado para `.pdf` viraria
+      // um texto que a tela tenta abrir num visualizador de PDF.
+      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+      if (asset.kind === 'plan' && !EXTENSOES.includes(ext)) {
+        throw new BadRequestException(`Roteiro precisa terminar em ${EXTENSOES.join(', ')}.`);
+      }
+      if (name !== asset.name) {
+        const jaExiste = await this.prisma.marketAsset.findFirst({
+          where: { tenantId, productCode: asset.productCode, name },
+          select: { id: true },
+        });
+        // Checado antes do update: o unique devolveria P2002, que sem tratamento vira
+        // 500 — e quem renomeou precisa saber que o nome já é de outro arquivo.
+        if (jaExiste) throw new BadRequestException(`Já existe "${name}" neste mercado.`);
+      }
+      data.name = name;
+    }
+
+    if (dto.content !== undefined) {
+      if (asset.kind !== 'plan') {
+        throw new BadRequestException('Portfólio não se edita por aqui — suba o arquivo novo.');
+      }
+      const sizeBytes = Buffer.byteLength(dto.content, 'utf8');
+      if (sizeBytes === 0) throw new BadRequestException('O texto não pode ficar vazio.');
+      if (sizeBytes > TAMANHO_MAXIMO) {
+        throw new BadRequestException(
+          `O texto tem ${Math.round(sizeBytes / 1024)} KB — o limite é ${TAMANHO_MAXIMO / 1024} KB.`,
+        );
+      }
+      data.content = dto.content;
+      data.sizeBytes = sizeBytes;
+    }
+
+    if (!Object.keys(data).length) return asset;
+
+    // Renomear também derruba: o nome é o que o operador reconhece na lista, e um
+    // "aprovado" carimbado num nome que mudou depois diz menos do que parece.
+    const atualizado = await this.prisma.marketAsset.update({
+      where: { id },
+      data: { ...data, status: 'pending', approvedAt: null, approvedBy: null },
+    });
+    this.logger.log(`Material "${asset.name}" editado — voltou para aprovação`);
+    return atualizado;
+  }
+
+  /**
    * Aprova. A partir daqui a Lia pode usar o texto e o vendedor o enxerga.
    *
    * Guarda QUEM aprovou: quando um número errado chegar ao lead, a pergunta vai ser
