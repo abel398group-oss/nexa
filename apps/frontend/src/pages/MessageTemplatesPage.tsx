@@ -4,7 +4,7 @@ import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge 
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { listMarkets } from '@/entities/market';
-import { useMarketAtivo } from '@/shared/lib/marketAtivo';
+import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
   listTemplates, createTemplate, archiveTemplate, previewTemplate, sendTemplateTest,
   type MessageTemplate, type TemplatePreview,
@@ -45,7 +45,7 @@ export function MessageTemplatesPage() {
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // O market vem do cabeçalho do cockpit, compartilhado com as outras abas. Antes
   // era um `useState` local por aba, e a escolha derivava entre elas.
-  const [codigo, setMercado] = useMarketAtivo(mercados[0]?.code);
+  const [codigo, setMercado] = useMarketAtivo(marketPadrao(mercados));
 
   const { data: modelos = [] } = useQuery({
     queryKey: ['message-templates', codigo],

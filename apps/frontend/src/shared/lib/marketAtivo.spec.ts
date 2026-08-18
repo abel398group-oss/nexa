@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { getMarketAtivo, setMarketAtivo, useMarketAtivo } from './marketAtivo';
+import { getMarketAtivo, marketPadrao, setMarketAtivo, useMarketAtivo } from './marketAtivo';
 
 /**
  * O que este arquivo protege é a única coisa que o bug de 17/08/2026 provou ser
@@ -72,5 +72,39 @@ describe('useMarketAtivo', () => {
     } finally {
       Object.defineProperty(window, 'sessionStorage', original);
     }
+  });
+});
+
+/**
+ * O palpite da tela. Existe porque "primeiro da lista" tem um significado que só
+ * aparece quando a lista está ordenada por nome — e aí `agabe`, o mercado de teste
+ * em rascunho, ganha do HiperTMS que está no ar.
+ */
+describe('marketPadrao', () => {
+  it('prefere o liberado, mesmo quando o rascunho vem primeiro', () => {
+    expect(marketPadrao([
+      { code: 'd', status: 'draft' },
+      { code: 'hipertms', status: 'active' },
+    ])).toBe('hipertms');
+  });
+
+  it('sem nenhum liberado, cai no primeiro — a operação inteira está em montagem', () => {
+    expect(marketPadrao([
+      { code: 'd', status: 'draft' },
+      { code: 'outro', status: 'paused' },
+    ])).toBe('d');
+  });
+
+  // Suspenso não é liberado: o vendedor não o enxerga no Disparo, então abrir nele
+  // mostraria uma tela que não pode disparar nada.
+  it('suspenso não conta como liberado', () => {
+    expect(marketPadrao([
+      { code: 'pausado', status: 'paused' },
+      { code: 'hipertms', status: 'active' },
+    ])).toBe('hipertms');
+  });
+
+  it('lista vazia não tem palpite', () => {
+    expect(marketPadrao([])).toBeUndefined();
   });
 });

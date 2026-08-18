@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { listMarkets } from '@/entities/market';
-import { useMarketAtivo } from '@/shared/lib/marketAtivo';
+import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 
 /**
  * O market sobre o qual o módulo de vendas está trabalhando, no cabeçalho.
@@ -27,7 +27,7 @@ export function SeletorDeMarket() {
     queryFn: () => listMarkets(false),
   });
 
-  const [ativo, escolher] = useMarketAtivo(markets[0]?.code);
+  const [ativo, escolher] = useMarketAtivo(marketPadrao(markets));
 
   if (markets.length === 0) return null;
 

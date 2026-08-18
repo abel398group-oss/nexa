@@ -182,23 +182,25 @@ function IdentidadeDoMercado({ market }: { market: Market }) {
  * responder e a Lia improvisar.
  */
 function ResumoDoMercado({ c }: { c: MarketCounts }) {
+  // Singular e plural escritos por extenso: "mensagem" vira "mensagens" e "vendedor"
+  // vira "vendedores". Colar um "s" no fim dá "2 vendedors", e a linha inteira passa
+  // a parecer improvisada — que é justamente o que ela veio corrigir.
   const itens = [
-    { n: c.conhecimentoUtil, rotulo: 'fato', icone: 'knowledge' },
-    { n: c.modelos, rotulo: 'mensagem', icone: 'mail' },
-    { n: c.vendedores, rotulo: 'vendedor', icone: 'sellers' },
+    { n: c.conhecimentoUtil, um: 'fato', varios: 'fatos', icone: 'knowledge' },
+    { n: c.modelos, um: 'mensagem', varios: 'mensagens', icone: 'mail' },
+    { n: c.vendedores, um: 'vendedor', varios: 'vendedores', icone: 'sellers' },
   ];
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
       {itens.map((i) => (
         <span
-          key={i.rotulo}
+          key={i.um}
           // Zero em cinza claro somiria justamente onde está a informação mais
           // importante da linha. Fica âmbar, do lado do número.
           className={`flex items-center gap-1 text-[11px] ${i.n === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}
         >
           <Icon name={i.icone as any} className="h-3.5 w-3.5" />
-          {i.n} {i.rotulo}
-          {i.n === 1 ? '' : 's'}
+          {i.n} {i.n === 1 ? i.um : i.varios}
         </span>
       ))}
     </div>

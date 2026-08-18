@@ -45,11 +45,27 @@ export function setMarketAtivo(code: string | null): void {
 }
 
 /**
+ * Qual market a tela mostra enquanto ninguém escolheu.
+ *
+ * "O primeiro da lista" parecia inofensivo até a lista chegar ordenada por nome: em
+ * 18/08/2026 o cabeçalho abriu em `agabe (rascunho)` — um mercado de teste, sem
+ * conhecimento e sem mensagem — enquanto todo o resto da tela dizia HiperTMS.
+ * Rascunho é o mercado que ainda NÃO pode vender; abrir nele é começar errado.
+ *
+ * Liberado primeiro, e só depois o primeiro que houver. Se nenhum estiver liberado,
+ * não há escolha boa a fazer — mas aí a tela inteira está em montagem, e o rascunho
+ * é o assunto mesmo.
+ */
+export function marketPadrao(markets: { code: string; status?: string }[]): string | undefined {
+  return (markets.find((m) => m.status === 'active') ?? markets[0])?.code;
+}
+
+/**
  * Lê o market ativo e re-renderiza quando ele muda.
  *
- * `fallback` é o primeiro market da lista, para a tela não abrir vazia enquanto
- * ninguém escolheu — mas ele NÃO é gravado: gravar transformaria um palpite em
- * escolha, e é assim que se volta a mandar mensagem para o market errado.
+ * `fallback` é o palpite da tela (ver `marketPadrao`), para ela não abrir vazia
+ * enquanto ninguém escolheu — mas ele NÃO é gravado: gravar transformaria um palpite
+ * em escolha, e é assim que se volta a mandar mensagem para o market errado.
  */
 export function useMarketAtivo(fallback?: string): [string, (code: string) => void] {
   const [code, setCode] = useState<string | null>(() => getMarketAtivo());
