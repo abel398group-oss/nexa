@@ -81,7 +81,7 @@ const NAV_MODULES: NavModule[] = [
     groups: [
       { label: 'Base', icon: 'contacts', items: [
         { to: '/contacts',     label: 'Leads',     ic: 'contacts', perm: 'contacts' },
-        { to: '/partners',     label: 'Parceiros', ic: 'building', perm: 'partners' },
+        { to: '/partners',     label: 'Parceiros de indicação', ic: 'building', perm: 'partners' },
         { to: '/lead-batches', label: 'Lotes',     ic: 'upload',   perm: 'lead_batches' },
       ] },
       { label: 'Operação', icon: 'zap', items: [
@@ -147,7 +147,7 @@ const titles: Record<string, string> = {
   '/knowledge': 'Base de Conhecimento',
   '/sellers': 'Vendedores',
   '/opportunities': 'Oportunidades',
-  '/partners': 'Parceiros',
+  '/partners': 'Parceiros de indicação',
   '/fila': 'Minha fila',
   '/campaigns': 'Disparo de Leads',
   '/sender/health': 'Saúde dos números',

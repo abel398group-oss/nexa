@@ -1,5 +1,10 @@
 /**
- * PartnersPage — Parceiros de cross-sell (/partners).
+ * PartnersPage — Parceiros de INDICAÇÃO (/partners).
+ *
+ * "Parceiro" virou palavra ambígua: aqui é quem RECEBE lead nosso, e no módulo
+ * de vendas o Abel chama de parceiro o produto que a gente VENDE (o HiperTMS,
+ * que no banco é um market). Sentidos opostos, mesma palavra — por isso o menu
+ * diz "Parceiros de indicação" e não só "Parceiros".
  *
  * F7 (RevOps): cadastro das empresas parceiras EXTERNAS que recebem lead
  * qualificado por indicação (ex.: fornecedor de pneus para a base de
@@ -188,8 +193,8 @@ export function PartnersPage() {
 
   return (
     <StandardListPage
-      title="Parceiros"
-      breadcrumb={[{ label: 'Vendas' }, { label: 'Parceiros' }]}
+      title="Parceiros de indicação"
+      breadcrumb={[{ label: 'Vendas' }, { label: 'Parceiros de indicação' }]}
       description="Empresas externas que recebem indicação de lead (cross-sell). Compartilhar exige consentimento do lead — LGPD"
       isLoading={loading}
       hasData={items.length > 0}

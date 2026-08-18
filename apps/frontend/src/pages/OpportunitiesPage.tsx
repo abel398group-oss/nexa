@@ -786,7 +786,7 @@ export function OpportunitiesPage() {
 
           {activePartners.length === 0 ? (
             <p className="rounded-lg bg-base-200 p-3 text-sm text-base-content/70">
-              Nenhum parceiro ativo cadastrado. Cadastre a empresa parceira em <b>Vendas → Parceiros</b> antes
+              Nenhum parceiro ativo cadastrado. Cadastre a empresa parceira em <b>Vendas → Parceiros de indicação</b> antes
               de indicar um lead.
             </p>
           ) : (
