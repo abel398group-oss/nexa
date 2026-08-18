@@ -11,9 +11,10 @@ import { NotificationsModule } from '@/application/notifications/notifications.m
 import { WhatsappController } from '@/presentation/http/whatsapp/whatsapp.controller';
 import { WhatsappStatusController } from '@/presentation/http/whatsapp/whatsapp-status.controller';
 import { EmailCryptoModule } from '@/shared/email-crypto/email-crypto.module';
+import { QuoteModule } from '@/application/quote/quote.module';
 
 @Module({
-  imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule, EmailCryptoModule],
+  imports: [ContactsModule, ConversationsModule, AgentsModule, FollowUpModule, NotificationsModule, EmailCryptoModule, QuoteModule],
   controllers: [WhatsappController, WhatsappStatusController],
   providers: [WhatsappService, InternalNumbersService, WahaBootstrapService, WahaHealthService],
 })

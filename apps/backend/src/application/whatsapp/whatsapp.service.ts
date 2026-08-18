@@ -14,6 +14,9 @@ import { InternalNumbersService } from './internal-numbers.service';
 import { LINHA_PRINCIPAL } from '@/shared/waha/waha-client.service';
 import { isOptOutMessage } from './opt-out-detection';
 import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
+import { QuoteConversationService } from '@/application/quote/quote-conversation.service';
+import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
 
 interface Normalized {
   phone: string;
@@ -79,7 +82,38 @@ export class WhatsappService {
     private readonly emitter: EventEmitter2,
     private readonly internalNumbers: InternalNumbersService,
     private readonly optOutRegistry: OptOutRegistryService,
+    private readonly cotacao: QuoteConversationService,
+    private readonly tmsLookup: TmsLookupService,
+    private readonly waha: WahaClientService,
   ) {}
+
+  /**
+   * Cotação de frete por WhatsApp. `false` = a mensagem não é de cotação.
+   *
+   * Isolada num método para o gate de números internos continuar legível, e para que
+   * QUALQUER falha aqui — TMS fora do ar, Redis caído, exceção inesperada — termine em
+   * `false` e devolva o caminho ao descarte de sempre. O canal de alerta é o que não pode
+   * quebrar; a cotação é o que pode faltar.
+   */
+  private async tentarCotacao(phone: string, texto: string, linha?: string): Promise<boolean> {
+    if (!this.cotacao.habilitado || !texto) return false;
+    try {
+      // Quem é essa pessoa no TMS. Sem usuário não há permissão nem cota a checar, e
+      // cotar em nome de ninguém não faz sentido — segue como descarte normal.
+      const usuarios = await this.tmsLookup.usuariosPorTelefone([phone]);
+      const userId = usuarios.get(TmsLookupService.normalize(phone));
+      if (!userId) return false;
+
+      const resposta = await this.cotacao.responderMensagem(phone, texto, userId);
+      if (!resposta) return false;
+
+      await this.waha.sendText(phone, resposta, { linha, origin: 'cotacao' });
+      return true;
+    } catch (e: any) {
+      this.logger.warn(`cotação falhou para ${phone}: ${e?.message}`);
+      return false;
+    }
+  }
 
   // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
   async handleAck(rawBody: any) {

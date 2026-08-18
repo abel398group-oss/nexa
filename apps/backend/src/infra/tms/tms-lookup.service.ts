@@ -421,6 +421,50 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     return mapa;
   }
 
+  /**
+   * Telefone → id do usuário no TMS (`tenant_core_user.id`).
+   *
+   * Diferente do `batchLookup`, que devolve nome e empresa para EXIBIR: aqui o que
+   * importa é a identidade, porque é ela que o TMS usa para decidir permissão e cota na
+   * cotação por WhatsApp. Devolver o nome não serviria — o endpoint deles pede o id.
+   *
+   * Só usuário ATIVO e não excluído. Quem saiu da empresa não cota em nome dela, e a
+   * checagem tem que ser aqui: o Nexa é quem escolhe qual id mandar.
+   */
+  async usuariosPorTelefone(phones: string[]): Promise<Map<string, string>> {
+    const mapa = new Map<string, string>();
+    const normalizados = [...new Set(phones.filter(Boolean).map(TmsLookupService.normalize))];
+    if (!normalizados.length) return mapa;
+
+    const pool = this.getPool();
+    if (!pool) return mapa;
+    const client = await pool.connect().catch((e: any) => {
+      this.logger.error(`TMS DB indisponível: ${e?.message}`);
+      return null;
+    });
+    if (!client) return mapa;
+
+    try {
+      const res = await client.query(
+        // Mesma normalização dos dois lados: o TMS guarda telefone com máscara, e o Nexa
+        // guarda só dígitos com DDI. Comparar cru não casa nunca.
+        `SELECT id, phone FROM tenant_core_user
+          WHERE "isActive" = true AND "deletedAt" IS NULL
+            AND phone IS NOT NULL AND phone <> ''
+            AND regexp_replace(phone, '[^0-9]', '', 'g') = ANY($1::text[])`,
+        [normalizados],
+      );
+      for (const row of res.rows as { id: string; phone: string }[]) {
+        mapa.set(TmsLookupService.normalize(row.phone), row.id);
+      }
+    } catch (e: any) {
+      this.logger.error(`usuariosPorTelefone falhou: ${e?.message}`);
+    } finally {
+      client.release();
+    }
+    return mapa;
+  }
+
   async onModuleDestroy() {
     if (this.pool) {
       await this.pool.end().catch(() => null);

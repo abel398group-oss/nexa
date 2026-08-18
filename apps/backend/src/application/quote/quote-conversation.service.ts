@@ -109,6 +109,15 @@ export class QuoteConversationService {
       return msg.semTabelaDeFrete(passo.estado);
     }
 
+    // As duas buscas foram resolvidas acima. Se ainda houver uma aqui, é porque uma delas
+    // levou à outra — cenário que o fluxo não produz hoje, e que eu prefiro ver no log a
+    // deixar o TypeScript acreditar que não existe.
+    if (passo.tipo === 'buscar_cidade' || passo.tipo === 'buscar_cargas') {
+      this.logger.warn(`fluxo pediu ${passo.tipo} duas vezes seguidas — não deveria acontecer`);
+      await this.sessoes.apagar(phone);
+      return 'Alguma coisa se perdeu no meio. Manda *cotar* pra recomeçar. 😕';
+    }
+
     if (passo.tipo === 'repetir') {
       const desistiu = passo.motivo === 'desistiu';
       // Ao desistir a sessão MORRE. Deixá-la viva faria a próxima mensagem qualquer cair
