@@ -741,8 +741,20 @@ export function Layout() {
               <Icon name="menu" className="h-5 w-5" />
             </button>
             <h1 className="truncate text-base font-semibold text-base-content">{pageTitle}</h1>
-            {/* seletor de cliente/tenant — só aparece para o admin da plataforma */}
-            <TenantSelector />
+            {/* Seletor de CLIENTE (tenant) — só para o admin da plataforma, e fora do
+                módulo Market.
+
+                "HiperTMS" quer dizer duas coisas no produto: no TMS é o CLIENTE cuja
+                conta a gente está operando (suporte, alertas); no Market é o PRODUTO
+                que a gente vende. No Market o seletor de cliente aparecia ao lado do
+                seletor de mercado, os dois escritos "HiperTMS", e nenhum dos dois dizia
+                qual era qual. Pior em /partners, onde "parceiro" é ainda um terceiro
+                sentido — quem recebe indicação nossa.
+
+                Escolher cliente continua sendo do TMS e da Plataforma, onde é a
+                pergunta certa. Ninguém fica preso sem escolher: o `TenantGate` cobre
+                isso antes de qualquer tela renderizar. */}
+            {activeModuleId !== 'market' && <TenantSelector />}
           </div>
           <div className="flex items-center gap-2">
             {location.pathname === '/dashboard' && <DateRangePicker />}
