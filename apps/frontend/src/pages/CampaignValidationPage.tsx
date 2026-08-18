@@ -70,7 +70,7 @@ export function CampaignValidationPage() {
   const [arrastando, setArrastando] = useState<'plan' | 'portfolio' | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   /// Rascunho da correção. `null` = só lendo; objeto = editando este arquivo.
-  const [edicao, setEdicao] = useState<{ id: string; name: string; content: string } | null>(null);
+  const [edicao, setEdicao] = useState<{ id: string | null; name: string; content: string } | null>(null);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
@@ -85,12 +85,26 @@ export function CampaignValidationPage() {
 
   const selecionado = itens.find((a) => a.id === aberto) ?? null;
   const editando = edicao?.id === aberto ? edicao : null;
+  /// Rascunho que ainda não existe no servidor: `id` nulo com nada aberto na fila.
+  const novo = !!editando && editando.id === null;
 
   function abrir(id: string) {
     // Trocar de arquivo descarta o rascunho: sem isto o texto de um apareceria no
     // editor do outro, e salvar gravaria no arquivo errado.
     setEdicao(null);
     setAberto(id);
+  }
+
+  /**
+   * Roteiro escrito aqui, do zero — nem todo texto nasce num arquivo no computador.
+   *
+   * Abre o MESMO editor da correção, vazio. O nome já vem com `.md` porque a extensão
+   * decide o tipo no servidor, e descobrir isso levando recusa depois de escrever o
+   * texto inteiro seria o pior momento possível.
+   */
+  function escreverDoZero() {
+    setAberto(null);
+    setEdicao({ id: null, name: 'novo-roteiro.md', content: '' });
   }
   const { data: texto, isLoading: lendo } = useQuery({
     queryKey: [...chave, aberto, 'conteudo'],
@@ -148,16 +162,26 @@ export function CampaignValidationPage() {
   });
 
   const salvar = useMutation({
+    // Rascunho novo (`id` nulo) entra pela MESMA rota do arquivo arrastado: o servidor
+    // faz upsert pelo nome, então escrever aqui e arrastar um `.md` com o mesmo nome
+    // acabam na mesma linha, com a mesma regra de aprovação. Dois caminhos de escrita
+    // seriam duas chances de divergirem.
     mutationFn: () =>
-      editMarketAsset(code, edicao!.id, {
-        ...(edicao!.name !== selecionado?.name && { name: edicao!.name }),
-        ...(selecionado?.kind === 'plan' && { content: edicao!.content }),
-      }),
-    onSuccess: () => {
+      edicao!.id === null
+        ? uploadMarketAsset(code, { name: edicao!.name.trim(), content: edicao!.content })
+        : editMarketAsset(code, edicao!.id, {
+            ...(edicao!.name !== selecionado?.name && { name: edicao!.name }),
+            ...(selecionado?.kind === 'plan' && { content: edicao!.content }),
+          }),
+    onSuccess: (salvo) => {
       recarregar();
       void qc.invalidateQueries({ queryKey: [...chave, aberto, 'conteudo'] });
+      const eraNovo = edicao?.id === null;
       setEdicao(null);
-      toast.success('Corrigido — voltou para a fila, é só aprovar.');
+      // Abre o que acabou de nascer: escrever e não ver o resultado deixa a dúvida
+      // de se salvou mesmo.
+      if (eraNovo && salvo?.id) setAberto(salvo.id);
+      toast.success(eraNovo ? 'Roteiro criado — está na fila para você aprovar.' : 'Corrigido — voltou para a fila, é só aprovar.');
     },
     onError: (e: any) => {
       const m = e?.response?.data?.message;
@@ -246,11 +270,19 @@ export function CampaignValidationPage() {
         title="Validação de campanha"
         subtitle="Traga o material do mercado para cá, leia e aprove. Só o aprovado a Lia usa e o vendedor manda."
         actions={
-          <select className="input w-52 text-sm" value={code} onChange={(e) => setCode(e.target.value)}>
-            {mercados.map((m) => (
-              <option key={m.code} value={m.code}>{m.displayName || m.name}</option>
-            ))}
-          </select>
+          <>
+            <select className="input w-52 text-sm" value={code} onChange={(e) => setCode(e.target.value)}>
+              {mercados.map((m) => (
+                <option key={m.code} value={m.code}>{m.displayName || m.name}</option>
+              ))}
+            </select>
+            {/* Nem todo roteiro nasce num arquivo: às vezes a pessoa quer escrever
+                aqui mesmo. Cai na mesma fila e na mesma aprovação do que foi
+                arrastado — o texto não sabe por onde entrou. */}
+            <Button variant="outline" onClick={escreverDoZero}>
+              <Icon name="edit" className="h-4 w-4" /> Escrever roteiro
+            </Button>
+          </>
         }
       />
 
@@ -298,12 +330,13 @@ export function CampaignValidationPage() {
             ficava igual — dava para não saber em que modo se estava, e um clique
             fora perdia o que tinha sido digitado sem aviso. */}
         <Card className={`p-0 ${editando ? 'ring-2 ring-blue-400 dark:ring-blue-500' : ''}`}>
-          {!selecionado ? (
+          {!selecionado && !novo ? (
             <div className="flex h-72 flex-col items-center justify-center gap-2 text-center">
               <Icon name="knowledge" className="h-8 w-8 text-base-content/20" />
               <p className="text-sm text-base-content/70">Escolha um arquivo para ler.</p>
               <p className="max-w-xs text-[11px] text-base-content/60">
-                O botão de aprovar aparece aqui, ao lado do que você está lendo.
+                O botão de aprovar aparece aqui, ao lado do que você está lendo. Para escrever um
+                roteiro do zero, use “Escrever roteiro” lá em cima.
               </p>
             </div>
           ) : (
@@ -322,31 +355,47 @@ export function CampaignValidationPage() {
                       aria-label="Nome do arquivo"
                     />
                   ) : (
-                    <div className="truncate text-sm font-medium text-base-content">{selecionado.name}</div>
+                    <div className="truncate text-sm font-medium text-base-content">{selecionado?.name}</div>
                   )}
                   <div className="text-[11px] text-base-content/70">
-                    {rotuloDoTipo(selecionado.kind)} · {tamanho(selecionado.sizeBytes)}
-                    {selecionado.approvedAt &&
-                      ` · aprovado em ${new Date(selecionado.approvedAt).toLocaleDateString('pt-BR')}`}
+                    {selecionado
+                      ? `${rotuloDoTipo(selecionado.kind)} · ${tamanho(selecionado.sizeBytes)}${
+                          selecionado.approvedAt
+                            ? ` · aprovado em ${new Date(selecionado.approvedAt).toLocaleDateString('pt-BR')}`
+                            : ''
+                        }`
+                      : 'Roteiro da campanha · ainda não salvo'}
                   </div>
                 </div>
                 {editando ? (
                   <StatusBadge tone="info">
-                    <Icon name="edit" className="mr-1 inline h-3 w-3" /> Editando
+                    <Icon name="edit" className="mr-1 inline h-3 w-3" /> {novo ? 'Escrevendo' : 'Editando'}
                   </StatusBadge>
                 ) : (
-                  <StatusBadge tone={selecionado.status === 'pending' ? 'warning' : 'success'}>
-                    {selecionado.status === 'pending' ? 'Aguardando' : 'Aprovado'}
-                  </StatusBadge>
+                  selecionado && (
+                    <StatusBadge tone={selecionado.status === 'pending' ? 'warning' : 'success'}>
+                      {selecionado.status === 'pending' ? 'Aguardando' : 'Aprovado'}
+                    </StatusBadge>
+                  )
                 )}
                 {editando ? (
                   <>
-                    <Button size="sm" variant="ghost" onClick={() => setEdicao(null)}>Cancelar</Button>
-                    <Button size="sm" loading={salvar.isPending} onClick={() => salvar.mutate()}>
-                      Salvar correção
+                    <Button size="sm" variant="ghost" onClick={() => { setEdicao(null); }}>
+                      {novo ? 'Descartar' : 'Cancelar'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      loading={salvar.isPending}
+                      // Rascunho novo sem nome ou sem texto não vira arquivo. O servidor
+                      // recusaria, mas depois de escrever tudo — travar aqui é mais honesto.
+                      disabled={novo && (!editando.name.trim() || !editando.content.trim())}
+                      onClick={() => salvar.mutate()}
+                    >
+                      {novo ? 'Criar roteiro' : 'Salvar correção'}
                     </Button>
                   </>
                 ) : (
+                  selecionado && (
                   <>
                     {/* Corrigir fica ao lado de aprovar de propósito: quem lê é quem
                         vê o erro, e mandar essa pessoa voltar ao computador para
@@ -386,11 +435,12 @@ export function CampaignValidationPage() {
                       Remover
                     </button>
                   </>
+                  )
                 )}
               </div>
 
               <div className="p-3">
-                {editando && selecionado.kind === 'plan' ? (
+                {editando && (novo || selecionado?.kind === 'plan') ? (
                   <textarea
                     className="input h-[32rem] w-full py-2 font-mono text-xs leading-relaxed"
                     style={{ resize: 'vertical' }}
@@ -399,12 +449,13 @@ export function CampaignValidationPage() {
                     aria-label="Texto do roteiro"
                   />
                 ) : null}
-                {editando && selecionado.kind === 'plan' ? (
+                {editando ? (
                   <p className="mt-2 text-[11px] text-base-content/70">
-                    Salvar devolve o arquivo para a fila — você aprova de novo com o texto novo na
-                    frente. Cancelar descarta o que foi digitado.
+                    {novo
+                      ? 'O roteiro entra na fila como pendente — você lê de novo e aprova. O nome precisa terminar em .md ou .txt.'
+                      : 'Salvar devolve o arquivo para a fila — você aprova de novo com o texto novo na frente. Cancelar descarta o que foi digitado.'}
                   </p>
-                ) : selecionado.kind === 'plan' ? (
+                ) : !selecionado ? null : selecionado.kind === 'plan' ? (
                   lendo ? (
                     <p className="text-xs text-base-content/60">Abrindo…</p>
                   ) : (
