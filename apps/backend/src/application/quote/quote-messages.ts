@@ -1,0 +1,176 @@
+// As mensagens do fluxo de cotação — puro, sem IO.
+//
+// Separado da máquina de estados porque texto muda por decisão de produto e regra muda
+// por decisão de engenharia; juntos, mexer num obriga a reler o outro.
+//
+// Formatação do WhatsApp: *negrito* com asterisco, _itálico_ com sublinhado.
+
+import type { CidadeDoTms } from './quote-city';
+import type { EstadoCotacao } from './quote-flow';
+
+const brl = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
+
+const cidade = (c: CidadeDoTms) => `${c.name}/${c.state}`;
+
+/**
+ * Eco da resposta anterior.
+ *
+ * É a última trava contra cidade errada: quem digitou "sp" querendo Sorocaba vê
+ * "São Paulo/SP ✓" e corrige antes de o número virar preço dito ao cliente.
+ */
+function eco(estado: EstadoCotacao): string {
+  if (estado.etapa === 'destino' && estado.origem) return `Origem: *${cidade(estado.origem)}* ✓\n\n`;
+  if (estado.etapa === 'modalidade' && estado.destino) {
+    return `Destino: *${cidade(estado.destino)}* ✓\n\n`;
+  }
+  return '';
+}
+
+export function abertura(): string {
+  return [
+    '*Cotação de frete* 🚛',
+    '',
+    'São 5 perguntas rápidas. No fim eu te dou o valor',
+    'e já deixo o rascunho salvo no TMS.',
+    '',
+    'Digite *sair* pra cancelar a qualquer momento.',
+    '',
+    '1/5 — Cidade de *origem*?',
+    '_exemplo: Campinas SP_',
+  ].join('\n');
+}
+
+/**
+ * A pergunta da etapa atual.
+ *
+ * O `n/5` existe porque sem ele, na terceira pergunta, a pessoa acha que não acaba nunca.
+ * Dedicado e fracionado somam 5 nos dois caminhos — muda a pergunta, não o total.
+ */
+export function pergunta(estado: EstadoCotacao): string {
+  switch (estado.etapa) {
+    case 'origem':
+      return '1/5 — Cidade de *origem*?\n_exemplo: Campinas SP_';
+
+    case 'destino':
+      return `${eco(estado)}2/5 — Cidade de *destino*?\n_exemplo: Belo Horizonte MG_`;
+
+    case 'escolher_origem':
+    case 'escolher_destino': {
+      const opcoes = estado.opcoes ?? [];
+      const linhas = opcoes.map((c, i) => `*${i + 1}* ${cidade(c)}`);
+      return [`Achei ${opcoes.length}. Qual delas?`, '', ...linhas].join('\n');
+    }
+
+    case 'modalidade':
+      return [
+        eco(estado) + '3/5 — Tipo de frete?',
+        '*1* Dedicado — veículo só pra sua carga',
+        '*2* Fracionado — divide com outras cargas',
+      ].join('\n');
+
+    case 'veiculo':
+      return ['4/5 — Qual veículo?', '*1* Truck', '*2* Carreta', '*3* Bitrem', '*4* Rodotrem'].join(
+        '\n',
+      );
+
+    case 'peso':
+      return '4/5 — Peso total da carga, em kg?\n_exemplo: 500_';
+
+    case 'valor':
+      return '5/5 — Valor da mercadoria, em reais?\n_exemplo: 80000_';
+
+    default:
+      return '';
+  }
+}
+
+/**
+ * Resposta a entrada inválida.
+ *
+ * A segunda tentativa NÃO repete a primeira: quem errou uma vez errou porque a pergunta
+ * não bastou, e repetir igual é o robô que não entende. Na terceira, entrega para humano
+ * em vez de insistir.
+ */
+export function naoEntendi(estado: EstadoCotacao, desistiu: boolean): string {
+  if (desistiu) {
+    return [
+      'Não consegui entender 😕',
+      '',
+      'Vou passar para alguém do time te ajudar.',
+      'Se preferir recomeçar, digite *cotar*.',
+    ].join('\n');
+  }
+
+  switch (estado.etapa) {
+    case 'origem':
+    case 'destino':
+      return 'Não achei essa cidade. Escreve com o estado, tipo *Campinas SP*.';
+    case 'escolher_origem':
+    case 'escolher_destino':
+      return `Responde só com o número da opção, de *1* a *${(estado.opcoes ?? []).length}*.`;
+    case 'peso':
+      return 'Preciso do peso em número, só os kg. _exemplo: 500_';
+    case 'valor':
+      return 'Preciso do valor em número. _exemplo: 80000_ (não vale "80 mil")';
+    default:
+      return 'Responde com o número da opção.';
+  }
+}
+
+export function cancelado(): string {
+  return 'Cotação cancelada. Quando quiser, é só mandar *cotar*. 👍';
+}
+
+export interface ResultadoDaCotacao {
+  distanciaKm?: number | null;
+  valor: number;
+  pisoAntt?: number | null;
+  rascunhoId?: string | null;
+}
+
+/**
+ * O resultado.
+ *
+ * "Valor de referência" fica na mensagem de propósito: o número dito no WhatsApp já é um
+ * preço na cabeça de quem lê, e a formalização ainda vai acontecer no TMS.
+ */
+export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
+  const rota =
+    estado.origem && estado.destino ? `${cidade(estado.origem)} → ${cidade(estado.destino)}` : '';
+  const detalhe = [
+    r.distanciaKm ? `${Math.round(r.distanciaKm)} km` : null,
+    estado.modalidade === 'dedicado' ? 'Dedicado' : 'Fracionado',
+    estado.veiculo ? estado.veiculo[0].toUpperCase() + estado.veiculo.slice(1) : null,
+    estado.pesoKg ? `${estado.pesoKg} kg` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return [
+    '*Cotação pronta* ✅',
+    '',
+    rota,
+    detalhe,
+    '',
+    `💰 *${brl(r.valor)}*`,
+    ...(r.pisoAntt ? [`📊 Piso ANTT: ${brl(r.pisoAntt)}`] : []),
+    '',
+    'Valor de referência, sujeito a confirmação.',
+    ...(r.rascunhoId ? [`📋 Rascunho *#${r.rascunhoId}* salvo no TMS.`] : []),
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
+}
+
+/**
+ * Recusa vinda do TMS.
+ *
+ * Duas frases diferentes porque são dois problemas diferentes, e mandar a mesma para os
+ * dois faz quem estourou a cota ir pedir permissão que já tem.
+ */
+export function recusado(motivo: 'sem_permissao' | 'cota_estourada'): string {
+  return motivo === 'sem_permissao'
+    ? 'Seu acesso à cotação não está liberado. Fale com o administrador do TMS. 🔒'
+    : 'Você atingiu o limite de cotações do período. Fale com o administrador do TMS. 📊';
+}
