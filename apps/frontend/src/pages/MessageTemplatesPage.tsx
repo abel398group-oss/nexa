@@ -4,6 +4,7 @@ import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge 
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { listMarkets } from '@/entities/market';
+import { useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
   listTemplates, createTemplate, archiveTemplate, previewTemplate, sendTemplateTest,
   type MessageTemplate, type TemplatePreview,
@@ -34,7 +35,6 @@ export function MessageTemplatesPage() {
   const confirm = useConfirm();
   const qc = useQueryClient();
 
-  const [mercado, setMercado] = useState<string>('');
   const [canal, setCanal] = useState<'email' | 'whatsapp'>('email');
   const [nome, setNome] = useState('');
   const [assunto, setAssunto] = useState('');
@@ -43,7 +43,9 @@ export function MessageTemplatesPage() {
   const [previa, setPrevia] = useState<TemplatePreview | null>(null);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
-  const codigo = mercado || mercados[0]?.code || '';
+  // O market vem do cabeçalho do cockpit, compartilhado com as outras abas. Antes
+  // era um `useState` local por aba, e a escolha derivava entre elas.
+  const [codigo, setMercado] = useMarketAtivo(mercados[0]?.code);
 
   const { data: modelos = [] } = useQuery({
     queryKey: ['message-templates', codigo],

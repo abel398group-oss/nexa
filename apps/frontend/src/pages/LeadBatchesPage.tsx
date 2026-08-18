@@ -12,6 +12,7 @@ import {
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { getMarketSellers, listMarkets, type Market } from '@/entities/market';
+import { useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
   distribuirLote,
   importarLote,
@@ -36,7 +37,6 @@ export function LeadBatchesPage() {
   const toast = useToast();
   const qc = useQueryClient();
 
-  const [productCode, setProductCode] = useState('');
   const [nome, setNome] = useState('');
   const [origem, setOrigem] = useState('');
   const [csv, setCsv] = useState('');
@@ -50,6 +50,8 @@ export function LeadBatchesPage() {
     queryKey: ['markets', 'liberados'],
     queryFn: () => listMarkets(true),
   });
+  // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
+  const [productCode, setProductCode] = useMarketAtivo(mercados[0]?.code);
 
   const { data: lotes = [] } = useQuery<LeadBatch[]>({
     queryKey: ['lead-batches'],

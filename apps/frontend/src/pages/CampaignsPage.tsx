@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
+import { getMarketAtivo } from '@/shared/lib/marketAtivo';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
@@ -197,7 +198,11 @@ export function CampaignsPage() {
   const [name, setName] = useState('');
   // F8: produto/parceiro da campanha. O lead herda na conversa e a Lia busca só
   // o conhecimento desse produto. Vazio = produto principal.
-  const [productCode, setProductCode] = useState('');
+  //
+  // Nasce no market escolhido no cabeçalho: quem está vendendo HiperTMS quer a
+  // campanha no HiperTMS, e digitar de novo é só chance de divergir. Continua
+  // editável e continua podendo ficar vazio — só o ponto de partida mudou.
+  const [productCode, setProductCode] = useState(() => getMarketAtivo() ?? '');
   // Produtos que já têm conhecimento — sugestão + aviso de produto sem base.
   const [productCodes, setProductCodes] = useState<{ productCode: string; artigos: number }[]>([]);
   useEffect(() => {
@@ -402,7 +407,7 @@ export function CampaignsPage() {
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
     setManualSort('az'); setManualSnapshot(null);
-    setProductCode(''); setLinha('vendas');
+    setProductCode(getMarketAtivo() ?? ''); setLinha('vendas');
     setFormErrors({});
   }
 

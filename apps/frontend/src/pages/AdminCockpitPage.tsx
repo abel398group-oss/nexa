@@ -7,6 +7,7 @@ import { NumberHealthPage } from './NumberHealthPage';
 import { AbuseGuardPage } from './AbuseGuardPage';
 import { SellersPage } from './SellersPage';
 import { NewMarketModal } from '@/components/NewMarketModal';
+import { SeletorDeMarket } from '@/components/SeletorDeMarket';
 import { useAuth } from '@/app/providers/AuthContext';
 import { temPerm } from '@/shared/lib/perms';
 
@@ -115,6 +116,12 @@ export function AdminCockpitPage() {
   return (
     <div className="flex h-screen flex-col bg-base-100">
       <div className="border-b border-base-300 bg-white shadow-sm">
+        {/* O market fica AQUI, e não dentro de cada aba, porque ele é a dimensão que
+            corta todas elas — mensagem, lista de lead e disparo são todos de um
+            market. Com um seletor por aba a escolha derivava entre elas. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-base-200 px-4 py-2">
+          <SeletorDeMarket />
+        </div>
         <div className="flex flex-wrap gap-2 p-4">
           {visiveis.map((a) => (
             <button
