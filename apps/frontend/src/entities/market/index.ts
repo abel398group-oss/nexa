@@ -25,6 +25,7 @@ export {
   listMarketAssets,
   readMarketAsset,
   uploadMarketAsset,
+  uploadMarketPortfolio,
   approveMarketAsset,
   rejectMarketAsset,
   deleteMarketAsset,

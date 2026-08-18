@@ -1630,7 +1630,16 @@ model MarketAsset {
   /// Nome do arquivo como veio: `02_eixo_cotacoes.md`. É o que o operador
   /// reconhece — renomear aqui quebraria a ligação com o que ele tem no disco.
   name        String
-  content     String
+  /// plan = roteiro que a Lia lê (texto na linha) · portfolio = PDF/imagem que o
+  /// vendedor mostra e anexa (bytes no disco, em `uploads/`).
+  kind        String   @default("plan")
+  /// Só para `plan`. Portfólio é binário e não cabe aqui.
+  content     String?
+  /// Só para `portfolio`: caminho relativo (`/uploads/...`). Relativo de propósito —
+  /// a URL pública é montada no envio com MEDIA_PUBLIC_BASE, igual ao anexo da
+  /// campanha, para não congelar o domínio dentro do banco.
+  fileUrl     String?  @map("file_url")
+  mimeType    String?  @map("mime_type")
   sizeBytes   Int      @map("size_bytes")
   /// pending = subiu e ninguém leu · approved = revisado, a Lia pode usar.
   /// Nasce sempre em `pending`: material que entra valendo é material que ninguém
@@ -1643,6 +1652,6 @@ model MarketAsset {
 
   /// Mesmo arquivo não entra duas vezes no mesmo mercado — subir de novo atualiza.
   @@unique([tenantId, productCode, name])
-  @@index([tenantId, productCode, status])
+  @@index([tenantId, productCode, kind, status])
   @@map("market_assets")
 }

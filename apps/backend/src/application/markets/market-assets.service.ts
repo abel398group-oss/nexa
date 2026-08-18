@@ -13,16 +13,30 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 
-/** Teto por arquivo. Os planos reais têm 5–15 KB; 512 KB é folga, não convite. */
+/** Teto do ROTEIRO. Os planos reais têm 5–15 KB; 512 KB é folga, não convite. */
 export const TAMANHO_MAXIMO = 512 * 1024;
 
-/// Só texto. PDF é binário e precisa de destino próprio — aceitar aqui gravaria
-/// bytes ilegíveis numa coluna `text` e só quebraria na hora de mostrar.
+/// Roteiro é texto e mora na linha. PDF chega pelo outro caminho (`subirPortfolio`),
+/// porque binário numa coluna `text` só quebra na hora de mostrar.
 const EXTENSOES = ['.md', '.txt', '.markdown'];
 
 export interface SubirAssetInput {
   name: string;
   content: string;
+}
+
+/**
+ * Portfólio já gravado em disco pelo multer — a rota entrega o caminho relativo.
+ *
+ * Relativo, e não a URL inteira: o endereço público é montado no envio com
+ * MEDIA_PUBLIC_BASE, e gravar o domínio aqui congelaria no banco um valor que muda
+ * de ambiente. Mesma regra do anexo da campanha.
+ */
+export interface SubirPortfolioInput {
+  name: string;
+  fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 @Injectable()
@@ -40,12 +54,15 @@ export class MarketAssetsService {
    * `content` sai FORA da listagem. São sete arquivos de até 15 KB; mandar todos em
    * toda abertura da tela é ~100 KB por render para exibir nome e tamanho.
    */
-  async listar(tenantId: string, productCode: string) {
+  async listar(tenantId: string, productCode: string, kind?: 'plan' | 'portfolio') {
     return this.prisma.marketAsset.findMany({
-      where: { tenantId, productCode },
+      where: { tenantId, productCode, ...(kind ? { kind } : {}) },
       select: {
         id: true,
         name: true,
+        kind: true,
+        fileUrl: true,
+        mimeType: true,
         sizeBytes: true,
         status: true,
         approvedAt: true,
@@ -104,11 +121,45 @@ export class MarketAssetsService {
 
     const asset = await this.prisma.marketAsset.upsert({
       where: { tenantId_productCode_name: { tenantId, productCode, name } },
-      create: { tenantId, productCode, name, content, sizeBytes, status: 'pending' },
+      create: { tenantId, productCode, name, kind: 'plan', content, sizeBytes, status: 'pending' },
       update: { content, sizeBytes, status: 'pending', approvedAt: null, approvedBy: null },
     });
 
-    this.logger.log(`Material "${name}" (${sizeBytes}B) em ${productCode} — aguardando aprovação`);
+    this.logger.log(`Roteiro "${name}" (${sizeBytes}B) em ${productCode} — aguardando aprovação`);
+    return asset;
+  }
+
+  /**
+   * Registra um portfólio que o multer já gravou em disco.
+   *
+   * Mesma regra do roteiro: nasce pendente, e reenviar o mesmo nome derruba a
+   * aprovação. Substituir o folder por uma versão nova sem revisar seria o mesmo furo
+   * do texto, só que mais difícil de notar — ninguém relê um PDF por acidente.
+   */
+  async subirPortfolio(tenantId: string, productCode: string, input: SubirPortfolioInput) {
+    const market = await this.prisma.product.findUnique({ where: { code: productCode } });
+    if (!market) throw new NotFoundException('Mercado não encontrado');
+
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('O arquivo precisa de um nome.');
+
+    const asset = await this.prisma.marketAsset.upsert({
+      where: { tenantId_productCode_name: { tenantId, productCode, name } },
+      create: {
+        tenantId, productCode, name, kind: 'portfolio',
+        fileUrl: input.fileUrl, mimeType: input.mimeType, sizeBytes: input.sizeBytes,
+        status: 'pending',
+      },
+      update: {
+        kind: 'portfolio',
+        fileUrl: input.fileUrl, mimeType: input.mimeType, sizeBytes: input.sizeBytes,
+        // Some o texto se a linha era um roteiro com o mesmo nome — o tipo mudou.
+        content: null,
+        status: 'pending', approvedAt: null, approvedBy: null,
+      },
+    });
+
+    this.logger.log(`Portfólio "${name}" (${input.sizeBytes}B) em ${productCode} — aguardando aprovação`);
     return asset;
   }
 

@@ -177,3 +177,80 @@ describe('MarketAssetsService.listar', () => {
     expect(ordenadas.map((l) => l.status)).toEqual(['pending', 'approved']);
   });
 });
+
+/**
+ * Portfólio — o que o LEAD vê.
+ *
+ * Os bytes ficam em disco (multer) e a linha guarda o caminho. O que se protege aqui é
+ * que ele siga a MESMA regra de aprovação do roteiro: trocar o folder por uma versão
+ * nova sem revisar é o mesmo furo do texto, e mais difícil de notar — ninguém relê um
+ * PDF por acidente.
+ */
+describe('MarketAssetsService.subirPortfolio', () => {
+  const arquivo = {
+    name: 'portfolio_hipertms.pdf',
+    fileUrl: '/uploads/1787000000_portfolio_hipertms.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 2_100_000,
+  };
+
+  it('guarda o caminho relativo, não a URL pública', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.subirPortfolio('t1', 'hipertms', arquivo);
+
+    const { create } = prisma.marketAsset.upsert.mock.calls[0][0];
+    expect(create.kind).toBe('portfolio');
+    expect(create.status).toBe('pending');
+    // O domínio é montado no envio com MEDIA_PUBLIC_BASE. Gravá-lo aqui congelaria no
+    // banco um endereço que muda de ambiente.
+    expect(create.fileUrl).toBe('/uploads/1787000000_portfolio_hipertms.pdf');
+    expect(create.fileUrl).not.toMatch(/^https?:/);
+  });
+
+  it('reenviar o folder derruba a aprovação, igual ao roteiro', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.subirPortfolio('t1', 'hipertms', arquivo);
+
+    const { update } = prisma.marketAsset.upsert.mock.calls[0][0];
+    expect(update.status).toBe('pending');
+    expect(update.approvedAt).toBeNull();
+  });
+
+  // Mesmo nome que era um roteiro: o tipo muda, e o texto antigo não pode ficar
+  // pendurado numa linha que agora é um PDF.
+  it('virando portfólio, o texto antigo é apagado', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.subirPortfolio('t1', 'hipertms', arquivo);
+
+    expect(prisma.marketAsset.upsert.mock.calls[0][0].update.content).toBeNull();
+  });
+
+  it('mercado inexistente é 404, não uma linha órfã apontando para um arquivo', async () => {
+    const { svc, prisma } = makeSvc(null);
+    await expect(svc.subirPortfolio('t1', 'nao-existe', arquivo)).rejects.toThrow(
+      'Mercado não encontrado',
+    );
+    expect(prisma.marketAsset.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarketAssetsService.listar por tipo', () => {
+  it('separa roteiro de portfólio — são duas listas na tela', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.listar('t1', 'hipertms', 'portfolio');
+
+    expect(prisma.marketAsset.findMany.mock.calls[0][0].where.kind).toBe('portfolio');
+  });
+
+  it('sem tipo, devolve os dois', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.listar('t1', 'hipertms');
+
+    expect(prisma.marketAsset.findMany.mock.calls[0][0].where).not.toHaveProperty('kind');
+  });
+});

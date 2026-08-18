@@ -7,6 +7,7 @@ import {
   listMarketAssets,
   readMarketAsset,
   uploadMarketAsset,
+  uploadMarketPortfolio,
   approveMarketAsset,
   rejectMarketAsset,
   deleteMarketAsset,
@@ -14,29 +15,67 @@ import {
 } from '@/entities/market';
 
 /**
- * Material de campanha do mercado (ADR 037).
+ * O que o mercado tem de material, em duas seções (ADR 037).
  *
- * O plano de campanha nasce fora do Nexa — alguém escreve `.md` por eixo (cotações,
- * pneus, financeiro) numa pasta. Até aqui esse arquivo não tinha lugar no sistema:
- * quem montava a campanha abria fora, copiava e colava na tela de Mensagens. O plano,
- * que é a FONTE, ficava de fora, e a Lia nunca via.
+ * São duas coisas diferentes e por isso não moram juntas:
  *
- * Tudo sobe PENDENTE. Aprovar é um ato separado, e é ele que libera o texto para a
- * Lia. Reenviar o mesmo arquivo derruba a aprovação — o servidor cuida disso; a tela
- * só precisa não esconder que aconteceu.
+ *   • ROTEIRO — o `.md` que alguém escreveu por eixo (cotações, pneus, financeiro).
+ *     É texto, e é o que a Lia lê para saber o que pode afirmar.
+ *   • PORTFÓLIO — folder, catálogo, foto. É binário, e é o que o LEAD vê: vai
+ *     anexado no e-mail ou mandado no zap.
+ *
+ * Misturar os dois numa lista só faz o operador procurar o PDF no meio dos textos e
+ * não saber por que um abre na tela e o outro baixa.
+ *
+ * A regra de aprovação é a mesma para os dois: sobe pendente, e só vale depois que
+ * alguém leu. Reenviar o mesmo nome derruba a aprovação.
  */
 
-const EXTENSOES = ['.md', '.txt', '.markdown'];
-
-function ehTexto(nome: string): boolean {
-  return EXTENSOES.some((e) => nome.toLowerCase().endsWith(e));
-}
+const EXT_ROTEIRO = ['.md', '.txt', '.markdown'];
+const TIPOS_PORTFOLIO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 function tamanho(bytes: number): string {
-  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function MaterialDaCampanha({ code }: { code: string }) {
+  return (
+    <>
+      <SecaoDeMaterial
+        code={code}
+        kind="plan"
+        titulo="Roteiro da campanha"
+        explicacao="O texto que a Lia lê para saber o que pode afirmar deste mercado."
+        convite="Arraste os .md ou .txt aqui, ou clique para escolher"
+        vazio="Nenhum roteiro ainda. Sem ele a Lia responde só com o conhecimento genérico."
+        accept={EXT_ROTEIRO.join(',')}
+      />
+      <SecaoDeMaterial
+        code={code}
+        kind="portfolio"
+        titulo="Portfólio e materiais"
+        explicacao="O que o lead vê: folder, catálogo, foto. Vai anexado no e-mail e no zap."
+        convite="Arraste PDF, JPG ou PNG aqui, ou clique para escolher"
+        vazio="Nenhum material ainda. O vendedor não tem o que anexar."
+        accept={TIPOS_PORTFOLIO.join(',')}
+      />
+    </>
+  );
+}
+
+interface SecaoProps {
+  code: string;
+  kind: 'plan' | 'portfolio';
+  titulo: string;
+  explicacao: string;
+  convite: string;
+  vazio: string;
+  accept: string;
+}
+
+function SecaoDeMaterial({ code, kind, titulo, explicacao, convite, vazio, accept }: SecaoProps) {
   const toast = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
@@ -44,35 +83,35 @@ export function MaterialDaCampanha({ code }: { code: string }) {
   const [arrastando, setArrastando] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
 
-  const chave = ['markets', code, 'assets'];
-  const { data: itens = [], isLoading } = useQuery({ queryKey: chave, queryFn: () => listMarketAssets(code) });
+  const ehRoteiro = kind === 'plan';
+  const chave = ['markets', code, 'assets', kind];
+  const { data: itens = [], isLoading } = useQuery({
+    queryKey: chave,
+    queryFn: () => listMarketAssets(code, kind),
+  });
 
+  // O texto só é buscado quando alguém abre. O portfólio nunca passa por aqui — ele
+  // é mostrado direto do `/uploads`, sem trafegar pelo JSON.
   const { data: texto, isLoading: lendo } = useQuery({
-    queryKey: [...chave, aberto],
+    queryKey: [...chave, aberto, 'conteudo'],
     queryFn: () => readMarketAsset(code, aberto!),
-    enabled: !!aberto,
+    enabled: !!aberto && ehRoteiro,
   });
 
   const recarregar = () => void qc.invalidateQueries({ queryKey: chave });
 
   /**
-   * Sobe os arquivos um a um, em série.
-   *
-   * Em série de propósito: arrastar os sete de uma vez em paralelo transformaria uma
-   * recusa individual ("PDF não entra") em sete erros simultâneos, e o operador não
-   * saberia qual arquivo é qual. Assim cada um dá o seu recado.
+   * Sobe em série, e não em paralelo: arrastar sete de uma vez transformaria uma
+   * recusa individual em sete erros simultâneos, sem dizer qual arquivo é qual.
    */
   const subir = useMutation({
     mutationFn: async (arquivos: File[]) => {
       const aceitos: string[] = [];
       const recusados: string[] = [];
       for (const f of arquivos) {
-        if (!ehTexto(f.name)) {
-          recusados.push(f.name);
-          continue;
-        }
         try {
-          await uploadMarketAsset(code, { name: f.name, content: await f.text() });
+          if (ehRoteiro) await uploadMarketAsset(code, { name: f.name, content: await f.text() });
+          else await uploadMarketPortfolio(code, f);
           aceitos.push(f.name);
         } catch (e: any) {
           const m = e?.response?.data?.message;
@@ -83,13 +122,9 @@ export function MaterialDaCampanha({ code }: { code: string }) {
     },
     onSuccess: ({ aceitos, recusados }) => {
       recarregar();
-      if (aceitos.length) {
-        toast.success(
-          `${aceitos.length} arquivo(s) no mercado — aguardando sua aprovação para a Lia usar.`,
-        );
-      }
-      // O recusado é dito INTEIRO, com o motivo. "Alguns arquivos falharam" faz o
-      // operador subir tudo de novo às cegas.
+      if (aceitos.length) toast.success(`${aceitos.length} arquivo(s) — aguardando sua aprovação.`);
+      // O recusado sai INTEIRO, com o motivo: "alguns falharam" faz subir tudo de novo
+      // às cegas.
       if (recusados.length) toast.error(`Fora: ${recusados.join(' · ')}`);
     },
     onError: () => toast.error('Não consegui subir o material.'),
@@ -97,26 +132,28 @@ export function MaterialDaCampanha({ code }: { code: string }) {
 
   const aprovar = useMutation({
     mutationFn: (id: string) => approveMarketAsset(code, id),
-    onSuccess: () => { recarregar(); toast.success('Aprovado. A Lia já pode usar este material.'); },
+    onSuccess: () => { recarregar(); toast.success(ehRoteiro ? 'Aprovado. A Lia já pode usar.' : 'Aprovado. O vendedor já pode anexar.'); },
     onError: () => toast.error('Não consegui aprovar.'),
   });
 
   const reprovar = useMutation({
     mutationFn: (id: string) => rejectMarketAsset(code, id),
-    onSuccess: () => { recarregar(); toast.info('Voltou para pendente. O texto continua aqui.'); },
+    onSuccess: () => { recarregar(); toast.info('Voltou para pendente. O arquivo continua aqui.'); },
     onError: () => toast.error('Não consegui reprovar.'),
   });
 
   const remover = useMutation({
     mutationFn: (id: string) => deleteMarketAsset(code, id),
-    onSuccess: () => { recarregar(); setAberto(null); toast.info('Material removido.'); },
+    onSuccess: () => { recarregar(); setAberto(null); toast.info('Removido.'); },
     onError: () => toast.error('Não consegui remover.'),
   });
 
   async function pedirRemocao(a: MarketAsset) {
     const ok = await confirm({
       title: `Remover "${a.name}"?`,
-      message: 'O texto sai do mercado e a Lia deixa de vê-lo. As mensagens já escritas continuam.',
+      message: ehRoteiro
+        ? 'O texto sai do mercado e a Lia deixa de vê-lo. As mensagens já escritas continuam.'
+        : 'O arquivo sai do mercado e o vendedor deixa de poder anexá-lo.',
       confirmLabel: 'Remover',
       variant: 'danger',
     });
@@ -133,17 +170,14 @@ export function MaterialDaCampanha({ code }: { code: string }) {
   return (
     <div className="mt-3 border-t border-base-200 pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium text-base-content">Material da campanha</p>
+        <p className="text-xs font-medium text-base-content">{titulo}</p>
         <span className="text-[11px] text-base-content/50">
           {itens.length} arquivo(s)
           {pendentes > 0 && <span className="text-amber-600 dark:text-amber-400"> · {pendentes} aguardando</span>}
         </span>
       </div>
-      <p className="mb-2 text-[11px] text-base-content/50">
-        O plano que a Lia lê. Sobe pendente — só depois de você aprovar ela pode usar.
-      </p>
+      <p className="mb-2 text-[11px] text-base-content/50">{explicacao}</p>
 
-      {/* ── Soltar arquivo ──────────────────────────────────────────────── */}
       <div
         onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
         onDragLeave={() => setArrastando(false)}
@@ -153,36 +187,35 @@ export function MaterialDaCampanha({ code }: { code: string }) {
           arrastando ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-500/10' : 'border-base-300 hover:bg-base-100'
         }`}
       >
-        <Icon name="upload" className="mx-auto h-5 w-5 text-base-content/40" />
-        <p className="mt-1 text-[11px] text-base-content/60">
-          {subir.isPending ? 'Subindo…' : 'Arraste os .md aqui, ou clique para escolher'}
-        </p>
+        <Icon name={ehRoteiro ? 'upload' : 'building'} className="mx-auto h-5 w-5 text-base-content/40" />
+        <p className="mt-1 text-[11px] text-base-content/60">{subir.isPending ? 'Subindo…' : convite}</p>
       </div>
       <input
         ref={inputRef}
         type="file"
         multiple
-        accept={EXTENSOES.join(',')}
+        accept={accept}
         className="hidden"
         onChange={(e) => { receber(e.target.files); e.target.value = ''; }}
       />
 
-      {/* ── Lista ───────────────────────────────────────────────────────── */}
       {isLoading ? (
-        <p className="text-[11px] text-base-content/40">Carregando material…</p>
+        <p className="text-[11px] text-base-content/40">Carregando…</p>
       ) : itens.length === 0 ? (
-        <p className="text-[11px] text-base-content/40">
-          Nenhum material ainda. Sem ele a Lia responde só com o conhecimento genérico.
-        </p>
+        <p className="text-[11px] text-base-content/40">{vazio}</p>
       ) : (
         <div className="overflow-hidden rounded-lg border border-base-200">
           {itens.map((a) => {
             const pendente = a.status === 'pending';
             const expandido = aberto === a.id;
+            const ehImagem = !!a.mimeType?.startsWith('image/');
             return (
               <div key={a.id} className="border-b border-base-200 last:border-0">
                 <div className={`flex flex-wrap items-center gap-2 px-3 py-2 ${pendente ? 'bg-amber-50/60 dark:bg-amber-500/10' : ''}`}>
-                  <Icon name="mail" className={`h-4 w-4 shrink-0 ${pendente ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/40'}`} />
+                  <Icon
+                    name={ehRoteiro ? 'mail' : ehImagem ? 'eye' : 'knowledge'}
+                    className={`h-4 w-4 shrink-0 ${pendente ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/40'}`}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs text-base-content">{a.name}</div>
                     <div className="truncate text-[11px] text-base-content/50">
@@ -195,25 +228,21 @@ export function MaterialDaCampanha({ code }: { code: string }) {
                     {pendente ? 'Aguardando' : 'Aprovado'}
                   </StatusBadge>
 
-                  {/* Ler vem antes de aprovar, e não por acaso: aprovar sem abrir é
+                  {/* Ver vem antes de Aprovar de propósito: aprovar sem abrir é
                       exatamente o que a aprovação existe para impedir. */}
                   <button
                     type="button"
                     className="text-[11px] text-base-content/40 underline"
                     onClick={() => setAberto(expandido ? null : a.id)}
                   >
-                    {expandido ? 'Fechar' : 'Ler'}
+                    {expandido ? 'Fechar' : ehRoteiro ? 'Ler' : 'Ver'}
                   </button>
                   {pendente ? (
                     <Button size="sm" variant="outline" disabled={aprovar.isPending} onClick={() => aprovar.mutate(a.id)}>
                       Aprovar
                     </Button>
                   ) : (
-                    <button
-                      type="button"
-                      className="text-[11px] text-base-content/40 underline"
-                      onClick={() => reprovar.mutate(a.id)}
-                    >
+                    <button type="button" className="text-[11px] text-base-content/40 underline" onClick={() => reprovar.mutate(a.id)}>
                       Reprovar
                     </button>
                   )}
@@ -228,15 +257,27 @@ export function MaterialDaCampanha({ code }: { code: string }) {
 
                 {expandido && (
                   <div className="border-t border-base-200 bg-base-100 px-3 py-2">
-                    {lendo ? (
-                      <p className="text-[11px] text-base-content/40">Abrindo…</p>
+                    {ehRoteiro ? (
+                      lendo ? (
+                        <p className="text-[11px] text-base-content/40">Abrindo…</p>
+                      ) : (
+                        // Texto cru. Renderizar o markdown mostraria algo diferente do
+                        // que a Lia lê — e é o que ela lê que está sendo aprovado.
+                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-base-content/70">
+                          {texto?.content ?? ''}
+                        </pre>
+                      )
+                    ) : ehImagem ? (
+                      <img src={a.fileUrl ?? ''} alt={a.name} className="max-h-96 rounded-lg border border-base-200" />
                     ) : (
-                      // Texto cru, com rolagem própria. Renderizar o markdown aqui
-                      // mostraria algo diferente do que a Lia lê — e é o que a Lia lê
-                      // que está sendo aprovado.
-                      <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-base-content/70">
-                        {texto?.content ?? ''}
-                      </pre>
+                      // PDF no visualizador do próprio navegador, aqui na tela. Abrir
+                      // noutra aba tira o operador do meio da revisão — e revisar sem
+                      // sair é o ponto da seção.
+                      <iframe
+                        title={a.name}
+                        src={a.fileUrl ?? ''}
+                        className="h-96 w-full rounded-lg border border-base-200 bg-white"
+                      />
                     )}
                   </div>
                 )}

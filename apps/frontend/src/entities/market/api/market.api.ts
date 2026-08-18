@@ -111,6 +111,11 @@ export async function deleteMarket(code: string): Promise<void> {
 export interface MarketAsset {
   id: string;
   name: string;
+  /** plan = roteiro que a Lia lê · portfolio = PDF/imagem que o lead vê. */
+  kind: 'plan' | 'portfolio';
+  /** Só no portfólio: caminho relativo servido em /uploads. */
+  fileUrl: string | null;
+  mimeType: string | null;
   sizeBytes: number;
   /** pending = subiu e ninguém leu · approved = revisado, a Lia pode usar. */
   status: 'pending' | 'approved';
@@ -124,8 +129,24 @@ export interface MarketAssetContent extends MarketAsset {
   content: string;
 }
 
-export async function listMarketAssets(code: string): Promise<MarketAsset[]> {
-  const r = await api.get(`/markets/${code}/assets`);
+export async function listMarketAssets(
+  code: string,
+  kind?: 'plan' | 'portfolio',
+): Promise<MarketAsset[]> {
+  const r = await api.get(`/markets/${code}/assets`, { params: kind ? { kind } : undefined });
+  return r.data;
+}
+
+/**
+ * Portfólio: PDF ou imagem, como `multipart`.
+ *
+ * Diferente do roteiro, que vai como JSON: o navegador leu o `.md` para mostrar
+ * antes de enviar, mas não tem como ler um PDF — os bytes sobem crus.
+ */
+export async function uploadMarketPortfolio(code: string, file: File): Promise<MarketAsset> {
+  const form = new FormData();
+  form.append('file', file);
+  const r = await api.post(`/markets/${code}/assets/portfolio`, form);
   return r.data;
 }
 
