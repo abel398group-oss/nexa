@@ -6,7 +6,7 @@
 // Formatação do WhatsApp: *negrito* com asterisco, _itálico_ com sublinhado.
 
 import type { CidadeDoTms } from './quote-city';
-import type { EstadoCotacao } from './quote-flow';
+import { passoAtual, type EstadoCotacao } from './quote-flow';
 
 const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
@@ -31,8 +31,8 @@ export function abertura(): string {
   return [
     '*Cotação de frete* 🚛',
     '',
-    'São 5 perguntas rápidas. No fim eu te dou o valor',
-    'e já deixo o rascunho salvo no TMS.',
+    'São 5 ou 6 perguntas rápidas, depende do tipo de frete.',
+    'No fim eu te dou o valor e deixo o rascunho salvo no TMS.',
     '',
     'Digite *sair* pra cancelar a qualquer momento.',
     '',
@@ -44,16 +44,23 @@ export function abertura(): string {
 /**
  * A pergunta da etapa atual.
  *
- * O `n/5` existe porque sem ele, na terceira pergunta, a pessoa acha que não acaba nunca.
- * Dedicado e fracionado somam 5 nos dois caminhos — muda a pergunta, não o total.
+ * A contagem vem de `passoAtual` e NÃO é fixa: dedicado tem veículo e tipo de carga (6),
+ * fracionado tem peso (5). Escrever "n/5" na mão faria o dedicado exibir "6/5" no último
+ * passo — número impossível é o tipo de detalhe que faz o usuário desconfiar do resto.
+ *
+ * O contador existe porque sem ele, na terceira pergunta, a pessoa acha que não acaba
+ * nunca.
  */
 export function pergunta(estado: EstadoCotacao): string {
+  const p = passoAtual(estado);
+  const n = p ? `${p.n}/${p.total} — ` : '';
+
   switch (estado.etapa) {
     case 'origem':
-      return '1/5 — Cidade de *origem*?\n_exemplo: Campinas SP_';
+      return `${n}Cidade de *origem*?\n_exemplo: Campinas SP_`;
 
     case 'destino':
-      return `${eco(estado)}2/5 — Cidade de *destino*?\n_exemplo: Belo Horizonte MG_`;
+      return `${eco(estado)}${n}Cidade de *destino*?\n_exemplo: Belo Horizonte MG_`;
 
     case 'escolher_origem':
     case 'escolher_destino': {
@@ -64,25 +71,51 @@ export function pergunta(estado: EstadoCotacao): string {
 
     case 'modalidade':
       return [
-        eco(estado) + '3/5 — Tipo de frete?',
+        eco(estado) + `${n}Tipo de frete?`,
         '*1* Dedicado — veículo só pra sua carga',
         '*2* Fracionado — divide com outras cargas',
       ].join('\n');
 
     case 'veiculo':
-      return ['4/5 — Qual veículo?', '*1* Truck', '*2* Carreta', '*3* Bitrem', '*4* Rodotrem'].join(
+      return [`${n}Qual veículo?`, '*1* Truck', '*2* Carreta', '*3* Bitrem', '*4* Rodotrem'].join(
         '\n',
       );
 
+    case 'carga': {
+      // Os rótulos vêm da tabela do tenant, não de uma lista nossa: o motor do TMS casa
+      // `cargoType` por igualdade estrita, então texto escrito aqui nunca casaria.
+      const opcoes = estado.opcoesCarga ?? [];
+      return [
+        `${n}Tipo de carga?`,
+        ...opcoes.map((c, i) => `*${i + 1}* ${c}`),
+      ].join('\n');
+    }
+
     case 'peso':
-      return '4/5 — Peso total da carga, em kg?\n_exemplo: 500_';
+      return `${n}Peso total da carga, em kg?\n_exemplo: 500_`;
 
     case 'valor':
-      return '5/5 — Valor da mercadoria, em reais?\n_exemplo: 80000_';
+      return `${n}Valor da mercadoria, em reais?\n_exemplo: 80000_`;
 
     default:
       return '';
   }
+}
+
+/**
+ * O tenant não tem tabela de frete para o veículo escolhido.
+ *
+ * Frase própria, e não "não entendi": o usuário respondeu certo, o cadastro é que não
+ * existe. Mandar ele tentar de novo o faria repetir a mesma escolha até desistir.
+ */
+export function semTabelaDeFrete(estado: EstadoCotacao): string {
+  const veiculo = estado.veiculo ? estado.veiculo[0].toUpperCase() + estado.veiculo.slice(1) : 'esse veículo';
+  return [
+    `Não há tabela de frete cadastrada para *${veiculo}* 😕`,
+    '',
+    'Fale com o administrador do TMS para cadastrar, ou',
+    'digite *cotar* pra tentar com outro veículo.',
+  ].join('\n');
 }
 
 /**
@@ -109,6 +142,8 @@ export function naoEntendi(estado: EstadoCotacao, desistiu: boolean): string {
     case 'escolher_origem':
     case 'escolher_destino':
       return `Responde só com o número da opção, de *1* a *${(estado.opcoes ?? []).length}*.`;
+    case 'carga':
+      return `Responde com o número do tipo de carga, de *1* a *${(estado.opcoesCarga ?? []).length}*.`;
     case 'peso':
       return 'Preciso do peso em número, só os kg. _exemplo: 500_';
     case 'valor':

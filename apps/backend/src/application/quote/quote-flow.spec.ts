@@ -6,6 +6,8 @@ import {
   ehSaida,
   novaCotacao,
   responder,
+  comCargasEncontradas,
+  passoAtual,
   MAX_TENTATIVAS,
   type EstadoCotacao,
 } from './quote-flow';
@@ -32,7 +34,9 @@ function ate(etapa: EstadoCotacao['etapa']): EstadoCotacao {
   if (etapa === 'modalidade') return e;
   e = seguir(responder(e, '1')); // dedicado
   if (etapa === 'veiculo') return e;
-  e = seguir(responder(e, '2')); // carreta
+  // Escolher o veículo pede o catálogo de cargas; com uma opção só, o fluxo pula a
+  // pergunta e cai em 'valor'. É o caminho mais curto até lá.
+  e = seguir(comCargasEncontradas({ ...e, veiculo: 'carreta' }, 'carreta', ['Carga Geral']));
   return e; // valor
 }
 
@@ -158,6 +162,7 @@ describe('dados para o TMS', () => {
       destCode: BH.code,
       freightMode: 'DEDICATED',
       vehicleType: 'carreta',
+      cargoType: 'Carga Geral',
       weightKg: null,
       merchandiseValue: 80000,
     });
@@ -177,5 +182,80 @@ describe('dados para o TMS', () => {
       weightKg: 500,
       merchandiseValue: 12000,
     });
+  });
+});
+
+describe('tipo de carga (6a pergunta)', () => {
+  const comVeiculo = () => {
+    const p = responder(ate('veiculo'), '2');
+    if (p.tipo !== 'buscar_cargas') throw new Error('esperava buscar_cargas, veio ' + p.tipo);
+    return p;
+  };
+
+  it('escolher veiculo NAO avanca — pede o catalogo do tenant', () => {
+    // A tabela de frete e por veiculo no TMS, entao o tipo de carga depende dele.
+    expect(comVeiculo()).toEqual({ tipo: 'buscar_cargas', vehicleType: 'carreta' });
+  });
+
+  it('lista vazia = sem tabela de frete, nao erro do usuario', () => {
+    const p = comCargasEncontradas(ate('veiculo'), 'carreta', []);
+    expect(p.tipo).toBe('sem_tabela');
+  });
+
+  it('uma opcao so NAO pergunta — segue com ela e fica em 5 perguntas', () => {
+    const p = comCargasEncontradas(ate('veiculo'), 'carreta', ['Carga Geral']);
+    expect(p.tipo).toBe('seguir');
+    if (p.tipo !== 'seguir') return;
+    expect(p.estado.cargoType).toBe('Carga Geral');
+    expect(p.estado.etapa).toBe('valor');
+  });
+
+  it('varias opcoes viram menu com os rotulos EXATOS do tenant', () => {
+    const p = comCargasEncontradas(ate('veiculo'), 'carreta', ['Carga Geral', 'Frigorificada']);
+    if (p.tipo !== 'seguir') throw new Error('seguir');
+    expect(p.estado.etapa).toBe('carga');
+    expect(p.estado.opcoesCarga).toEqual(['Carga Geral', 'Frigorificada']);
+  });
+
+  it('a escolha grava o rotulo, nao o indice', () => {
+    const menu = comCargasEncontradas(ate('veiculo'), 'carreta', ['Carga Geral', 'Frigorificada']);
+    if (menu.tipo !== 'seguir') throw new Error('menu');
+    const p = responder(menu.estado, '2');
+    expect(p.tipo === 'seguir' && p.estado.cargoType).toBe('Frigorificada');
+  });
+
+  it('o corpo leva cargoType quando escolhido, e null quando nao', () => {
+    const menu = comCargasEncontradas(ate('veiculo'), 'carreta', ['A', 'B']);
+    if (menu.tipo !== 'seguir') throw new Error('menu');
+    const carga = responder(menu.estado, '1');
+    if (carga.tipo !== 'seguir') throw new Error('carga');
+    const valor = responder(carga.estado, '80000');
+    if (valor.tipo !== 'seguir') throw new Error('valor');
+    expect(dadosDaCotacao(valor.estado)?.cargoType).toBe('A');
+  });
+});
+
+describe('contagem de passos', () => {
+  it('dedicado tem 6 perguntas; fracionado tem 5', () => {
+    const m = ate('modalidade');
+    const ded = responder(m, '1');
+    const fra = responder(m, '2');
+    if (ded.tipo !== 'seguir' || fra.tipo !== 'seguir') throw new Error('modalidade');
+    expect(passoAtual(ded.estado)).toEqual({ n: 4, total: 6 });
+    expect(passoAtual(fra.estado)).toEqual({ n: 4, total: 5 });
+  });
+
+  it('o ultimo passo nunca passa do total — era o "6/5" que eu quase enviei', () => {
+    const menu = comCargasEncontradas(ate('veiculo'), 'carreta', ['A', 'B']);
+    if (menu.tipo !== 'seguir') throw new Error('menu');
+    expect(passoAtual(menu.estado)).toEqual({ n: 5, total: 6 });
+    const carga = responder(menu.estado, '1');
+    if (carga.tipo !== 'seguir') throw new Error('carga');
+    expect(passoAtual(carga.estado)).toEqual({ n: 6, total: 6 });
+  });
+
+  it('etapa fora do fluxo nao tem contagem', () => {
+    expect(passoAtual({ etapa: 'pronto', tentativas: 0 })).toBeNull();
+    expect(passoAtual({ etapa: 'cancelado', tentativas: 0 })).toBeNull();
   });
 });

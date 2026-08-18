@@ -14,7 +14,7 @@ const estado = (p: Partial<EstadoCotacao>): EstadoCotacao => ({
 describe('perguntas', () => {
   it('a abertura diz quantas perguntas são e como sair', () => {
     const t = abertura();
-    expect(t).toContain('5 perguntas');
+    expect(t).toContain('5 ou 6 perguntas');
     expect(t).toContain('*sair*');
     expect(t).toContain('1/5');
   });
@@ -23,9 +23,12 @@ describe('perguntas', () => {
     expect(pergunta(estado({ etapa: 'origem' }))).toContain('1/5');
     expect(pergunta(estado({ etapa: 'destino', origem: CAMPINAS }))).toContain('2/5');
     expect(pergunta(estado({ etapa: 'modalidade', destino: BH }))).toContain('3/5');
-    expect(pergunta(estado({ etapa: 'veiculo' }))).toContain('4/5');
+    // Dedicado tem 6 perguntas: veiculo e carga entram no caminho dele.
+    expect(pergunta(estado({ etapa: 'veiculo' }))).toContain('4/6');
+    expect(pergunta(estado({ etapa: 'carga', opcoesCarga: ['A', 'B'] }))).toContain('5/6');
     expect(pergunta(estado({ etapa: 'peso' }))).toContain('4/5');
     expect(pergunta(estado({ etapa: 'valor' }))).toContain('5/5');
+    expect(pergunta(estado({ etapa: 'valor', modalidade: 'dedicado' }))).toContain('6/6');
   });
 
   it('O ECO: a pergunta seguinte mostra a cidade que ficou gravada', () => {

@@ -1,4 +1,4 @@
-// As 5 perguntas da cotação por WhatsApp — puro, sem IO e sem IA.
+// As perguntas da cotação por WhatsApp — 5 no fracionado, 6 no dedicado — puro, sem IO e sem IA.
 //
 // Sem IA de propósito (spec fechada): são cinco campos numa ordem fixa, o que é
 // formulário e não conversa. Menu numerado não inventa preço, não erra cidade, não custa
@@ -17,6 +17,7 @@ export type Etapa =
   | 'escolher_destino'
   | 'modalidade'
   | 'veiculo'
+  | 'carga'
   | 'peso'
   | 'valor'
   | 'pronto'
@@ -33,6 +34,10 @@ export interface EstadoCotacao {
   destino?: CidadeDoTms;
   modalidade?: Modalidade;
   veiculo?: Veiculo;
+  /// Rótulo do tipo de carga, exatamente como vem da tabela do tenant no TMS.
+  cargoType?: string;
+  /// Opções pendentes de tipo de carga.
+  opcoesCarga?: string[];
   pesoKg?: number;
   valorMercadoria?: number;
   /// Opções pendentes de escolha (menu de cidade).
@@ -78,8 +83,15 @@ export function novaCotacao(): EstadoCotacao {
  */
 export type Passo =
   | { tipo: 'buscar_cidade'; termo: string; uf: string | null; para: 'origem' | 'destino' }
+  | { tipo: 'buscar_cargas'; vehicleType: Veiculo }
   | { tipo: 'seguir'; estado: EstadoCotacao }
-  | { tipo: 'repetir'; estado: EstadoCotacao; motivo: 'invalido' | 'desistiu' };
+  | { tipo: 'repetir'; estado: EstadoCotacao; motivo: 'invalido' | 'desistiu' }
+  /**
+   * O tenant não tem tabela de frete para aquele veículo. Não é erro do usuário nem
+   * falha do sistema — é ausência de cadastro, e insistir na pergunta não resolve.
+   * Quem chama diz isso com a própria frase e encerra.
+   */
+  | { tipo: 'sem_tabela'; estado: EstadoCotacao };
 
 /**
  * Número escrito por gente: "80000", "80.000", "R$ 80.000,00".
@@ -168,9 +180,24 @@ export function responder(estado: EstadoCotacao, texto: string): Passo {
     case 'veiculo': {
       const n = escolhaDeMenu(texto, VEICULOS.length);
       if (!n) return erro(estado);
+      // Escolhido o veículo, o tipo de carga depende dele: a tabela de frete é por
+      // veículo no TMS. Então aqui não se avança — pede-se o catálogo.
+      return { tipo: 'buscar_cargas', vehicleType: VEICULOS[n - 1] };
+    }
+
+    case 'carga': {
+      const opcoes = estado.opcoesCarga ?? [];
+      const n = escolhaDeMenu(texto, opcoes.length);
+      if (!n) return erro(estado);
       return {
         tipo: 'seguir',
-        estado: { ...estado, veiculo: VEICULOS[n - 1], etapa: 'valor', tentativas: 0 },
+        estado: {
+          ...estado,
+          cargoType: opcoes[n - 1],
+          etapa: 'valor',
+          opcoesCarga: undefined,
+          tentativas: 0,
+        },
       };
     }
 
@@ -235,6 +262,61 @@ export function comCidadesEncontradas(
 }
 
 /**
+ * Estado depois de buscar os tipos de carga daquele veículo.
+ *
+ * Três saídas, e as três importam:
+ *
+ *   vazio  → o tenant não tem tabela de frete para esse veículo. Perguntar de novo não
+ *            resolve, e deixar seguir daria erro na cotação lá na frente, longe da causa.
+ *   um só  → não pergunta. Escolha única não é escolha, e uma pergunta com uma opção só
+ *            faz o fluxo parecer burro. Continua em 5 perguntas.
+ *   vários → menu com os rótulos EXATOS do tenant. O motor do TMS casa `cargoType` por
+ *            igualdade estrita, então rótulo escrito por nós nunca casaria.
+ */
+export function comCargasEncontradas(
+  estado: EstadoCotacao,
+  vehicleType: Veiculo,
+  cargas: readonly string[],
+): Passo {
+  const base = { ...estado, veiculo: vehicleType, tentativas: 0 };
+  if (!cargas.length) return { tipo: 'sem_tabela', estado: base };
+
+  if (cargas.length === 1) {
+    return {
+      tipo: 'seguir',
+      estado: { ...base, cargoType: cargas[0], etapa: 'valor', opcoesCarga: undefined },
+    };
+  }
+
+  return {
+    tipo: 'seguir',
+    estado: { ...base, etapa: 'carga', opcoesCarga: cargas.slice(0, MAX_OPCOES) },
+  };
+}
+
+/**
+ * Onde a pessoa está, e quantas perguntas tem o caminho dela.
+ *
+ * O total MUDA com a modalidade: dedicado tem veículo e carga (6), fracionado tem peso
+ * (5). Fixar em 5 faria o dedicado mostrar "6/5"; fixar em 6 prometeria ao fracionado uma
+ * pergunta que nunca vem. Antes de escolher a modalidade o total é 5 — que é o caminho
+ * mais curto, e crescer para 6 é melhor que anunciar 6 e entregar 5.
+ */
+export function passoAtual(estado: EstadoCotacao): { n: number; total: number } | null {
+  // `veiculo` e `carga` só existem no caminho dedicado, então a etapa por si já diz qual
+  // é o caminho. Depender só de `modalidade` fazia a contagem DESAPARECER num estado que
+  // ainda não a tivesse gravada — e pergunta sem contador no meio de um fluxo que tem
+  // contador parece defeito.
+  const dedicado =
+    estado.modalidade === 'dedicado' || estado.etapa === 'veiculo' || estado.etapa === 'carga';
+  const ordem: Record<string, number> = dedicado
+    ? { origem: 1, escolher_origem: 1, destino: 2, escolher_destino: 2, modalidade: 3, veiculo: 4, carga: 5, valor: 6 }
+    : { origem: 1, escolher_origem: 1, destino: 2, escolher_destino: 2, modalidade: 3, peso: 4, valor: 5 };
+  const n = ordem[estado.etapa];
+  return n ? { n, total: dedicado ? 6 : 5 } : null;
+}
+
+/**
  * O corpo que vai para `POST /nexa/quote`.
  *
  * Tudo em INGLÊS, e não misturado como na primeira versão: o padrão da API do TMS é
@@ -249,6 +331,8 @@ export interface CorpoDaCotacao {
   destCode: string;
   freightMode: 'DEDICATED' | 'FRACTIONAL';
   vehicleType: Veiculo | null;
+  /// Rótulo exato da tabela do tenant. Opcional no contrato: sem ele o TMS infere.
+  cargoType: string | null;
   weightKg: number | null;
   merchandiseValue: number;
 }
@@ -263,6 +347,7 @@ export function dadosDaCotacao(estado: EstadoCotacao): CorpoDaCotacao | null {
     destCode: estado.destino.code,
     freightMode: estado.modalidade === 'dedicado' ? 'DEDICATED' : 'FRACTIONAL',
     vehicleType: estado.veiculo ?? null,
+    cargoType: estado.cargoType ?? null,
     weightKg: estado.pesoKg ?? null,
     merchandiseValue: estado.valorMercadoria,
   };
