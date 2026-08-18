@@ -203,27 +203,30 @@ export function SiteAudiencePage() {
           </Card>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <TopLista
-              titulo="Páginas mais vistas"
-              itens={data.topPaginas}
-              vazio="Nenhuma página registrada."
-            />
-            {/* Por campanha vem ANTES de utm_source: "qual disparo trouxe gente?" é a
-                pergunta que se faz aqui; utm_source é sempre "nexa" nos nossos links. */}
+            {/* Por campanha vem PRIMEIRO — é a pergunta que a tela existe para
+                responder. Ficava em terceiro, ao lado de listas que respondem coisas
+                menores, enquanto o número grande no topo era o total com o time dentro. */}
             <TopLista
               titulo="Qual campanha trouxe"
               itens={data.topCampanhas}
               vazio="Nenhuma visita vinda de campanha ainda. O link do disparo é marcado automaticamente; só aparece depois de alguém clicar."
             />
             <TopLista
+              titulo="Páginas do site"
+              itens={data.topPaginas}
+              vazio="Nenhuma página registrada."
+            />
+            <TopLista
               titulo="Origens (utm_source)"
               itens={data.topOrigens}
               vazio="Nenhuma visita com utm_source."
             />
+            {/* O próprio domínio já sai no backend: `hipertms.com.br → hipertms.com.br`
+                é navegação interna, não alguém chegando de fora. */}
             <TopLista
               titulo="Vieram de"
               itens={data.topReferrers}
-              vazio="Nenhum referrer — visitas diretas não têm site de origem."
+              vazio="Nenhum site de fora trouxe visita — as diretas não têm origem."
             />
           </div>
         </>

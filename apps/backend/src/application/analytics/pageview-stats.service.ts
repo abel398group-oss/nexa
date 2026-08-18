@@ -19,6 +19,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { ehReferrerProprio } from './pageview-sanitizer';
 
 export interface Periodo {
   from: Date;
@@ -67,8 +68,8 @@ export class PageviewStatsService {
   async visaoGeral(tenantId: string, p: Periodo): Promise<VisaoGeral> {
     // Uma ida ao banco por recorte, todas em paralelo — são queries independentes
     // e serializá-las só somaria latência.
-    const [serie, topPaginas, topOrigens, topCampanhas, topReferrers, dispositivos,
-           site, app, campanha, cadastro] = await Promise.all([
+    const [serie, topPaginas, topOrigens, topCampanhas, topReferrersBruto, dispositivos,
+           site, app, campanha, cadastro, proprios] = await Promise.all([
       this.serieDiaria(tenantId, p),
       this.topPor(tenantId, p, 'path'),
       this.topPor(tenantId, p, 'utm_source'),
@@ -81,6 +82,7 @@ export class PageviewStatsService {
       this.contarIntervalo(tenantId, p.from, p.to, 'app'),
       this.contarIntervalo(tenantId, p.from, p.to, 'campanha'),
       this.contarIntervalo(tenantId, p.from, p.to, 'cadastro'),
+      this.dominiosDoTenant(tenantId),
     ]);
 
     return {
@@ -95,9 +97,22 @@ export class PageviewStatsService {
       topPaginas,
       topOrigens,
       topCampanhas,
-      topReferrers,
+      // `hipertms.com.br → hipertms.com.br` não é origem, é navegação interna: alguém
+      // clicando de uma página para outra do próprio site. Apareciam 4 das 40 visitas
+      // como se fossem gente chegando de fora.
+      topReferrers: topReferrersBruto.filter(
+        (r) => !proprios.some((d) => ehReferrerProprio(r.rotulo, d)),
+      ),
       dispositivos,
     };
+  }
+
+  /** Domínios do próprio tenant — para separar navegação interna de origem real. */
+  private async dominiosDoTenant(tenantId: string): Promise<string[]> {
+    const sites = await this.prisma.website
+      .findMany({ where: { tenantId }, select: { domain: true } })
+      .catch(() => [] as { domain: string }[]);
+    return sites.map((s) => s.domain);
   }
 
   /**
