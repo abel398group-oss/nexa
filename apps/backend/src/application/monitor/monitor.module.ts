@@ -12,6 +12,8 @@ import { EmailDeliverabilityWatchService } from './email-deliverability-watch.se
 import { AdminAlertService } from './admin-alert.service';
 import { MonitorController } from './monitor.controller';
 import { MonitorIngestController } from './monitor-ingest.controller';
+import { ScraperAlertController } from './scraper-alert.controller';
+import { ScraperAlertService } from './scraper-alert.service';
 import { ScaleHealthController } from '@/presentation/http/health/scale-health.controller';
 import { PrismaModule } from '@/infra/prisma/prisma.module';
 import { ConnectorsModule } from '@/application/connectors/connectors.module';
@@ -35,6 +37,9 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
     // para "estamos queimando o domínio?" só chegaria pela entrega parar.
     EmailDeliverabilityWatchService,
     AdminAlertService, // aviso admin nos 2 canais (WhatsApp + e-mail)
+    // Relatorio de raspagem do diretorio publico, apurado no log do nginx pelo cron
+    // do TMS — o Nexa nao alcanca /var/log (ver scraper-alert.service.ts).
+    ScraperAlertService,
     WahaNotificationChannel,
     WhatsAppCloudChannel,
     {
@@ -46,7 +51,12 @@ import { NOTIFICATION_CHANNEL } from './notification-channel.interface';
         (process.env.MONITOR_WA_PROVIDER ?? 'waha').toLowerCase() === 'cloud' ? cloud : waha,
     },
   ],
-  controllers: [MonitorController, MonitorIngestController, ScaleHealthController],
+  controllers: [
+    MonitorController,
+    MonitorIngestController,
+    ScraperAlertController,
+    ScaleHealthController,
+  ],
   // AdminAlertService exportado para o relatório de custo de IA (metrics/ai-cost)
   // usar o MESMO canal de aviso ao admin — WhatsApp + e-mail já configurados.
   exports: [MonitorService, AdminAlertService],

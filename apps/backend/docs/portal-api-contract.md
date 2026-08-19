@@ -1,6 +1,6 @@
 # Portal de Suporte — Contrato de API
 
-> **Versão:** 1.1 · **Audiência:** Squad TMS · **Última atualização:** 2026-06-18
+> **Versão:** 1.2 · **Audiência:** Squad TMS · **Última atualização:** 2026-08-19
 
 O Nexa expõe uma API REST que o HiperTMS consome para renderizar o portal de suporte ao cliente.
 A Lia (IA) tenta resolver o chamado automaticamente; se não conseguir, escala para atendimento humano.
@@ -456,3 +456,89 @@ chamado estiver aberto (`open` ou `escalated`) e o drawer estiver visível.
 - Em produção, o cookie `portal_session` exige `Secure` + `SameSite=None` para funcionar
   em iframe cross-origin. Confirme que o Nexa está servindo em HTTPS e que o domínio do TMS
   está em `CORS_ORIGINS`.
+
+---
+
+## 6. Monitor — alerta de raspagem do diretório público
+
+Endpoint fora do portal, mas server-to-server pelo mesmo `TMS_SERVICE_TOKEN`.
+
+**Por que existe:** o diretório público de transportadoras (`hipertms.com.br/transportadoras/`)
+é estático e não embarca JavaScript — e scraper não executa JavaScript de qualquer forma.
+O beacon do Nexa (`POST /api/tracking/pageview`) é client-side: mede humano e é **cego para
+raspagem**. A única fonte de verdade é `/var/log/nginx/access.log` do droplet, que o backend
+do Nexa **não alcança** (roda em container montando só `nexa-models` e `nexa-uploads`).
+
+Portanto: **o TMS analisa o log por cron no host; o Nexa é o canal que avisa o admin da
+plataforma** (WhatsApp `ALERT_ADMIN_PHONE` + e-mail `ALERT_ADMIN_EMAIL`).
+
+> Não use `POST /monitor/ingest` para isso. Aquele fluxo é por sub-cliente e sua `category`
+> é um `@IsIn` de cinco setores do TMS — valor novo ali toma 400 e derruba o lote inteiro.
+
+### 6.1 `POST /monitor/scraper-alert`
+
+```http
+POST /api/monitor/scraper-alert
+Authorization: Bearer <TMS_SERVICE_TOKEN>
+Content-Type: application/json
+```
+
+```json
+{
+  "site": "hipertms.com.br/transportadoras",
+  "severity": "warn",
+  "windowHours": 24,
+  "totalHits": 41203,
+  "uniqueIps": 1884,
+  "suspects": [
+    {
+      "ip": "203.0.113.7",
+      "hits": 12480,
+      "peakRpm": 310,
+      "userAgent": "python-requests/2.31",
+      "fetchedCss": false,
+      "windowStart": "2026-08-18T02:11:00Z",
+      "windowEnd": "2026-08-18T03:47:00Z",
+      "paths": ["/transportadoras/sp/sao-paulo/", "/transportadoras/mg/uberlandia/"]
+    }
+  ],
+  "dryRun": false
+}
+```
+
+| Campo | Obrig. | Nota |
+|---|---|---|
+| `site` | sim | Compõe a chave do ritmo por IP. |
+| `severity` | não | `info` \| `warn` \| `critical`. **`critical` fura o ritmo** — use para o IP novo com >1.000 hits em <1h. |
+| `windowHours`, `totalHits`, `uniqueIps` | não | Só para o texto da mensagem. |
+| `suspects[]` | sim | Máx. **200** por chamada. |
+| `suspects[].ip` | sim | IP inteiro, sem mascarar — é o que serve para bloquear. |
+| `suspects[].hits` | sim | Inteiro ≥ 1. |
+| `suspects[].peakRpm` | não | Pico de req/min. |
+| `suspects[].userAgent` | não | |
+| `suspects[].fetchedCss` | não | **OMITIR quando não apurado.** `false` afirma "não baixou o CSS" — o sinal mais forte de robô. Mandar `false` por omissão inventa evidência. |
+| `suspects[].windowStart` / `windowEnd` | não | ISO 8601. |
+| `suspects[].paths` | não | Máx. 20; a mensagem mostra 3. |
+| `dryRun` | não | Valida e devolve `preview` **sem enviar e sem consumir o ritmo**. |
+
+**Resposta `200`:**
+
+```json
+{ "received": 3, "alerted": 1, "throttled": 2, "dryRun": false,
+  "channels": { "whatsapp": true, "email": true } }
+```
+
+`throttled` são os IPs já avisados dentro da janela (`SCRAPER_ALERT_THROTTLE_H`, padrão
+`6`) — a chamada foi aceita, só não gerou mensagem para eles. `channels` é `null` quando
+nada saiu (dryRun, ou todos calados).
+
+**Erros:** `401` token inválido · `503` `TMS_SERVICE_TOKEN` não configurado no Nexa ·
+`400` campo fora do DTO (o ValidationPipe é `forbidNonWhitelisted` — campo novo exige
+mudança combinada dos dois lados).
+
+### 6.2 Variáveis de ambiente (Nexa)
+
+| Var | Padrão | Nota |
+|---|---|---|
+| `SCRAPER_ALERT_THROTTLE_H` | `6` | Horas de silêncio por IP já avisado. `critical` ignora. |
+| `ALERT_ADMIN_PHONE` / `ALERT_ADMIN_EMAIL` | — | Já existentes; sem nenhum dos dois o alerta não tem para onde ir (fica no log como `error`). |
