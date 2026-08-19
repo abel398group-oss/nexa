@@ -14,7 +14,10 @@ export function PlaybookMessagesTab() {
   const { user } = useAuth();
   const podePlaybook = temPerm(user, 'ai_control');
   const podeMensagens = temPerm(user, 'campaigns');
-  const [subTab, setSubTab] = useState<SubTab>(podePlaybook ? 'playbook' : 'messages');
+  // Mensagens é a primeira aba e o padrão (19/08/2026): é a tela de trabalho do dia a
+  // dia — escrever, testar e salvar modelo. O playbook é configuração da Lia, mexida
+  // de vez em quando. Aba que abre por padrão deve ser a mais usada.
+  const [subTab, setSubTab] = useState<SubTab>(podeMensagens ? 'messages' : 'playbook');
   const ativa: SubTab = subTab === 'playbook' && !podePlaybook ? 'messages'
     : subTab === 'messages' && !podeMensagens ? 'playbook'
     : subTab;
@@ -26,16 +29,6 @@ export function PlaybookMessagesTab() {
         <div className="border-b border-base-200 bg-white px-6 py-3">
           <div className="flex gap-4">
             <button
-              onClick={() => setSubTab('playbook')}
-              className={`px-4 py-2 rounded-md font-medium text-sm transition ${
-                ativa === 'playbook'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-base-100 text-base-content hover:bg-base-200'
-              }`}
-            >
-              🤖 Playbook da IA
-            </button>
-            <button
               onClick={() => setSubTab('messages')}
               className={`px-4 py-2 rounded-md font-medium text-sm transition ${
                 ativa === 'messages'
@@ -44,6 +37,16 @@ export function PlaybookMessagesTab() {
               }`}
             >
               ✉️ Modelos de Mensagens
+            </button>
+            <button
+              onClick={() => setSubTab('playbook')}
+              className={`px-4 py-2 rounded-md font-medium text-sm transition ${
+                ativa === 'playbook'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-base-100 text-base-content hover:bg-base-200'
+              }`}
+            >
+              🤖 Playbook da IA
             </button>
           </div>
         </div>
