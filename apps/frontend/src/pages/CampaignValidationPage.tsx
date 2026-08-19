@@ -138,6 +138,13 @@ export function CampaignValidationPage() {
    */
   const subir = useMutation({
     mutationFn: async ({ arquivos, kind }: { arquivos: File[]; kind: 'plan' | 'portfolio' }) => {
+      // Sem mercado escolhido não se monta URL: `/markets/${''}/assets` vira
+      // `/markets//assets`, que o navegador normaliza para `/api/markets/assets` e o
+      // servidor responde "Cannot POST" — uma vez por arquivo da pilha. A lista de
+      // mercados chega por query, então há uma janela real entre a tela aparecer e
+      // `code` existir, e é nela que a pilha arrastada cai.
+      if (!code) throw new Error('SEM_MERCADO');
+
       const aceitos: string[] = [];
       const recusados: string[] = [];
       for (const f of arquivos) {
@@ -174,7 +181,12 @@ export function CampaignValidationPage() {
       if (aceitos.length) toast.success(`${aceitos.length} arquivo(s) na fila de validação.`);
       if (recusados.length) toast.error(`Fora: ${recusados.join(' · ')}`);
     },
-    onError: () => toast.error('Não consegui subir os arquivos.'),
+    onError: (e: any) =>
+      toast.error(
+        e?.message === 'SEM_MERCADO'
+          ? 'Escolha o mercado antes de soltar os arquivos.'
+          : 'Não consegui subir os arquivos.',
+      ),
   });
 
   const salvar = useMutation({
