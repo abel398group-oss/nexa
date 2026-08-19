@@ -286,6 +286,66 @@ describe('ConversationAgentService.handle()', () => {
       );
     });
 
+    // Lead MORNO (19/08/2026). Antes disto a oportunidade só nascia no caminho quente,
+    // e quem respondia a campanha com interesse abaixo do corte gerava conversa e nada
+    // no funil — a fila do SDR lê `Opportunity`, então ninguém via o lead.
+    it('handle(): resposta de vendas morna também cria oportunidade', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 30 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Manda mais informação', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ conversationId: 'conv1', interestScore: 30 }),
+      );
+    });
+
+    // O morno espera na fila; quem avisa vendedor é o quente. Chamar o rodízio aqui
+    // jogaria todo lead morno em `pickAndClaimSeller` — o centro do incidente de 09/07.
+    it('handle(): lead morno não aciona rodízio nem notificação', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 30 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Manda mais informação', conversationId: 'conv1' });
+
+      expect(mockSellers.handoff).not.toHaveBeenCalled();
+      expect(mockNotifications.create).not.toHaveBeenCalled();
+    });
+
+    // O dono é o da distribuição do lote (passo 4), não um sorteio novo.
+    it('handle(): lead morno herda o dono do contato', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'interested', leadScore: 30 }),
+      );
+      mockPrisma.contact.findFirst.mockResolvedValue({ ownerSellerId: 's9' });
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Quanto custa?', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ assignedSellerId: 's9' }),
+      );
+    });
+
+    // Mesma razão do handoff (incidente da marmita): fora de perfil não é lead, e
+    // criar oportunidade encheria o funil de spam.
+    it('handle(): wrong_person não cria oportunidade', async () => {
+      mockRouter.route.mockResolvedValue(
+        makeRoute({ agent: 'sales', intent: 'wrong_person', leadScore: 0 }),
+      );
+
+      const svc = makeService();
+      await svc.handle('t1', { message: 'Promoção imperdível!', conversationId: 'conv1' });
+
+      expect(mockOpportunities.createFromLead).not.toHaveBeenCalled();
+    });
+
     it('escalateOnly(): wrong_person também não aciona vendedor (IA off)', async () => {
       mockRouter.route.mockResolvedValue(
         makeRoute({ agent: 'human', intent: 'wrong_person', leadScore: 0 }),

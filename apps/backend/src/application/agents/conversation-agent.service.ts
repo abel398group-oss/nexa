@@ -1085,6 +1085,63 @@ export class ConversationAgentService {
       });
     }
 
+    /**
+     * MORNO: resposta de vendas que não chegou a ser quente também vira oportunidade.
+     *
+     * Até 19/08/2026 a oportunidade só nascia no `isHot` acima. Quem respondia a
+     * campanha com "manda mais informação" — interesse real, score abaixo do corte —
+     * gerava conversa e NADA no funil. A fila do SDR lê `Opportunity`, então esse lead
+     * não aparecia para ninguém trabalhar: pago na lista, disparado, respondido, e
+     * perdido em silêncio. É o vazamento mais caro do funil porque não deixa rastro.
+     *
+     * Deliberadamente SEM rodízio e SEM notificação. O dono é o que o contato já tem
+     * (distribuição do lote, no passo 4); sem dono, a oportunidade nasce órfã e aparece
+     * para admin/gestor, que distribui. Chamar `pickAndClaimSeller` aqui jogaria todo
+     * lead morno no rodízio do lead quente — e esse rodízio foi o centro do incidente
+     * de 09/07. Notificar também não: quente avisa o vendedor, morno espera na fila.
+     *
+     * `wrong_person` fica de fora pelo mesmo motivo do handoff (incidente da marmita):
+     * mensagem fora de perfil não é lead. Opt-out idem — ele já saiu.
+     */
+    const ehVendaMorna =
+      route.agent === 'sales' && !isHot && route.intent !== 'wrong_person';
+    if (ehVendaMorna) {
+      // O dono do contato é a distribuição do passo 4. Ler aqui e repassar é o que
+      // impede o lead de nascer órfão quando o lote já tinha dono definido.
+      const dono = conv.contactId
+        ? await this.prisma.contact
+            .findFirst({ where: { id: conv.contactId }, select: { ownerSellerId: true } })
+            .catch(() => null)
+        : null;
+
+      const oportunidade = await this.opportunities
+        .createFromLead(tenantId, {
+          conversationId: input.conversationId,
+          contactId: conv.contactId,
+          phone: conv.phone,
+          interestScore: route.leadScore,
+          intent: route.intent,
+          summary: input.message.slice(0, 120),
+          assignedSellerId: dono?.ownerSellerId ?? undefined,
+        })
+        .catch((e) => {
+          // Nunca derruba a resposta ao lead por causa do funil, mas também não some:
+          // falha silenciosa aqui é exatamente o vazamento que este bloco corrige.
+          this.logger.warn(
+            `Não consegui criar oportunidade de lead morno phone=${conv.phone} ` +
+              `conv=${input.conversationId} score=${route.leadScore}: ${(e as Error).message}`,
+          );
+          return null;
+        });
+
+      if (oportunidade) {
+        this.logger.log(
+          `Lead morno no funil: phone=${conv.phone} score=${route.leadScore} ` +
+            `intent=${route.intent} dono=${dono?.ownerSellerId ?? 'sem dono'}`,
+        );
+      }
+    }
+
     // SUPORTE: a Lia tentou e NÃO resolveu (needsHuman) → marca o chamado p/ humano e avisa
     // o time. O humano assume no inbox e liga pro cliente (modelo de callback do suporte).
     // Dedup: só escala uma vez por conversa (não renotifica a cada mensagem).
