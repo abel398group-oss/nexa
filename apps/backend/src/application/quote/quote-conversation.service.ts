@@ -44,6 +44,28 @@ export class QuoteConversationService {
   }
 
   /**
+   * A mensagem TALVEZ seja de cotação? Checagem barata, antes de consultar o TMS.
+   *
+   * Existe para quem chama não fazer uma consulta ao banco do TMS a cada mensagem que
+   * chega no WhatsApp. Só o gatilho (comparação de texto) e a sessão (um GET no Redis)
+   * — e ambos são falsos na esmagadora maioria das mensagens.
+   */
+  async pareceCotacao(phone: string, texto: string): Promise<boolean> {
+    if (!this.habilitado || !texto) return false;
+    if (ehGatilho(texto)) return true;
+    return (await this.sessoes.ler(phone)) !== null;
+  }
+
+  /// Freio da mensagem de orientação: uma por número por dia. Ver `orientarNumeroInterno`.
+  avisouRecentemente(phone: string): Promise<boolean> {
+    return this.sessoes.avisou(phone);
+  }
+
+  marcarAvisado(phone: string): Promise<void> {
+    return this.sessoes.marcarAvisado(phone);
+  }
+
+  /**
    * @param userId Id do usuário no TMS (`tenant_core_user.id`), resolvido pelo telefone.
    * @returns texto a responder, ou `null` se a mensagem não é de cotação.
    */

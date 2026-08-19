@@ -83,4 +83,37 @@ export class QuoteSessionService {
       /* sessão órfã expira sozinha pelo TTL */
     }
   }
+
+  /**
+   * Marca de "já orientei este número hoje".
+   *
+   * Chave separada da sessão de propósito: a sessão morre quando a cotação termina, e
+   * esta precisa sobreviver a isso — senão bastaria cotar para o aviso poder repetir.
+   *
+   * Sem Redis, `avisou` devolve TRUE: sem onde guardar a marca, o freio não existe, e um
+   * alerta com cinco respostas geraria cinco avisos. Calar é a falha segura aqui.
+   */
+  private chaveAviso(phone: string): string {
+    return `nexa:cotacao:avisado:${phone}`;
+  }
+
+  static readonly TTL_AVISO_SEGUNDOS = 24 * 60 * 60;
+
+  async avisou(phone: string): Promise<boolean> {
+    if (!this.redis) return true;
+    try {
+      return (await this.redis.get(this.chaveAviso(phone))) !== null;
+    } catch {
+      return true;
+    }
+  }
+
+  async marcarAvisado(phone: string): Promise<void> {
+    if (!this.redis) return;
+    try {
+      await this.redis.set(this.chaveAviso(phone), '1', 'EX', QuoteSessionService.TTL_AVISO_SEGUNDOS);
+    } catch {
+      /* sem a marca, o pior caso é um aviso a mais */
+    }
+  }
 }

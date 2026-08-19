@@ -115,6 +115,42 @@ export class WhatsappService {
     }
   }
 
+  /**
+   * Orienta o número interno em vez de sumir com a mensagem dele.
+   *
+   * O descarte silencioso é correto para NÃO virar lead, e errado como experiência: o
+   * vendedor escreve, não recebe nada, conclui que o sistema caiu e abre chamado que
+   * ninguém consegue rastrear. É a regra do CLAUDE.md deste repo — nenhum descarte sem
+   * rastro — aplicada também para quem está do outro lado da tela.
+   *
+   * O freio de 24h é o que impede isto de virar spam: um alerta gera vários "ok" e
+   * "obrigado", e responder a cada um transformaria o canal de aviso em conversa.
+   *
+   * Presa à mesma chave da cotação: sem cotação ligada, esta mensagem não faz sentido —
+   * ela ensina a digitar "cotar".
+   */
+  private async orientarNumeroInterno(phone: string, texto: string, linha?: string): Promise<void> {
+    if (!this.cotacao.habilitado || !texto) return;
+    try {
+      const jaAvisado = await this.cotacao.avisouRecentemente(phone);
+      if (jaAvisado) return;
+      await this.cotacao.marcarAvisado(phone);
+      await this.waha.sendText(
+        phone,
+        [
+          'Este número é de *alertas* e *cotação*.',
+          '',
+          'Para cotar um frete, digite *cotar*.',
+          'Para suporte, use o chat dentro do HiperTMS.',
+        ].join('\n'),
+        { linha, origin: 'cotacao' },
+      );
+    } catch (e: any) {
+      // Nunca derruba o descarte: a orientação é conveniência, o gate é regra.
+      this.logger.warn(`orientação não enviada para ${phone}: ${e?.message}`);
+    }
+  }
+
   // Recibo do WhatsApp (evento message.ack do WAHA): 1=enviado ✓, 2=entregue ✓✓, 3=lido ✓✓azul.
   async handleAck(rawBody: any) {
     const p = rawBody?.payload ?? rawBody?.body?.payload ?? rawBody?.body ?? rawBody ?? {};
@@ -470,6 +506,26 @@ export class WhatsappService {
       }
     }
 
+    // COTAÇÃO POR WHATSAPP — antes do gate de números internos, de propósito.
+    //
+    // Estava DENTRO do gate, e isso escondia um furo: `GATE_TEST_PHONES` é consultado
+    // primeiro pelo `classify`, então quem está na lista de teste era tratado como número
+    // de fora e nunca chegava na cotação. Em 19/08/2026 o Uelder mandou "cotar" e a Lia
+    // respondeu como se ele fosse lead.
+    //
+    // Aqui em cima, a pergunta que decide deixa de ser "esse número é interno?" e passa a
+    // ser "essa pessoa é usuária do TMS?" — que é a pergunta certa, porque cotação é
+    // permissão do TMS, não do Nexa. Lead comum nunca resolve para um usuário de lá, e
+    // por isso segue o fluxo normal sem nem perceber que passou por aqui.
+    //
+    // `pareceCotacao` é a guarda barata que evita uma consulta ao banco do TMS a cada
+    // mensagem: só gatilho ou sessão aberta passam daqui.
+    if (await this.cotacao.pareceCotacao(n.phone, n.text)) {
+      if (await this.tentarCotacao(n.phone, n.text, linha)) {
+        return { ignored: false, cotacao: true, phone: n.phone };
+      }
+    }
+
     // GATE de números internos (ADR 034/035, brainstorm 2026-07-20): vendedores
     // e contatos de alerta do Monitor NUNCA viram contato/lead — quem responde
     // "ok" a uma notificação de handoff ou a um digest não pode cair no funil
@@ -477,17 +533,10 @@ export class WhatsappService {
     // (regra do repo: nenhum drop silencioso).
     const internal = await this.internalNumbers.classify(n.phone);
     if (internal.internal) {
-      // COTAÇÃO POR WHATSAPP — o gancho fica AQUI DENTRO do descarte, não antes dele.
-      //
-      // Quem cota é exatamente quem recebe alerta: usuário do TMS cadastrado como contato
-      // do Monitor. Esses números são internos por definição, e a regra abaixo joga a
-      // mensagem deles fora. Depois do `return` seria código morto; antes do gate faria
-      // lead virar cotação.
-      //
-      // `tentarCotacao` devolve false quando a mensagem não é de cotação — e aí o
-      // descarte segue exatamente como sempre foi. Ver `QuoteConversationService`.
-      const virouCotacao = await this.tentarCotacao(n.phone, n.text, linha);
-      if (virouCotacao) return { ignored: false, cotacao: true, phone: n.phone };
+      // Número interno que NÃO estava cotando. Em vez de sumir com a mensagem, orienta.
+      // Ver `orientarNumeroInterno` — descarte mudo é o que faz o vendedor achar que o
+      // sistema caiu e abrir chamado que ninguém consegue rastrear.
+      await this.orientarNumeroInterno(n.phone, n.text, linha);
 
       this.logger.warn(
         `inbound descartado: número interno (${internal.reason}) — ${n.phone} não vira lead/conversa`,

@@ -15,6 +15,8 @@ function sessoesFalsas() {
     ler: vi.fn(async (p: string) => mapa.get(p) ?? null),
     gravar: vi.fn(async (p: string, e: EstadoCotacao) => void mapa.set(p, e)),
     apagar: vi.fn(async (p: string) => void mapa.delete(p)),
+    avisou: vi.fn(async () => false),
+    marcarAvisado: vi.fn(async () => undefined),
     _mapa: mapa,
   };
 }
@@ -175,5 +177,35 @@ describe('cotação por WhatsApp', () => {
     const svc = criar(s, tmsFalso());
     const r = await svc.responderMensagem(FONE, 'cotar', USER);
     expect(r).toContain('indisponível');
+  });
+});
+
+describe('guarda barata antes de consultar o TMS', () => {
+  beforeEach(() => {
+    process.env.QUOTE_WHATSAPP_ENABLED = 'true';
+  });
+
+  it('gatilho parece cotacao', async () => {
+    const svc = criar(sessoesFalsas(), tmsFalso());
+    expect(await svc.pareceCotacao(FONE, 'cotar')).toBe(true);
+  });
+
+  it('mensagem qualquer sem sessao NAO parece — evita consulta ao TMS a cada msg', async () => {
+    const svc = criar(sessoesFalsas(), tmsFalso());
+    expect(await svc.pareceCotacao(FONE, 'ok')).toBe(false);
+    expect(await svc.pareceCotacao(FONE, 'obrigado')).toBe(false);
+  });
+
+  it('com sessao aberta, qualquer mensagem parece — e resposta do formulario', async () => {
+    const s = sessoesFalsas();
+    const svc = criar(s, tmsFalso());
+    await svc.responderMensagem(FONE, 'cotar', USER);
+    expect(await svc.pareceCotacao(FONE, 'Campinas SP')).toBe(true);
+  });
+
+  it('desligada, nada parece cotacao', async () => {
+    delete process.env.QUOTE_WHATSAPP_ENABLED;
+    const svc = criar(sessoesFalsas(), tmsFalso());
+    expect(await svc.pareceCotacao(FONE, 'cotar')).toBe(false);
   });
 });
