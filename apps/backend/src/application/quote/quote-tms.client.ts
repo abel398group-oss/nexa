@@ -72,12 +72,20 @@ export class QuoteTmsClient {
     );
     if (!res?.ok) return null;
     const dados: any = await res.json().catch(() => null);
-    const lista = dados?.cities ?? dados ?? [];
+    // Formato REAL do TMS, conferido em produção em 19/08/2026:
+    //   { success: true, data: [ { city_code, city, state, ibge_code, ... } ] }
+    // Eu tinha suposto `{ cities: [ { code, name, state } ] }` — a lista vinha num
+    // objeto, `Array.isArray` dava falso, e toda busca virava "não consegui consultar".
+    // Os apelidos alternativos ficam porque custam nada e o WAHA/TMS já mudaram formato
+    // antes; o que não fica é supor sem conferir.
+    const lista = dados?.data ?? dados?.cities ?? dados;
     if (!Array.isArray(lista)) return null;
     return lista
       .map((c: any) => ({
-        code: String(c?.code ?? c?.id ?? ''),
-        name: String(c?.name ?? ''),
+        // `city_code` é o que o motor de cotação espera; `ibge_code` é o mesmo número
+        // neste retorno, mas o campo canônico é o primeiro.
+        code: String(c?.city_code ?? c?.ibge_code ?? c?.code ?? c?.id ?? ''),
+        name: String(c?.city ?? c?.name ?? ''),
         state: String(c?.state ?? c?.uf ?? ''),
       }))
       .filter((c) => c.code && c.name);
@@ -96,7 +104,10 @@ export class QuoteTmsClient {
     if (res.status === 404) return []; // veículo sem catálogo = sem tabela
     if (!res.ok) return null;
     const dados: any = await res.json().catch(() => null);
-    const lista = dados?.cargoTypes;
+    // Aceita com e sem o embrulho `{ success, data }`: as rotas antigas do TMS embrulham,
+    // e o contrato que o squad passou para as novas nao embrulha. Custa nada aceitar os
+    // dois e evita a busca inteira virar "nao consegui" por causa de uma casca.
+    const lista = dados?.cargoTypes ?? dados?.data?.cargoTypes ?? dados?.data;
     return Array.isArray(lista) ? lista.map(String).filter(Boolean) : null;
   }
 
@@ -124,7 +135,9 @@ export class QuoteTmsClient {
       return { ok: false, motivo: 'indisponivel' };
     }
 
-    const d: any = await res.json().catch(() => null);
+    const bruto: any = await res.json().catch(() => null);
+    // Mesmo motivo da lista de cidades: com ou sem `{ success, data }`.
+    const d: any = bruto?.price != null ? bruto : (bruto?.data ?? bruto);
     const price = Number(d?.price);
     // Sem preço não há cotação. Devolver "ok" com valor zero mandaria "R$ 0,00" para o
     // cliente — pior que dizer que não deu.

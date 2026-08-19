@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
 import { getMarketAtivo } from '@/shared/lib/marketAtivo';
+import { SeletorDeModelo } from '@/components/SeletorDeModelo';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
@@ -1836,6 +1837,12 @@ export function CampaignsPage() {
 
             {channel === 'email' ? (
               <>
+                <SeletorDeModelo
+                  productCode={productCode}
+                  channel="email"
+                  onEscolher={(m) => { setEmailSubject(m.subject ?? ''); setEmailTemplate(m.body); }}
+                />
+
                 {/* Assunto */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-base-content/60">
@@ -2052,6 +2059,12 @@ export function CampaignsPage() {
               </>
             ) : campaignType === 'message' ? (
               <>
+                <SeletorDeModelo
+                  productCode={productCode}
+                  channel="whatsapp"
+                  onEscolher={(m) => setTemplate(m.body)}
+                />
+
                 {/* Mensagem WhatsApp */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-base-content/60">

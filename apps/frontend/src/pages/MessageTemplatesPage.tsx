@@ -63,7 +63,7 @@ export function MessageTemplatesPage() {
     mutationFn: () =>
       createTemplate({ productCode: codigo, name: nome, channel: canal, subject: assunto, body: corpo, step: passo }),
     onSuccess: () => {
-      toast.success('Modelo salvo. Já aparece no Disparo deste mercado.');
+      toast.success('Modelo salvo. Já aparece em "Usar um modelo pronto" no Disparo deste mercado.');
       setNome(''); setAssunto(''); setCorpo(''); setPrevia(null);
       void qc.invalidateQueries({ queryKey: ['message-templates', codigo] });
       // "Nenhuma mensagem pronta" é uma das quatro travas de liberação, e ela é
