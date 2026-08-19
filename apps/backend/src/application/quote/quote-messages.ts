@@ -302,7 +302,10 @@ export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): 
     ...(estado.valorMercadoria ? [`Mercadoria: ${brl(estado.valorMercadoria)}`] : []),
     '',
     `💰 *${brl(r.valor)}*`,
-    ...(r.pisoAntt != null ? [`Piso ANTT: ${brl(r.pisoAntt)}`] : []),
+    // > 0, não só != null: fracionado normalmente não tem piso ANTT aplicável e o TMS
+    // manda 0 nesse caso — mostrar "R$ 0,00" leria como um piso real, quando é "não se
+    // aplica". Mesmo raciocínio do `price` em quote-tms.client.ts.
+    ...(r.pisoAntt != null && r.pisoAntt > 0 ? [`Piso ANTT: ${brl(r.pisoAntt)}`] : []),
     ...analiseCritica,
     '',
     ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),

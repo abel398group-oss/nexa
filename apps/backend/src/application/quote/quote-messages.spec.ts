@@ -159,6 +159,12 @@ describe('resultado — mensagem interna (resultadoInterno)', () => {
     expect(t).not.toContain('Piso ANTT');
   });
 
+  it('piso ZERO também não imprime a linha — fracionado geralmente não tem piso ANTT', () => {
+    // Visto em produção: "Piso ANTT: R$ 0,00" lido como se fosse um valor real.
+    const t = resultadoInterno(pronto, { valor: 538.77, pisoAntt: 0, rascunhoId: '017751' });
+    expect(t).not.toContain('Piso ANTT');
+  });
+
   it('avisa que a mensagem encaminhável vem em seguida', () => {
     expect(resultadoInterno(pronto, { valor: 5200 })).toContain('encaminhar ao cliente');
   });
