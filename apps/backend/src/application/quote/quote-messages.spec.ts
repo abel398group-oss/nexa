@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abertura, cancelado, naoEntendi, pergunta, recusado, resultado } from './quote-messages';
+import { abertura, cancelado, naoEntendi, pergunta, recusado, resultado, validadeEmDiaMes } from './quote-messages';
 import type { EstadoCotacao } from './quote-flow';
 
 const CAMPINAS = { code: '1', name: 'Campinas', state: 'SP' };
@@ -135,5 +135,40 @@ describe('recusa do TMS', () => {
 describe('cancelamento', () => {
   it('diz como recomeçar', () => {
     expect(cancelado()).toContain('*cotar*');
+  });
+});
+
+describe('validade', () => {
+  const pronto: EstadoCotacao = {
+    etapa: 'pronto',
+    tentativas: 0,
+    origem: CAMPINAS,
+    destino: BH,
+    modalidade: 'fracionado',
+    pesoKg: 100,
+    valorMercadoria: 10000,
+  };
+
+  it('A ARMADILHA DO FUSO: 03/09 continua 03/09', () => {
+    // O TMS manda meia-noite UTC. Converter para America/Sao_Paulo devolveria 02/09,
+    // porque 00:00Z e 21:00 do dia anterior em Brasilia. Um dia a menos numa validade
+    // e o cliente cobrando um preco que o sistema ja considera vencido.
+    expect(validadeEmDiaMes('2026-09-03T00:00:00.000Z')).toBe('03/09');
+  });
+
+  it('a mensagem mostra a validade quando o TMS manda', () => {
+    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749', validoAte: '2026-09-03T00:00:00.000Z' });
+    expect(t).toContain('Válida até *03/09*');
+  });
+
+  it('sem validade, nao inventa data nem imprime linha vazia', () => {
+    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749' });
+    expect(t).not.toContain('Válida até');
+  });
+
+  it('lixo no lugar da data devolve null em vez de data torta', () => {
+    expect(validadeEmDiaMes('amanha')).toBeNull();
+    expect(validadeEmDiaMes(null)).toBeNull();
+    expect(validadeEmDiaMes(undefined)).toBeNull();
   });
 });

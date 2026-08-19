@@ -16,7 +16,16 @@ import type { CorpoDaCotacao } from './quote-flow';
  */
 
 export type ResultadoTms =
-  | { ok: true; price: number; minimumFloor: number | null; distanceKm: number | null; draftId: string | null }
+  | {
+      ok: true;
+      price: number;
+      minimumFloor: number | null;
+      distanceKm: number | null;
+      draftId: string | null;
+      /// ISO-8601 vindo do TMS, calculado pela regra do tenant. Guardado CRU de propósito
+      /// — ver o comentário de `validadeEmDiaMes` em quote-messages.
+      validUntil: string | null;
+    }
   | { ok: false; motivo: 'sem_permissao' | 'cota_estourada' | 'indisponivel' };
 
 @Injectable()
@@ -151,6 +160,7 @@ export class QuoteTmsClient {
       minimumFloor: Number.isFinite(Number(d?.minimumFloor)) ? Number(d.minimumFloor) : null,
       distanceKm: Number.isFinite(Number(d?.distanceKm)) ? Number(d.distanceKm) : null,
       draftId: d?.draftId != null ? String(d.draftId) : null,
+      validUntil: typeof d?.validUntil === 'string' ? d.validUntil : null,
     };
   }
 }

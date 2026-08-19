@@ -168,6 +168,7 @@ export class QuoteConversationService {
       pisoAntt: r.minimumFloor,
       distanciaKm: r.distanceKm,
       rascunhoId: r.draftId,
+      validoAte: r.validUntil,
     });
   }
 }

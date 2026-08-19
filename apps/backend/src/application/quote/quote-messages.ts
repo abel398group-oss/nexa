@@ -162,6 +162,25 @@ export interface ResultadoDaCotacao {
   valor: number;
   pisoAntt?: number | null;
   rascunhoId?: string | null;
+  /// ISO-8601 do TMS. Ver `validadeEmDiaMes` — NÃO converter para fuso nenhum.
+  validoAte?: string | null;
+}
+
+/**
+ * Validade em dia/mês, lida DIRETO dos dígitos do ISO.
+ *
+ * Não converte fuso, e isso é o ponto: o TMS manda `2026-09-03T00:00:00.000Z`, e
+ * `toLocaleDateString` em America/Sao_Paulo devolve **02/09** — meia-noite UTC é 21h do
+ * dia anterior em Brasília. A proposta impressa diz 03/09, e a mensagem diria 02/09.
+ *
+ * Um dia a menos numa validade é o cliente cobrando um preço que o sistema já considera
+ * vencido. Validade é data de CALENDÁRIO, não instante no tempo — e data de calendário
+ * não se converte.
+ */
+export function validadeEmDiaMes(iso: string | null | undefined): string | null {
+  if (typeof iso !== 'string') return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}` : null;
 }
 
 /**
@@ -198,6 +217,7 @@ export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string 
     // Esta mensagem é encaminhável com um toque: se ela chegar ao cliente com o piso,
     // ele passa a saber a margem. O vendedor consulta no sistema quando precisar.
     '',
+    ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
     'Valor de referência — confirme antes de fechar com o cliente.',
     ...(r.rascunhoId
       ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
