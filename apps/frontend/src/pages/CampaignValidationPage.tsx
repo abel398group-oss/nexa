@@ -233,6 +233,41 @@ export function CampaignValidationPage() {
     if (ok) remover.mutate(a.id);
   }
 
+  /**
+   * Esvazia o mercado inteiro. Existe para o caso de recomeçar a pilha do zero —
+   * subir a pasta errada e ter que apagar sete arquivos um a um é o caminho que faz
+   * a pessoa desistir e conviver com material errado no mercado.
+   *
+   * O texto da confirmação DIZ O NÚMERO e quantos já estavam aprovados: "remover
+   * tudo" é fácil de clicar sem perceber que leva junto o que já foi revisado.
+   *
+   * Sem endpoint em lote de propósito — são poucos arquivos por mercado, e um
+   * DELETE por item reaproveita a rota que já existe (com a checagem de tenant que
+   * ela já faz) em vez de abrir uma rota nova que apaga em massa.
+   */
+  const removerTudo = useMutation({
+    mutationFn: async () => {
+      for (const a of itens) await deleteMarketAsset(code, a.id);
+    },
+    onSuccess: () => { recarregar(); setAberto(null); toast.info('Mercado esvaziado.'); },
+    onError: () => toast.error('Não consegui remover tudo — recarregue e veja o que sobrou.'),
+  });
+
+  async function pedirRemocaoTotal() {
+    const qtdAprovados = itens.filter((a) => a.status === 'approved').length;
+    const ok = await confirm({
+      title: `Remover todos os ${itens.length} arquivos de ${code}?`,
+      message:
+        (qtdAprovados
+          ? `${qtdAprovados} já ${qtdAprovados === 1 ? 'está aprovado' : 'estão aprovados'} e ${qtdAprovados === 1 ? 'vai' : 'vão'} junto. `
+          : '') +
+        'Não tem como desfazer: os arquivos saem do mercado, a Lia deixa de ver e o vendedor deixa de poder anexar.',
+      confirmLabel: `Remover os ${itens.length}`,
+      variant: 'danger',
+    });
+    if (ok) removerTudo.mutate();
+  }
+
   function receber(lista: FileList | null, kind: 'plan' | 'portfolio') {
     const arquivos = Array.from(lista ?? []);
     if (arquivos.length) subir.mutate({ arquivos, kind });
@@ -298,6 +333,19 @@ export function CampaignValidationPage() {
             <Button variant="outline" onClick={escreverDoZero}>
               <Icon name="edit" className="h-4 w-4" /> Escrever roteiro
             </Button>
+            {/* Só aparece com material na tela: botão de esvaziar num mercado já
+                vazio não tem o que fazer, e ocupa o lugar de quem importa. */}
+            {itens.length > 0 && (
+              <Button
+                variant="ghost"
+                className="text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15"
+                disabled={removerTudo.isPending}
+                onClick={() => void pedirRemocaoTotal()}
+              >
+                <Icon name="trash" className="h-4 w-4" />{' '}
+                {removerTudo.isPending ? 'Removendo…' : 'Remover tudo'}
+              </Button>
+            )}
           </>
         }
       />
