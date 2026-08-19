@@ -1,0 +1,12 @@
+/* ==========================================================================
+   HiperTMS — Webfonts
+   Body text uses Inter; tabular values use JetBrains Mono. The brand wordmark
+   ("HiperTMS") uses Baloo 2 — a rounded, friendly display face. The source repo
+   (hipervias_v12) declares `font-family: Inter, …` on :root but ships no
+   Inter binaries, so we load Inter (and JetBrains Mono) from Google Fonts.
+   Headings (h1/h2) intentionally use the native system-ui stack (no webfont).
+   SUBSTITUTION FLAG: Inter, JetBrains Mono & Baloo 2 are pulled from the Google
+   Fonts CDN rather than self-hosted binaries. Supply .woff2 files to self-host.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');

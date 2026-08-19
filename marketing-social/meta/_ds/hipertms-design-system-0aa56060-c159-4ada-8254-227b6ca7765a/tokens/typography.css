@@ -1,0 +1,53 @@
+/* ==========================================================================
+   HiperTMS — Typography tokens
+   Body: Inter · Headings (h1/h2): system-ui stack · Mono: JetBrains Mono
+   The app declares `font-family: Inter, system-ui, …` on :root and a
+   system-ui stack on h1/h2. No webfont binaries ship with the source repo,
+   so Inter is loaded from Google Fonts (see fonts.css). — flagged in readme.
+   ========================================================================== */
+
+:root {
+  /* ---- Families ---- */
+  --font-sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Headings deliberately use the OS UI stack (matches globals.css h1/h2) */
+  --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  /* Brand wordmark ("HiperTMS") — Baloo 2, rounded & friendly. Logo use only. */
+  --font-brand: 'Baloo 2', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Tabular values (currency, CT-e keys, counts) */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ---- Type scale (rem; note the app applies a global zoom: 0.8) -------- */
+  --text-xs: 0.75rem;    /* 12px — legend / caption */
+  --text-sm: 0.875rem;   /* 14px — secondary / helper */
+  --text-base: 1rem;     /* 16px — body default */
+  --text-lg: 1.125rem;   /* 18px — card title */
+  --text-xl: 1.25rem;    /* 20px — section */
+  --text-2xl: 1.5rem;    /* 24px — KPI value */
+  --text-3xl: 1.875rem;  /* 30px — page title */
+  --text-4xl: 2.25rem;   /* 36px — marketing h2 */
+  --text-5xl: 3rem;      /* 48px — hero */
+  --text-6xl: 3.2rem;    /* ~51px — hero (lg) */
+
+  /* ---- Weights ---- */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800; /* hero / marketing headlines */
+
+  /* ---- Line heights ---- */
+  --leading-tight: 1.06;   /* hero headlines */
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;   /* body default */
+  --leading-relaxed: 1.75; /* long-form marketing paragraphs */
+
+  /* ---- Letter spacing ---- */
+  --tracking-tight: -0.02em;   /* headlines */
+  --tracking-normal: 0;
+  --tracking-eyebrow: 0.1em;   /* uppercase nav-group labels */
+  --tracking-wide: 0.14em;     /* overlines */
+  --tracking-wider: 0.2em;     /* marketing eyebrow */
+
+  /* ---- Semantic aliases ---- */
+  --text-body: var(--text-base);
+}

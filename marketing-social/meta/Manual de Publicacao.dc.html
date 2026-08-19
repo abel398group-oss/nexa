@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  doc-page:not(:defined){visibility:hidden}
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #16181D; }
+  h1,h2,h3 { color:#16181D; letter-spacing:-0.02em; }
+  p,li { color:#2A2D34; line-height:1.55; }
+  a { color:#ED4708; }
+  .eyebrow { font-size:11px; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; color:#ED4708; }
+  .lead { font-size:15px; color:#3A3D44; line-height:1.6; }
+  .rule { height:3px; width:56px; background:#FF5A1F; border-radius:3px; border:0; margin:0 0 22px; }
+  h2 { font-size:22px; margin:38px 0 6px; padding-top:20px; border-top:1px solid #EAE4DE; }
+  h2:first-of-type { border-top:0; padding-top:0; }
+  h3 { font-size:15px; margin:20px 0 6px; }
+  p, ul, ol { font-size:13.5px; margin:8px 0; }
+  ul, ol { padding-left:20px; }
+  li { margin:5px 0; }
+  strong { color:#16181D; }
+  code { font-family:'JetBrains Mono',monospace; font-size:12px; background:#F1EBE5; color:#B3400A; padding:2px 6px; border-radius:5px; }
+  .card { background:#FFF3ED; border:1px solid #F3DCCE; border-radius:14px; padding:18px 20px; margin:16px 0; break-inside:avoid; }
+  .card.warn { background:#FEF6EE; border-color:#F7C9A6; }
+  .card .h { font-size:13px; font-weight:800; color:#16181D; margin:0 0 8px; display:flex; align-items:center; gap:8px; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; color:#ED4708; background:#FFE2D1; padding:3px 10px; border-radius:999px; }
+  table.cmp { width:100%; border-collapse:collapse; margin:14px 0; font-size:12.5px; break-inside:avoid; }
+  table.cmp th { text-align:left; background:#16181D; color:#FAFAF9; font-weight:700; padding:11px 12px; font-size:11px; letter-spacing:0.04em; }
+  table.cmp th:first-child { border-radius:8px 0 0 0; }
+  table.cmp th:last-child { border-radius:0 8px 0 0; }
+  table.cmp td { padding:10px 12px; border-bottom:1px solid #EEE7E0; vertical-align:top; color:#2A2D34; }
+  table.cmp tr:last-child td { border-bottom:0; }
+  .chk li { list-style:none; position:relative; padding-left:26px; margin:7px 0; }
+  .chk { padding-left:0; }
+  .chk li:before { content:""; position:absolute; left:0; top:2px; width:16px; height:16px; border-radius:5px; border:2px solid #FF5A1F; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+
+  <div slot="header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 0;">
+    <div style="font-family:'Baloo 2',sans-serif;font-size:17px;letter-spacing:-0.02em;"><span style="color:#16181D;font-weight:600;">Hiper</span><span style="color:#FF5A1F;font-weight:800;">TMS</span></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#9a938b;">Manual de publicação · Redes sociais</div>
+  </div>
+
+  <div slot="footer" style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:10px;color:#a89f96;">
+    <span>HiperTMS — uso interno da equipe de conteúdo</span>
+    <span style="font-family:'JetBrains Mono',monospace;">v1 · 2026</span>
+  </div>
+
+  <div class="eyebrow">Guia rápido da equipe</div>
+  <h1 style="font-size:34px;margin:8px 0 4px;line-height:1.05;">Como publicar no Instagram e no Facebook</h1>
+  <hr class="rule">
+  <p class="lead">Este manual reúne o essencial para postar as artes do HiperTMS com consistência: o que é cada formato, como colocar links (o ponto que mais confunde), como montar o carrossel na ordem certa, legendas, hashtags e um checklist final. Guarde e consulte sempre antes de publicar.</p>
+
+  <div class="card">
+    <div class="h">Antes de tudo — as duas contas</div>
+    <p style="margin:0;">Publicamos em <strong>@hipertms</strong> no Instagram e na <strong>Página HiperTMS</strong> no Facebook. Sempre que possível, agende os dois de uma vez pelo <strong>Meta Business Suite</strong> (business.facebook.com) — ele conecta Página + Instagram no mesmo lugar, permite agendar data/hora e ver as métricas. Evite postar logado na conta pessoal por engano.</p>
+  </div>
+
+  <h2>1. Feed, Reels e Stories — a diferença</h2>
+  <p>São três formatos com papéis diferentes. Nossas artes atuais são de <strong>Feed</strong> (quadradas, 1080×1080). Use a tabela para saber onde cada coisa entra.</p>
+
+  <table class="cmp">
+    <tr><th>Formato</th><th>Como é</th><th>Para que serve</th><th>Dura</th></tr>
+    <tr><td><strong>Feed</strong></td><td>Foto ou carrossel (até 20 imagens). Quadrado 1080×1080 ou retrato 1080×1350.</td><td>Conteúdo principal e permanente: marca, educação, ofertas, depoimentos. É o nosso caso.</td><td>Fica no perfil para sempre</td></tr>
+    <tr><td><strong>Reels</strong></td><td>Vídeo vertical 1080×1920, curto (até 90s).</td><td>Alcance e descoberta — o Instagram entrega Reels para quem ainda não segue. Bom para dicas rápidas em vídeo.</td><td>Permanente, mas some do feed com o tempo</td></tr>
+    <tr><td><strong>Stories</strong></td><td>Foto/vídeo vertical 1080×1920, em tela cheia.</td><td>Bastidores, avisos, enquetes e — importante — <strong>link clicável</strong>. Some em 24h.</td><td>24 horas (salve em Destaques)</td></tr>
+  </table>
+
+  <div class="card">
+    <div class="h">Regra prática</div>
+    <p style="margin:0;">Toda arte quadrada que criamos vai no <strong>Feed</strong>. Quando tivermos vídeo, vira <strong>Reels</strong>. Para divulgar um post novo ou colocar link, use os <strong>Stories</strong>.</p>
+  </div>
+
+  <h2>2. Como postar no Feed</h2>
+  <h3>Post único</h3>
+  <ol>
+    <li>No app do Instagram, toque em <strong>+</strong> → <strong>Publicação</strong>.</li>
+    <li>Selecione a imagem (ex.: <code>02-hero.png</code>). Mantenha em <strong>1:1</strong> — não deixe cortar.</li>
+    <li>Avance, escreva a legenda (já vem pronta no kit), revise e publique.</li>
+  </ol>
+  <h3>Carrossel (o nosso de 6 telas)</h3>
+  <ol>
+    <li>Toque em <strong>+</strong> → <strong>Publicação</strong> → ícone de <strong>múltiplas fotos</strong>.</li>
+    <li>Selecione as 6 imagens <strong>na ordem numerada</strong>: <code>06-carrossel-1</code> → <code>11-carrossel-6</code>. A ordem em que você toca é a ordem que aparece.</li>
+    <li>Confira que a <strong>tela 1</strong> ("Deslize →") é a capa e a <strong>tela 6</strong> (CTA) é a última.</li>
+    <li>Uma única legenda vale para o carrossel inteiro.</li>
+  </ol>
+  <div class="card warn">
+    <div class="h">⚠ Não se assuste com o "1/6"</div>
+    <p style="margin:0;">O Instagram mostra o próprio contador de páginas (1/6, 2/6…) no topo. As nossas artes <strong>já foram feitas sem contador embutido</strong> justamente para não duplicar. Publique como estão.</p>
+  </div>
+
+  <h2>3. Links — leia com atenção</h2>
+  <p>Esse é o ponto que mais gera erro. As regras são diferentes em cada rede:</p>
+
+  <table class="cmp">
+    <tr><th>Onde</th><th>Link clicável?</th><th>O que fazer</th></tr>
+    <tr><td>Legenda de <strong>post/carrossel do Instagram</strong></td><td style="color:#B91C1C;font-weight:700;">Não</td><td>Colar um link na legenda <em>não vira clicável</em>. Escreva "link na bio" e mantenha o link no perfil.</td></tr>
+    <tr><td><strong>Bio do Instagram</strong></td><td style="color:#166534;font-weight:700;">Sim</td><td>Um link no perfil. Se precisar de vários, use uma página agregadora (Linktree/Beacons) ou os <strong>links do perfil</strong> do próprio Instagram (até 5).</td></tr>
+    <tr><td><strong>Stories do Instagram</strong></td><td style="color:#166534;font-weight:700;">Sim</td><td>Use o <strong>adesivo de link</strong> (ícone de elo). Toda conta já tem — não precisa mais de 10 mil seguidores.</td></tr>
+    <tr><td><strong>Post do Facebook</strong></td><td style="color:#166534;font-weight:700;">Sim</td><td>Link na legenda <em>é</em> clicável. Cole o link, espere carregar a pré-visualização e então <strong>apague o texto do link</strong> (a prévia continua) para a legenda ficar limpa.</td></tr>
+  </table>
+
+  <div class="card">
+    <div class="h">Fluxo recomendado ao publicar uma oferta</div>
+    <ol style="margin:0;">
+      <li>Publique a arte no <strong>Feed</strong> (Instagram + Facebook).</li>
+      <li>No Instagram, confirme que o <strong>link da bio</strong> aponta para o destino certo (site, cadastro ou WhatsApp).</li>
+      <li>Poste um <strong>Story</strong> chamando o post novo, com o <strong>adesivo de link</strong> direto para a ação.</li>
+      <li>No Facebook, cole o link na legenda (é clicável).</li>
+    </ol>
+  </div>
+
+  <h3>Link de WhatsApp</h3>
+  <p>Para mandar direto para a conversa, use <code>https://wa.me/5512997880659</code> (código do país 55 + DDD 12 + número, sem espaços nem sinais). Vale na bio, nos Stories e no Facebook.</p>
+
+  <h2>4. Legendas e hashtags</h2>
+  <ul>
+    <li><strong>Use as legendas prontas</strong> do kit — já estão na voz da marca. Revise nome, número e valores antes de publicar.</li>
+    <li>Primeira linha é a mais importante: ela aparece antes do "…mais". Comece pelo gancho.</li>
+    <li><strong>Sem emoji</strong> — a marca não usa. Mantenha o texto limpo e direto.</li>
+    <li>Hashtags: de <strong>3 a 8</strong>, no fim da legenda. Use as do kit (ex.: <code>#transportadora</code> <code>#cotaçãodefrete</code> <code>#frete</code>). Não repita o mesmo bloco gigante em todo post.</li>
+    <li>Chame a ação: "Crie sua conta — link na bio", "Chame no WhatsApp", "Salve este post".</li>
+  </ul>
+
+  <h2>5. Stories e Destaques</h2>
+  <ul>
+    <li>Publique Stories para dar movimento ao perfil: avisar post novo, mostrar a plataforma, responder dúvidas.</li>
+    <li>Salve os Stories importantes em <strong>Destaques</strong> (capinhas fixas na bio): sugestão de organizar em <strong>Cotação</strong>, <strong>Planos</strong>, <strong>Fiscal</strong> e <strong>Fale conosco</strong>.</li>
+    <li>Todo Story de campanha deve ter o <strong>adesivo de link</strong> ou a menção "link na bio".</li>
+  </ul>
+
+  <h2>6. Boas práticas de imagem</h2>
+  <ul>
+    <li>Sempre publique os <strong>PNGs originais</strong> das pastas <em>Criativos Instagram</em> / <em>Criativos Facebook</em> — não tire print nem reduza, para não perder qualidade.</li>
+    <li>A <strong>capa do Facebook</strong> (<code>00-capa-facebook</code>, 1702×630) vai só na Página, em "Editar capa". Não é um post de feed.</li>
+    <li>A <strong>foto de perfil</strong> (<code>01-perfil</code>) é a mesma nas duas redes.</li>
+    <li>Não adicione texto ou molduras por cima das artes; elas já estão fechadas.</li>
+  </ul>
+
+  <h2>7. Ritmo e agendamento</h2>
+  <ul>
+    <li>Estamos abrindo o perfil: mantenha um <strong>lote inicial</strong> saindo de forma constante — sugestão de <strong>3 a 4 posts por semana</strong> + Stories quase diários.</li>
+    <li>Agende tudo no <strong>Meta Business Suite</strong> para não depender de postar na hora.</li>
+    <li>Alterne os tipos: marca → educação → oferta → depoimento, para o perfil não ficar só vendendo.</li>
+  </ul>
+
+  <h2>8. Comentários e mensagens</h2>
+  <ul>
+    <li>Responda comentários e DMs no <strong>mesmo tom da marca</strong>: direto, prestativo, sem jargão.</li>
+    <li>Dúvida comercial vira oportunidade: leve para o <strong>WhatsApp (12) 99788-0659</strong> ou para o cadastro.</li>
+    <li>Não apague crítica — responda com educação e resolva. Só remova spam ou ofensa.</li>
+  </ul>
+
+  <h2>9. Checklist antes de publicar</h2>
+  <ul class="chk">
+    <li>Imagem certa, na proporção certa, sem corte</li>
+    <li>Carrossel na ordem 1 → 6</li>
+    <li>Legenda revisada (nome, valores, sem emoji)</li>
+    <li>Hashtags no fim (3 a 8)</li>
+    <li>Link da bio conferido / adesivo de link no Story</li>
+    <li>No Facebook: link clicável na legenda</li>
+    <li>Publicando na conta certa (@hipertms / Página)</li>
+    <li>Agendado no horário planejado</li>
+  </ul>
+
+</x-import>
+</x-dc>
+</body>
+</html>
