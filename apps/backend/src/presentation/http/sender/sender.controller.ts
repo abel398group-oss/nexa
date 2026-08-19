@@ -38,6 +38,9 @@ class CreateCampaignDto {
   @IsOptional() @IsString() productCode?: string;
   @IsOptional() @IsArray() phones?: { phone: string; name?: string }[];
   @IsOptional() @IsBoolean() fromContacts?: boolean;
+  /// Dispara para os contatos ativos de uma lista importada (19/08/2026). Terceira
+  /// origem de alvos, ao lado de `phones` e `fromContacts`.
+  @IsOptional() @IsString() fromBatchId?: string;
   @IsOptional() @IsString() link?: string;
   // DISP-015: a tela envia `sendLinkOnFirst` junto com o link no WhatsApp (o
   // service já aceitava), mas o campo só existia no DTO de e-mail — e o

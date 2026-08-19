@@ -7,6 +7,7 @@ import { SeletorDeModelo } from '@/components/SeletorDeModelo';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
 import { listContacts, listTags, type TagCount, type Contact } from '@/entities/contact';
+import { listLeadBatches } from '@/entities/lead-batch';
 import {
   type Campaign,
   type SenderNumber,
@@ -78,6 +79,7 @@ const campaignSchema = z
     emailCount: z.number(),
     audience: z.string(),
     audienceTag: z.string(),
+    audienceBatch: z.string(),
     recipientCount: z.number(),
   })
   .superRefine((v, ctx) => {
@@ -88,6 +90,7 @@ const campaignSchema = z
     } else {
       if (!v.template.trim()) ctx.addIssue({ code: 'custom', path: ['message'], message: 'Escreva a mensagem' });
       if (v.audience === 'tag' && !v.audienceTag) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Escolha uma tag' });
+      if (v.audience === 'lista' && !v.audienceBatch) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Escolha a lista de leads' });
       if (v.audience === 'manual' && v.recipientCount === 0) ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Selecione ao menos um contato ou avulso' });
     }
   });
@@ -222,13 +225,26 @@ export function CampaignsPage() {
       .then(setLinhas)
       .catch(() => setLinhas([])); // some o seletor, campanha continua criável
   }, []);
+  // Mesmo tratamento das linhas: falhar aqui esconde a opção "Lista", não impede
+  // criar campanha pelos outros públicos.
+  useEffect(() => {
+    listLeadBatches()
+      .then((b) => setLotes(b.map((l: any) => ({ id: l.id, name: l.name, validCount: l.validCount ?? 0 }))))
+      .catch(() => setLotes([]));
+  }, []);
   const [template, setTemplate] = useState('{{saudacao}}, {{nome}}! Aqui é a Lia do HiperTMS. Posso te apresentar nosso sistema de gestão de fretes?');
   // WhatsApp: default "todos os contatos". Email: default lista manual (fromContacts=false)
   // pois normalmente não há e-mails cadastrados nos contatos ainda
   const [fromContacts, setFromContacts] = useState(true);
-  // público do WhatsApp: todos ativos | por tag | manual
-  const [audience, setAudience] = useState<'todos' | 'tag' | 'manual'>('todos');
+  // público do WhatsApp: todos ativos | lista importada | por tag | manual
+  const [audience, setAudience] = useState<'todos' | 'lista' | 'tag' | 'manual'>('todos');
   const [audienceTag, setAudienceTag] = useState('');
+  /// Lista importada escolhida como público (19/08/2026). Antes, quem importava um CSV
+  /// e passava pela peneira precisava exportar o mesmo arquivo e subir de novo aqui —
+  /// refazendo a peneira do zero. O id vai como `fromBatchId` e o servidor resolve os
+  /// contatos ativos do lote.
+  const [audienceBatch, setAudienceBatch] = useState('');
+  const [lotes, setLotes] = useState<{ id: string; name: string; validCount: number }[]>([]);
   // aba Manual: seletor de contatos + avulsos
   const [manualContacts, setManualContacts] = useState<Contact[]>([]);
   const [manualLoaded, setManualLoaded] = useState(false);
@@ -403,7 +419,7 @@ export function CampaignsPage() {
     setEmailsText(''); setEmailSubject('');
     setChannel('whatsapp'); setCampaignType('message'); setStatusMediaUrl('');
     setFromContacts(true); setEmailLinkMode('upload'); setSendLinkOnFirst(false);
-    setAudience('todos'); setAudienceTag('');
+    setAudience('todos'); setAudienceTag(''); setAudienceBatch('');
     setScheduledAt(''); setSchedEnabled(false); setSchedDayOffset(0); setSchedHour(null); setSchedMinute(0);
     setManualSelected(new Map()); setAvulsos([]); setAvulsoInput(''); setManualSearch(''); setSeedPhones([]);
     setManualLoaded(false); setManualError(false); setManualOpen(false);
@@ -969,7 +985,7 @@ export function CampaignsPage() {
     const recipientCount = manualSelected.size + avulsos.length;
     const check = campaignSchema.safeParse({
       channel, name, template, emailSubject, emailTemplate, fromContacts,
-      emailCount, audience, audienceTag, recipientCount,
+      emailCount, audience, audienceTag, audienceBatch, recipientCount,
     });
     if (!check.success) {
       const errs: Record<string, string> = {};
@@ -1009,6 +1025,11 @@ export function CampaignsPage() {
         if (productCode.trim()) payload.productCode = productCode.trim();
         if (audience === 'todos') {
           payload.fromContacts = true;
+        } else if (audience === 'lista') {
+          // Só o id: quem resolve os contatos é o servidor, que já aplica opt-out e
+          // bloqueio. Mandar os telefones daqui obrigaria a tela a repetir a peneira,
+          // e duas peneiras divergem na primeira regra nova.
+          payload.fromBatchId = audienceBatch;
         } else if (audience === 'tag') {
           const r2 = await listContacts({ tag: audienceTag, limit: 2000 });
           payload.phones = r2.items
@@ -2146,7 +2167,7 @@ export function CampaignsPage() {
                     </div>
                   )}
                   <div className="mb-2 flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
-                    {([['todos', 'Todos ativos'], ['tag', 'Por tag'], ['manual', 'Manual']] as const).map(([k, label]) => (
+                    {([['todos', 'Todos ativos'], ['lista', 'Lista'], ['tag', 'Por tag'], ['manual', 'Manual']] as const).map(([k, label]) => (
                       <button
                         key={k}
                         type="button"
@@ -2159,6 +2180,40 @@ export function CampaignsPage() {
                       </button>
                     ))}
                   </div>
+
+                  {audience === 'lista' && (
+                    <div>
+                      {lotes.length === 0 ? (
+                        <p className="text-sm text-base-content/60">
+                          Nenhuma lista importada ainda. Suba um CSV em{' '}
+                          <Link to="/lead-batches" className="text-brand-600 hover:underline">
+                            Listas de Leads
+                          </Link>{' '}
+                          — lá a peneira tira duplicado, inválido, opt-out e quem já é cliente.
+                        </p>
+                      ) : (
+                        <>
+                          <select
+                            className="input w-full text-sm"
+                            value={audienceBatch}
+                            onChange={(e) => setAudienceBatch(e.target.value)}
+                          >
+                            <option value="">Escolha a lista…</option>
+                            {lotes.map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {l.name} · {l.validCount} lead(s)
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-base-content/50">
+                            Dispara para os contatos ativos da lista. Quem virou cliente, pediu
+                            opt-out ou foi bloqueado desde a importação fica de fora — a contagem
+                            final pode ser menor que a da lista.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {audience === 'tag' && (
                     <div>

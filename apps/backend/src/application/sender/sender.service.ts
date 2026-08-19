@@ -31,8 +31,10 @@ const DELAY_MIN_MS = Number(process.env.SENDER_DELAY_MIN_MS ?? 30000);
 const DELAY_MAX_MS = Number(process.env.SENDER_DELAY_MAX_MS ?? 90000);
 // Validade do veredito de saúde de engajamento (a query varre 24h de alvos).
 const HEALTH_CACHE_MS = 10 * 60_000;
-// limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce
-const WARMUP_DAILY = [10, 15, 20, 30];
+// limite diário efetivo por fase de aquecimento (G7) — número novo começa baixo e cresce.
+// Exportado para `SenderWarmupService`, que é quem faz o número SUBIR de degrau: aqui
+// a escada só é lida para decidir o teto do dia.
+export const WARMUP_DAILY = [10, 15, 20, 30];
 
 /**
  * Espelho dos defaults de `SenderNumber` no schema. Usado para descrever uma linha
@@ -394,6 +396,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     dto: {
       name: string; template: string; type?: string; productCode?: string;
       phones?: { phone: string; name?: string }[]; fromContacts?: boolean;
+      /**
+       * Dispara para os contatos de UM LOTE (19/08/2026).
+       *
+       * Terceira origem de alvos, ao lado de `phones` (telefone avulso) e
+       * `fromContacts` (base inteira). Existe porque o caminho do meio faltava: quem
+       * importava um CSV, peneirava e distribuía não tinha como dizer "manda para
+       * esta lista" — exportava o mesmo CSV e subia de novo aqui, refazendo a peneira.
+       */
+      fromBatchId?: string;
       link?: string; sendLinkOnFirst?: boolean;
       mediaUrl?: string; mediaName?: string; sendLimit?: number; scheduledAt?: string;
       /** Vendedor dono. Vem do token quando quem cria é vendedor. */
@@ -440,6 +451,30 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         select: { phone: true, name: true },
       });
       targets = contacts.map((c: any) => ({ phone: c.phone, name: c.name ?? undefined }));
+    } else if (dto.fromBatchId) {
+      // O lote é do tenant — checado no `where`, não confiado no parâmetro: sem isso
+      // bastava mandar o id de um lote alheio para disparar para a lista de outro.
+      const lote = await this.prisma.leadBatch.findFirst({
+        where: { id: dto.fromBatchId, tenantId },
+        select: { id: true, name: true },
+      });
+      if (!lote) throw new BadRequestException('Lista de leads não encontrada.');
+
+      const contacts = await this.prisma.contact.findMany({
+        where: { tenantId, batchId: lote.id, status: 'active' }, // opted_out fora (LGPD)
+        select: { phone: true, name: true },
+      });
+      if (!contacts.length) {
+        // Mensagem específica: "0 alvos" numa lista que a tela mostra com 500 leads
+        // manda o operador procurar defeito no disparo, e o motivo é a peneira —
+        // todos viraram cliente, opt-out ou bloqueado desde a importação.
+        throw new BadRequestException(
+          `A lista "${lote.name}" não tem nenhum contato ativo — todos saíram por opt-out, ` +
+            `bloqueio ou por já serem clientes.`,
+        );
+      }
+      targets = contacts.map((c: any) => ({ phone: c.phone, name: c.name ?? undefined }));
+      this.logger.log(`Campanha "${dto.name}": ${targets.length} alvo(s) da lista "${lote.name}"`);
     }
     // dedup por telefone
     const seen = new Set<string>();
@@ -647,9 +682,13 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
         mediaUrl: dto.mediaUrl || null,
         mediaName: dto.mediaName || null,
-        // Dono do disparo. A conversa que nascer daqui herda este vendedor —
-        // sem isso a resposta do lead cai sem dono e os três a enxergam.
+        // Dono do disparo. A conversa que nascer daqui herda este vendedor quando o
+        // CONTATO ainda não tem dono — a distribuição do lote vem primeiro (ver
+        // `dispatchOneTarget`).
         ownerSellerId,
+        // De qual lista esta campanha saiu. É o que liga o passo 4 ao 5 e permite
+        // depois perguntar quanto uma lista comprada realmente rendeu.
+        batchId: dto.fromBatchId || null,
         sendLimit: dto.sendLimit && dto.sendLimit > 0 ? dto.sendLimit : null,
         // agendada já entra como running; o worker só dispara a partir de scheduledAt
         scheduledAt,
@@ -1478,8 +1517,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             phone: target.phone,
             sourceChannel: 'whatsapp',
             productCode: (campaign as any).productCode ?? undefined,
-            // Quem disparou é quem atende a resposta (11/08/2026).
-            assignedSellerId: (campaign as any).ownerSellerId ?? undefined,
+            // Quem disparou é quem atende a resposta (11/08/2026) — MAS o dono do
+            // contato vem primeiro (19/08/2026).
+            //
+            // A importação do lote distribui os leads entre os vendedores por rodízio
+            // e grava em `Contact.ownerSellerId`. Ler só o dono da CAMPANHA apagava
+            // essa distribuição inteira no primeiro disparo: uma campanha criada pelo
+            // admin (sem dono) fazia toda resposta nascer órfã, e uma criada por um
+            // vendedor puxava para ele os leads que o rodízio tinha dado aos outros.
+            // O trabalho do passo 4 durava até o passo 5 e morria ali.
+            assignedSellerId:
+              (contact as any).ownerSellerId ?? (campaign as any).ownerSellerId ?? undefined,
             // A conversa nasce na linha da campanha e a resposta (inclusive
             // follow-up) sai por ela pra sempre — ver o invariante em
             // ConversationsService.addMessage.
