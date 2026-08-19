@@ -13,6 +13,11 @@ const brl = (v: number) =>
 
 const cidade = (c: CidadeDoTms) => `${c.name}/${c.state}`;
 
+/// A operação é brasileira. Mesmo motivo do fuso fixo em `closer-today.ts`: o container
+/// roda em UTC, e formatar no fuso do servidor mostraria a data errada por algumas horas
+/// todo dia.
+const FUSO_DA_OPERACAO = 'America/Sao_Paulo';
+
 /**
  * Eco da resposta anterior.
  *
@@ -162,25 +167,41 @@ export interface ResultadoDaCotacao {
   valor: number;
   pisoAntt?: number | null;
   rascunhoId?: string | null;
-  /// ISO-8601 do TMS. Ver `validadeEmDiaMes` — NÃO converter para fuso nenhum.
+  /// ISO-8601 do TMS. Ver `validadeEmDiaMes` — instante e data pura são tratados diferente.
   validoAte?: string | null;
 }
 
 /**
- * Validade em dia/mês, lida DIRETO dos dígitos do ISO.
+ * Validade em dia/mês. Depende de o valor ser um INSTANTE ou uma DATA — e são coisas
+ * diferentes, que erram para lados opostos se tratadas igual.
  *
- * Não converte fuso, e isso é o ponto: o TMS manda `2026-09-03T00:00:00.000Z`, e
- * `toLocaleDateString` em America/Sao_Paulo devolve **02/09** — meia-noite UTC é 21h do
- * dia anterior em Brasília. A proposta impressa diz 03/09, e a mensagem diria 02/09.
+ * O TMS calcula `validUntil` como o momento da criação mais N dias, então ele carrega
+ * hora: `2026-09-03T13:19:00.000Z`. Isso é instante, e instante se formata no fuso de
+ * quem lê. Ler os dígitos UTC crus erraria na janela das 21h à meia-noite de Brasília,
+ * quando o dia em UTC já virou: uma cotação das 22h mostraria 04/09 aqui e 03/09 na tela
+ * do TMS, que usa o fuso do navegador.
+ *
+ * Já uma data SEM hora (`2026-09-03`) é data de calendário. Aí `new Date()` a interpreta
+ * como meia-noite UTC, e converter para Brasília devolveria 02/09 — o erro inverso. Essa
+ * se lê pelos dígitos.
  *
  * Um dia a menos numa validade é o cliente cobrando um preço que o sistema já considera
- * vencido. Validade é data de CALENDÁRIO, não instante no tempo — e data de calendário
- * não se converte.
+ * vencido, com a mensagem na mão dizendo que estava válido. É a mesma armadilha que o
+ * `formatToBrazilianDate` do TMS resolve acrescentando meio-dia às datas sem hora.
  */
 export function validadeEmDiaMes(iso: string | null | undefined): string | null {
   if (typeof iso !== 'string') return null;
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}` : null;
+
+  const soData = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (soData) return `${soData[3]}/${soData[2]}`;
+
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  // `en-GB` para sair dd/mm; `pt-BR` traria o ano junto e o corte por índice quebraria
+  // no dia que o formato mudasse.
+  return d
+    .toLocaleDateString('en-GB', { timeZone: FUSO_DA_OPERACAO, day: '2-digit', month: '2-digit' })
+    .replace(/-/g, '/');
 }
 
 /**

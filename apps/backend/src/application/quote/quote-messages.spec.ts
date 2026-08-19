@@ -149,21 +149,29 @@ describe('validade', () => {
     valorMercadoria: 10000,
   };
 
-  it('A ARMADILHA DO FUSO: 03/09 continua 03/09', () => {
-    // O TMS manda meia-noite UTC. Converter para America/Sao_Paulo devolveria 02/09,
-    // porque 00:00Z e 21:00 do dia anterior em Brasilia. Um dia a menos numa validade
-    // e o cliente cobrando um preco que o sistema ja considera vencido.
-    expect(validadeEmDiaMes('2026-09-03T00:00:00.000Z')).toBe('03/09');
+  it('instante normal: mostra o dia de Brasilia', () => {
+    // O TMS calcula validUntil como o momento da criacao + N dias, entao carrega hora.
+    expect(validadeEmDiaMes('2026-09-03T13:19:00.000Z')).toBe('03/09');
+  });
+
+  it('A JANELA DAS 22H: instante que ja virou o dia em UTC', () => {
+    // Cotacao criada 19/08 as 22h BRT -> validUntil 04/09 01:00 UTC = 03/09 22:00 aqui.
+    // Ler os digitos UTC crus mostraria 04/09; a tela do TMS mostra 03/09.
+    expect(validadeEmDiaMes('2026-09-04T01:00:00.000Z')).toBe('03/09');
+  });
+
+  it('data PURA se le pelos digitos — converter daria o dia anterior', () => {
+    // Sem hora, new Date() interpreta como meia-noite UTC, e Brasilia devolveria 02/09.
+    expect(validadeEmDiaMes('2026-09-03')).toBe('03/09');
   });
 
   it('a mensagem mostra a validade quando o TMS manda', () => {
-    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749', validoAte: '2026-09-03T00:00:00.000Z' });
+    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749', validoAte: '2026-09-03T13:19:00.000Z' });
     expect(t).toContain('Válida até *03/09*');
   });
 
   it('sem validade, nao inventa data nem imprime linha vazia', () => {
-    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749' });
-    expect(t).not.toContain('Válida até');
+    expect(resultado(pronto, { valor: 176.1, rascunhoId: '017749' })).not.toContain('Válida até');
   });
 
   it('lixo no lugar da data devolve null em vez de data torta', () => {
