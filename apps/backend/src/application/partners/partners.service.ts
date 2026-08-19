@@ -36,7 +36,19 @@ export class PartnersService {
 
   async setActive(tenantId: string, id: string, active: boolean) {
     await this.findOne(tenantId, id);
-    return (this.prisma as any).partner.update({ where: { id }, data: { active } });
+    const partner = await (this.prisma as any).partner.update({ where: { id }, data: { active } });
+
+    // Desativar o parceiro NÃO suspende os mercados dele — suspender é decisão de
+    // operação, não efeito colateral de um toggle. Mas quem clicou precisa saber
+    // que as campanhas desses mercados continuam disparando com a marca dele:
+    // devolve a contagem para a tela avisar.
+    if (!active) {
+      const activeMarkets = await (this.prisma as any).product.count({
+        where: { partnerId: id, status: 'active' },
+      });
+      return { ...partner, activeMarkets };
+    }
+    return partner;
   }
 
   /**
@@ -58,6 +70,17 @@ export class PartnersService {
    */
   async remove(tenantId: string, id: string) {
     const parceiro = await this.findOne(tenantId, id);
+
+    // Mesma lógica do bloqueio por indicação: a FK é SetNull, então apagar
+    // FUNCIONARIA — e o mercado viraria "da casa" em silêncio, perdendo de quem
+    // é. Quem quer apagar o parceiro desvincula o mercado antes, de propósito.
+    const mercados = await (this.prisma as any).product.count({ where: { partnerId: id } });
+    if (mercados > 0) {
+      throw new ConflictException(
+        `"${parceiro.name}" é dono de ${mercados} mercado(s). ` +
+          'Desvincule o parceiro na tela de Mercados antes de excluí-lo — ou apenas desative-o.',
+      );
+    }
 
     const indicacoes = await (this.prisma as any).opportunity.count({
       where: { tenantId, sharedWithPartnerId: id },

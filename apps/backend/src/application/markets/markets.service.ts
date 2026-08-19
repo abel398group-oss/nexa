@@ -24,7 +24,12 @@ export class MarketsService {
    * pode aparecer no seletor do disparo, senão a trava não serve para nada.
    */
   async list(tenantId: string, opts: { somenteLiberados?: boolean } = {}) {
-    const markets = await this.prisma.product.findMany({ orderBy: { name: 'asc' } });
+    const markets = await (this.prisma as any).product.findMany({
+      orderBy: { name: 'asc' },
+      // De quem é cada mercado — a tela mostra o nome ao lado do status. `active`
+      // vai junto: mercado de parceiro desativado merece um aviso, não silêncio.
+      include: { partner: { select: { id: true, name: true, active: true } } },
+    });
     const visiveis = opts.somenteLiberados ? markets.filter((m: any) => m.status === 'active') : markets;
 
     return Promise.all(
@@ -78,7 +83,7 @@ export class MarketsService {
    * tenant). O parâmetro entra só para manter a assinatura dos outros métodos.
    */
   async create(
-    _tenantId: string,
+    tenantId: string,
     dto: {
       name: string;
       slug: string;
@@ -87,10 +92,17 @@ export class MarketsService {
       brandTagline?: string;
       brandColor?: string;
       signupUrl?: string;
+      /** De quem é o mercado. Vazio = mercado da casa. */
+      partnerId?: string;
     },
   ) {
     const code = dto.slug.trim().toLowerCase();
     const name = dto.name.trim();
+
+    // O parceiro é do TENANT (products é global, partners não): validar aqui é o
+    // que impede gravar id de parceiro alheio — e um id inexistente estouraria a
+    // FK como P2003, que sem tratamento vira 500 na cara de quem clicou.
+    if (dto.partnerId) await this.validarParceiro(tenantId, dto.partnerId);
 
     // Checagem explícita antes do insert: o unique de `code` devolveria P2002, que sem
     // tratamento vira 500 — e quem clicou precisa saber que o identificador já é de
@@ -105,12 +117,13 @@ export class MarketsService {
       );
     }
 
-    const market = await this.prisma.product.create({
+    const market = await (this.prisma as any).product.create({
       data: {
         code,
         name,
         connector: 'none',
         status: 'draft',
+        partnerId: dto.partnerId || null,
         // A identidade vem do formulário quando preenchida; senão cai no nome do
         // mercado, para o primeiro disparo não sair com a marca do HiperTMS na cara
         // do lead de outro parceiro (email-market-identity.ts). Editável depois.
@@ -241,7 +254,7 @@ export class MarketsService {
    * `undefined` e `null` importa aqui.
    */
   async updateIdentidade(
-    _tenantId: string,
+    tenantId: string,
     code: string,
     dto: {
       name?: string;
@@ -250,14 +263,20 @@ export class MarketsService {
       brandTagline?: string | null;
       brandColor?: string | null;
       signupUrl?: string | null;
+      /** `null`/vazio = volta a ser mercado da casa. */
+      partnerId?: string | null;
     },
   ) {
     const market = await this.prisma.product.findUnique({ where: { code } });
     if (!market) throw new NotFoundException('Mercado não encontrado');
 
+    // Parceiro passa pela mesma validação da criação — editar não pode ser a
+    // porta dos fundos para gravar um id de outro tenant.
+    if (dto.partnerId) await this.validarParceiro(tenantId, dto.partnerId);
+
     // Só o que veio no corpo entra no update — `undefined` é "não mexe".
     const data: Record<string, unknown> = {};
-    for (const campo of ['name', 'displayName', 'senderName', 'brandTagline', 'brandColor', 'signupUrl'] as const) {
+    for (const campo of ['name', 'displayName', 'senderName', 'brandTagline', 'brandColor', 'signupUrl', 'partnerId'] as const) {
       if (dto[campo] !== undefined) {
         const v = dto[campo];
         // String vazia vira NULL: o gate lê `!!displayName`, e `''` passaria por
@@ -270,6 +289,20 @@ export class MarketsService {
     const atualizado = await this.prisma.product.update({ where: { code }, data: data as any });
     this.logger.log(`Mercado ${code}: identidade atualizada (${Object.keys(data).join(', ')})`);
     return atualizado;
+  }
+
+  /** O parceiro existe, é deste tenant e está ativo — senão recusa com o motivo. */
+  private async validarParceiro(tenantId: string, partnerId: string) {
+    const partner = await (this.prisma as any).partner.findFirst({
+      where: { id: partnerId, tenantId },
+      select: { name: true, active: true },
+    });
+    if (!partner) throw new BadRequestException('Parceiro não encontrado.');
+    if (!partner.active) {
+      throw new BadRequestException(
+        `O parceiro "${partner.name}" está desativado. Reative-o antes de vincular um mercado a ele.`,
+      );
+    }
   }
 
   /**

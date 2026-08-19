@@ -448,6 +448,16 @@ export function MarketsPage() {
                   </div>
                   <div className="truncate text-xs text-base-content/50">
                     {m.code}
+                    {/* De quem é o mercado. Parceiro desativado fica em âmbar: as
+                        campanhas dele continuam saindo com a marca de uma empresa
+                        que alguém tirou do ar — quem olha a lista precisa ver. */}
+                    {m.partner && (
+                      <span className={m.partner.active ? '' : 'text-amber-600 dark:text-amber-400'}>
+                        {' · '}
+                        {m.partner.name}
+                        {!m.partner.active && ' (parceiro desativado)'}
+                      </span>
+                    )}
                     {m.releasedAt && ` · no ar desde ${new Date(m.releasedAt).toLocaleDateString('pt-BR')}`}
                   </div>
                   {m.readiness?.counts && <ResumoDoMercado c={m.readiness.counts} />}

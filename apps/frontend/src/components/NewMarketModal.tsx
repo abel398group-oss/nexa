@@ -129,6 +129,10 @@ export function NewMarketModal({ open, onClose }: NewMarketModalProps) {
       createMarket({
         name: f.nome.trim(),
         slug: slug.trim(),
+        // O vínculo de verdade, não só o preenchimento: até 19/08/2026 o seletor
+        // preenchia nome/slug e o parceiro escolhido era descartado no envio —
+        // nenhum mercado sabia de quem era.
+        ...(parceiro && parceiro !== 'outro' && { partnerId: parceiro }),
         // Campo vazio não entra no corpo: o DTO valida FORMATO, e mandar `''` em
         // `brandColor` reprovaria a criação inteira por causa de um campo opcional.
         ...(f.displayName.trim() && { displayName: f.displayName.trim() }),

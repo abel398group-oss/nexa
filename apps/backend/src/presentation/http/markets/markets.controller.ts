@@ -60,6 +60,13 @@ class CreateMarketDto {
   @Matches(/^https?:\/\/.+/, { message: 'O link de cadastro deve começar com http:// ou https://.' })
   @MaxLength(300)
   signupUrl?: string;
+
+  /// De quem é o mercado. Vazio = mercado da casa (HiperTMS). O service valida
+  /// que o parceiro é do tenant e está ativo.
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  partnerId?: string;
 }
 
 /**
@@ -111,6 +118,13 @@ class UpdateMarketDto {
   @Matches(/^https?:\/\/.+/, { message: 'O link de cadastro deve começar com http:// ou https://.' })
   @MaxLength(300)
   signupUrl?: string | null;
+
+  /// `null`/vazio = volta a ser mercado da casa. Não-nulo passa pela mesma
+  /// validação da criação no service.
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  partnerId?: string | null;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

@@ -605,8 +605,18 @@ model Product {
   senderName    String?   @map("sender_name")    // nome no "De:" do e-mail
   releasedAt    DateTime? @map("released_at")
 
+  // ── De quem é este mercado (19/08/2026) ─────────────────────────────────────
+  // NULL = mercado da casa (HiperTMS). Sem este vínculo não dava para responder
+  // "quais mercados são do parceiro X?" nem rastrear o que a campanha dele rendeu —
+  // campanha→mercado existe via productCode, mercado→parceiro não existia.
+  // SetNull: apagar o parceiro (só permitido sem histórico de indicação) não pode
+  // derrubar o mercado junto.
+  partnerId String?  @map("partner_id")
+  partner   Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
   credentials ProductConnectorCredential[]
 
+  @@index([partnerId])
   @@map("products")
 }
 
@@ -1292,6 +1302,7 @@ model Partner {
   createdAt    DateTime @default(now()) @map("created_at")
 
   sharedLeads  Opportunity[]
+  markets      Product[]
 
   @@index([tenantId])
   @@map("partners")

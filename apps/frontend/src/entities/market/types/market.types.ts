@@ -52,6 +52,10 @@ export interface Market {
   signupUrl: string | null;
   senderName: string | null;
   releasedAt: string | null;
+  /** De quem é o mercado. `null` = mercado da casa (HiperTMS). */
+  partnerId: string | null;
+  /** Vem no include da listagem; `active` avisa quando o dono foi desativado. */
+  partner?: { id: string; name: string; active: boolean } | null;
   /** Ausente na listagem do vendedor (`?liberados=true`). */
   readiness?: MarketReadiness;
 }

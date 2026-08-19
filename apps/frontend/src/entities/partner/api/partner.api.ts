@@ -19,8 +19,14 @@ export async function updatePartner(id: string, input: PartnerInput): Promise<Pa
   return r.data;
 }
 
-export async function togglePartnerActive(id: string, active: boolean): Promise<void> {
-  await api.patch(`/partners/${id}/active`, { active });
+/**
+ * Ao DESATIVAR, o backend devolve `activeMarkets`: quantos mercados liberados o
+ * parceiro ainda tem. Desativar não suspende os mercados — a tela avisa que as
+ * campanhas deles continuam saindo com a marca dele.
+ */
+export async function togglePartnerActive(id: string, active: boolean): Promise<{ activeMarkets?: number }> {
+  const r = await api.patch(`/partners/${id}/active`, { active });
+  return r.data;
 }
 
 /**

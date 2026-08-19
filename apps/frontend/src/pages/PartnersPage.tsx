@@ -118,8 +118,16 @@ export function PartnersPage() {
 
   async function toggle(p: Partner) {
     try {
-      await togglePartnerActive(p.id, !p.active);
+      const r = await togglePartnerActive(p.id, !p.active);
       toast.success(p.active ? `${p.name} desativado.` : `${p.name} reativado.`);
+      // Desativar o parceiro não suspende os mercados dele — e quem clicou
+      // precisa saber que as campanhas continuam saindo com a marca dele.
+      if (p.active && (r.activeMarkets ?? 0) > 0) {
+        toast.info(
+          `${p.name} ainda tem ${r.activeMarkets} mercado(s) liberado(s) — as campanhas deles ` +
+            'continuam disparando. Suspenda-os em Mercados se for o caso.',
+        );
+      }
       await invalidate();
     } catch {
       toast.error('Erro ao alterar status.');

@@ -8,6 +8,7 @@ function makePrisma() {
       findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(),
     },
     opportunity: { count: vi.fn().mockResolvedValue(0) },
+    product: { count: vi.fn().mockResolvedValue(0) },
   } as any;
 }
 
@@ -45,6 +46,30 @@ describe('PartnersService', () => {
     prisma.partner.update.mockResolvedValue({ id: 'p1', active: false });
     await svc.setActive('t1', 'p1', false);
     expect(prisma.partner.update.mock.calls[0][0]).toMatchObject({ where: { id: 'p1' }, data: { active: false } });
+  });
+
+  // Desativar NÃO suspende os mercados do parceiro — mas quem clicou precisa
+  // saber quantos continuam disparando com a marca dele. A contagem só existe
+  // na desativação: reativar não tem nada a avisar.
+  it('setActive(false): devolve quantos mercados liberados o parceiro ainda tem', async () => {
+    prisma.partner.findFirst.mockResolvedValue({ id: 'p1', tenantId: 't1' });
+    prisma.partner.update.mockResolvedValue({ id: 'p1', active: false });
+    prisma.product.count.mockResolvedValue(2);
+
+    const r: any = await svc.setActive('t1', 'p1', false);
+    expect(r.activeMarkets).toBe(2);
+    expect(prisma.product.count).toHaveBeenCalledWith({
+      where: { partnerId: 'p1', status: 'active' },
+    });
+  });
+
+  it('setActive(true): não conta mercado — reativar não tem aviso', async () => {
+    prisma.partner.findFirst.mockResolvedValue({ id: 'p1', tenantId: 't1' });
+    prisma.partner.update.mockResolvedValue({ id: 'p1', active: true });
+
+    const r: any = await svc.setActive('t1', 'p1', true);
+    expect(r.activeMarkets).toBeUndefined();
+    expect(prisma.product.count).not.toHaveBeenCalled();
   });
 });
 
@@ -107,5 +132,17 @@ describe('PartnersService.remove', () => {
     expect(prisma.opportunity.count).toHaveBeenCalledWith({
       where: { tenantId: 't1', sharedWithPartnerId: 'p1' },
     });
+  });
+
+  // A FK de products é SetNull: apagar FUNCIONARIA, e o mercado viraria "da
+  // casa" em silêncio — perderia de quem é. A recusa manda desvincular antes.
+  it('parceiro dono de mercado: recusa e manda desvincular', async () => {
+    prisma.product.count.mockResolvedValue(1);
+
+    const erro: any = await svc.remove('t1', 'p1').catch((e) => e);
+    expect(erro).toBeInstanceOf(ConflictException);
+    expect(erro.message).toContain('Pneus Silva');
+    expect(erro.message).toContain('mercado');
+    expect(prisma.partner.delete).not.toHaveBeenCalled();
   });
 });

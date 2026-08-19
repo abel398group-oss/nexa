@@ -72,6 +72,8 @@ export async function createMarket(data: {
   brandTagline?: string;
   brandColor?: string;
   signupUrl?: string;
+  /** De quem é o mercado. Ausente = mercado da casa. */
+  partnerId?: string;
 }): Promise<Market> {
   const r = await api.post('/markets', data);
   return r.data;
@@ -89,7 +91,7 @@ export async function createMarket(data: {
  */
 export async function updateMarket(
   code: string,
-  dto: Partial<Pick<Market, 'name' | 'displayName' | 'senderName' | 'brandTagline' | 'brandColor' | 'signupUrl'>>,
+  dto: Partial<Pick<Market, 'name' | 'displayName' | 'senderName' | 'brandTagline' | 'brandColor' | 'signupUrl' | 'partnerId'>>,
 ): Promise<Market> {
   const r = await api.patch(`/markets/${code}`, dto);
   return r.data;
