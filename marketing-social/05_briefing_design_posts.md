@@ -2,6 +2,8 @@
 
 Especificações para montar as peças no design (Figma/Canva). Cada peça tem o texto exato, a hierarquia e as cores. Os arquivos `*.png` desta pasta servem como **referência visual** — este documento é a fonte da verdade do conteúdo.
 
+> **⚠️ Reposicionamento (agosto/2026):** nenhuma peça pública leva **preço** nem promessa de "5 minutos / sem implantação / conta grátis". CTA padrão: **"Fale com um especialista"**. As artes antigas com preço (`post8_planos.png`) e com "5 minutos" (`02_capa_facebook.png`, `post1_boas-vindas.png`, `carrossel_6.png`) precisam ser regeradas conforme as seções abaixo.
+
 ---
 
 ## 0. Especificações gerais (tokens)
@@ -64,7 +66,7 @@ Especificações para montar as peças no design (Figma/Canva). Cada peça tem o
 - **Conteúdo centralizado** (deixe o canto inferior esquerdo livre — a foto de perfil sobrepõe):
   1. Wordmark **HiperTMS** (Hiper off-white + TMS laranja), centralizado no topo do bloco.
   2. Título: **"O TMS feito para vender frete"** — off-white, bold.
-  3. Subtítulo: **"Cadastrou, cotou em 5 minutos."** — laranja claro `#FF6A33`, bold.
+  3. Subtítulo: **"A tabela do Brasil inteiro, pronta."** — laranja claro `#FF6A33`, bold.
   4. Filete laranja curto (~300 px) abaixo, centralizado.
 - **Referência:** `02_capa_facebook.png`.
 
@@ -90,7 +92,7 @@ Especificações para montar as peças no design (Figma/Canva). Cada peça tem o
 - **Elementos (alinhados à esquerda, margem 70 px):**
   1. Wordmark **HiperTMS** no topo.
   2. Badge vazado laranja: **"FORÇA 1 · COTAÇÃO"**.
-  3. Título em três linhas: **"Todo o Brasil"** (grafite) / **"precificado"** (grafite) / **"em 5 minutos"** (laranja).
+  3. Título em três linhas: **"Todo o Brasil"** (grafite) / **"precificado, desde"** (grafite) / **"o primeiro dia"** (laranja).
   4. Corpo (cinza `#3A3D44`): "+5.500 municípios já vêm com tabela pronta, criada pelo nosso time de precificação. Qualquer cidade para qualquer cidade — e você ajusta preço ou desconto em segundos."
   5. Botão pílula laranja, texto branco: **"Calcule grátis"**.
 - **Referência:** `forca1_cotacao.png`.
@@ -132,7 +134,7 @@ Legendas completas (para o campo de texto do post) estão em `01_pagina_facebook
 
 - Wordmark **HiperTMS** centralizado no topo.
 - Título: **"O TMS feito para"** (off-white) / **"vender frete"** (laranja).
-- Subtítulo (cinza mudo): "Cadastrou, cotou. Comece a vender frete em 5 minutos."
+- Subtítulo (cinza mudo): "A tabela do Brasil inteiro já vem pronta. Você só vende."
 - Botão laranja: **"Siga a página"**.
 - Rodapé: **"hipertms.com.br"**.
 - **Referência:** `post1_boas-vindas.png`.
@@ -154,15 +156,26 @@ Legendas completas (para o campo de texto do post) estão em `01_pagina_facebook
 - Rodapé cinza: "Calculadora aberta · link na bio".
 - **Referência:** `post5_calculadora.png`.
 
-### Post 8 — Planos e preço (fundo grafite)
+### Post 8 — Proatividade / faturamento semi-automático (fundo grafite)
+
+_Substitui a antiga arte de planos e preço (`post8_planos.png`) — preço não aparece mais em peça pública._
 
 - Wordmark no topo.
-- Título centralizado: **"Preço de PME,"** (off-white) / **"sem taxa de implantação"** (laranja claro).
-- Três faixas de plano (retângulos arredondados), nome à esquerda e preço à direita:
-  - **Básico** — R$ 89 /mês (faixa painel escuro).
-  - **Essencial** — R$ 299 /mês · mais escolhido (faixa **laranja**, texto grafite — plano destacado).
-  - **Profissional** — R$ 599 /mês (faixa painel escuro).
-- **Referência:** `post8_planos.png`.
+- Título centralizado: **"O escritório que"** (off-white) / **"trabalha sozinho"** (laranja claro).
+- Corpo (cinza mudo): "O módulo de proatividade acompanha as viagens e prepara o faturamento de forma semi-automática. E a Lia cota pelo WhatsApp com seu cliente."
+- Três chips (painel `#23262E`, texto off-white): **"Faturamento semi-automático"**, **"Contratos por cliente"**, **"Lia no WhatsApp"**.
+- Botão laranja: **"Fale com um especialista"**.
+- **Referência:** gerar nova arte (a `post8_planos.png` foi aposentada).
+
+### Post 9 — Inteligência de precificação (fundo grafite)
+
+- Wordmark no topo.
+- Badge vazado laranja: **"INTELIGÊNCIA DE PRECIFICAÇÃO"**.
+- Título centralizado: **"Quem atualiza sua tabela"** (off-white) / **"quando o diesel sobe?"** (laranja claro) / **"A gente."** (off-white, linha isolada).
+- Corpo (cinza mudo): "Nosso time acompanha as métricas do mercado e mantém a sua tabela de frete viva, dentro do sistema. Sua margem, suas regras — a base, a gente mantém certa."
+- Três chips (painel `#23262E`, texto off-white): **"Custos e insumos"**, **"Pedágio"**, **"Piso ANTT"**.
+- Botão laranja: **"Fale com um especialista"**.
+- **Referência:** gerar nova arte.
 
 ---
 
@@ -176,8 +189,8 @@ Sequência do lançamento. Todas com wordmark **HiperTMS** no topo à esquerda e
 | 2 | Grafite | "O HiperTMS é o primeiro feito para **VENDER frete**." | — |
 | 3 | Creme | "Montar tabela de preço trava a PME: cidade por cidade, região por região." | corpo em cinza |
 | 4 | Grafite | "No HiperTMS, **+5.500 municípios já vêm precificados**." | linha de apoio: "Qualquer cidade para qualquer cidade." |
-| 5 | Grafite | "Não é só software. **É uma comunidade de especialistas por você**." | apoio: "Precificação, frota e financeiro: tarefas terceirizadas via sistema." |
-| 6 | **Laranja** | "Em 5 minutos, todo o Brasil precificado." (última linha off-white) | monograma "H" no topo + botão grafite **"Criar conta grátis"** + "hipertms.com.br · link na bio" |
+| 5 | Grafite | "Não é só software. **É um time de precificação trabalhando pela sua tabela**." | apoio: "Inteligência de precificação: o mercado muda, sua tabela acompanha." |
+| 6 | **Laranja** | "Todo o Brasil precificado, desde o primeiro dia." (última linha off-white) | monograma "H" no topo + botão grafite **"Fale com um especialista"** + "hipertms.com.br · link na bio" |
 
 - **Referência:** `carrossel_1.png` … `carrossel_6.png`.
 

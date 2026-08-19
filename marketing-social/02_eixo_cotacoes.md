@@ -1,9 +1,11 @@
 # HiperTMS — Eixo de Cotações
 
 **Mensagens-chave, as 3 forças e roteiro do carrossel**
-_O TMS feito para vender frete · Junho de 2026_
+_O TMS feito para vender frete · Junho de 2026 · Revisado em agosto de 2026 (reposicionamento comercial)_
 
-> **A virada de mensagem em uma frase.** Quase todo sistema para transportadora é, no fundo, um **emissor de documento fiscal**. O HiperTMS é o primeiro feito para o transportador **VENDER** — e por trás não é só software: é uma **comunidade de especialistas** que cria os parâmetros e assume tarefas pelo próprio sistema.
+> **⚠️ Reposicionamento (agosto/2026):** sem preço em peça pública; sem promessa de "5 minutos / sem implantação / conta grátis". A implantação é conduzida por especialistas e o CTA padrão é **"Fale com um especialista"**. As frases de velocidade valem para a **cotação** (segundos), nunca para o onboarding.
+
+> **A virada de mensagem em uma frase.** Quase todo sistema para transportadora é, no fundo, um **emissor de documento fiscal**. O HiperTMS é o primeiro feito para o transportador **VENDER** — e por trás não é só software: é a **inteligência de precificação**: um time de especialistas que acompanha o mercado, mantém as tabelas e assume tarefas pelo próprio sistema.
 
 ---
 
@@ -16,7 +18,7 @@ O HiperTMS inverte essa lógica. Em vez de entregar um sistema vazio para você 
 **Os dois ganchos que sustentam tudo:**
 
 - **Categoria nova:** "feito para vender, não só para emitir". É o que diferencia o HiperTMS de todo concorrente que se apresenta como emissor fiscal.
-- **Não é só software, é comunidade:** especialistas criam parâmetros operacionais e gerenciais e assumem tarefas pelo sistema. Ao usar o HiperTMS, a transportadora terceiriza parte do trabalho para o nosso time.
+- **Não é só software, é serviço embutido — a "inteligência de precificação":** especialistas acompanham as métricas do mercado, elaboram e mantêm as tabelas dentro do sistema e assumem tarefas pelo próprio HiperTMS. Ao assinar, a transportadora terceiriza a precificação para o nosso time. (Nome público definido em `00_posicionamento.md`; substitui o antigo rótulo interno "comunidade de especialistas".)
 
 > **Punchline principal:** **"O TMS feito para vender frete."**
 > Reforço: o primeiro sistema feito para o transportador vender — não só emitir CT-e.
@@ -31,10 +33,11 @@ Use o principal no topo da página e no primeiro post. Os demais alimentam posts
 |---|---|
 | O TMS feito para vender frete. | Topo da página, post de marca, capa. |
 | Enquanto os outros emitem CT-e, o HiperTMS ajuda você a vender. | Post de diferenciação / anúncio. |
-| Em 5 minutos, todo o Brasil precificado. | Hero de cotação, calculadora, CTA. |
+| Todo o Brasil precificado, desde o primeiro dia. | Hero de cotação, calculadora, CTA. |
 | Cotar era o mais difícil. Agora é um clique. | Post de dor → solução. |
 | +5.500 municípios já vêm com preço. Você só ajusta. | Prova / autoridade de precificação. |
-| Mais que um sistema: uma comunidade de especialistas por você. | Post de posicionamento / comunidade. |
+| Inteligência de precificação: sua tabela, mantida viva pelo nosso time. | Post de posicionamento / camada de serviço. |
+| Quem atualiza sua tabela quando o diesel sobe? A gente. | Dor → serviço (inteligência de precificação). |
 | Responda qualquer cotação em segundos. | Agilidade / atendimento ao cliente. |
 
 ---
@@ -46,13 +49,13 @@ Cada força segue a mesma estrutura: a dor do transportador, a promessa do Hiper
 ### Força 1 — Agilidade em cotações (o hero)
 
 - **Dor:** montar tabela de preço para diferentes cidades e regiões é complexo e manual; a PME perde tempo e perde carga.
-- **Promessa:** o HiperTMS já vem com o território nacional precificado pelo nosso time. Mais de 5.500 municípios, qualquer cidade para qualquer cidade — e o usuário ajusta preço ou desconto em segundos.
-- **Punchline:** _"Em 5 minutos, todo o Brasil precificado."_
+- **Promessa:** o HiperTMS já vem com o território nacional precificado pelo nosso time — e mantido vivo pela inteligência de precificação, que acompanha as métricas do mercado. Mais de 5.500 municípios, qualquer cidade para qualquer cidade — e o usuário ajusta preço ou desconto em segundos.
+- **Punchline:** _"Todo o Brasil precificado, desde o primeiro dia."_
 
 > **Legenda pronta (post/hero)**
 > Cotar é a maior dificuldade de quem transporta — e a maioria dos sistemas não ajuda nisso.
 > O HiperTMS já vem com mais de 5.500 municípios precificados pelo nosso time de especialistas. Qualquer cidade para qualquer cidade, com imposto, custo e margem. Precisa de aumento ou desconto? Ajuste em segundos.
-> Em 5 minutos, todo o Brasil precificado. Responda o cliente antes do concorrente.
+> Todo o Brasil precificado, desde o primeiro dia. Responda o cliente antes do concorrente.
 > `#cotaçãodefrete #transportadora #frete #TMS #precificação`
 
 ### Força 2 — Controle de pneus e combustível
@@ -83,8 +86,8 @@ Seis telas contando a virada de categoria — do problema (só emite fiscal) à 
 | 2 | O HiperTMS é o primeiro feito para VENDER frete. | Vira a categoria. |
 | 3 | Montar tabela de preço trava a PME: cidade por cidade, região por região. | Aprofunda a dor da cotação. |
 | 4 | No HiperTMS, +5.500 municípios já vêm precificados. Qualquer cidade para qualquer cidade. | Entrega a prova. |
-| 5 | Não é só software. É uma comunidade de especialistas por você. | Reforça o diferencial (comunidade). |
-| 6 | Em 5 minutos, todo o Brasil precificado. Criar conta grátis. | Fecha com CTA. |
+| 5 | Não é só software: é um time de precificação trabalhando pela sua tabela. | Reforça o diferencial (inteligência de precificação). |
+| 6 | Todo o Brasil precificado, desde o primeiro dia. Fale com um especialista. | Fecha com CTA. |
 
 _Dica: o mesmo roteiro vira um Reels — cada tela por 2–3 segundos, com a gravação da cotação real na tela 4._
 
@@ -98,14 +101,14 @@ _Dica: o mesmo roteiro vira um Reels — cada tela por 2–3 segundos, com a gra
 O TMS feito para vender frete 🚚
 +5.500 municípios já precificados. Cote qualquer rota em segundos.
 Não é só sistema: especialistas trabalhando por você.
-👇 Calcule seu frete
+👇 Fale com um especialista
 ```
 
 **Nova ordem dos primeiros posts:**
 
 1. Hero — "O TMS feito para vender frete" (`hero_cotacoes`).
 2. Carrossel do eixo — telas 1 a 6 (o mais importante do lançamento).
-3. Força 1 — "Todo o Brasil precificado em 5 minutos" (`forca1`).
+3. Força 1 — "Todo o Brasil precificado, desde o primeiro dia" (`forca1`).
 4. Força 2 — pneus e combustível (`forca2`).
 5. Força 3 — financeiro automático (`forca3`).
 

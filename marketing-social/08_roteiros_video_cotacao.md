@@ -1,7 +1,9 @@
 # HiperTMS — Roteiros de Vídeo da Cotação
 
 **Uso restrito: contatos positivados + landing page. Nunca em disparo frio.**
-_O TMS feito para vender frete · Agosto de 2026_
+_O TMS feito para vender frete · Agosto de 2026 · Revisado (reposicionamento comercial)_
+
+> **⚠️ Reposicionamento (agosto/2026):** os cards finais **não levam preço** nem "cadastrou, cotou em 5 min". CTA dos vídeos: **"Fale com um especialista"** / demonstração. A velocidade mostrada é a da **cotação**, não a do onboarding.
 
 > **Política de uso (decisão de campanha).** Vídeo **não** entra na prospecção fria — nem WhatsApp, nem anexo de email. Motivos: (1) anexos de mídia em massa aumentam denúncia e risco de bloqueio do número; (2) não é prática do mercado de TMS, então um vídeo não solicitado soa como spam, não como diferencial. O vídeo é ferramenta de **fechamento**: a Lia envia somente a quem respondeu com interesse (positivado, ver doc 07), e a versão hospedada fica na landing para quem clicar por conta própria.
 
@@ -27,15 +29,15 @@ _O TMS feito para vender frete · Agosto de 2026_
 |---|---|---|---|
 | 0–4s | Cronômetro zerado + pergunta em card grafite | QUANTO TEMPO VOCÊ LEVA PARA COTAR UM FRETE? | "Quanto tempo você leva para responder uma cotação?" |
 | 4–10s | Planilha caótica de tabela de frete (genérica) sendo rolada | A MAIORIA MONTA TABELA CIDADE POR CIDADE | "A maioria dos sistemas deixa essa parte com você." |
-| 10–16s | Tela do HiperTMS: nova cotação, cronômetro dispara | NO HIPERTMS A TABELA JÁ VEM PRONTA | "No HiperTMS, o Brasil inteiro já vem precificado." |
+| 10–16s | Tela do HiperTMS: nova cotação, cronômetro dispara | NO HIPERTMS A TABELA JÁ VEM PRONTA — E É MANTIDA PELO NOSSO TIME | "No HiperTMS, o Brasil inteiro já vem precificado — e nosso time mantém a tabela viva." |
 | 16–28s | Digitação real: origem [cidade A] → destino [cidade B interior, fora de rota óbvia], peso/valor da carga | +5.500 MUNICÍPIOS · QUALQUER CIDADE → QUALQUER CIDADE | "Escolha qualquer origem e qualquer destino…" |
 | 28–38s | Preço aparece calculado: destaque em zoom para imposto, custo e margem | IMPOSTO ✓ CUSTO ✓ MARGEM ✓ — TUDO NO PREÇO | "…e o preço sai pronto: imposto, custo e a sua margem." |
 | 38–46s | Ajuste de margem/desconto em segundos; preço recalcula ao vivo | SUA MARGEM, SUA REGRA — AJUSTE EM SEGUNDOS | "Precisa de desconto ou aumento? Ajusta na hora." |
 | 46–52s | Cotação enviada/PDF gerado; cronômetro **para** (< 1 min) | COTAÇÃO ENVIADA EM [tempo real] ⏱ | "Cotação respondida antes do concorrente abrir a planilha." |
-| 52–60s | Card final: wordmark + oferta | O TMS FEITO PARA VENDER FRETE · CADASTROU, COTOU — 5 MIN · A PARTIR DE R$ 89/MÊS | "HiperTMS. Crie sua conta e cote a primeira rota hoje." |
+| 52–60s | Card final: wordmark + oferta | O TMS FEITO PARA VENDER FRETE · A TABELA DO BRASIL INTEIRO, PRONTA · FALE COM UM ESPECIALISTA | "HiperTMS. Fale com um especialista e veja com uma rota sua." |
 
 **Mensagem da Lia que acompanha o envio:**
-> Olha aí, [nome] — cotação de verdade, do início ao fim, em menos de 1 minuto ⏱. Quer fazer a mesma coisa com uma rota sua? [link de cadastro]
+> Olha aí, [nome] — cotação de verdade, do início ao fim, em menos de 1 minuto ⏱. Quer ver a mesma coisa com as suas rotas e os seus preços? Agendo uma demonstração com nosso especialista.
 
 ---
 
@@ -49,7 +51,7 @@ _O TMS feito para vender frete · Agosto de 2026_
 | 0–5s | Tela de cotação já com a rota do lead digitada | [CIDADE DO LEAD] → [DESTINO]? JÁ TEM PREÇO. |
 | 5–15s | Preço calculado; zoom em imposto/custo/margem | PRONTO ANTES DE VOCÊ PEDIR — TABELA COM +5.500 MUNICÍPIOS |
 | 15–22s | Ajuste rápido de margem; recalcula | AJUSTE SUA MARGEM EM SEGUNDOS |
-| 22–30s | Card final | ESSA COTAÇÃO PODIA SER SUA · CADASTROU, COTOU · R$ 89/MÊS |
+| 22–30s | Card final | ESSA COTAÇÃO PODIA SER SUA · FALE COM UM ESPECIALISTA |
 
 > Quando não houver variação gravada para a rota pedida, a Lia envia **print** da cotação real (mais rápido) e o Roteiro 1 como complemento.
 

@@ -71,7 +71,7 @@ _Imagem única._
 > No HiperTMS, avisam. Alertas automáticos de troca de óleo, pneus, licenciamento e exames dos motoristas.
 > `#segurança #manutenção #gestãodefrota #transportadora`
 
-**CTA:** criar conta grátis — link na bio.
+**CTA:** fale com um especialista — link na bio.
 
 ---
 
@@ -84,7 +84,7 @@ _Imagem única._
 | 3 | Você lança o abastecimento… | Mostra a ação simples do usuário. |
 | 4 | …e o sistema programa pneus, lubrificantes e manutenção. | Entrega a automação. |
 | 5 | Alertas automáticos: nada vence sem aviso. | Reforça a prova. |
-| 6 | Frota sob controle. Crie sua conta grátis. | Fecha com CTA. |
+| 6 | Frota sob controle. Fale com um especialista. | Fecha com CTA. |
 
 _Dica: a tela 3→4 fica ótima em Reels, mostrando a ordem de abastecimento gerando a programação na tela seguinte._
 

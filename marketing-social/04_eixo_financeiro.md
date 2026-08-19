@@ -72,7 +72,7 @@ _Imagem única (posicionamento/comunidade)._
 > No financeiro, isso vira um plano de contas pronto e um planejamento que se monta a partir do seu faturamento.
 > `#gestão #transportadora #comunidade #financeiro`
 
-**CTA:** criar conta grátis — link na bio.
+**CTA:** fale com um especialista — link na bio.
 
 ---
 
@@ -85,7 +85,7 @@ _Imagem única (posicionamento/comunidade)._
 | 3 | Informe a média de faturamento… | Mostra a ação simples do usuário. |
 | 4 | …e o HiperTMS gera o plano de contas e o planejamento. | Entrega a automação. |
 | 5 | 30 anos de gestão de transportadora, dentro do sistema. | Reforça a autoridade/comunidade. |
-| 6 | Menos digitação, mais decisão. Crie sua conta grátis. | Fecha com CTA. |
+| 6 | Menos digitação, mais decisão. Fale com um especialista. | Fecha com CTA. |
 
 _Dica: a tela 3→4 vira Reels mostrando o campo "faturamento médio" gerando o plano de contas na sequência._
 

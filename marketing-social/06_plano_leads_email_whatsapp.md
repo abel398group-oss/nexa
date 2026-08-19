@@ -1,7 +1,9 @@
 # HiperTMS — Plano de Marketing para Leads (Email + WhatsApp)
 
 **Base de ~30.000 leads frios · Disparo via Lia (WhatsApp) + email**
-_O TMS feito para vender frete · Agosto de 2026_
+_O TMS feito para vender frete · Agosto de 2026 · Revisado (reposicionamento comercial)_
+
+> **⚠️ Reposicionamento (agosto/2026):** preço não aparece em nenhuma peça de disparo (WhatsApp ou email). "Sem implantação / 5 minutos / conta grátis" saiu do discurso — a implantação é **conduzida por especialistas** e é parte do valor. O objetivo do funil mudou: de "conta criada self-service" para **demonstração agendada com especialista** (a Lia qualifica e agenda; o time interno implanta). Perfil de lead prioritário: transportadoras já acostumadas a investir R$ 850–1.500/mês em TMS.
 
 > **Em uma frase:** todo concorrente vende "emissor de CT-e completo" e ensina o transportador a **montar** tabela de frete; nós somos os únicos em que a tabela **já vem pronta** para o Brasil inteiro. Toda mensagem desta campanha existe para cravar essa diferença.
 
@@ -32,17 +34,17 @@ Analisamos o vocabulário de Bsoft, TranspNet, TOTVS, Fretefy, Omie, Zetta, Soft
 **Falar a língua do mercado nos termos de busca e reconhecimento; falar a nossa língua no diferencial.**
 
 - ✅ Usar os termos deles para ser entendido: CT-e, MDF-e, tabela de frete, generalidades, tabela ANTT, cotação. O lead pesquisa e reconhece por essas palavras.
-- ✅ Reservar as nossas frases para o que só nós temos: **"tabela de frete pronta"**, **"+5.500 municípios já precificados"**, **"Cadastrou, cotou"**, **"Em 5 minutos, todo o Brasil precificado"**, **"O TMS feito para vender frete"**.
+- ✅ Reservar as nossas frases para o que só nós temos: **"tabela de frete pronta"**, **"+5.500 municípios já precificados"**, **"Todo o Brasil precificado, desde o primeiro dia"**, **"contratos que entendem cada cliente"**, **"inteligência de precificação — sua tabela mantida viva pelo nosso time"**, **"O TMS feito para vender frete"**.
 - ❌ Nunca abrir mensagem com "sistema completo de gestão" — é o clichê de todos. Abrir sempre pela dor da cotação.
 
 ---
 
 ## 2. Posicionamento da campanha
 
-- **Punchline mestre:** "O TMS feito para vender frete." (já definido em `02_eixo_cotacoes.md`)
-- **Promessa da campanha:** pare de montar tabela de frete — a sua já vem pronta, com +5.500 municípios precificados por especialistas. Você só ajusta margem e desconto.
-- **Prova:** demonstração real de uma cotação em segundos (vídeo de tela) + calculadora de frete pública.
-- **CTA único em todas as peças:** criar conta e fazer a primeira cotação em 5 minutos (a partir de R$ 89/mês, sem implantação).
+- **Punchline mestre:** "O TMS feito para vender frete." (já definido em `02_eixo_cotacoes.md`; posicionamento completo em `00_posicionamento.md`)
+- **Promessa da campanha:** pare de montar tabela de frete — a sua já vem pronta, com +5.500 municípios precificados por especialistas, e **mantida viva** pela inteligência de precificação (o time acompanha as métricas do mercado por você). Você só ajusta margem e desconto.
+- **Prova:** demonstração real de uma cotação em segundos (vídeo de tela) + calculadora de frete pública + a Lia cotando uma rota real do lead na conversa.
+- **CTA único em todas as peças:** ver a cotação de uma rota real sua e **agendar uma demonstração com um especialista**. Sem preço nas peças — o investimento é apresentado na proposta, junto do escopo de implantação.
 
 As 3 forças continuam as mesmas dos eixos existentes; nesta campanha as forças 2 (pneus/combustível) e 3 (financeiro) entram apenas como reforço nos toques finais das sequências — o gancho de entrada é sempre cotação.
 
@@ -54,9 +56,9 @@ Base fria = ninguém deu opt-in recente. Antes de qualquer disparo em massa, seg
 
 | Segmento | Critério | Prioridade |
 |---|---|---|
-| A — PME transportadora ativa | CNPJ de transporte (CNAE 49.30), frota própria pequena/média | 1º — é o ICP: sofre mais com cotação manual |
-| B — Autônomo/agregado | Motorista CNPJ, 1–3 veículos | 2º — sensível a preço; entrada pelo plano Básico R$ 89 |
-| C — Sem qualificação | Sem dado de CNAE/porte | 3º — qualificar via primeira interação com a Lia antes de nutrir |
+| A — PME transportadora ativa | CNPJ de transporte (CNAE 49.30), frota própria pequena/média, já paga (ou pagaria) TMS | 1º — é o ICP: sofre com cotação manual e já investe R$ 850–1.500/mês em sistema |
+| C — Sem qualificação | Sem dado de CNAE/porte | 2º — qualificar via primeira interação com a Lia antes de nutrir |
+| B — Autônomo/agregado | Motorista CNPJ, 1–3 veículos | 3º — fora do ICP no novo posicionamento (ticket de entrada subiu); nutrir com calculadora/conteúdo, sem abordagem ativa |
 
 Se a base não tiver esses dados, a própria primeira mensagem serve de qualificação (ver seção 5, toque 1 — a resposta separa quem cota manualmente de quem não é o perfil).
 
@@ -97,7 +99,7 @@ Sequência intercalada por lead: WhatsApp abre (D0) → email aprofunda (D2) →
 > [Nome], a maioria dos sistemas para transportadora só emite CT-e — e deixa a parte mais difícil, a cotação, por sua conta. No HiperTMS a tabela de frete **já vem pronta**: +5.500 municípios precificados, qualquer cidade para qualquer cidade. Você só ajusta sua margem. Me diga uma rota que você atende e eu te mostro a cotação pronta. _(Responda SAIR para não receber mais mensagens.)_
 
 **Toque 3 (D14) — última chamada:**
-> [Nome], última mensagem, prometo 🙂 Se cotar frete ainda é trabalho manual aí, o HiperTMS resolve isso por R$ 89/mês, sem taxa de implantação: cadastrou, cotou em 5 minutos. Teste com a rota que você mais atende: [link calculadora]. Qualquer coisa, estou por aqui. _(SAIR para não receber mais.)_
+> [Nome], última mensagem, prometo 🙂 Se cotar frete ainda é trabalho manual aí, vale conhecer o HiperTMS: a tabela do Brasil inteiro já vem pronta e o sistema entende o contrato de cada cliente na hora de cotar e faturar. Teste com a rota que você mais atende: [link calculadora]. Se quiser, agendo uma demonstração com nosso especialista. _(SAIR para não receber mais.)_
 
 ### 5.2. Email — 4 toques
 
@@ -106,16 +108,16 @@ Sequência intercalada por lead: WhatsApp abre (D0) → email aprofunda (D2) →
 - Corpo: dor (tabela manual trava a PME e perde carga) → virada (os sistemas do mercado ensinam a montar; o HiperTMS entrega pronta) → prova (+5.500 municípios, impostos, custo e margem inclusos) → CTA calculadora.
 
 **Email 2 (D9) — prova visual:**
-- Assunto: `Todo o Brasil precificado em 5 minutos (veja a tela)`
-- Corpo: sequência de 3 prints da cotação real (origem/destino → preço calculado → CT-e pronto) → "enquanto os outros emitem CT-e, o HiperTMS ajuda você a vender" → CTA criar conta. O vídeo completo fica hospedado na landing (o lead clica se quiser); **não anexar vídeo em disparo frio**.
+- Assunto: `Todo o Brasil precificado (veja a tela)`
+- Corpo: sequência de 3 prints da cotação real (origem/destino → preço calculado → CT-e pronto) → "enquanto os outros emitem CT-e, o HiperTMS ajuda você a vender" → CTA agendar demonstração. O vídeo completo fica hospedado na landing (o lead clica se quiser); **não anexar vídeo em disparo frio**.
 
 **Email 3 (D16) — autoridade/SEO reverso:**
 - Assunto: `Tabela ANTT 2026: o piso é obrigação. O lucro é outra conta.`
-- Corpo: usa o termo que todo mundo busca (tabela ANTT / piso mínimo) e vira: piso mínimo evita multa, mas não diz seu preço de venda — o HiperTMS calcula piso **e** preço com margem → CTA calculadora ANTT pública.
+- Corpo: usa o termo que todo mundo busca (tabela ANTT / piso mínimo) e vira: piso mínimo evita multa, mas não diz seu preço de venda — o HiperTMS calcula piso **e** preço com margem, com uma tabela que o nosso time de precificação mantém atualizada quando diesel, pedágio e piso mudam → CTA calculadora ANTT pública.
 
 **Email 4 (D23) — quebra de objeção + oferta:**
-- Assunto: `Sem implantação, sem treinamento: R$ 89/mês`
-- Corpo: objeção nº 1 (trocar de sistema dá trabalho) → resposta (não há projeto de implantação: a tabela já vem carregada; forças 2 e 3 como bônus — frota e financeiro automáticos) → CTA teste.
+- Assunto: `Trocar de TMS dá trabalho? Não quando a implantação é nossa.`
+- Corpo: objeção nº 1 (trocar de sistema dá trabalho) → resposta (a implantação é conduzida pelo nosso time: tabela nacional calibrada com os seus preços, contratos dos seus clientes configurados e equipe treinada — você não começa do zero, começa pronto; forças 2 e 3 como bônus — frota e financeiro automáticos) → CTA agendar demonstração com especialista.
 
 ---
 
@@ -141,8 +143,8 @@ Números conservadores para base fria B2B; calibrar após a 1ª onda de 2.000 le
 | Entrega WhatsApp | ~90% | 27.000 |
 | Resposta ao toque 1 | 3–8% | 800–2.100 |
 | Conversa qualificada (Lia) | 40% das respostas | 320–850 |
-| Contas criadas | 25% das qualificadas | 80–210 |
-| Assinantes pagos (90 dias) | 30–40% das contas | **25–85 clientes** |
+| Demonstrações agendadas | 25% das qualificadas | 80–210 |
+| Assinantes pagos (90 dias) | 30–40% das demonstrações | **25–85 clientes** |
 
 Métricas de guarda: taxa de bloqueio WhatsApp < 0,5% · descadastro email < 1% · bounce < 3%. Estourou, pausa e revisa a mensagem/segmento.
 
