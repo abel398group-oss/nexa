@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SenderService } from './sender.service';
+import { SenderWarmupService } from './sender-warmup.service';
 import { ContactsModule } from '@/application/contacts/contacts.module';
 import { ConversationsModule } from '@/application/conversations/conversations.module';
 import { FollowUpModule } from '@/application/followup/followup.module';
@@ -13,6 +14,6 @@ import { NotificationsModule } from '@/application/notifications/notifications.m
   controllers: [SenderController],
   // TmsLookupService vem do TmsModule (@Global): era provider local aqui e em outros
   // dois módulos, e cada registro abria um pool próprio contra o banco do TMS.
-  providers: [SenderService],
+  providers: [SenderService, SenderWarmupService],
 })
 export class SenderModule {}

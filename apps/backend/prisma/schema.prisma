@@ -854,6 +854,12 @@ model SenderNumber {
   sentThisHour Int      @default(0) @map("sent_this_hour")
   hourStamp    String?  @map("hour_stamp") // YYYY-MM-DD-HH
   warmupStage  Int      @default(0) @map("warmup_stage") // aquecimento (G7)
+  /// Quando o número entrou no degrau atual de aquecimento (19/08/2026). Sem isto não
+  /// havia como saber há quanto tempo ele está no degrau, e a escada nunca subia —
+  /// `warmupStage` era lido a cada envio e escrito por ninguém. NULL nos números
+  /// anteriores a esta coluna: a decisão cai no `createdAt` para eles não ficarem
+  /// presos no degrau 0 esperando um carimbo que ninguém pôs.
+  warmupStageSince DateTime? @map("warmup_stage_since")
   createdAt    DateTime @default(now()) @map("created_at")
   /// LINHA de WhatsApp que este número representa (13/08/2026). Cada linha é um
   /// chip físico diferente — não pode compartilhar aquecimento/teto diário com
@@ -894,6 +900,13 @@ model Campaign {
   /// admin vê todos. A conversa criada por esta campanha nasce com este vendedor
   /// — sem isso a resposta do lead cairia sem dono e os três a veriam.
   ownerSellerId String? @map("owner_seller_id")
+  /// LOTE que originou esta campanha (19/08/2026). Antes não havia como disparar
+  /// "para esta lista": o disparo só aceitava telefones colados na mão ou TODOS os
+  /// contatos do tenant. Quem importava um CSV, passava pela peneira e distribuía
+  /// entre os vendedores precisava exportar o mesmo CSV e subir de novo no Disparo,
+  /// onde a peneira inteira rodava outra vez do zero. NULL nas campanhas que não
+  /// nasceram de um lote — telefone avulso e "todos os contatos" continuam válidos.
+  batchId String? @map("batch_id")
   /// Por qual LINHA de WhatsApp esta campanha dispara (13/08/2026 — divisão de
   /// números). Default "principal" é só o valor de BACKFILL para linhas
   /// históricas que realmente saíram por ali; campanha NOVA recebe "vendas" na
@@ -907,6 +920,8 @@ model Campaign {
   @@index([tenantId])
   @@index([archivedAt])
   @@index([tenantId, ownerSellerId])
+  /// "Quais campanhas saíram deste lote" é a pergunta que o relatório por lote faz.
+  @@index([tenantId, batchId])
   @@map("campaigns")
 }
 
