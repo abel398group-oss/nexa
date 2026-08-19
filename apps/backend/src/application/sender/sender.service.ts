@@ -18,6 +18,7 @@ import { firstName, tidyMissingName } from './name-render';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
 import { precisaTrocarMercado } from './conversation-market';
+import { motivoDeBloqueioDoDisparo } from '@/application/markets/market-gate';
 import { marcarLinkDaCampanha } from './campaign-link';
 import { resolveSignature } from '@/application/email/email-signature';
 import { NotificationsService } from '@/application/notifications/notifications.service';
@@ -423,6 +424,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     const campaignType = dto.type === 'status' ? 'status' : 'message';
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     const linha = dto.linha || 'vendas';
+
+    // Trava de mercado NA API, não só no seletor (ADR 037). O e-mail já barrava
+    // mercado em rascunho/inexistente na criação; o WhatsApp aceitava qualquer
+    // string como productCode — dava para disparar de um mercado não validado e
+    // a Lia caía numa conversa sem base de conhecimento. Ver market-gate.ts.
+    await this.assertMercadoLiberado(dto.productCode);
 
     // ── Campanha de Status WhatsApp: sem targets, cria direto e retorna ────────
     if (campaignType === 'status') {
@@ -966,10 +973,34 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   }
 
   async setStatus(tenantId: string, id: string, status: 'running' | 'paused') {
+    // A trava de mercado vale também aqui: campanha criada com o mercado ativo e
+    // iniciada/retomada DEPOIS de ele ser suspenso dispararia mesmo assim — o
+    // start é o momento do disparo, não a criação. Cobre WhatsApp e e-mail, que
+    // compartilham esta rota. Pausar é sempre permitido.
+    if (status === 'running') {
+      const c = await this.prisma.campaign.findFirst({
+        where: { id, tenantId },
+        select: { productCode: true },
+      });
+      if (!c) throw new NotFoundException('Campanha não encontrada');
+      await this.assertMercadoLiberado(c.productCode);
+    }
     return this.prisma.campaign.updateMany({
       where: { id, tenantId },
       data: { status, ...(status === 'running' ? { startedAt: new Date() } : {}) },
     });
+  }
+
+  /** Busca o mercado e recusa o disparo quando a trava aponta bloqueio (ADR 037). */
+  private async assertMercadoLiberado(productCode: string | null | undefined) {
+    const market = productCode
+      ? await this.prisma.product.findUnique({
+          where: { code: productCode },
+          select: { name: true, status: true },
+        })
+      : null;
+    const bloqueio = motivoDeBloqueioDoDisparo(productCode, market);
+    if (bloqueio) throw new BadRequestException(bloqueio);
   }
 
   /**

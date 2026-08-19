@@ -46,6 +46,7 @@ import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
 import { dedupSentAtFilter, dedupWindowLabel, podeIgnorarDedup } from '@/application/sender/campaign-dedup';
 import { precisaTrocarMercado } from '@/application/sender/conversation-market';
+import { motivoDeBloqueioDoDisparo } from '@/application/markets/market-gate';
 import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 import { normalizarMessageId } from './campaign-reply-linker';
 import { ConversationsService } from '@/application/conversations/conversations.service';
@@ -304,20 +305,15 @@ export class EmailCampaignSenderService {
 
     // Trava de mercado NA API, não só no seletor (ADR 037). O seletor do vendedor
     // já esconde mercado em rascunho, mas quem chama o endpoint direto passava por
-    // cima da trava de liberação inteira — conhecimento não aprovado, identidade
-    // vazia, e o disparo saindo mesmo assim. Código desconhecido também barra:
-    // um typo aqui desligaria silenciosamente o conhecimento e a marca do mercado.
+    // cima da trava de liberação inteira. A decisão vive em market-gate.ts,
+    // compartilhada com o canal de WhatsApp (SenderService).
     if (dto.productCode) {
-      const market = await this.prisma.product.findUnique({ where: { code: dto.productCode } });
-      if (!market) {
-        throw new BadRequestException(`Mercado "${dto.productCode}" não existe.`);
-      }
-      if (market.status !== 'active') {
-        throw new BadRequestException(
-          `Mercado "${market.name}" não está liberado para disparo (status: ${market.status}). ` +
-          'Libere-o na tela de Mercados antes de criar a campanha.',
-        );
-      }
+      const market = await this.prisma.product.findUnique({
+        where: { code: dto.productCode },
+        select: { name: true, status: true },
+      });
+      const bloqueio = motivoDeBloqueioDoDisparo(dto.productCode, market);
+      if (bloqueio) throw new BadRequestException(bloqueio);
     }
 
     // Encurtador de link é o único bloqueio: o Gmail não classifica como promoção,
