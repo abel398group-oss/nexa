@@ -183,16 +183,25 @@ export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string 
     .join(' · ');
 
   return [
-    '*Cotação pronta* ✅',
+    // O número no TÍTULO, e não no rodapé: é por ele que a pessoa vai procurar a cotação
+    // no sistema, e no fim da mensagem ele compete com o preço pela atenção.
+    r.rascunhoId ? `*Cotação ${r.rascunhoId}* ✅` : '*Cotação pronta* ✅',
     '',
     rota,
     detalhe,
+    // Eco do valor da mercadoria: é o único número que a pessoa digitou livre, e trocar
+    // 10.000 por 100.000 muda o seguro sem ninguém perceber.
+    ...(estado.valorMercadoria ? [`Mercadoria: ${brl(estado.valorMercadoria)}`] : []),
     '',
     `💰 *${brl(r.valor)}*`,
-    ...(r.pisoAntt ? [`📊 Piso ANTT: ${brl(r.pisoAntt)}`] : []),
+    // O piso ANTT fica FORA da mensagem de propósito, e continua gravado no rascunho.
+    // Esta mensagem é encaminhável com um toque: se ela chegar ao cliente com o piso,
+    // ele passa a saber a margem. O vendedor consulta no sistema quando precisar.
     '',
-    'Valor de referência, sujeito a confirmação.',
-    ...(r.rascunhoId ? [`📋 Rascunho *#${r.rascunhoId}* salvo no TMS.`] : []),
+    'Valor de referência — confirme antes de fechar com o cliente.',
+    ...(r.rascunhoId
+      ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
+      : []),
   ]
     .filter((l) => l !== null)
     .join('\n');

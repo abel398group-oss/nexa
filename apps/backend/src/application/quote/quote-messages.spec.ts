@@ -76,12 +76,31 @@ describe('resultado', () => {
     valorMercadoria: 80000,
   });
 
-  it('mostra rota, valor em reais e o rascunho', () => {
-    const t = resultado(pronto, { valor: 5200, pisoAntt: 3800, distanciaKm: 586, rascunhoId: '1234' });
+  it('o número da cotação vai no TÍTULO', () => {
+    // É por ele que a pessoa procura no sistema; no rodapé ele compete com o preço.
+    const t = resultado(pronto, { valor: 5200, pisoAntt: 3800, distanciaKm: 586, rascunhoId: '017749' });
+    expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
     expect(t).toContain('Campinas/SP → Belo Horizonte/MG');
     expect(t).toContain('586 km');
-    expect(t).toContain('#1234');
-    expect(t.replace(/ /g, ' ')).toContain('R$ 5.200,00');
+    expect(t).toContain('5.200,00');
+  });
+
+  it('NÃO mostra o piso ANTT — a mensagem é encaminhável com um toque', () => {
+    // Chegando ao cliente com o piso, ele passa a saber a margem. Fica no rascunho.
+    const t = resultado(pronto, { valor: 5200, pisoAntt: 3800, rascunhoId: '017749' });
+    expect(t).not.toContain('Piso');
+    expect(t).not.toContain('3.800');
+  });
+
+  it('ecoa o valor da mercadoria — é o único número digitado livre', () => {
+    // Trocar 10.000 por 100.000 muda o seguro sem ninguém perceber.
+    expect(resultado(pronto, { valor: 5200 })).toContain('80.000,00');
+  });
+
+  it('diz ONDE achar o rascunho, não só que ele existe', () => {
+    expect(resultado(pronto, { valor: 5200, rascunhoId: '017749' })).toContain(
+      'Vendas › Cotações › 017749',
+    );
   });
 
   it('diz que é referência — o número já vira preço na cabeça de quem lê', () => {
@@ -91,7 +110,7 @@ describe('resultado', () => {
   it('sem piso e sem rascunho, não imprime linha vazia no lugar', () => {
     const t = resultado(pronto, { valor: 5200 });
     expect(t).not.toContain('Piso ANTT');
-    expect(t).not.toContain('Rascunho');
+    expect(t).not.toContain('Rascunho salvo');
   });
 
   it('fracionado mostra o peso no lugar do veículo', () => {

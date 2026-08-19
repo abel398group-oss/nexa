@@ -90,7 +90,7 @@ describe('cotação por WhatsApp', () => {
     const fim = await svc.responderMensagem(FONE, '80000', USER);
 
     expect(fim).toContain('5.200,00');
-    expect(fim).toContain('#1234');
+    expect(fim).toContain('1234');
     // A sessão MORRE no fim: a próxima mensagem não pode virar resposta de formulário.
     expect(s._mapa.has(FONE)).toBe(false);
   });
