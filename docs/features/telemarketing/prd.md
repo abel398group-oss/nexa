@@ -332,7 +332,8 @@ trancaria todo mercado já liberado.
 
 Where the SDR spends the day: one screen, one lead at a time, dozens of calls.
 Módulo 1 prepares the work; this is the work. Approved on 2026-08-11 as layout
-and rules; not implemented.
+and rules; implemented (`SdrWorkbenchPage`, `sdr.service.ts`, `sdr-queue.ts` —
+this note said "not implemented" until 2026-08-19, after the code had shipped).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -457,7 +458,8 @@ operator available/paused state.
 ## Módulo 3 — Closer: reunião e fechamento (aprovado 2026-08-11)
 
 Starts exactly where módulo 2 ends: the lead the SDR handed over. Approved as
-layout and rules on 2026-08-11; not implemented.
+layout and rules on 2026-08-11; implemented (`CloserTodayPage`,
+`closer.service.ts`, `closer-today.ts` — same stale-note fix as módulo 2).
 
 ### The default view is the day, not a kanban
 
