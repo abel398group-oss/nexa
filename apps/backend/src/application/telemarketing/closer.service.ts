@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
-import { MarketScopeService, filtroDeMercado } from '@/shared/auth/market-scope.service';
+import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
+import { MarketAssetsService } from '@/application/markets/market-assets.service';
 import { agruparPorBloco } from './closer-today';
 import { empresaDoNegocio } from './lead-import';
 
@@ -15,6 +16,7 @@ export class CloserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly marketScope: MarketScopeService,
+    private readonly marketAssets: MarketAssetsService,
   ) {}
 
   /**
@@ -51,6 +53,15 @@ export class CloserService {
         productCode: true,
         contactId: true,
         assignedSellerId: true,
+        // A nota que o SDR escreveu ao passar o lead (`transferir()`, result
+        // `passou_closer`) morava aqui sem ninguém buscar de volta — o closer nunca via
+        // o que o SDR quis dizer. `fila()` do SDR já busca o mesmo campo; faltava só
+        // deste lado (19/08/2026).
+        activities: {
+          select: { id: true, type: true, result: true, notes: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
       },
       take: 500,
     });
@@ -81,6 +92,18 @@ export class CloserService {
         };
       }),
     );
+  }
+
+  /**
+   * Material APROVADO do mercado (ADR 037, módulo 3 fechado em 19/08/2026): o mesmo
+   * roteiro/portfólio validado que o SDR já enxerga na mesa de trabalho. O closer
+   * herda o negócio de um mercado que às vezes nunca trabalhou como SDR — sem isto,
+   * ele chegava na reunião sem saber o que a campanha prometeu.
+   */
+  async materialAprovadoDoMercado(tenantId: string, productCode: string, user?: Usuario) {
+    if (!productCode) return [];
+    assertMercado(await this.marketScope.mercadosDoUsuario(tenantId, user), productCode);
+    return this.marketAssets.listarAprovados(tenantId, productCode);
   }
 
   /// Registra a proposta com o valor estimado. `value` já existia no schema — é valor

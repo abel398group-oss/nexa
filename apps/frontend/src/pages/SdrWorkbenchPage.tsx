@@ -18,6 +18,7 @@ import {
   descartarLead,
   listClosers,
   listMaterial,
+  listMaterialAprovado,
   listQueue,
   pausarLead,
   registrarAtividade,
@@ -429,8 +430,75 @@ function RoteiroDoMercado({
         </div>
       )}
 
+      <MaterialAprovadoDoMercado productCode={productCode} />
       <Material productCode={productCode} />
     </Card>
+  );
+}
+
+/**
+ * Material JÁ APROVADO do mercado (ADR 037, 19/08/2026): o roteiro em `.md` e o
+ * portfólio validados no painel Validação de Campanha.
+ *
+ * Não é o mesmo que o "Roteiro" acima (aquele é `SalesScript`, texto de callcenter
+ * digitado à mão) nem que "Material de consulta" abaixo (aquele é a base de
+ * conhecimento antiga, `ai_knowledge_base`). É uma terceira fonte, a mais nova — as
+ * três convivem até a operação decidir migrar conteúdo de uma pra outra.
+ */
+function MaterialAprovadoDoMercado({ productCode }: { productCode: string | null }) {
+  const [abre, setAbre] = useState(false);
+
+  const { data: itens = [] } = useQuery({
+    queryKey: ['sdr', 'material-aprovado', productCode],
+    queryFn: () => listMaterialAprovado(productCode as string),
+    enabled: !!productCode && abre,
+  });
+
+  if (!productCode) return null;
+
+  const planos = itens.filter((i) => i.kind === 'plan');
+  const portfolios = itens.filter((i) => i.kind === 'portfolio');
+
+  return (
+    <div className="mt-3 border-t border-base-300 pt-2">
+      <button
+        type="button"
+        onClick={() => setAbre(!abre)}
+        className="flex w-full items-center justify-between gap-2 py-1 text-left text-xs font-medium uppercase tracking-wide text-base-content/50"
+      >
+        Material do mercado (aprovado)
+        <span className={'transition-transform ' + (abre ? 'rotate-180' : '')}>▾</span>
+      </button>
+
+      {abre && (
+        <div className="pt-2">
+          {!itens.length && (
+            <p className="text-xs text-base-content/50">
+              Nada aprovado ainda para este mercado na Validação de Campanha.
+            </p>
+          )}
+          {planos.map((p) => (
+            <details key={p.id} className="border-b border-base-200 py-1.5 last:border-0" open>
+              <summary className="cursor-pointer text-sm">{p.name}</summary>
+              <p className="whitespace-pre-wrap pt-1 text-xs leading-relaxed text-base-content/80">
+                {p.content}
+              </p>
+            </details>
+          ))}
+          {portfolios.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {portfolios.map((p) => (
+                <a key={p.id} href={p.fileUrl ?? '#'} target="_blank" rel="noreferrer">
+                  <Button size="xs" variant="outline">
+                    📎 {p.name}
+                  </Button>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

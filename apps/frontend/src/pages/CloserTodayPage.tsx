@@ -20,6 +20,7 @@ import {
 import {
   adiarNegocio,
   getPainelDeHoje,
+  listMaterialAprovado,
   marcarGanho,
   marcarPerda,
   reagendarReuniao,
@@ -227,6 +228,10 @@ function LinhaNegocio({
   const volta = hora(n.pausedUntil);
   const canal = canalPeloIdentificador(n.phone);
   const email = emailDoIdentificador(n.phone);
+  const [contexto, setContexto] = useState(false);
+  // Mais recente primeiro (backend já ordena): a nota que importa é a do handoff, não
+  // a primeira ligação que o SDR fez há três semanas.
+  const notaDoSdr = n.activities.find((a) => a.result === 'passou_closer')?.notes ?? null;
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 border-b border-base-200 py-3 last:border-0">
@@ -280,6 +285,12 @@ function LinhaNegocio({
             </Button>
           </a>
         )}
+        {/* Nota do SDR e material do mercado (roteiro/portfólio aprovados) — vivia
+            gravado e ninguém buscava de volta neste painel (19/08/2026). Selo só
+            quando há nota: sem lead nenhum não fica sinalizado à toa. */}
+        <Button size="xs" variant="outline" onClick={() => setContexto(true)}>
+          Contexto{notaDoSdr && ' 📝'}
+        </Button>
         <Button size="xs" variant="outline" onClick={() => onAcao('reagendar')}>
           Remarcar
         </Button>
@@ -296,7 +307,92 @@ function LinhaNegocio({
           Perdeu
         </Button>
       </div>
+
+      {contexto && (
+        <ModalContexto
+          nome={n.company ?? n.name ?? 'este lead'}
+          notaDoSdr={notaDoSdr}
+          productCode={n.productCode}
+          onFechar={() => setContexto(false)}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * Nota do handoff + material do mercado, num modal — não no card, que já divide
+ * espaço com estágio, valor e cinco botões de ação.
+ */
+function ModalContexto({
+  nome,
+  notaDoSdr,
+  productCode,
+  onFechar,
+}: {
+  nome: string;
+  notaDoSdr: string | null;
+  productCode: string | null;
+  onFechar: () => void;
+}) {
+  const { data: itens = [], isLoading } = useQuery({
+    queryKey: ['closer', 'material-aprovado', productCode],
+    queryFn: () => listMaterialAprovado(productCode as string),
+    enabled: !!productCode,
+  });
+
+  const planos = itens.filter((i) => i.kind === 'plan');
+  const portfolios = itens.filter((i) => i.kind === 'portfolio');
+
+  return (
+    <Modal open onClose={onFechar} title={`Contexto — ${nome}`}>
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-base-content/50">
+            O que o SDR deixou ao passar o lead
+          </p>
+          <p className="text-sm text-base-content/90">
+            {notaDoSdr ?? 'O SDR não deixou nota nesta transferência.'}
+          </p>
+        </div>
+
+        <div className="border-t border-base-200 pt-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-base-content/50">
+            Material do mercado (aprovado)
+          </p>
+          {!productCode && (
+            <p className="text-sm text-base-content/60">Este negócio não tem mercado.</p>
+          )}
+          {productCode && isLoading && (
+            <p className="text-sm text-base-content/60">Carregando…</p>
+          )}
+          {productCode && !isLoading && !itens.length && (
+            <p className="text-sm text-base-content/60">
+              Nada aprovado ainda para este mercado na Validação de Campanha.
+            </p>
+          )}
+          {planos.map((p) => (
+            <details key={p.id} className="border-b border-base-200 py-1.5 last:border-0" open>
+              <summary className="cursor-pointer text-sm">{p.name}</summary>
+              <p className="whitespace-pre-wrap pt-1 text-xs leading-relaxed text-base-content/80">
+                {p.content}
+              </p>
+            </details>
+          ))}
+          {portfolios.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {portfolios.map((p) => (
+                <a key={p.id} href={p.fileUrl ?? '#'} target="_blank" rel="noreferrer">
+                  <Button size="xs" variant="outline">
+                    📎 {p.name}
+                  </Button>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 

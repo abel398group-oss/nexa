@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
+import { MarketAssetsService } from '@/application/markets/market-assets.service';
 import { agruparPorContato, ordenarFila } from './sdr-queue';
 import { naoAusente } from './seller-availability';
 
@@ -13,6 +14,7 @@ export class SdrService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly marketScope: MarketScopeService,
+    private readonly marketAssets: MarketAssetsService,
   ) {}
 
   /**
@@ -238,6 +240,24 @@ export class SdrService {
       // não ajudam quem tem quinze segundos para achar o preço.
       take: 25,
     });
+  }
+
+  /**
+   * Material APROVADO do mercado (ADR 037, módulo 2 fechado em 19/08/2026): o roteiro
+   * em `.md` e o portfólio que alguém validou no painel de Validação de Campanha.
+   *
+   * Diferente de `materialDoMercado()`: aquele é a base de conhecimento antiga
+   * (`ai_knowledge_base`), este é o `market_assets` que a esteira nova produz. As
+   * duas fontes convivem até a operação migrar o conteúdo de uma pra outra.
+   */
+  async materialAprovadoDoMercado(
+    tenantId: string,
+    productCode: string,
+    user?: UsuarioComEscopo,
+  ) {
+    if (!productCode) return [];
+    assertMercado(await this.marketScope.mercadosDoUsuario(tenantId, user), productCode);
+    return this.marketAssets.listarAprovados(tenantId, productCode);
   }
 
   /// Closers elegíveis para um mercado. É a lista que o SDR escolhe — e a mesma que

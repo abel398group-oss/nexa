@@ -1,5 +1,6 @@
 // Tipos do painel do closer (módulo 3 do telemarketing).
 // Espelham GET /api/closer/today — ver docs/features/telemarketing/prd.md §Módulo 3.
+import type { AtividadeRecente } from '@/entities/sdr';
 
 /// Os três blocos vêm agrupados do backend. A tela rotula e renderiza, nunca
 /// recalcula a regra: duas versões da mesma classificação divergem no primeiro ajuste.
@@ -21,6 +22,10 @@ export interface Negocio {
   contactId: string | null;
   assignedSellerId: string | null;
   bloco: Bloco;
+  /// Últimas 10 tentativas, mais recente primeiro — inclui a nota que o SDR escreveu
+  /// ao passar o lead (`result: 'passou_closer'`). Adicionado 19/08/2026: antes essa
+  /// nota era gravada e nunca lida por este painel.
+  activities: AtividadeRecente[];
 }
 
 export type PainelDeHoje = Record<Bloco, Negocio[]>;

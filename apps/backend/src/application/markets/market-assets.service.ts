@@ -76,6 +76,24 @@ export class MarketAssetsService {
     });
   }
 
+  /**
+   * Material JÁ APROVADO do mercado — o que o SDR e o closer podem ver.
+   *
+   * Diferente de `listar()`: aqui o `content` vem junto. São poucos arquivos por
+   * mercado (um roteiro, um punhado de portfólios) e quem chama precisa LER o
+   * roteiro na tela, não só listar nome e tamanho.
+   */
+  async listarAprovados(tenantId: string, productCode: string) {
+    return this.prisma.marketAsset.findMany({
+      where: { tenantId, productCode, status: 'approved' },
+      select: {
+        id: true, name: true, kind: true, content: true, fileUrl: true,
+        mimeType: true, sizeBytes: true, approvedAt: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   /** O texto de um arquivo — só quando alguém abre para revisar. */
   async ler(tenantId: string, id: string) {
     const asset = await this.prisma.marketAsset.findFirst({ where: { id, tenantId } });

@@ -13,6 +13,7 @@ export {
   descartarLead,
   listClosers,
   listMaterial,
+  listMaterialAprovado,
   listQueue,
   pausarLead,
   registrarAtividade,

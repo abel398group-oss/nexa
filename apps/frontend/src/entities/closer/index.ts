@@ -7,6 +7,7 @@ export { ROTULO_BLOCO, SUBTITULO_BLOCO, MOTIVOS_PERDA } from './types/closer.typ
 export {
   adiarNegocio,
   getPainelDeHoje,
+  listMaterialAprovado,
   marcarGanho,
   marcarPerda,
   reagendarReuniao,

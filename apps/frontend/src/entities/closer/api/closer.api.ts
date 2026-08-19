@@ -1,11 +1,19 @@
 // Funções puras de acesso à API do painel do closer (FSD — sem React).
 import { api } from '@/shared/lib/api';
 import type { PainelDeHoje } from '../types/closer.types';
+import type { MarketAssetContent } from '@/entities/market';
 
 /// Os 3 blocos já agrupados e ordenados. Sempre vem com as três chaves, mesmo vazias —
 /// a tela renderiza os cabeçalhos de qualquer forma.
 export async function getPainelDeHoje(): Promise<PainelDeHoje> {
   const r = await api.get('/closer/today');
+  return r.data;
+}
+
+/// Material APROVADO do mercado (roteiro + portfólio) — a mesma leitura que a mesa do
+/// SDR tem, agora do lado do closer.
+export async function listMaterialAprovado(productCode: string): Promise<MarketAssetContent[]> {
+  const r = await api.get('/closer/material-aprovado', { params: { productCode } });
   return r.data;
 }
 

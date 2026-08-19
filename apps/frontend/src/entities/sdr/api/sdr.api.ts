@@ -1,6 +1,7 @@
 // Funções puras de acesso à API da mesa do SDR (FSD — sem React).
 import { api } from '@/shared/lib/api';
 import type { Closer, ItemDaFila } from '../types/sdr.types';
+import type { MarketAssetContent } from '@/entities/market';
 
 /// Fila do SDR numa chamada só: oportunidade + ficha + lote + histórico recente, já
 /// ordenada e com a prioridade calculada. Cinco requisições por lead, quarenta leads
@@ -24,6 +25,14 @@ export async function listMaterial(
   q?: string,
 ): Promise<{ id: string; title: string; content: string; category: string | null; topic: string | null }[]> {
   const r = await api.get('/sdr/knowledge', { params: { productCode, q: q || undefined } });
+  return r.data;
+}
+
+/// Material APROVADO do mercado (roteiro em .md + portfólio) — validado no painel
+/// Validação de Campanha. Distinto de `listMaterial`, que lê o acervo antigo
+/// (`ai_knowledge_base`); as duas fontes convivem até a operação migrar uma pra outra.
+export async function listMaterialAprovado(productCode: string): Promise<MarketAssetContent[]> {
+  const r = await api.get('/sdr/material-aprovado', { params: { productCode } });
   return r.data;
 }
 

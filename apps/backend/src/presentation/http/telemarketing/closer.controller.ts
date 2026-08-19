@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { CloserService } from '@/application/telemarketing/closer.service';
 import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
@@ -24,6 +24,18 @@ export class CloserController {
   @RequirePerm('closer')
   hoje(@CurrentTenant() tenantId: string, @CurrentUser() user: Usuario) {
     return this.closer.hoje(tenantId, user);
+  }
+
+  /// Material aprovado do mercado (roteiro + portfólio validados na Validação de
+  /// Campanha) — a mesma leitura que a mesa do SDR tem, agora do lado do closer.
+  @Get('material-aprovado')
+  @RequirePerm('closer')
+  materialAprovado(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Query('productCode') productCode: string,
+  ) {
+    return this.closer.materialAprovadoDoMercado(tenantId, productCode, user);
   }
 
   @Patch('opportunities/:id/proposal')

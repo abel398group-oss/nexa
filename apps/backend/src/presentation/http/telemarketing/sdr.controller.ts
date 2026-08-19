@@ -89,6 +89,18 @@ export class SdrController {
     return this.sdr.materialDoMercado(tenantId, productCode, q, user);
   }
 
+  /// Material aprovado do mercado (roteiro + portfólio validados na Validação de
+  /// Campanha) — distinto de `/sdr/knowledge`, que lê o acervo antigo.
+  @Get('material-aprovado')
+  @RequirePerm('sdr')
+  materialAprovado(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Query('productCode') productCode: string,
+  ) {
+    return this.sdr.materialAprovadoDoMercado(tenantId, productCode, user);
+  }
+
   /// Passa pro closer: escolha direta pelo SDR (decidido 11/08), sem round-robin —
   /// `pickAndClaimSeller` foi o centro do incidente de 09/07 e não se mexe nele para
   /// atender uma tela nova.
