@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { abertura, cancelado, naoEntendi, pergunta, recusado, resultado, validadeEmDiaMes } from './quote-messages';
+import {
+  abertura,
+  cancelado,
+  naoEntendi,
+  pergunta,
+  recusado,
+  resultadoInterno,
+  resultadoParaCliente,
+  validadeEmDiaMes,
+} from './quote-messages';
 import type { EstadoCotacao } from './quote-flow';
 
 const CAMPINAS = { code: '1', name: 'Campinas', state: 'SP' };
@@ -66,7 +75,7 @@ describe('erro', () => {
   });
 });
 
-describe('resultado', () => {
+describe('resultado — mensagem pro cliente (resultadoParaCliente)', () => {
   const pronto = estado({
     etapa: 'pronto',
     origem: CAMPINAS,
@@ -78,7 +87,12 @@ describe('resultado', () => {
 
   it('o número da cotação vai no TÍTULO', () => {
     // É por ele que a pessoa procura no sistema; no rodapé ele compete com o preço.
-    const t = resultado(pronto, { valor: 5200, pisoAntt: 3800, distanciaKm: 586, rascunhoId: '017749' });
+    const t = resultadoParaCliente(pronto, {
+      valor: 5200,
+      pisoAntt: 3800,
+      distanciaKm: 586,
+      rascunhoId: '017749',
+    });
     expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
     expect(t).toContain('Campinas/SP → Belo Horizonte/MG');
     expect(t).toContain('586 km');
@@ -86,40 +100,76 @@ describe('resultado', () => {
   });
 
   it('NÃO mostra o piso ANTT — a mensagem é encaminhável com um toque', () => {
-    // Chegando ao cliente com o piso, ele passa a saber a margem. Fica no rascunho.
-    const t = resultado(pronto, { valor: 5200, pisoAntt: 3800, rascunhoId: '017749' });
+    // Chegando ao cliente com o piso, ele passa a saber a margem. Quem precisa dele lê na
+    // mensagem interna, que chega antes desta (ver describe de resultadoInterno).
+    const t = resultadoParaCliente(pronto, { valor: 5200, pisoAntt: 3800, rascunhoId: '017749' });
     expect(t).not.toContain('Piso');
     expect(t).not.toContain('3.800');
   });
 
   it('ecoa o valor da mercadoria — é o único número digitado livre', () => {
     // Trocar 10.000 por 100.000 muda o seguro sem ninguém perceber.
-    expect(resultado(pronto, { valor: 5200 })).toContain('80.000,00');
+    expect(resultadoParaCliente(pronto, { valor: 5200 })).toContain('80.000,00');
   });
 
   it('diz ONDE achar o rascunho, não só que ele existe', () => {
-    expect(resultado(pronto, { valor: 5200, rascunhoId: '017749' })).toContain(
+    expect(resultadoParaCliente(pronto, { valor: 5200, rascunhoId: '017749' })).toContain(
       'Vendas › Cotações › 017749',
     );
   });
 
   it('diz que é referência — o número já vira preço na cabeça de quem lê', () => {
-    expect(resultado(pronto, { valor: 5200 })).toContain('referência');
+    expect(resultadoParaCliente(pronto, { valor: 5200 })).toContain('referência');
   });
 
   it('sem piso e sem rascunho, não imprime linha vazia no lugar', () => {
-    const t = resultado(pronto, { valor: 5200 });
+    const t = resultadoParaCliente(pronto, { valor: 5200 });
     expect(t).not.toContain('Piso ANTT');
     expect(t).not.toContain('Rascunho salvo');
   });
 
   it('fracionado mostra o peso no lugar do veículo', () => {
-    const t = resultado(
+    const t = resultadoParaCliente(
       estado({ etapa: 'pronto', origem: CAMPINAS, destino: BH, modalidade: 'fracionado', pesoKg: 500 }),
       { valor: 900 },
     );
     expect(t).toContain('Fracionado');
     expect(t).toContain('500 kg');
+  });
+});
+
+describe('resultado — mensagem interna (resultadoInterno)', () => {
+  const pronto = estado({
+    etapa: 'pronto',
+    origem: CAMPINAS,
+    destino: BH,
+    modalidade: 'dedicado',
+    veiculo: 'carreta',
+    valorMercadoria: 80000,
+  });
+
+  it('MOSTRA o piso ANTT — só o vendedor vê esta mensagem', () => {
+    const t = resultadoInterno(pronto, { valor: 5200, pisoAntt: 3800, rascunhoId: '017749' });
+    expect(t).toContain('Piso ANTT');
+    expect(t).toContain('3.800,00');
+  });
+
+  it('sem piso, não imprime a linha', () => {
+    const t = resultadoInterno(pronto, { valor: 5200, rascunhoId: '017749' });
+    expect(t).not.toContain('Piso ANTT');
+  });
+
+  it('avisa que a mensagem encaminhável vem em seguida', () => {
+    expect(resultadoInterno(pronto, { valor: 5200 })).toContain('encaminhar ao cliente');
+  });
+
+  it('NÃO tem o aviso de "valor de referência" — esse é só da mensagem-cliente', () => {
+    expect(resultadoInterno(pronto, { valor: 5200 })).not.toContain('referência');
+  });
+
+  it('o número da cotação também vai no título', () => {
+    const t = resultadoInterno(pronto, { valor: 5200, rascunhoId: '017749' });
+    expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
   });
 });
 
@@ -166,12 +216,18 @@ describe('validade', () => {
   });
 
   it('a mensagem mostra a validade quando o TMS manda', () => {
-    const t = resultado(pronto, { valor: 176.1, rascunhoId: '017749', validoAte: '2026-09-03T13:19:00.000Z' });
+    const t = resultadoParaCliente(pronto, {
+      valor: 176.1,
+      rascunhoId: '017749',
+      validoAte: '2026-09-03T13:19:00.000Z',
+    });
     expect(t).toContain('Válida até *03/09*');
   });
 
   it('sem validade, nao inventa data nem imprime linha vazia', () => {
-    expect(resultado(pronto, { valor: 176.1, rascunhoId: '017749' })).not.toContain('Válida até');
+    expect(resultadoParaCliente(pronto, { valor: 176.1, rascunhoId: '017749' })).not.toContain(
+      'Válida até',
+    );
   });
 
   it('lixo no lugar da data devolve null em vez de data torta', () => {

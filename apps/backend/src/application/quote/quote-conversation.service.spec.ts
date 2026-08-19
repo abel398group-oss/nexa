@@ -72,7 +72,7 @@ describe('cotação por WhatsApp', () => {
     expect(s._mapa.get(FONE)?.etapa).toBe('origem');
   });
 
-  it('percorre as 6 perguntas e devolve o valor com o rascunho', async () => {
+  it('percorre as 6 perguntas e devolve duas mensagens finais — interna e encaminhável, NESTA ordem', async () => {
     const s = sessoesFalsas();
     const tms = tmsFalso({
       buscarCidades: vi
@@ -91,8 +91,15 @@ describe('cotação por WhatsApp', () => {
     await svc.responderMensagem(FONE, '1', USER); // Carga Geral
     const fim = await svc.responderMensagem(FONE, '80000', USER);
 
-    expect(fim).toContain('5.200,00');
-    expect(fim).toContain('1234');
+    expect(Array.isArray(fim)).toBe(true);
+    const [interna, paraCliente] = fim as string[];
+    // A interna vem primeiro e traz o piso ANTT — a encaminhável não.
+    expect(interna).toContain('5.200,00');
+    expect(interna).toContain('1234');
+    expect(interna).toContain('Piso ANTT');
+    expect(paraCliente).toContain('5.200,00');
+    expect(paraCliente).toContain('1234');
+    expect(paraCliente).not.toContain('Piso ANTT');
     // A sessão MORRE no fim: a próxima mensagem não pode virar resposta de formulário.
     expect(s._mapa.has(FONE)).toBe(false);
   });

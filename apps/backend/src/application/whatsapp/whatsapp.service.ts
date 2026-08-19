@@ -107,7 +107,13 @@ export class WhatsappService {
       const resposta = await this.cotacao.responderMensagem(phone, texto, userId);
       if (!resposta) return false;
 
-      await this.waha.sendText(phone, resposta, { linha, origin: 'cotacao' });
+      // O passo final devolve duas mensagens (interna + encaminhável); todo o resto
+      // devolve uma. Mandar em sequência, na ordem que veio — é ela que garante que a
+      // interna chegue ANTES da que o vendedor pode repassar.
+      const mensagens = Array.isArray(resposta) ? resposta : [resposta];
+      for (const mensagem of mensagens) {
+        await this.waha.sendText(phone, mensagem, { linha, origin: 'cotacao' });
+      }
       return true;
     } catch (e: any) {
       this.logger.warn(`cotação falhou para ${phone}: ${e?.message}`);

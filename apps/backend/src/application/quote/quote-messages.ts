@@ -204,13 +204,7 @@ export function validadeEmDiaMes(iso: string | null | undefined): string | null 
     .replace(/-/g, '/');
 }
 
-/**
- * O resultado.
- *
- * "Valor de referência" fica na mensagem de propósito: o número dito no WhatsApp já é um
- * preço na cabeça de quem lê, e a formalização ainda vai acontecer no TMS.
- */
-export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
+function resumoDaRota(estado: EstadoCotacao, r: ResultadoDaCotacao): { rota: string; detalhe: string } {
   const rota =
     estado.origem && estado.destino ? `${cidade(estado.origem)} → ${cidade(estado.destino)}` : '';
   const detalhe = [
@@ -221,6 +215,21 @@ export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string 
   ]
     .filter(Boolean)
     .join(' · ');
+  return { rota, detalhe };
+}
+
+/**
+ * O resultado — mensagem encaminhável, a que o vendedor repassa pro cliente.
+ *
+ * "Valor de referência" fica na mensagem de propósito: o número dito no WhatsApp já é um
+ * preço na cabeça de quem lê, e a formalização ainda vai acontecer no TMS.
+ *
+ * Chega DEPOIS de `resultadoInterno` na conversa — ver `quote-conversation.service.ts`.
+ * Isso é o que já existia como `resultado()` antes da mensagem interna nascer; o texto não
+ * mudou, só o nome, pra deixar explícito quem lê esta.
+ */
+export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
+  const { rota, detalhe } = resumoDaRota(estado, r);
 
   return [
     // O número no TÍTULO, e não no rodapé: é por ele que a pessoa vai procurar a cotação
@@ -236,13 +245,48 @@ export function resultado(estado: EstadoCotacao, r: ResultadoDaCotacao): string 
     `💰 *${brl(r.valor)}*`,
     // O piso ANTT fica FORA da mensagem de propósito, e continua gravado no rascunho.
     // Esta mensagem é encaminhável com um toque: se ela chegar ao cliente com o piso,
-    // ele passa a saber a margem. O vendedor consulta no sistema quando precisar.
+    // ele passa a saber a margem. Quem precisa dele lê na mensagem interna, antes desta.
     '',
     ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
     'Valor de referência — confirme antes de fechar com o cliente.',
     ...(r.rascunhoId
       ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
       : []),
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
+}
+
+/**
+ * O resultado — mensagem interna, só quem cotou vê. Chega ANTES da mensagem-cliente.
+ *
+ * Existe pra separar o que é do vendedor do que é seguro encaminhar. Traz o piso ANTT, que
+ * `resultadoParaCliente` esconde de propósito (ver comentário lá).
+ *
+ * Margem, receita líquida e link direto pro registro NÃO estão aqui: `/nexa/quote` no TMS
+ * hoje só devolve price/minimumFloor/distanceKm/draftId/validUntil (ver `ResultadoTms` em
+ * `quote-tms.client.ts`). Quando esse contrato crescer, essas linhas entram aqui — nunca na
+ * mensagem-cliente, que é a que sai do controle de quem cotou assim que chega no zap dele.
+ */
+export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
+  const { rota, detalhe } = resumoDaRota(estado, r);
+
+  return [
+    r.rascunhoId ? `*Cotação ${r.rascunhoId}* ✅` : '*Cotação pronta* ✅',
+    '',
+    rota,
+    detalhe,
+    ...(estado.valorMercadoria ? [`Mercadoria: ${brl(estado.valorMercadoria)}`] : []),
+    '',
+    `💰 *${brl(r.valor)}*`,
+    ...(r.pisoAntt != null ? [`Piso ANTT: ${brl(r.pisoAntt)}`] : []),
+    '',
+    ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
+    ...(r.rascunhoId
+      ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
+      : []),
+    '',
+    '👇 Mensagem pronta pra encaminhar ao cliente, logo abaixo.',
   ]
     .filter((l) => l !== null)
     .join('\n');

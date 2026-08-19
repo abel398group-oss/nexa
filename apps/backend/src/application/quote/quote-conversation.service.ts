@@ -67,9 +67,15 @@ export class QuoteConversationService {
 
   /**
    * @param userId Id do usuário no TMS (`tenant_core_user.id`), resolvido pelo telefone.
-   * @returns texto a responder, ou `null` se a mensagem não é de cotação.
+   * @returns texto(s) a responder, em ORDEM, ou `null` se a mensagem não é de cotação. Só o
+   *   passo final (`fechar`) devolve mais de um texto — a interna primeiro, a encaminhável
+   *   depois. Quem chama manda cada item como uma mensagem separada, na ordem do array.
    */
-  async responderMensagem(phone: string, texto: string, userId: string): Promise<string | null> {
+  async responderMensagem(
+    phone: string,
+    texto: string,
+    userId: string,
+  ): Promise<string | string[] | null> {
     if (!this.habilitado) return null;
 
     const sessao = await this.sessoes.ler(phone);
@@ -103,7 +109,7 @@ export class QuoteConversationService {
     sessao: EstadoCotacao,
     texto: string,
     userId: string,
-  ): Promise<string> {
+  ): Promise<string | string[]> {
     let passo = responder(sessao, texto);
 
     // Busca de cidade: o fluxo pede, o mundo responde, e o fluxo decide. O `while` existe
@@ -167,7 +173,11 @@ export class QuoteConversationService {
   /// Última etapa: chama o TMS e encerra a sessão de qualquer jeito. Manter a sessão viva
   /// depois de cotar faria a próxima mensagem ser lida como resposta de um formulário que
   /// já acabou.
-  private async fechar(phone: string, estado: EstadoCotacao, userId: string): Promise<string> {
+  private async fechar(
+    phone: string,
+    estado: EstadoCotacao,
+    userId: string,
+  ): Promise<string | string[]> {
     const corpo = dadosDaCotacao(estado);
     await this.sessoes.apagar(phone);
 
@@ -185,12 +195,15 @@ export class QuoteConversationService {
     }
 
     this.logger.log(`cotação criada para ${phone} — rascunho ${r.draftId ?? '(sem id)'}`);
-    return msg.resultado(estado, {
+    const dados: msg.ResultadoDaCotacao = {
       valor: r.price,
       pisoAntt: r.minimumFloor,
       distanciaKm: r.distanceKm,
       rascunhoId: r.draftId,
       validoAte: r.validUntil,
-    });
+    };
+    // Duas mensagens, NESTA ordem: a interna (com piso ANTT) primeiro, pro vendedor
+    // conferir; a encaminhável — a que já existia — logo depois, pronta pra repassar.
+    return [msg.resultadoInterno(estado, dados), msg.resultadoParaCliente(estado, dados)];
   }
 }
