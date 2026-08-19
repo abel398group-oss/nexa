@@ -547,11 +547,28 @@ export function CampaignValidationPage() {
                 ) : selecionado.mimeType?.startsWith('image/') ? (
                   <img src={selecionado.fileUrl ?? ''} alt={selecionado.name} className="max-h-[32rem] rounded-lg" />
                 ) : (
-                  <iframe
-                    title={selecionado.name}
-                    src={selecionado.fileUrl ?? ''}
-                    className="h-[32rem] w-full rounded-lg border border-base-200 bg-white"
-                  />
+                  <>
+                    {/* O link vem ANTES do visualizador, e não como alternativa
+                        escondida: exibir PDF dentro de um iframe depende de um leitor
+                        embutido que nem todo navegador traz ligado — e quando ele não
+                        vem, o que sobra é um retângulo branco. Aprovar material que a
+                        tela não conseguiu mostrar é exatamente o que a aprovação existe
+                        para impedir, então tem que haver sempre um caminho para ler. */}
+                    <a
+                      href={selecionado.fileUrl ?? ''}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+                    >
+                      <Icon name="eye" className="h-3.5 w-3.5" />
+                      Abrir em nova aba — use se o arquivo não aparecer aqui embaixo
+                    </a>
+                    <iframe
+                      title={selecionado.name}
+                      src={selecionado.fileUrl ?? ''}
+                      className="h-[32rem] w-full rounded-lg border border-base-200 bg-white"
+                    />
+                  </>
                 )}
               </div>
             </>
