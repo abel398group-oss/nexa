@@ -124,6 +124,30 @@ export class MarketAssetsController {
         },
       }),
       limits: { fileSize: 16 * 1024 * 1024 },
+      /**
+       * O tipo é recusado ANTES de o arquivo tocar o disco.
+       *
+       * A checagem ficava só no corpo do método, e o `diskStorage` roda primeiro: o
+       * `.pptx` era gravado inteiro em `uploads/` e só então a requisição respondia
+       * 400. O usuário via a recusa, mas os bytes ficavam lá — arquivo que ninguém
+       * referencia, que nenhuma tela lista e que ninguém vai apagar. Foram três
+       * `.pptx` (2,6 MB) numa única tentativa de subir a pilha.
+       *
+       * `fileFilter` roda antes do `storage`, então recusar aqui é recusar sem
+       * escrever. A mensagem é a mesma que o método dava, para quem sobe não notar
+       * diferença nenhuma além de o lixo não existir mais.
+       */
+      fileFilter: (_req, file, cb) => {
+        if (!TIPOS_PORTFOLIO.includes(file.mimetype)) {
+          return cb(
+            new BadRequestException(
+              `"${file.originalname}" é ${file.mimetype}. Aqui entra PDF, JPG, PNG ou WEBP.`,
+            ),
+            false,
+          );
+        }
+        cb(null, true);
+      },
     }),
   )
   subirPortfolio(
@@ -131,12 +155,9 @@ export class MarketAssetsController {
     @Param('code') code: string,
     @UploadedFile() file: any,
   ) {
+    // O tipo já foi filtrado no `fileFilter` acima; aqui sobra o caso de não vir
+    // arquivo nenhum no campo `file`.
     if (!file) throw new BadRequestException('Nenhum arquivo chegou.');
-    if (!TIPOS_PORTFOLIO.includes(file.mimetype)) {
-      throw new BadRequestException(
-        `"${file.originalname}" é ${file.mimetype}. Aqui entra PDF, JPG, PNG ou WEBP.`,
-      );
-    }
     return this.assets.subirPortfolio(tenantId, code, {
       name: file.originalname,
       fileUrl: `/uploads/${file.filename}`,
