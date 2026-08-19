@@ -383,8 +383,12 @@ function RoteiroDoMercado({
   }
 
   if (!roteiro) {
+    // O material aprovado continua aparecendo aqui embaixo, e não é detalhe: o mercado
+    // sem `SalesScript` é justamente o caso em que o roteiro validado na Validação de
+    // Campanha é a ÚNICA coisa que o SDR tem para ler. Esconder os dois juntos deixava
+    // ele sem nada — foi o que esta tela fez até 19/08/2026.
     return (
-      <Card className="p-5">
+      <Card className="max-h-[calc(100vh-14rem)] overflow-y-auto p-5">
         <p className="text-sm text-amber-700">
           Não existe roteiro para <b>{productCode}</b> ainda.
         </p>
@@ -392,6 +396,8 @@ function RoteiroDoMercado({
           Quem monta a operação precisa escrever em Roteiro do SDR. Ligar sem roteiro é
           exatamente o que este módulo existe para evitar.
         </p>
+        <MaterialAprovadoDoMercado productCode={productCode} />
+        <Material productCode={productCode} />
       </Card>
     );
   }
