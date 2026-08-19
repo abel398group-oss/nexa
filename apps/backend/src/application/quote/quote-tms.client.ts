@@ -15,6 +15,13 @@ import type { CorpoDaCotacao } from './quote-flow';
  * desfecho: o vendedor fica esperando um preço que nunca vem.
  */
 
+export interface ImpostoDaCotacao {
+  acronym: string;
+  name: string;
+  rate: number;
+  value: number;
+}
+
 export type ResultadoTms =
   | {
       ok: true;
@@ -25,6 +32,22 @@ export type ResultadoTms =
       /// ISO-8601 vindo do TMS, calculado pela regra do tenant. Guardado CRU de propósito
       /// — ver o comentário de `validadeEmDiaMes` em quote-messages.
       validUntil: string | null;
+      /// Campos aditivos (2026-08-19): margem, receita líquida e impostos vêm da "análise
+      /// crítica" que o TMS já calculava internamente — não existiam na resposta antes.
+      /// `null` de propósito quando o motor não devolveu análise: ZERO seria lido pelo
+      /// vendedor como "cotação sem margem", que é uma mensagem bem diferente de "não sei".
+      netMargin: number | null;
+      netRevenue: number | null;
+      taxes: { total: number; items: ImpostoDaCotacao[] } | null;
+      /// Path relativo, SEMPRE presente segundo o contrato do TMS. `draftUrl` é o
+      /// absoluto — só vem preenchido quando o TMS conhece a base do próprio web-app
+      /// (branding do tenant ou `WEB_APP_URL` deles). Quando vem `null`, NÃO montamos um
+      /// link aqui: `app.hipertms.com.br` já se mostrou incorreto para outro fluxo (ver
+      /// comentário em `digest-tabular.ts`), e não há confirmação de que a raiz sem
+      /// subdomínio sirva a SPA em `draftPath`. Nesse caso a mensagem interna some com o
+      /// link e mantém só a instrução em texto que já existia.
+      draftPath: string | null;
+      draftUrl: string | null;
     }
   | { ok: false; motivo: 'sem_permissao' | 'cota_estourada' | 'indisponivel' };
 
@@ -161,6 +184,29 @@ export class QuoteTmsClient {
       distanceKm: Number.isFinite(Number(d?.distanceKm)) ? Number(d.distanceKm) : null,
       draftId: d?.draftId != null ? String(d.draftId) : null,
       validUntil: typeof d?.validUntil === 'string' ? d.validUntil : null,
+      netMargin: Number.isFinite(Number(d?.netMargin)) ? Number(d.netMargin) : null,
+      netRevenue: Number.isFinite(Number(d?.netRevenue)) ? Number(d.netRevenue) : null,
+      taxes: this.extrairImpostos(d?.taxes),
+      draftPath: typeof d?.draftPath === 'string' && d.draftPath ? d.draftPath : null,
+      draftUrl: typeof d?.draftUrl === 'string' && d.draftUrl ? d.draftUrl : null,
     };
+  }
+
+  /// `taxes` é opcional e tem formato composto (`total` + `items[]`) — mais chance de vir
+  /// torto que os campos escalares. `total` sem número utilizável já invalida o bloco
+  /// inteiro: impostos parciais na tela confundem mais que não mostrar nenhum.
+  private extrairImpostos(bruto: any): { total: number; items: ImpostoDaCotacao[] } | null {
+    const total = Number(bruto?.total);
+    if (!Number.isFinite(total)) return null;
+    const itens = Array.isArray(bruto?.items) ? bruto.items : [];
+    const items: ImpostoDaCotacao[] = itens
+      .map((i: any) => ({
+        acronym: String(i?.acronym ?? ''),
+        name: String(i?.name ?? ''),
+        rate: Number.isFinite(Number(i?.rate)) ? Number(i.rate) : 0,
+        value: Number.isFinite(Number(i?.value)) ? Number(i.value) : 0,
+      }))
+      .filter((i: ImpostoDaCotacao) => i.acronym);
+    return { total, items };
   }
 }

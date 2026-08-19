@@ -150,3 +150,86 @@ describe('cliente do TMS — tipos de carga e cotação', () => {
     expect(enviado.userId).toBe('u');
   });
 });
+
+describe('cliente do TMS — campos aditivos da análise crítica (2026-08-19)', () => {
+  const original = globalThis.fetch;
+  const corpo = { originCode: '1', destCode: '2', freightMode: 'DEDICATED', vehicleType: 'carreta', cargoType: null, weightKg: null, merchandiseValue: 1000 } as any;
+
+  beforeEach(() => {
+    process.env.TMS_BASE_URL = 'http://tms:3000/api';
+    process.env.TMS_SERVICE_TOKEN = 'token';
+  });
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('lê margem, receita, impostos e os dois formatos de link quando o TMS manda', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      respostaFake({
+        price: 5200,
+        draftId: '017747',
+        netMargin: 780.25,
+        netRevenue: 4420.5,
+        taxes: {
+          total: 779.5,
+          items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 624.0 }],
+        },
+        draftPath: '/logistic/quotes/b3f1',
+        draftUrl: 'https://app.hipertms.com.br/logistic/quotes/b3f1',
+      }),
+    ) as any;
+
+    const r = await new QuoteTmsClient().cotar('u', corpo, '55119');
+    expect(r).toMatchObject({
+      ok: true,
+      netMargin: 780.25,
+      netRevenue: 4420.5,
+      taxes: { total: 779.5, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 624.0 }] },
+      draftPath: '/logistic/quotes/b3f1',
+      draftUrl: 'https://app.hipertms.com.br/logistic/quotes/b3f1',
+    });
+  });
+
+  it('sem análise crítica na resposta, os campos somem — não viram zero', async () => {
+    // Zero seria lido como "cotação sem margem", que é uma mensagem bem diferente de
+    // "o TMS não calculou isso".
+    globalThis.fetch = vi.fn(async () => respostaFake({ price: 5200, draftId: '1' })) as any;
+    const r = await new QuoteTmsClient().cotar('u', corpo, '55119');
+    expect(r).toMatchObject({
+      ok: true,
+      netMargin: null,
+      netRevenue: null,
+      taxes: null,
+      draftPath: null,
+      draftUrl: null,
+    });
+  });
+
+  it('taxes sem total utilizável descarta o bloco inteiro, mesmo com items presentes', async () => {
+    // Impostos parciais na tela confundem mais que não mostrar nenhum.
+    globalThis.fetch = vi.fn(async () =>
+      respostaFake({
+        price: 5200,
+        draftId: '1',
+        taxes: { total: 'não é número', items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 624 }] },
+      }),
+    ) as any;
+    const r = await new QuoteTmsClient().cotar('u', corpo, '55119');
+    expect((r as any).taxes).toBeNull();
+  });
+
+  it('item de imposto sem acronym é descartado da lista', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      respostaFake({
+        price: 5200,
+        draftId: '1',
+        taxes: {
+          total: 100,
+          items: [{ acronym: '', name: 'sem sigla', rate: 0.1, value: 50 }, { acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 50 }],
+        },
+      }),
+    ) as any;
+    const r = await new QuoteTmsClient().cotar('u', corpo, '55119');
+    expect((r as any).taxes.items).toEqual([{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 50 }]);
+  });
+});

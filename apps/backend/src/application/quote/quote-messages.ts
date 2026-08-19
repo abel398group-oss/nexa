@@ -7,6 +7,7 @@
 
 import type { CidadeDoTms } from './quote-city';
 import { passoAtual, type EstadoCotacao } from './quote-flow';
+import type { ImpostoDaCotacao } from './quote-tms.client';
 
 const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
@@ -169,6 +170,14 @@ export interface ResultadoDaCotacao {
   rascunhoId?: string | null;
   /// ISO-8601 do TMS. Ver `validadeEmDiaMes` — instante e data pura são tratados diferente.
   validoAte?: string | null;
+  /// Campos aditivos (2026-08-19) — só entram em `resultadoInterno`, nunca em
+  /// `resultadoParaCliente`. `null` quando o TMS não devolveu análise crítica.
+  netMargin?: number | null;
+  netRevenue?: number | null;
+  taxes?: { total: number; items: ImpostoDaCotacao[] } | null;
+  /// Absoluto, só quando o TMS conhece a própria base de web-app. `null` = não mostramos
+  /// link nenhum — ver o porquê em `ResultadoTms` de `quote-tms.client.ts`.
+  draftUrl?: string | null;
 }
 
 /**
@@ -271,6 +280,20 @@ export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotaca
 export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
   const { rota, detalhe } = resumoDaRota(estado, r);
 
+  // Presente só quando o TMS devolveu análise crítica — nem sempre devolve (motor sem
+  // essa etapa, ou tenant sem tabela fiscal configurada). Ausência TOTAL, não zero: ver
+  // o comentário em `ResultadoDaCotacao`.
+  const temAnalise = r.netMargin != null || r.netRevenue != null || r.taxes != null;
+  const analiseCritica = temAnalise
+    ? [
+        '',
+        '📊 *Análise crítica*',
+        ...(r.netRevenue != null ? [`Receita líquida: ${brl(r.netRevenue)}`] : []),
+        ...(r.taxes ? [`Impostos: ${brl(r.taxes.total)}`] : []),
+        ...(r.netMargin != null ? [`Margem: ${brl(r.netMargin)}`] : []),
+      ]
+    : [];
+
   return [
     r.rascunhoId ? `*Cotação ${r.rascunhoId}* ✅` : '*Cotação pronta* ✅',
     '',
@@ -280,11 +303,15 @@ export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): 
     '',
     `💰 *${brl(r.valor)}*`,
     ...(r.pisoAntt != null ? [`Piso ANTT: ${brl(r.pisoAntt)}`] : []),
+    ...analiseCritica,
     '',
     ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
     ...(r.rascunhoId
       ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
       : []),
+    // Só quando o TMS manda um absoluto pronto — nunca montado aqui. Ver o porquê em
+    // `ResultadoTms.draftUrl` (quote-tms.client.ts): domínio errado já quebrou link antes.
+    ...(r.draftUrl ? [`🔗 ${r.draftUrl}`] : []),
     '',
     '👇 Mensagem pronta pra encaminhar ao cliente, logo abaixo.',
   ]

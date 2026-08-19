@@ -171,6 +171,50 @@ describe('resultado — mensagem interna (resultadoInterno)', () => {
     const t = resultadoInterno(pronto, { valor: 5200, rascunhoId: '017749' });
     expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
   });
+
+  it('mostra a análise crítica quando o TMS manda margem/receita/impostos', () => {
+    const t = resultadoInterno(pronto, {
+      valor: 5200,
+      rascunhoId: '017749',
+      netMargin: 780.25,
+      netRevenue: 4420.5,
+      taxes: { total: 779.5, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 624 }] },
+    });
+    expect(t).toContain('Análise crítica');
+    expect(t).toContain('780,25');
+    expect(t).toContain('4.420,50');
+    expect(t).toContain('779,50');
+  });
+
+  it('sem análise crítica na resposta do TMS, não mostra o bloco', () => {
+    const t = resultadoInterno(pronto, { valor: 5200, rascunhoId: '017749' });
+    expect(t).not.toContain('Análise crítica');
+  });
+
+  it('mostra o link só quando o TMS manda um pronto — nunca monta um sozinho', () => {
+    const comLink = resultadoInterno(pronto, {
+      valor: 5200,
+      draftUrl: 'https://app.hipertms.com.br/logistic/quotes/b3f1',
+    });
+    expect(comLink).toContain('https://app.hipertms.com.br/logistic/quotes/b3f1');
+
+    const semLink = resultadoInterno(pronto, { valor: 5200, draftUrl: null });
+    expect(semLink).not.toContain('http');
+  });
+
+  it('resultadoParaCliente NUNCA mostra análise crítica nem link — mesmo se vierem no resultado', () => {
+    const t = resultadoParaCliente(pronto, {
+      valor: 5200,
+      rascunhoId: '017749',
+      netMargin: 780.25,
+      netRevenue: 4420.5,
+      taxes: { total: 779.5, items: [] },
+      draftUrl: 'https://app.hipertms.com.br/logistic/quotes/b3f1',
+    });
+    expect(t).not.toContain('Análise crítica');
+    expect(t).not.toContain('780,25');
+    expect(t).not.toContain('http');
+  });
 });
 
 describe('recusa do TMS', () => {

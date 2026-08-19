@@ -201,6 +201,10 @@ export class QuoteConversationService {
       distanciaKm: r.distanceKm,
       rascunhoId: r.draftId,
       validoAte: r.validUntil,
+      netMargin: r.netMargin,
+      netRevenue: r.netRevenue,
+      taxes: r.taxes,
+      draftUrl: r.draftUrl,
     };
     // Duas mensagens, NESTA ordem: a interna (com piso ANTT) primeiro, pro vendedor
     // conferir; a encaminhável — a que já existia — logo depois, pronta pra repassar.
