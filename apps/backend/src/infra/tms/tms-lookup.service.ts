@@ -180,13 +180,18 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
       }
 
       // ── Query 2: empresas (tenant_company) ────────────────────────────────
+      // A coluna do nome é DESCOBERTA, não fixa: o TMS chama de `name` e aqui estava
+      // `nome`, o que derrubava a consulta inteira (ver COLUNAS_DE_NOME_DA_EMPRESA).
+      // Sem nenhuma candidata, `NULL AS nome` mantém a peneira de pé sem o rótulo.
+      const colunaNome = await this.descobrirColunaDeNome(client);
+      const selectNome = colunaNome ? `"${colunaNome}" AS nome` : `NULL AS nome`;
       const companiesRes = await client.query<{
-        telefone: string | null; celular: string | null; nome: string; email: string | null;
+        telefone: string | null; celular: string | null; nome: string | null; email: string | null;
       }>(
         `SELECT
            "contatoTelefone" AS telefone,
            "contatoCelular"  AS celular,
-           nome,
+           ${selectNome},
            "contatoEmail"    AS email
          FROM tenant_company
          WHERE (
@@ -205,9 +210,11 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
           // não sobrescreve se já achou como usuário
           result.set(key, {
             phone: key,
-            name: row.nome,
+            // Sem coluna de nome no TMS o rótulo vem nulo; o que importa aqui é a
+            // resposta "é cliente", e ela não depende do nome.
+            name: row.nome ?? 'Cliente TMS',
             email: row.email ?? undefined,
-            tenantName: row.nome,
+            tenantName: row.nome ?? undefined,
             isUser: false,
             isCompany: true,
           });
@@ -242,6 +249,26 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
    */
   private static readonly COLUNAS_DE_ATIVO = ['isActive', 'is_active', 'active', 'ativo'] as const;
   private static readonly COLUNAS_DE_EXCLUSAO = ['deletedAt', 'deleted_at'] as const;
+
+  /**
+   * Como a empresa se chama em `tenant_company`.
+   *
+   * A consulta pedia `nome` fixo e o TMS chama de `name` — em 20/08/2026 isso
+   * derrubou `batchLookup` com `column "nome" does not exist`, e como a falha é
+   * tratada como "não deu para verificar", a importação de listas parou inteira e
+   * qualquer campanha nova junto. O comentário logo acima já avisava que fixar nome
+   * de coluna quebra no dia que o TMS renomeia; a proteção existia para a vigência e
+   * faltava aqui.
+   *
+   * Ordem importa: `name` é o que o TMS usa hoje; `nome` fica para uma base antiga;
+   * `display_name` e `fantasia` são o nome comercial, bom o bastante quando a razão
+   * social não existir. Lista fechada — é o que torna seguro interpolar no SQL.
+   */
+  private static readonly COLUNAS_DE_NOME_DA_EMPRESA = [
+    'name', 'nome', 'display_name', 'fantasia',
+  ] as const;
+  /// `undefined` = ainda não perguntei. `null` = perguntei e nenhuma existe.
+  private colunaDeNomeDaEmpresa?: string | null;
   /// `undefined` = ainda não perguntei. `null` = perguntei e não existe.
   private colunaDeVigencia?: { nome: string; tipo: 'booleano' | 'exclusao' } | null;
 
@@ -264,6 +291,36 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Descobre como `tenant_company` chama o nome da empresa.
+   *
+   * Devolve `null` quando nenhuma das candidatas existe — e aí a consulta sai SEM a
+   * coluna de nome em vez de estourar. O lookup existe para responder "este telefone
+   * é de cliente?", e essa resposta não depende do nome: perder o rótulo é aceitável,
+   * derrubar a peneira inteira não é.
+   */
+  private async descobrirColunaDeNome(client: any): Promise<string | null> {
+    if (this.colunaDeNomeDaEmpresa !== undefined) return this.colunaDeNomeDaEmpresa;
+    try {
+      const res = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = $1`,
+        ['tenant_company'],
+      );
+      const existentes = new Set<string>(res.rows.map((r: { column_name: string }) => r.column_name));
+      this.colunaDeNomeDaEmpresa =
+        TmsLookupService.COLUNAS_DE_NOME_DA_EMPRESA.find((c) => existentes.has(c)) ?? null;
+      this.logger.log(
+        this.colunaDeNomeDaEmpresa
+          ? `empresas do TMS: nome lido de "${this.colunaDeNomeDaEmpresa}"`
+          : 'empresas do TMS: nenhuma coluna de nome encontrada — o cliente entra sem rótulo',
+      );
+    } catch (e: any) {
+      this.logger.warn(`não consegui ler o catálogo de tenant_company: ${e?.message}`);
+      this.colunaDeNomeDaEmpresa = null;
+    }
+    return this.colunaDeNomeDaEmpresa;
   }
 
   private async descobrirColunaDeVigencia(client: any): Promise<{ nome: string; tipo: 'booleano' | 'exclusao' } | null> {
