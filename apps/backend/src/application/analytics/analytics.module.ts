@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PageviewService } from './pageview.service';
 import { PageviewStatsService } from './pageview-stats.service';
 import { SiteDigestCron } from './site-digest.cron';
+import { PageviewRetentionCron } from './pageview-retention.cron';
 import { AnalyticsController } from '@/presentation/http/analytics/analytics.controller';
 import { MonitorModule } from '@/application/monitor/monitor.module';
 import { RedisLockModule } from '@/shared/lock/redis-lock.module';
@@ -18,7 +19,9 @@ import { TrackingController } from '@/presentation/http/analytics/tracking.contr
 @Module({
   imports: [MonitorModule, RedisLockModule],
   controllers: [TrackingController, AnalyticsController],
-  providers: [PageviewService, PageviewStatsService, SiteDigestCron],
+    // Expurgo de retencao (LGPD). NASCE DESLIGADO: so roda com
+  // PAGEVIEW_RETENTION_ENABLED=true (ou 'dry' para ensaiar sem escrever).
+  providers: [PageviewService, PageviewStatsService, SiteDigestCron, PageviewRetentionCron],
   exports: [PageviewService, PageviewStatsService],
 })
 export class AnalyticsModule {}
