@@ -221,13 +221,18 @@ export function CampaignValidationPage() {
     mutationFn: (id: string) => approveMarketAsset(code, id),
     // Roteiro aprovado vira artigo na base de conhecimento (19/08/2026) — o toast
     // confirma o efeito que a tela sempre prometeu, agora que ele existe.
-    onSuccess: (_data, id) => {
+    onSuccess: (data, id) => {
       recarregar();
       const item = itens.find((a) => a.id === id);
+      const modelos = data?.modelosCriados ?? 0;
       toast.success(
-        item?.kind === 'plan'
-          ? 'Aprovado — a Lia já pode usar este roteiro.'
-          : 'Aprovado — o vendedor já enxerga este material.',
+        // O número vem primeiro porque é o que muda o próximo passo de quem
+        // aprovou: com modelo novo, o caminho é conferir o texto em Mensagens.
+        modelos > 0
+          ? `Aprovado — ${modelos} mensagem(ns) do roteiro já estão em Playbook & Mensagens.`
+          : item?.kind === 'plan'
+            ? 'Aprovado — a Lia já pode usar este roteiro.'
+            : 'Aprovado — o vendedor já enxerga este material.',
       );
     },
     // A publicação para a Lia acontece ANTES do carimbo: se ela falhar, o material

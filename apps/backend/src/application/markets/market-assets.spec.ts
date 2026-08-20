@@ -488,3 +488,105 @@ describe('urlPublicaDoArquivo', () => {
     expect(urlPublicaDoArquivo(null)).toBeNull();
   });
 });
+
+/**
+ * Aprovar o roteiro sobe as mensagens para a tela seguinte (20/08/2026).
+ *
+ * O plano descreve a cadência; até aqui alguém a transcrevia à mão para Mensagens
+ * (foi assim que os quatro toques do HiperTMS entraram, à meia-noite e quarenta).
+ * A regra que estes testes prendem é a que protege o trabalho humano: publica o
+ * que FALTA, nunca por cima do que já existe.
+ */
+describe('MarketAssetsService — roteiro aprovado publica os modelos', () => {
+  const PLANO = [
+    '**Toque 1 (D0) — abertura:**',
+    '> Oi, [nome]! Tudo bem?',
+    '',
+    '**Email 1 (D2) — a dor:**',
+    '- Assunto: `Tabela de frete manual — até quando?`',
+    '- Corpo: dor → virada → CTA.',
+  ].join('\n');
+
+  const ROTEIRO = {
+    id: 'a1', kind: 'plan', name: 'cadencia.md',
+    content: PLANO, productCode: 'hipertms', status: 'pending',
+  };
+
+  function comModelos(existentes: any[] = []) {
+    const r = makeSvc(undefined, ROTEIRO);
+    (r.prisma as any).messageTemplate = {
+      findMany: vi.fn().mockResolvedValue(existentes),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    };
+    return r;
+  }
+
+  it('publica os toques do roteiro no mercado, com canal e step certos', async () => {
+    const { svc, prisma } = comModelos();
+
+    const r: any = await svc.aprovar('t1', 'a1');
+
+    const { data } = (prisma as any).messageTemplate.createMany.mock.calls[0][0];
+    expect(data).toHaveLength(2);
+    expect(r.modelosCriados).toBe(2);
+    expect(data.every((d: any) => d.productCode === 'hipertms' && d.tenantId === 't1')).toBe(true);
+
+    const email = data.find((d: any) => d.channel === 'email');
+    expect(email.subject).toBe('Tabela de frete manual — até quando?');
+    expect(email.step).toBe(1);
+
+    const zap = data.find((d: any) => d.channel === 'whatsapp');
+    // WhatsApp não guarda assunto — o modelo recusaria salvar de outro jeito.
+    expect(zap.subject).toBeNull();
+    expect(zap.body).toContain('{{nome}}');
+  });
+
+  // A regra que importa: copy revisada à mão não pode ser trocada por briefing.
+  it('modelo que já existe naquele canal e step fica intocado', async () => {
+    const { svc, prisma } = comModelos([{ channel: 'email', step: 1 }]);
+
+    const r: any = await svc.aprovar('t1', 'a1');
+
+    const { data } = (prisma as any).messageTemplate.createMany.mock.calls[0][0];
+    expect(data).toHaveLength(1);
+    expect(data[0].channel).toBe('whatsapp');
+    expect(r.modelosCriados).toBe(1);
+  });
+
+  it('cadência inteira já cadastrada: não escreve nada', async () => {
+    const { svc, prisma } = comModelos([
+      { channel: 'email', step: 1 },
+      { channel: 'whatsapp', step: 1 },
+    ]);
+
+    const r: any = await svc.aprovar('t1', 'a1');
+
+    expect((prisma as any).messageTemplate.createMany).not.toHaveBeenCalled();
+    expect(r.modelosCriados).toBe(0);
+  });
+
+  it('roteiro de posicionamento (sem cadência) não cria modelo nenhum', async () => {
+    const { svc, prisma } = makeSvc(undefined, { ...ROTEIRO, content: '# Posicionamento\n\nTexto.' });
+    (prisma as any).messageTemplate = {
+      findMany: vi.fn().mockResolvedValue([]),
+      createMany: vi.fn(),
+    };
+
+    const r: any = await svc.aprovar('t1', 'a1');
+
+    expect((prisma as any).messageTemplate.createMany).not.toHaveBeenCalled();
+    expect(r.modelosCriados).toBe(0);
+  });
+
+  it('portfólio não publica modelo — PDF não tem cadência dentro', async () => {
+    const { svc, prisma } = makeSvc(undefined, {
+      id: 'a2', kind: 'portfolio', name: 'folder.pdf', content: null,
+      productCode: 'hipertms', status: 'pending',
+    });
+    (prisma as any).messageTemplate = { findMany: vi.fn(), createMany: vi.fn() };
+
+    await svc.aprovar('t1', 'a2');
+
+    expect((prisma as any).messageTemplate.findMany).not.toHaveBeenCalled();
+  });
+});

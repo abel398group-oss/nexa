@@ -179,7 +179,15 @@ export async function uploadMarketAsset(
   return r.data;
 }
 
-export async function approveMarketAsset(code: string, id: string): Promise<MarketAsset> {
+/**
+ * Aprova. Roteiro aprovado publica na tela de Mensagens os toques que ele descreve —
+ * `modelosCriados` diz quantos entraram (só os que faltavam; modelo já escrito à mão
+ * não é tocado), para a tela poder mandar quem aprovou olhar lá.
+ */
+export async function approveMarketAsset(
+  code: string,
+  id: string,
+): Promise<MarketAsset & { modelosCriados?: number }> {
   const r = await api.post(`/markets/${code}/assets/${id}/approve`);
   return r.data;
 }

@@ -13,6 +13,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { KnowledgeService } from '@/application/knowledge/knowledge.service';
+import { extrairToques } from './campaign-plan-parser';
 
 /** Teto do ROTEIRO. Os planos reais têm 5–15 KB; 512 KB é folga, não convite. */
 export const TAMANHO_MAXIMO = 512 * 1024;
@@ -327,12 +328,17 @@ export class MarketAssetsService {
     // pendente e o erro aparece — melhor que um "aprovado" que a Lia não vê.
     await this.publicarParaLia(tenantId, asset, userId);
 
+    // E as mensagens que o roteiro descreve já sobem para a tela seguinte. O plano
+    // é a fonte da cadência; até 20/08/2026 ela era transcrita à mão de lá para
+    // Mensagens, e nada garantia que as duas ficassem iguais.
+    const modelosCriados = await this.publicarModelos(tenantId, asset);
+
     const atualizado = await this.prisma.marketAsset.update({
       where: { id },
       data: { status: 'approved', approvedAt: new Date(), approvedBy: userId ?? null },
     });
     this.logger.log(`Material "${asset.name}" aprovado em ${asset.productCode}`);
-    return atualizado;
+    return { ...atualizado, modelosCriados };
   }
 
   /** Volta para pendente — some da Lia sem perder o texto. */
@@ -411,6 +417,55 @@ export class MarketAssetsService {
       );
     }
     this.logger.log(`Roteiro "${asset.name}" publicado para a Lia (${asset.productCode})`);
+  }
+
+  /**
+   * Publica na tela de Mensagens os toques que o roteiro descreve.
+   *
+   * **Só cria o que falta.** A chave é (canal, step): se já existe um modelo ativo
+   * para "e-mail, toque 2", ele fica intocado, com o texto que a pessoa escreveu.
+   * Sobrescrever seria pior que não fazer nada — o modelo escrito à mão é copy
+   * revisada, e o plano quase sempre traz um briefing ("dor → virada → CTA"), não a
+   * frase final. Publicar por cima apagaria trabalho bom com rascunho.
+   *
+   * Devolve quantos entraram, para a tela dizer o que aconteceu: uma aprovação que
+   * cria quatro modelos em silêncio deixa quem clicou sem saber para onde olhar.
+   */
+  private async publicarModelos(
+    tenantId: string,
+    asset: { kind: string; name: string; content: string | null; productCode: string },
+  ): Promise<number> {
+    if (asset.kind !== 'plan' || !asset.content) return 0;
+
+    const toques = extrairToques(asset.content);
+    if (!toques.length) return 0;
+
+    const existentes = await this.prisma.messageTemplate.findMany({
+      where: { tenantId, productCode: asset.productCode, active: true },
+      select: { channel: true, step: true },
+    });
+    const jaTem = new Set(existentes.map((e: any) => `${e.channel}:${e.step}`));
+
+    const novos = toques.filter((t) => !jaTem.has(`${t.channel}:${t.step}`));
+    if (!novos.length) return 0;
+
+    await this.prisma.messageTemplate.createMany({
+      data: novos.map((t) => ({
+        tenantId,
+        productCode: asset.productCode,
+        name: t.name,
+        channel: t.channel,
+        subject: t.channel === 'email' ? (t.subject ?? null) : null,
+        body: t.body,
+        step: t.step,
+      })),
+    });
+
+    this.logger.log(
+      `Roteiro "${asset.name}": ${novos.length} modelo(s) publicado(s) em ${asset.productCode} ` +
+        `(${toques.length - novos.length} já existiam e não foram tocados)`,
+    );
+    return novos.length;
   }
 
   /** Remove o artigo derivado — chamado sempre que o material deixa de valer. */
