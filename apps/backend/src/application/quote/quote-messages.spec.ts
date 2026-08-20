@@ -178,6 +178,31 @@ describe('resultado — mensagem interna (resultadoInterno)', () => {
     expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
   });
 
+  it('o título é DIFERENTE do da mensagem-cliente — encaminhar a bolha errada é fácil demais', () => {
+    // As duas chegam coladas no zap; se começassem igual, o vendedor encaminharia a
+    // interna (com a margem) pro cliente mais cedo ou mais tarde.
+    const dados = { valor: 5200, rascunhoId: '017749' };
+    const interna = resultadoInterno(pronto, dados).split(String.fromCharCode(10))[0];
+    const cliente = resultadoParaCliente(pronto, dados).split(String.fromCharCode(10))[0];
+    expect(interna).not.toBe(cliente);
+    expect(interna).toContain('uso interno');
+    expect(cliente).not.toContain('uso interno');
+  });
+
+  it('a margem sai em negrito e com o percentual sobre o preço', () => {
+    // R$ 309,44 sobre R$ 1.018,70 = 30% — o número que o vendedor precisa pra decidir.
+    const t = resultadoInterno(pronto, { valor: 1018.7, netMargin: 309.44 });
+    expect(t).toContain('Margem: *R$');
+    expect(t).toContain('(30%)');
+  });
+
+  it('preço zero não tenta calcular percentual — sem divisão por zero na mensagem', () => {
+    const t = resultadoInterno(pronto, { valor: 0, netMargin: 100 });
+    expect(t).not.toContain('%');
+    expect(t).not.toContain('NaN');
+    expect(t).not.toContain('Infinity');
+  });
+
   it('mostra a análise crítica quando o TMS manda margem/receita/impostos', () => {
     const t = resultadoInterno(pronto, {
       valor: 5200,

@@ -269,13 +269,15 @@ export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotaca
 /**
  * O resultado — mensagem interna, só quem cotou vê. Chega ANTES da mensagem-cliente.
  *
- * Existe pra separar o que é do vendedor do que é seguro encaminhar. Traz o piso ANTT, que
- * `resultadoParaCliente` esconde de propósito (ver comentário lá).
+ * Existe pra separar o que é do vendedor do que é seguro encaminhar: piso ANTT, análise
+ * crítica (margem, receita líquida, impostos) e o link do rascunho vivem SÓ aqui, nunca em
+ * `resultadoParaCliente` — que é a mensagem que sai do controle de quem cotou assim que
+ * chega no zap dele.
  *
- * Margem, receita líquida e link direto pro registro NÃO estão aqui: `/nexa/quote` no TMS
- * hoje só devolve price/minimumFloor/distanceKm/draftId/validUntil (ver `ResultadoTms` em
- * `quote-tms.client.ts`). Quando esse contrato crescer, essas linhas entram aqui — nunca na
- * mensagem-cliente, que é a que sai do controle de quem cotou assim que chega no zap dele.
+ * O título é DIFERENTE do da mensagem-cliente de propósito (🔒 + "uso interno" em vez de
+ * ✅): as duas bolhas chegam coladas e encaminhar no WhatsApp é apertar e segurar — se
+ * fossem parecidas, mandar a errada pro cliente seria questão de tempo, e a errada carrega
+ * a margem.
  */
 export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
   const { rota, detalhe } = resumoDaRota(estado, r);
@@ -284,18 +286,24 @@ export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): 
   // essa etapa, ou tenant sem tabela fiscal configurada). Ausência TOTAL, não zero: ver
   // o comentário em `ResultadoDaCotacao`.
   const temAnalise = r.netMargin != null || r.netRevenue != null || r.taxes != null;
+  // Margem em negrito E com o percentual sobre o preço: é O número da decisão — o
+  // vendedor bate o olho e sabe se aquela cotação fecha conta, sem calcular de cabeça.
+  const margem =
+    r.netMargin != null
+      ? `Margem: *${brl(r.netMargin)}*${r.valor > 0 ? ` (${Math.round((r.netMargin / r.valor) * 100)}%)` : ''}`
+      : null;
   const analiseCritica = temAnalise
     ? [
         '',
         '📊 *Análise crítica*',
         ...(r.netRevenue != null ? [`Receita líquida: ${brl(r.netRevenue)}`] : []),
         ...(r.taxes ? [`Impostos: ${brl(r.taxes.total)}`] : []),
-        ...(r.netMargin != null ? [`Margem: ${brl(r.netMargin)}`] : []),
+        ...(margem ? [margem] : []),
       ]
     : [];
 
   return [
-    r.rascunhoId ? `*Cotação ${r.rascunhoId}* ✅` : '*Cotação pronta* ✅',
+    r.rascunhoId ? `🔒 *Cotação ${r.rascunhoId}* — uso interno` : '🔒 *Cotação pronta* — uso interno',
     '',
     rota,
     detalhe,
