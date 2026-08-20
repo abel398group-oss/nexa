@@ -12,6 +12,28 @@
   - `/` → `http://127.0.0.1:8081` (frontend Nexa)
   - `/api` e `/ws` → `http://127.0.0.1:3001` (backend Nexa) — com upgrade de WebSocket
     (`Upgrade`/`Connection` headers) para o `/ws` (Socket.IO).
+  - **`/uploads/` → `http://127.0.0.1:3001`** (backend Nexa). Fácil de esquecer, porque
+    não é rota de API: é o diretório de arquivos (`app.useStaticAssets` em `main.ts`),
+    e é ele que serve o portfólio da Validação de Campanha e o anexo que o lead recebe.
+    A regra precisa vir **antes** do `location /`, senão cai no fallback da SPA — o
+    nginx do frontend devolve `index.html` com `200 OK`, e a prévia do PDF renderiza
+    **o próprio Nexa dentro do quadro** em vez do arquivo. Foi o que aconteceu em
+    20/08/2026; o sintoma não parece erro de proxy, parece bug de tela.
+
+    ```nginx
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    ```
+
+    Conferir depois do deploy (tem que responder `application/pdf`, não `text/html`):
+
+    ```bash
+    F=$(docker exec nexa-backend-1 sh -c "ls -t uploads | head -1")
+    curl -sI "https://nexa.SEU_DOMINIO/uploads/$F" | grep -i content-type
+    ```
 - **TLS** via Let's Encrypt (certbot) para o domínio do Nexa. Renovação automática.
 - **Não** alterar os server blocks do TMS. Mudança **aditiva** (novo virtual host).
 
@@ -148,6 +170,8 @@ cd ~ && rm -rf ~/nexa
 ## 5. Checklist operacional
 
 - [ ] Domínio do Nexa + TLS no reverse proxy (server block aditivo; TMS intocado).
+- [ ] `/uploads/` roteado para o backend, antes do `location /` — conferido com
+      `curl -sI .../uploads/<arquivo>` respondendo `application/pdf` (ver §1.1).
 - [ ] Firewall: só 80/443/22; apps em loopback; Redis e WAHA sem porta; PG Trusted Source = IP do droplet.
 - [ ] WAHA: sessão pareada (QR via túnel SSH), volume `nexa-waha` persistindo, webhook registrado no boot.
 - [ ] Swap configurado; `mem_limit` ajustado à RAM.
