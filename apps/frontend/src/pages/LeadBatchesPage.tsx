@@ -11,6 +11,7 @@ import {
   Switch,
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
+import { erroDoServidor } from '@/shared/lib/erroDoServidor';
 import { getMarketSellers, listMarkets, type Market } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
@@ -72,7 +73,7 @@ export function LeadBatchesPage() {
       }),
     onSuccess: setRelatorio,
     onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? 'Não foi possível ler esta lista.'),
+      toast.error(erroDoServidor(e, 'Não foi possível ler esta lista.')),
   });
 
   const confirmar = useMutation({
@@ -91,7 +92,7 @@ export function LeadBatchesPage() {
       qc.invalidateQueries({ queryKey: ['lead-batches'] });
     },
     onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? 'A importação não foi concluída.'),
+      toast.error(erroDoServidor(e, 'A importação não foi concluída.')),
   });
 
   function limpar() {
@@ -552,7 +553,7 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
       qc.invalidateQueries({ queryKey: ['sdr', 'queue'] });
     },
     onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? 'Não foi possível distribuir.'),
+      toast.error(erroDoServidor(e, 'Não foi possível distribuir.')),
   });
 
   const elegiveis = data?.vinculados ?? [];
