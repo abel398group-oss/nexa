@@ -51,6 +51,19 @@ export class MessageTemplatesService {
 
   async create(tenantId: string, dto: TemplateInput) {
     this.validar(dto);
+    // O mercado precisa existir: um typo no productCode criaria um modelo órfão —
+    // não aparece no seletor do Disparo (que filtra por mercado), não conta na
+    // trava de liberação do mercado certo, e some em silêncio. Mesma regra da
+    // trava de mercado no disparo (market-gate).
+    const mercado = await this.prisma.product.findUnique({
+      where: { code: dto.productCode },
+      select: { code: true },
+    });
+    if (!mercado) {
+      throw new BadRequestException(
+        `Mercado "${dto.productCode}" não existe. Confira o código na tela de Mercados.`,
+      );
+    }
     return this.prisma.messageTemplate.create({
       data: {
         tenantId,

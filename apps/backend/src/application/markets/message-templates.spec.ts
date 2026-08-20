@@ -34,11 +34,21 @@ describe('MessageTemplatesService — criação', () => {
   });
 
   it('whatsapp não precisa de assunto — e não guarda um', async () => {
-    const { svc, prisma } = makeSvc();
+    const { svc, prisma } = makeSvc({ code: 'pneus' });
     await svc.create('t1', {
       productCode: 'pneus', name: 'Toque 1', channel: 'whatsapp', subject: 'ignorado', body: 'oi',
     });
     expect(prisma.messageTemplate.create.mock.calls[0][0].data.subject).toBeNull();
+  });
+
+  // Um typo no productCode criaria um modelo órfão: fora do seletor do Disparo,
+  // fora da contagem da trava do mercado certo — e ninguém percebe.
+  it('mercado inexistente é recusado, não vira modelo órfão', async () => {
+    const { svc, prisma } = makeSvc(null);
+    await expect(
+      svc.create('t1', { productCode: 'hiprtms', name: 'Toque 1', channel: 'whatsapp', body: 'oi' }),
+    ).rejects.toThrow(/não existe/);
+    expect(prisma.messageTemplate.create).not.toHaveBeenCalled();
   });
 
   it('canal inválido é recusado', async () => {
