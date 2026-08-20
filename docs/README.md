@@ -95,6 +95,8 @@ Guias operacionais para quem usa o painel:
 - [Visão de Segurança](security/security-overview.md) — pilares de segurança do sistema
 - [LGPD](security/lgpd.md) — dados tratados, base legal, opt-out, retenção, DPO
 - [Política de Secrets](security/politica-secrets.md) — rotação de credenciais, cofre, inventário
+- [Exposição por repositório público (20/08/2026)](security/vazamento-repositorio-publico-2026-08-20.md)
+  — o que vazou ao abrir o repositório, o que foi contido, o que segue pendente
 
 ## Infra e Operações
 
