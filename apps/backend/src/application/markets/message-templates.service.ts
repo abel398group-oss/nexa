@@ -371,6 +371,31 @@ export class MessageTemplatesService {
 export function avisosDoTeste(channel: string, corpo: string, assunto?: string | null): AvisoDeTeste[] {
   const avisos: AvisoDeTeste[] = [];
 
+  // Placeholder que ninguém resolve sai LITERAL para o lead. Dois formatos, pela
+  // mesma razão: `[link calculadora]` é como os planos de campanha marcam o que
+  // falta decidir, e `{{cargo}}` é a variável inventada por quem supôs que existia.
+  // O disparo só resolve nome, saudação, remetente e empresa — o resto atravessa
+  // o render intacto e chega escrito na caixa de entrada.
+  //
+  // É ERRO, não aviso: diferente de assunto longo ou link comprido, aqui não há
+  // julgamento a fazer — texto com colchete cru está errado em qualquer contexto.
+  const sobrando = [
+    ...corpo.matchAll(/\[[^\]\n]{2,40}\]/g),
+    ...(assunto ?? '').matchAll(/\[[^\]\n]{2,40}\]/g),
+    ...corpo.matchAll(/\{\{\s*(?!nome|saudacao|remetente|empresa)[^}]{1,30}\}\}/gi),
+    ...(assunto ?? '').matchAll(/\{\{\s*(?!nome|saudacao|remetente|empresa)[^}]{1,30}\}\}/gi),
+  ].map((m) => m[0]);
+
+  if (sobrando.length) {
+    const unicos = [...new Set(sobrando)];
+    avisos.push({
+      gravidade: 'erro',
+      texto:
+        `${unicos.join(', ')} vai sair assim mesmo para o lead. ` +
+        'O disparo só troca {{nome}}, {{saudacao}}, {{remetente}} e {{empresa}}.',
+    });
+  }
+
   if (channel === 'whatsapp' && /\*\*|__|^#/m.test(corpo)) {
     avisos.push({
       gravidade: 'erro',

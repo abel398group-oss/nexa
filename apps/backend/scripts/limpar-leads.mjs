@@ -19,6 +19,33 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const APAGAR = process.argv.includes('--apagar');
 
+/**
+ * O que este script NUNCA pode apagar, e por quê.
+ *
+ * Não é lembrete: é trava. Em 20/08/2026 uma variante desta limpeza levou junto
+ * `message_templates` e apagou os quatro e-mails da campanha do HiperTMS — copy
+ * escrita à mão e revisada, perdida junto com os leads de teste. Foram recuperados
+ * de um backup que existia por acaso.
+ *
+ * A distinção que a lista abaixo protege: **lead é dado de teste, conteúdo é
+ * trabalho.** Quem limpa o funil para começar do zero quer perder contato e
+ * campanha — nunca o texto das mensagens nem o material aprovado do mercado.
+ *
+ * Se um dia for preciso apagar um destes, que seja num script próprio, com nome
+ * que diga o que faz. Não aqui, de carona.
+ */
+const NUNCA_APAGAR = [
+  'messageTemplate', // a copy da campanha — o texto que vai ao lead
+  'marketAsset',     // roteiro e portfólio aprovados do mercado
+  'aiKnowledgeBase', // o que a Lia sabe
+  'product',         // os mercados
+  'seller',          // vendedores
+  'user',            // usuários
+  'emailChannel',    // remetentes configurados
+  'senderNumber',    // números de WhatsApp e o aquecimento deles
+  'partner',         // parceiros donos de mercado
+];
+
 // Ordem importa: filhos antes dos pais (evita erro de foreign key).
 const ALVOS = [
   ['Mensagens da IA',            () => prisma.aiMessage,             (m) => m.deleteMany({})],
@@ -42,6 +69,23 @@ const ALVOS = [
 ];
 
 async function main() {
+  // A trava roda ANTES de qualquer contagem: se alguém pôs uma tabela protegida na
+  // lista, o script para aqui em vez de perguntar. Comparar pelo objeto do Prisma
+  // (e não pelo rótulo em português) é o que impede a checagem de ser burlada por
+  // um nome bonitinho na coluna da esquerda.
+  const protegidos = NUNCA_APAGAR.filter((chave) => {
+    const modelo = prisma[chave];
+    return modelo && ALVOS.some(([, obter]) => obter() === modelo);
+  });
+  if (protegidos.length) {
+    console.error(
+      `\n🛑 ABORTADO: ${protegidos.join(', ')} está na lista de exclusão, e não pode estar.\n` +
+        '   Lead é dado de teste; conteúdo é trabalho. Ver NUNCA_APAGAR no topo deste arquivo.\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   console.log(APAGAR ? '\n🔴 MODO APAGAR — isto é irreversível\n' : '\n🔎 SIMULAÇÃO (nada será apagado)\n');
 
   let total = 0;

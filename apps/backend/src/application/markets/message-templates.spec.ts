@@ -290,3 +290,47 @@ describe('MessageTemplatesService — exclusão', () => {
     });
   });
 });
+
+/**
+ * Placeholder que ninguém resolve sai LITERAL para o lead.
+ *
+ * `[link calculadora]` é como os planos de campanha marcam o que falta decidir, e
+ * chega aqui pelo extrator de roteiro; `{{cargo}}` é a variável inventada por quem
+ * supôs que existia. O disparo resolve quatro chaves e mais nenhuma.
+ */
+describe('avisosDoTeste — placeholder não resolvido', () => {
+  const temErroDePlaceholder = (avisos: any[]) =>
+    avisos.some((a) => a.gravidade === 'erro' && /vai sair assim mesmo/.test(a.texto));
+
+  it('colchete do plano vira ERRO, com o trecho no texto do aviso', () => {
+    const a = avisosDoTeste('whatsapp', 'Teste em [link calculadora] hoje.');
+    expect(temErroDePlaceholder(a)).toBe(true);
+    expect(a.find((x) => /vai sair assim mesmo/.test(x.texto))!.texto).toContain('[link calculadora]');
+  });
+
+  it('variável inventada também', () => {
+    expect(temErroDePlaceholder(avisosDoTeste('email', 'Oi {{cargo}}', 'x'))).toBe(true);
+  });
+
+  it('as quatro variáveis de verdade não acusam', () => {
+    const a = avisosDoTeste('email', '{{saudacao}}, {{nome}}! Aí na {{empresa}}? — {{remetente}}', 'Assunto');
+    expect(temErroDePlaceholder(a)).toBe(false);
+  });
+
+  it('o assunto é conferido junto do corpo', () => {
+    expect(temErroDePlaceholder(avisosDoTeste('email', 'texto limpo', 'Proposta para [empresa]'))).toBe(true);
+  });
+
+  // Repetir a mesma chave três vezes é um aviso, não três.
+  it('não repete o mesmo placeholder no aviso', () => {
+    const a = avisosDoTeste('whatsapp', 'Veja [link] e [link] e [link]');
+    const texto = a.find((x) => /vai sair assim mesmo/.test(x.texto))!.texto;
+    expect(texto.match(/\[link\]/g)).toHaveLength(1);
+  });
+
+  // Uma letra só entre colchetes é marcação, não placeholder: `[x]` é caixa de
+  // seleção e `[1]` é nota de rodapé. Acusar isso encheria a tela de erro falso.
+  it('colchete de um caractere é marcação, não placeholder', () => {
+    expect(temErroDePlaceholder(avisosDoTeste('whatsapp', 'item [x] feito, ver nota [1]'))).toBe(false);
+  });
+});
