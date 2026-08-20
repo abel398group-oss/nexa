@@ -46,6 +46,13 @@
     "//            ": "(envia e-mail em runtime — major aí se testa com envio real, não com suíte),",
     "//             _": "vite 5→6 (muda config de build) e sharp 0.32→0.35, que é 0.x mas troca o binário",
     "//              _": "pré-compilado dentro do @xenova/transformers — quebra o modelo de IA, não o teste.",
+    "//              a": "Também fora (levantamento de 19/08/2026, mesma regra de major):",
+    "//              b": "file-type 20→21 (upload no backend; o patch só existe na 21), deepmerge-ts 7→8",
+    "//              c": "(dentro do html-to-text/mailparser — parse de e-mail RECEBIDO; vale reavaliar,",
+    "//              d": "porque e-mail hostil é superfície real), @opentelemetry/core 1→2 (arrasta a",
+    "//              e": "cadeia de instrumentation), @nestjs/core 10→11 e react-router-dom 6→7 (o CVE",
+    "//              f": "do 6.x não tem patch na própria major — só migrando pra 7).",
+    "//              g": "esbuild 0.21→0.25 vem junto com o vite 6, não sozinho: o vite 5 PRENDE ^0.21.",
     "//             ": "A CHAVE leva a faixa de propósito: `pkg@>=1.0.0 <1.1.16` só casa dentro da",
     "//              ": "major 1. Se um dia a árvore trouxer a major 2, o override não se aplica em vez",
     "//               ": "de forçar um downgrade silencioso — a trava é a própria chave, não a memória de",
@@ -63,9 +70,16 @@
       "postcss@>=8.0.0 <8.5.18": "^8.5.18",
       "js-yaml@>=4.0.0 <4.3.0": "^4.3.0",
       "brace-expansion@>=1.0.0 <1.1.16": "^1.1.16",
+      "brace-expansion@>=5.0.0 <5.0.9": "^5.0.9",
       "linkify-it@>=5.0.0 <5.0.2": "^5.0.2",
       "fast-uri@>=3.0.0 <3.1.4": "^3.1.4",
-      "socket.io-parser@>=4.0.0 <4.2.7": "^4.2.7"
+      "socket.io-parser@>=4.0.0 <4.2.7": "^4.2.7",
+      "semver@>=5.0.0 <5.7.2": "^5.7.2",
+      "qs@>=6.11.1 <6.15.2": "^6.15.2",
+      "webpack@>=5.49.0 <5.104.1": "^5.104.1",
+      "body-parser@>=1.20.0 <1.20.6": "^1.20.6",
+      "ajv@>=8.0.0 <8.18.0": "^8.18.0",
+      "uuid@>=11.0.0 <11.1.1": "^11.1.1"
     }
   }
 }

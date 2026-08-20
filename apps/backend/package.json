@@ -58,7 +58,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "ioredis": "^5.4.0",
     "socket.io": "^4.7.0",
-    "uuid": "^9.0.0",
+    "uuid": "^11.1.1",
     "@sentry/node": "^8.0.0"
   },
   "devDependencies": {
@@ -74,7 +74,6 @@
     "@types/nodemailer": "^8.0.0",
     "@types/passport-jwt": "^4.0.0",
     "@types/pg": "^8.20.0",
-    "@types/uuid": "^9.0.0",
     "prisma": "^5.0.0",
     "socket.io-client": "^4.8.3",
     "ts-node": "^10.9.0",
