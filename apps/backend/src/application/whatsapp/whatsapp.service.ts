@@ -104,6 +104,11 @@ export class WhatsappService {
       const userId = usuarios.get(TmsLookupService.normalize(phone));
       if (!userId) return false;
 
+      // "digitando..." enquanto o TMS calcula: busca de cidade e cotação levam segundos,
+      // e segundos de silêncio no WhatsApp parecem robô morto. Fire-and-forget — o
+      // indicador é cortesia, e falha dele não pode atrasar nem derrubar a resposta.
+      void this.waha.startTyping(phone).catch(() => {});
+
       const resposta = await this.cotacao.responderMensagem(phone, texto, userId);
       if (!resposta) return false;
 

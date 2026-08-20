@@ -3,6 +3,7 @@ import { QuoteSessionService } from './quote-session.service';
 import { QuoteTmsClient } from './quote-tms.client';
 import * as msg from './quote-messages';
 import {
+  cargaUtilDoGatilho,
   comCargasEncontradas,
   comCidadesEncontradas,
   dadosDaCotacao,
@@ -10,6 +11,7 @@ import {
   novaCotacao,
   responder,
   type EstadoCotacao,
+  type Passo,
 } from './quote-flow';
 
 /**
@@ -53,7 +55,10 @@ export class QuoteConversationService {
   async pareceCotacao(phone: string, texto: string): Promise<boolean> {
     if (!this.habilitado || !texto) return false;
     if (ehGatilho(texto)) return true;
-    return (await this.sessoes.ler(phone)) !== null;
+    if ((await this.sessoes.ler(phone)) !== null) return true;
+    // Sessão que morreu por TTL há pouco também conta: a resposta atrasada precisa
+    // chegar em `responderMensagem` pra receber o aviso de expirada em vez de silêncio.
+    return this.sessoes.expirouHaPouco(phone);
   }
 
   /// Freio da mensagem de orientação: uma por número por dia. Ver `orientarNumeroInterno`.
@@ -83,25 +88,51 @@ export class QuoteConversationService {
     // Fora de sessão, só o gatilho abre. Sem esta guarda, qualquer "ok" mandado para um
     // alerta viraria início de cotação.
     if (!sessao) {
-      if (!ehGatilho(texto)) return null;
+      if (!ehGatilho(texto)) {
+        // Resposta atrasada de uma sessão que o TTL matou: dizer o que houve, uma vez.
+        if (await this.sessoes.consumirExpirada(phone)) return msg.expirada();
+        return null;
+      }
       if (!this.sessoes.disponivel || !this.tms.configurado) {
         this.logger.warn('cotação pedida mas Redis ou TMS não estão configurados');
         return 'A cotação por WhatsApp está indisponível agora. Tente mais tarde. 🔧';
       }
-      const estado = novaCotacao();
-      await this.sessoes.gravar(phone, estado);
-      return msg.abertura();
+      return this.abrir(phone, texto, userId);
     }
 
     // Em sessão, "cotar" de novo RECOMEÇA em vez de ser tratado como resposta. Quem
     // repete o gatilho está dizendo que se perdeu.
-    if (ehGatilho(texto)) {
-      const estado = novaCotacao();
-      await this.sessoes.gravar(phone, estado);
-      return msg.abertura();
-    }
+    if (ehGatilho(texto)) return this.abrir(phone, texto, userId);
 
     return this.avancar(phone, sessao, texto, userId);
+  }
+
+  /**
+   * Abre a sessão — e aproveita o que veio junto com o gatilho.
+   *
+   * "cotar Jacareí pra Taubaté" era aberto ignorando as cidades, e a primeira pergunta
+   * pedia o que a pessoa acabou de escrever. Agora a carga útil vira a resposta da
+   * origem na hora; se ela não resolver (cidade não achada, consulta fora), cai na
+   * abertura de sempre — nunca pior do que era.
+   */
+  private async abrir(phone: string, texto: string, userId: string): Promise<string | string[]> {
+    const estado = novaCotacao();
+    await this.sessoes.gravar(phone, estado);
+
+    const cargaUtil = cargaUtilDoGatilho(texto);
+    if (cargaUtil) {
+      const resposta = await this.avancar(phone, estado, cargaUtil, userId);
+      // Andou? O critério é o ESTADO, não o texto da resposta: se a sessão saiu da
+      // origem (avançou ou virou menu de escolha), a carga útil valeu e a resposta dela
+      // é a certa. Se continua parada na origem — cidade não achada, consulta fora —,
+      // a pessoa recebe a abertura de sempre, com tentativas zeradas: "não achei essa
+      // cidade" sem nunca ter visto a pergunta confunde mais do que explica.
+      const depois = await this.sessoes.ler(phone);
+      if (!depois || depois.etapa !== 'origem') return resposta;
+      const denovo = novaCotacao();
+      await this.sessoes.gravar(phone, denovo);
+    }
+    return msg.abertura();
   }
 
   private async avancar(
@@ -110,26 +141,33 @@ export class QuoteConversationService {
     texto: string,
     userId: string,
   ): Promise<string | string[]> {
-    let passo = responder(sessao, texto);
+    let passo: Passo = responder(sessao, texto);
 
-    // Busca de cidade: o fluxo pede, o mundo responde, e o fluxo decide. O `while` existe
-    // porque uma busca pode levar direto à etapa seguinte, que pode pedir outra coisa.
-    if (passo.tipo === 'buscar_cidade') {
-      const achadas = await this.tms.buscarCidades(passo.termo);
-      if (achadas === null) {
-        // Falha de consulta NÃO é "cidade não existe". Dizer "não achei" mandaria a
-        // pessoa corrigir um nome que estava certo.
-        return 'Não consegui consultar as cidades agora. Manda de novo em instantes. 🔧';
+    // As buscas rodam num laço porque uma pode emendar na outra: o par "origem pra
+    // destino" resolve a origem e já pede a busca do destino no mesmo turno. O teto de
+    // 3 é o pior caso legítimo (origem → destino → cargas); passar disso é bug de fluxo,
+    // e aí é melhor recomeçar do que rodar pra sempre.
+    for (let i = 0; i < 3; i++) {
+      if (passo.tipo === 'buscar_cidade') {
+        const base = passo.estado ?? sessao;
+        const achadas = await this.tms.buscarCidades(passo.termo);
+        if (achadas === null) {
+          // Falha de consulta NÃO é "cidade não existe". Dizer "não achei" mandaria a
+          // pessoa corrigir um nome que estava certo.
+          return 'Não consegui consultar as cidades agora. Manda de novo em instantes. 🔧';
+        }
+        passo = comCidadesEncontradas(base, achadas, passo.uf, passo.para);
+        continue;
       }
-      passo = comCidadesEncontradas(sessao, achadas, passo.uf, passo.para);
-    }
-
-    if (passo.tipo === 'buscar_cargas') {
-      const cargas = await this.tms.tiposDeCarga(userId, passo.vehicleType);
-      if (cargas === null) {
-        return 'Não consegui consultar os tipos de carga agora. Manda de novo em instantes. 🔧';
+      if (passo.tipo === 'buscar_cargas') {
+        const cargas = await this.tms.tiposDeCarga(userId, passo.vehicleType);
+        if (cargas === null) {
+          return 'Não consegui consultar os tipos de carga agora. Manda de novo em instantes. 🔧';
+        }
+        passo = comCargasEncontradas(sessao, passo.vehicleType, cargas);
+        continue;
       }
-      passo = comCargasEncontradas(sessao, passo.vehicleType, cargas);
+      break;
     }
 
     if (passo.tipo === 'sem_tabela') {
@@ -137,11 +175,8 @@ export class QuoteConversationService {
       return msg.semTabelaDeFrete(passo.estado);
     }
 
-    // As duas buscas foram resolvidas acima. Se ainda houver uma aqui, é porque uma delas
-    // levou à outra — cenário que o fluxo não produz hoje, e que eu prefiro ver no log a
-    // deixar o TypeScript acreditar que não existe.
     if (passo.tipo === 'buscar_cidade' || passo.tipo === 'buscar_cargas') {
-      this.logger.warn(`fluxo pediu ${passo.tipo} duas vezes seguidas — não deveria acontecer`);
+      this.logger.warn(`fluxo pediu ${passo.tipo} além do teto de buscas — não deveria acontecer`);
       await this.sessoes.apagar(phone);
       return 'Alguma coisa se perdeu no meio. Manda *cotar* pra recomeçar. 😕';
     }

@@ -70,6 +70,9 @@ export class QuoteSessionService {
         'EX',
         QuoteSessionService.TTL_SEGUNDOS,
       );
+      // A lápide vive MAIS que a sessão: é ela que diferencia "sessão expirou" de "nunca
+      // houve sessão" quando a resposta chega no minuto 11. Ver `expirouHaPouco`.
+      await this.redis.set(this.chaveLapide(phone), '1', 'EX', QuoteSessionService.TTL_LAPIDE_SEGUNDOS);
     } catch (e: any) {
       this.logger.warn(`falha gravando sessão de ${phone}: ${e?.message}`);
     }
@@ -78,9 +81,44 @@ export class QuoteSessionService {
   async apagar(phone: string): Promise<void> {
     if (!this.redis) return;
     try {
-      await this.redis.del(this.chave(phone));
+      // A lápide morre junto em TODO fim explícito (cotou, cancelou, desistiu): ela só
+      // deve sobrar quando a sessão morreu SOZINHA, por TTL. Sem isso, um "obrigado"
+      // depois de cotar receberia "sua cotação expirou" — mentira dupla.
+      await this.redis.del(this.chave(phone), this.chaveLapide(phone));
     } catch {
       /* sessão órfã expira sozinha pelo TTL */
+    }
+  }
+
+  /**
+   * "Tinha uma cotação aberta aqui que morreu por inatividade?"
+   *
+   * Sem isto, responder a pergunta no minuto 11 caía no descarte de número interno — a
+   * pessoa mandou "400" e nada voltou, que é o robô parecendo quebrado. Existe em par:
+   * `expirouHaPouco` só ESPIA (para o gate barato decidir rotear), `consumirExpirada`
+   * apaga junto — o aviso de expirada sai UMA vez, não a cada mensagem da próxima hora.
+   */
+  private chaveLapide(phone: string): string {
+    return `nexa:cotacao:lapide:${phone}`;
+  }
+
+  static readonly TTL_LAPIDE_SEGUNDOS = 60 * 60;
+
+  async expirouHaPouco(phone: string): Promise<boolean> {
+    if (!this.redis) return false;
+    try {
+      return (await this.redis.exists(this.chaveLapide(phone))) === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  async consumirExpirada(phone: string): Promise<boolean> {
+    if (!this.redis) return false;
+    try {
+      return (await this.redis.del(this.chaveLapide(phone))) === 1;
+    } catch {
+      return false;
     }
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cargaUtilDoGatilho,
   comCidadesEncontradas,
   dadosDaCotacao,
   ehGatilho,
@@ -257,5 +258,84 @@ describe('contagem de passos', () => {
   it('etapa fora do fluxo nao tem contagem', () => {
     expect(passoAtual({ etapa: 'pronto', tentativas: 0 })).toBeNull();
     expect(passoAtual({ etapa: 'cancelado', tentativas: 0 })).toBeNull();
+  });
+});
+
+describe('atalhos de escrita — menos ida-e-volta, sem adivinhar nada', () => {
+  it('a carga útil do gatilho é o que vem depois dele', () => {
+    expect(cargaUtilDoGatilho('cotar Jacareí pra Taubaté')).toBe('Jacareí pra Taubaté');
+    expect(cargaUtilDoGatilho('Cotação Campinas SP')).toBe('Campinas SP');
+    expect(cargaUtilDoGatilho('cotar')).toBeNull();
+    expect(cargaUtilDoGatilho('bom dia')).toBeNull();
+  });
+
+  it('o par na origem pede a busca da origem e guarda o destino escrito', () => {
+    const p = responder(novaCotacao(), 'Campinas SP para Belo Horizonte MG');
+    if (p.tipo !== 'buscar_cidade') throw new Error('esperava buscar_cidade');
+    expect(p.termo).toBe('campinas');
+    expect(p.uf).toBe('SP');
+    expect(p.estado?.destinoPendente).toBe('Belo Horizonte MG');
+  });
+
+  it('origem resolvida com destino pendente EMENDA a segunda busca', () => {
+    const p = responder(novaCotacao(), 'Campinas SP para Belo Horizonte MG');
+    if (p.tipo !== 'buscar_cidade') throw new Error('busca 1');
+    const p2 = comCidadesEncontradas(p.estado!, [CAMPINAS], p.uf, 'origem');
+    if (p2.tipo !== 'buscar_cidade') throw new Error('esperava a busca do destino emendada');
+    expect(p2.para).toBe('destino');
+    expect(p2.termo).toBe('belo horizonte');
+    expect(p2.estado?.origem).toEqual(CAMPINAS);
+    expect(p2.estado?.destinoPendente).toBeUndefined();
+  });
+
+  it('par com origem ambígua: o menu aparece, e a escolha emenda a busca do destino', () => {
+    const p = responder(novaCotacao(), 'Santa Rita para Campinas SP');
+    if (p.tipo !== 'buscar_cidade') throw new Error('busca 1');
+    const menu = comCidadesEncontradas(p.estado!, SANTAS, p.uf, 'origem');
+    if (menu.tipo !== 'seguir') throw new Error('esperava menu');
+    expect(menu.estado.etapa).toBe('escolher_origem');
+
+    const escolha = responder(menu.estado, '2');
+    if (escolha.tipo !== 'buscar_cidade') throw new Error('esperava busca do destino após escolha');
+    expect(escolha.para).toBe('destino');
+    expect(escolha.estado?.origem).toEqual(SANTAS[1]);
+  });
+
+  it('na pergunta de DESTINO, "para" é enfeite e não separador', () => {
+    const e = ate('destino');
+    const p = responder(e, 'para Campinas SP');
+    if (p.tipo !== 'buscar_cidade') throw new Error('esperava buscar_cidade');
+    expect(p.termo).toBe('campinas');
+  });
+
+  it('modalidade aceita a palavra do menu, além do número', () => {
+    const m = ate('modalidade');
+    const ded = responder(m, 'dedicado');
+    const fra = responder(m, 'Fracionado');
+    if (ded.tipo !== 'seguir' || fra.tipo !== 'seguir') throw new Error('modalidade por texto');
+    expect(ded.estado.modalidade).toBe('dedicado');
+    expect(fra.estado.modalidade).toBe('fracionado');
+    // Texto que não é nem número nem a palavra continua sendo erro.
+    expect(responder(m, 'expresso').tipo).toBe('repetir');
+  });
+
+  it('veículo aceita o nome exato do menu — apelido não', () => {
+    const v = ate('veiculo');
+    const p = responder(v, 'Carreta');
+    if (p.tipo !== 'buscar_cargas') throw new Error('veículo por nome');
+    expect(p.vehicleType).toBe('carreta');
+    expect(responder(v, 'caminhão').tipo).toBe('repetir');
+  });
+
+  it('peso aceita a unidade que a pergunta pediu: "400kg", "400 kg", "400 quilos"', () => {
+    // `ate()` só percorre o caminho dedicado; o estado de peso se monta direto.
+    const e: EstadoCotacao = { etapa: 'peso', modalidade: 'fracionado', tentativas: 0 };
+    for (const t of ['400kg', '400 kg', '400 KG', '400 quilos']) {
+      const p = responder(e, t);
+      if (p.tipo !== 'seguir') throw new Error(`peso rejeitou ${t}`);
+      expect(p.estado.pesoKg).toBe(400);
+    }
+    // Tonelada NÃO converte — unidade errada é erro, não adivinhação.
+    expect(responder(e, '1t').tipo).toBe('repetir');
   });
 });

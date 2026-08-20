@@ -143,8 +143,14 @@ export function naoEntendi(estado: EstadoCotacao, desistiu: boolean): string {
 
   switch (estado.etapa) {
     case 'origem':
-    case 'destino':
       return 'Não achei essa cidade. Escreve com o estado, tipo *Campinas SP*.';
+    case 'destino':
+      // Com a origem já gravada, dizer QUAL cidade falhou: no par ("Jacareí pra Xique"),
+      // a origem resolveu em silêncio e o erro é só do destino — sem o eco, a pessoa
+      // reescreveria as duas e a busca trataria o par inteiro como um nome de cidade.
+      return estado.origem
+        ? `Origem: *${cidade(estado.origem)}* ✓\n\nNão achei a cidade de *destino*. Escreve com o estado, tipo *Campinas SP*.`
+        : 'Não achei essa cidade. Escreve com o estado, tipo *Campinas SP*.';
     case 'escolher_origem':
     case 'escolher_destino':
       return `Responde só com o número da opção, de *1* a *${(estado.opcoes ?? []).length}*.`;
@@ -161,6 +167,20 @@ export function naoEntendi(estado: EstadoCotacao, desistiu: boolean): string {
 
 export function cancelado(): string {
   return 'Cotação cancelada. Quando quiser, é só mandar *cotar*. 👍';
+}
+
+/**
+ * A resposta chegou depois de a sessão morrer por inatividade (TTL de 10 min).
+ *
+ * Dizer POR QUE nada aconteceu: sem esta mensagem, quem respondeu "400" no minuto 11
+ * via silêncio e concluía que o robô quebrou — e a cotação seguinte começava com
+ * desconfiança.
+ */
+export function expirada(): string {
+  return [
+    'Essa cotação expirou — 10 minutos sem resposta e eu encerro pra não ficar conversa pendurada. ⏱️',
+    'Manda *cotar* que a gente recomeça do zero, é rapidinho.',
+  ].join('\n');
 }
 
 export interface ResultadoDaCotacao {

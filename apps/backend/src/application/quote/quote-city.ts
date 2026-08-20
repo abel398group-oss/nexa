@@ -72,3 +72,43 @@ export function filtrarPorUf(cidades: readonly CidadeDoTms[], uf: string | null)
 
 /// Teto do menu. Vinte opções ninguém lê no WhatsApp; cinco cabem na tela e decidem.
 export const MAX_OPCOES = 5;
+
+/**
+ * "Jacareí pra Taubaté" → { origem: 'Jacareí', destino: 'Taubaté' } — ou null.
+ *
+ * Detecta o PAR origem→destino numa resposta só, pra cortar uma ida-e-volta. Continua
+ * sem adivinhar cidade: cada metade ainda passa pela busca do TMS e pelo eco.
+ *
+ * Separadores explícitos (">", "→", ";") ganham de " para "/" pra ", que são palavras e
+ * podem pertencer ao NOME da cidade. Nesses, corta na ÚLTIMA ocorrência: "Pará de Minas
+ * para Contagem" separa certo (o "para" real é o último); o caso inverso — destino
+ * começando com "Pará de..." — separa errado, mas erra pra "não achei", nunca pra preço
+ * errado, porque a busca do TMS não vai casar e o usuário reescreve.
+ */
+export function separarOrigemDestino(entrada: string): { origem: string; destino: string } | null {
+  const s = String(entrada ?? '').trim();
+  if (!s) return null;
+
+  for (const sep of ['>', '→', ';']) {
+    const i = s.indexOf(sep);
+    if (i > 0) {
+      const origem = s.slice(0, i).trim();
+      const destino = s.slice(i + sep.length).trim();
+      return origem && destino ? { origem, destino } : null;
+    }
+  }
+
+  // " para " e " pra " não têm acento, então dá pra procurar direto no texto original em
+  // minúsculas — sem mapa de índices entre string limpa e string crua.
+  const baixo = s.toLowerCase();
+  for (const sep of [' para ', ' pra ']) {
+    const i = baixo.lastIndexOf(sep);
+    if (i > 0) {
+      const origem = s.slice(0, i).trim();
+      const destino = s.slice(i + sep.length).trim();
+      if (origem && destino) return { origem, destino };
+    }
+  }
+
+  return null;
+}

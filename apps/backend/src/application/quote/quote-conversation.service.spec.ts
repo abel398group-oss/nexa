@@ -10,14 +10,24 @@ const USER = 'user-1';
 /// Sessão em memória — o serviço não deve saber que é Redis do outro lado.
 function sessoesFalsas() {
   const mapa = new Map<string, EstadoCotacao>();
+  const lapides = new Set<string>();
   return {
     disponivel: true,
     ler: vi.fn(async (p: string) => mapa.get(p) ?? null),
-    gravar: vi.fn(async (p: string, e: EstadoCotacao) => void mapa.set(p, e)),
-    apagar: vi.fn(async (p: string) => void mapa.delete(p)),
+    gravar: vi.fn(async (p: string, e: EstadoCotacao) => {
+      mapa.set(p, e);
+      lapides.add(p);
+    }),
+    apagar: vi.fn(async (p: string) => {
+      mapa.delete(p);
+      lapides.delete(p);
+    }),
     avisou: vi.fn(async () => false),
     marcarAvisado: vi.fn(async () => undefined),
+    expirouHaPouco: vi.fn(async (p: string) => lapides.has(p)),
+    consumirExpirada: vi.fn(async (p: string) => lapides.delete(p)),
     _mapa: mapa,
+    _lapides: lapides,
   };
 }
 
@@ -184,6 +194,66 @@ describe('cotação por WhatsApp', () => {
     const svc = criar(s, tmsFalso());
     const r = await svc.responderMensagem(FONE, 'cotar', USER);
     expect(r).toContain('indisponível');
+  });
+
+  it('"cotar Campinas SP" aproveita a cidade e pula direto pra pergunta de destino', async () => {
+    const s = sessoesFalsas();
+    const svc = criar(s, tmsFalso());
+    const r = await svc.responderMensagem(FONE, 'cotar Campinas SP', USER);
+    expect(r).toContain('Campinas/SP');
+    expect(r).toContain('destino');
+    expect(s._mapa.get(FONE)?.etapa).toBe('destino');
+  });
+
+  it('o PAR no gatilho resolve as duas cidades numa mensagem só', async () => {
+    const s = sessoesFalsas();
+    const tms = tmsFalso({
+      buscarCidades: vi
+        .fn()
+        .mockResolvedValueOnce([CAMPINAS])
+        .mockResolvedValueOnce([BH]),
+    });
+    const svc = criar(s, tms);
+    const r = await svc.responderMensagem(FONE, 'cotar Campinas SP para Belo Horizonte MG', USER);
+    expect(tms.buscarCidades).toHaveBeenCalledTimes(2);
+    expect(r).toContain('Belo Horizonte/MG');
+    expect(r).toContain('Tipo de frete');
+    expect(s._mapa.get(FONE)?.etapa).toBe('modalidade');
+  });
+
+  it('carga útil que não resolve cai na abertura de sempre — nunca pior do que era', async () => {
+    const s = sessoesFalsas();
+    const svc = criar(s, tmsFalso({ buscarCidades: vi.fn(async () => []) }));
+    const r = await svc.responderMensagem(FONE, 'cotar Xanadu ZZ', USER);
+    expect(r).toContain('1/5');
+    expect(s._mapa.get(FONE)?.etapa).toBe('origem');
+    expect(s._mapa.get(FONE)?.tentativas).toBe(0);
+  });
+
+  it('resposta atrasada de sessão expirada recebe o aviso UMA vez, depois silêncio', async () => {
+    const s = sessoesFalsas();
+    const svc = criar(s, tmsFalso());
+    await svc.responderMensagem(FONE, 'cotar', USER);
+    // O TTL do Redis matou a sessão; a lápide fica.
+    s._mapa.delete(FONE);
+
+    expect(await svc.pareceCotacao(FONE, '400')).toBe(true);
+    const r = await svc.responderMensagem(FONE, '400', USER);
+    expect(r).toContain('expirou');
+    // Consumida: a próxima mensagem qualquer volta ao descarte normal.
+    expect(await svc.responderMensagem(FONE, '400', USER)).toBeNull();
+  });
+
+  it('cotação CONCLUÍDA não deixa lápide — "obrigado" depois dela não ganha aviso de expirada', async () => {
+    const s = sessoesFalsas();
+    const svc = criar(s, tmsFalso());
+    await svc.responderMensagem(FONE, 'cotar', USER);
+    await svc.responderMensagem(FONE, 'Campinas SP', USER);
+    await svc.responderMensagem(FONE, 'Belo Horizonte MG', USER);
+    await svc.responderMensagem(FONE, '2', USER);
+    await svc.responderMensagem(FONE, '500', USER);
+    await svc.responderMensagem(FONE, '12000', USER);
+    expect(await svc.responderMensagem(FONE, 'obrigado', USER)).toBeNull();
   });
 });
 

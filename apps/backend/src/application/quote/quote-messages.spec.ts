@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   abertura,
   cancelado,
+  expirada,
   naoEntendi,
   pergunta,
   recusado,
@@ -260,6 +261,25 @@ describe('recusa do TMS', () => {
 describe('cancelamento', () => {
   it('diz como recomeçar', () => {
     expect(cancelado()).toContain('*cotar*');
+  });
+});
+
+describe('expiração', () => {
+  it('explica o porquê e como recomeçar', () => {
+    expect(expirada()).toContain('expirou');
+    expect(expirada()).toContain('*cotar*');
+  });
+});
+
+describe('erro de destino com origem gravada', () => {
+  it('ecoa a origem — no par, ela resolveu em silêncio e o erro é só do destino', () => {
+    const t = naoEntendi(estado({ etapa: 'destino', origem: CAMPINAS }), false);
+    expect(t).toContain('Campinas/SP');
+    expect(t).toContain('destino');
+  });
+
+  it('sem origem gravada, mantém a frase de sempre', () => {
+    expect(naoEntendi(estado({ etapa: 'destino' }), false)).toContain('Não achei essa cidade');
   });
 });
 

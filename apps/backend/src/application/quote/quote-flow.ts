@@ -8,7 +8,13 @@
 // Este módulo NÃO chama o TMS. Quando precisa de cidade, ele PEDE a busca a quem o usa e
 // espera o resultado voltar. É o que o mantém testável sem banco e sem rede.
 
-import { filtrarPorUf, prepararBuscaDeCidade, MAX_OPCOES, type CidadeDoTms } from './quote-city';
+import {
+  filtrarPorUf,
+  prepararBuscaDeCidade,
+  separarOrigemDestino,
+  MAX_OPCOES,
+  type CidadeDoTms,
+} from './quote-city';
 
 export type Etapa =
   | 'origem'
@@ -42,6 +48,9 @@ export interface EstadoCotacao {
   valorMercadoria?: number;
   /// Opções pendentes de escolha (menu de cidade).
   opcoes?: CidadeDoTms[];
+  /// Texto de destino ainda não buscado, quando a pessoa mandou o PAR numa resposta só
+  /// ("Jacareí pra Taubaté"). Consumido assim que a origem resolve.
+  destinoPendente?: string;
   /// Erros seguidos NO CAMPO ATUAL. Zera ao avançar.
   tentativas: number;
 }
@@ -67,6 +76,27 @@ export function ehGatilho(texto: string): boolean {
   return GATILHOS.some((g) => t === g || t.startsWith(g + ' '));
 }
 
+/**
+ * O que veio DEPOIS do gatilho: "cotar Jacareí pra Taubaté" → "Jacareí pra Taubaté".
+ *
+ * Antes isso era jogado fora e a primeira pergunta pedia a origem de novo — quem já
+ * mandou tudo na abertura repetia o que acabou de escrever. Devolve null quando o
+ * gatilho veio sozinho ("cotar"), que segue no fluxo de sempre.
+ */
+export function cargaUtilDoGatilho(texto: string): string | null {
+  const cru = String(texto ?? '').trim();
+  const t = limpo(cru);
+  for (const g of GATILHOS) {
+    if (t.startsWith(g + ' ')) {
+      // Corta pelo tamanho do gatilho no texto ORIGINAL: `limpo` não muda contagem de
+      // caracteres (minúsculas + acentos combinantes fora), então os índices batem.
+      const resto = cru.slice(g.length).trim();
+      return resto || null;
+    }
+  }
+  return null;
+}
+
 export function ehSaida(texto: string): boolean {
   return SAIDAS.includes(limpo(texto));
 }
@@ -82,7 +112,16 @@ export function novaCotacao(): EstadoCotacao {
  * TMS e volta com `comCidadesEncontradas`.
  */
 export type Passo =
-  | { tipo: 'buscar_cidade'; termo: string; uf: string | null; para: 'origem' | 'destino' }
+  | {
+      tipo: 'buscar_cidade';
+      termo: string;
+      uf: string | null;
+      para: 'origem' | 'destino';
+      /// Estado a usar quando a busca voltar, quando ele mudou ANTES da busca — é o que
+      /// carrega o `destinoPendente` do par e a origem já resolvida na busca encadeada.
+      /// Ausente = usar o estado que já estava na sessão.
+      estado?: EstadoCotacao;
+    }
   | { tipo: 'buscar_cargas'; vehicleType: Veiculo }
   | { tipo: 'seguir'; estado: EstadoCotacao }
   | { tipo: 'repetir'; estado: EstadoCotacao; motivo: 'invalido' | 'desistiu' }
@@ -136,6 +175,23 @@ export function responder(estado: EstadoCotacao, texto: string): Passo {
   switch (estado.etapa) {
     case 'origem':
     case 'destino': {
+      // Par numa resposta só ("Jacareí pra Taubaté") corta uma ida-e-volta. Só na
+      // ORIGEM: na pergunta de destino, um "para" no texto é enfeite, não separador.
+      if (estado.etapa === 'origem') {
+        const par = separarOrigemDestino(texto);
+        if (par) {
+          const { termo, uf } = prepararBuscaDeCidade(par.origem);
+          if (termo) {
+            return {
+              tipo: 'buscar_cidade',
+              termo,
+              uf,
+              para: 'origem',
+              estado: { ...estado, destinoPendente: par.destino },
+            };
+          }
+        }
+      }
       const { termo, uf } = prepararBuscaDeCidade(texto);
       if (!termo) return erro(estado);
       return { tipo: 'buscar_cidade', termo, uf, para: estado.etapa };
@@ -148,22 +204,43 @@ export function responder(estado: EstadoCotacao, texto: string): Passo {
       if (!n) return erro(estado);
       const cidade = opcoes[n - 1];
       const ehOrigem = estado.etapa === 'escolher_origem';
-      return {
-        tipo: 'seguir',
-        estado: {
-          ...estado,
-          ...(ehOrigem ? { origem: cidade } : { destino: cidade }),
-          etapa: ehOrigem ? 'destino' : 'modalidade',
-          opcoes: undefined,
-          tentativas: 0,
-        },
+      const proximo: EstadoCotacao = {
+        ...estado,
+        ...(ehOrigem ? { origem: cidade } : { destino: cidade }),
+        etapa: ehOrigem ? 'destino' : 'modalidade',
+        opcoes: undefined,
+        tentativas: 0,
       };
+      // A pessoa mandou o par, a origem caiu num menu, e ela acabou de escolher: o
+      // destino que ela já escreveu vai pra busca agora, em vez de ser perguntado.
+      if (ehOrigem && estado.destinoPendente) {
+        const { termo, uf } = prepararBuscaDeCidade(estado.destinoPendente);
+        if (termo) {
+          return {
+            tipo: 'buscar_cidade',
+            termo,
+            uf,
+            para: 'destino',
+            estado: { ...proximo, destinoPendente: undefined },
+          };
+        }
+        proximo.destinoPendente = undefined;
+      }
+      return { tipo: 'seguir', estado: proximo };
     }
 
     case 'modalidade': {
-      const n = escolhaDeMenu(texto, 2);
-      if (!n) return erro(estado);
-      const modalidade: Modalidade = n === 1 ? 'dedicado' : 'fracionado';
+      // "1"/"2" continuam valendo; "dedicado"/"fracionado" escritos também — digitar a
+      // palavra que está NO MENU e receber "não entendi" é o robô sendo burro de pirraça.
+      const t = limpo(texto);
+      const porTexto: Modalidade | null = t.startsWith('dedic')
+        ? 'dedicado'
+        : t.startsWith('frac')
+          ? 'fracionado'
+          : null;
+      const n = porTexto ? null : escolhaDeMenu(texto, 2);
+      if (!porTexto && !n) return erro(estado);
+      const modalidade: Modalidade = porTexto ?? (n === 1 ? 'dedicado' : 'fracionado');
       return {
         tipo: 'seguir',
         estado: {
@@ -178,11 +255,14 @@ export function responder(estado: EstadoCotacao, texto: string): Passo {
     }
 
     case 'veiculo': {
-      const n = escolhaDeMenu(texto, VEICULOS.length);
-      if (!n) return erro(estado);
+      // Nome escrito também vale ("carreta") — mesmo motivo da modalidade. Só igualdade
+      // exata com o rótulo do menu: apelido de veículo é onde a adivinhação erra.
+      const porNome = VEICULOS.find((v) => limpo(texto) === v) ?? null;
+      const n = porNome ? null : escolhaDeMenu(texto, VEICULOS.length);
+      if (!porNome && !n) return erro(estado);
       // Escolhido o veículo, o tipo de carga depende dele: a tabela de frete é por
       // veículo no TMS. Então aqui não se avança — pede-se o catálogo.
-      return { tipo: 'buscar_cargas', vehicleType: VEICULOS[n - 1] };
+      return { tipo: 'buscar_cargas', vehicleType: porNome ?? VEICULOS[n! - 1] };
     }
 
     case 'carga': {
@@ -202,7 +282,10 @@ export function responder(estado: EstadoCotacao, texto: string): Passo {
     }
 
     case 'peso': {
-      const kg = numero(texto);
+      // "400kg" e "400 kg" valem: a unidade que a PERGUNTA pediu não é erro de digitação.
+      // Tonelada fica de fora — converter unidade é decisão, e decisão errada aqui vira
+      // peso errado na cotação.
+      const kg = numero(String(texto ?? '').replace(/\s*(kg|kgs|quilos?)\.?\s*$/i, ''));
       if (kg === null) return erro(estado);
       return { tipo: 'seguir', estado: { ...estado, pesoKg: kg, etapa: 'valor', tentativas: 0 } };
     }
@@ -238,16 +321,29 @@ export function comCidadesEncontradas(
 
   if (cidades.length === 1) {
     const [cidade] = cidades;
-    return {
-      tipo: 'seguir',
-      estado: {
-        ...estado,
-        ...(para === 'origem' ? { origem: cidade } : { destino: cidade }),
-        etapa: para === 'origem' ? 'destino' : 'modalidade',
-        opcoes: undefined,
-        tentativas: 0,
-      },
+    const proximo: EstadoCotacao = {
+      ...estado,
+      ...(para === 'origem' ? { origem: cidade } : { destino: cidade }),
+      etapa: para === 'origem' ? 'destino' : 'modalidade',
+      opcoes: undefined,
+      tentativas: 0,
     };
+    // Origem resolvida e o destino do par já está escrito: emenda a segunda busca em vez
+    // de perguntar o que a pessoa acabou de dizer.
+    if (para === 'origem' && estado.destinoPendente) {
+      const { termo, uf } = prepararBuscaDeCidade(estado.destinoPendente);
+      if (termo) {
+        return {
+          tipo: 'buscar_cidade',
+          termo,
+          uf,
+          para: 'destino',
+          estado: { ...proximo, destinoPendente: undefined },
+        };
+      }
+      proximo.destinoPendente = undefined;
+    }
+    return { tipo: 'seguir', estado: proximo };
   }
 
   return {

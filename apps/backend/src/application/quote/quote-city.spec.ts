@@ -1,5 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { filtrarPorUf, prepararBuscaDeCidade, type CidadeDoTms } from './quote-city';
+import {
+  filtrarPorUf,
+  prepararBuscaDeCidade,
+  separarOrigemDestino,
+  type CidadeDoTms,
+} from './quote-city';
+
+describe('par origem→destino numa resposta só', () => {
+  it('separa por "para", "pra" e pelos separadores explícitos', () => {
+    expect(separarOrigemDestino('Jacareí pra Taubaté')).toEqual({ origem: 'Jacareí', destino: 'Taubaté' });
+    expect(separarOrigemDestino('Campinas SP para Belo Horizonte MG')).toEqual({
+      origem: 'Campinas SP',
+      destino: 'Belo Horizonte MG',
+    });
+    expect(separarOrigemDestino('Campinas > BH')).toEqual({ origem: 'Campinas', destino: 'BH' });
+    expect(separarOrigemDestino('Campinas → BH')).toEqual({ origem: 'Campinas', destino: 'BH' });
+  });
+
+  it('"para" DENTRO do nome da origem não engana: corta na última ocorrência', () => {
+    // "Pará de Minas para Contagem" — o "para" real é o último.
+    expect(separarOrigemDestino('Pará de Minas para Contagem')).toEqual({
+      origem: 'Pará de Minas',
+      destino: 'Contagem',
+    });
+  });
+
+  it('sem separador, ou com metade vazia, devolve null — segue como cidade única', () => {
+    expect(separarOrigemDestino('Campinas SP')).toBeNull();
+    expect(separarOrigemDestino('para Campinas')).toBeNull();
+    expect(separarOrigemDestino('Campinas >')).toBeNull();
+    expect(separarOrigemDestino('')).toBeNull();
+  });
+});
 
 describe('preparação do texto de cidade', () => {
   it('separa a UF em qualquer separador comum', () => {
