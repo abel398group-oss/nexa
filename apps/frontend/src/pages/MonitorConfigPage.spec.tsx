@@ -412,7 +412,11 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    // Espera o DADO, não o rótulo da seção. "Contatos" é o título e aparece na
+    // primeira renderização, com a lista ainda carregando — o `getAllByRole` logo
+    // abaixo então lia o estado vazio ("Nenhum contato cadastrado") e falhava
+    // dizendo que não existe tabela. Passava aqui e quebrava na CI, que é mais lenta.
+    await screen.findByText('Maria');
 
     const tables = screen.getAllByRole('table');
     expect(tables).toHaveLength(1);
