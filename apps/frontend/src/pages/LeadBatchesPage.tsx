@@ -42,6 +42,8 @@ export function LeadBatchesPage() {
   const [csv, setCsv] = useState('');
   const [arquivo, setArquivo] = useState('');
   const [forcar, setForcar] = useState(false);
+  /// A coluna `nome` da lista é fantasia da empresa (base da Receita vem assim).
+  const [nomeEmpresa, setNomeEmpresa] = useState(false);
   const [relatorio, setRelatorio] = useState<RelatorioImportacao | null>(null);
   const [arrastando, setArrastando] = useState(false);
   const inputArquivo = useRef<HTMLInputElement>(null);
@@ -65,6 +67,7 @@ export function LeadBatchesPage() {
         name: nome,
         csv,
         forcarJaNaBase: forcar,
+        nomeEhDaEmpresa: nomeEmpresa,
         source: origem || undefined,
       }),
     onSuccess: setRelatorio,
@@ -79,6 +82,7 @@ export function LeadBatchesPage() {
         name: nome,
         csv,
         forcarJaNaBase: forcar,
+        nomeEhDaEmpresa: nomeEmpresa,
         source: origem || undefined,
       }),
     onSuccess: (r) => {
@@ -112,7 +116,7 @@ export function LeadBatchesPage() {
   useEffect(() => {
     if (csv && productCode && nome) previa.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forcar]);
+  }, [forcar, nomeEmpresa]);
 
   function lerArquivo(file: File) {
     const reader = new FileReader();
@@ -262,6 +266,8 @@ export function LeadBatchesPage() {
           relatorio={relatorio}
           forcar={forcar}
           onForcar={setForcar}
+          nomeEmpresa={nomeEmpresa}
+          onNomeEmpresa={setNomeEmpresa}
           simulando={previa.isPending}
           confirmando={confirmar.isPending}
           onConfirmar={() => confirmar.mutate()}
@@ -359,6 +365,8 @@ function Relatorio({
   relatorio,
   forcar,
   onForcar,
+  nomeEmpresa,
+  onNomeEmpresa,
   simulando,
   confirmando,
   onConfirmar,
@@ -366,6 +374,8 @@ function Relatorio({
   relatorio: RelatorioImportacao;
   forcar: boolean;
   onForcar: (v: boolean) => void;
+  nomeEmpresa: boolean;
+  onNomeEmpresa: (v: boolean) => void;
   simulando: boolean;
   confirmando: boolean;
   onConfirmar: () => void;
@@ -445,6 +455,26 @@ function Relatorio({
           </div>
         </div>
       )}
+
+      {/* Sempre visível, e não só quando a heurística desconfia: numa lista exportada
+          da Receita TODO nome é fantasia, inclusive o que não tem marcador nenhum
+          ("PEQLOG", "RODA BRASIL"). Quem subiu a lista sabe num olhar; o parser não. */}
+      <div className="mt-4 flex items-start gap-3 border-t border-base-300 pt-4">
+        <Switch
+          id="nome-empresa"
+          checked={nomeEmpresa}
+          onCheckedChange={onNomeEmpresa}
+          disabled={simulando}
+        />
+        <div>
+          <Label htmlFor="nome-empresa">A coluna "nome" é da empresa, não de uma pessoa</Label>
+          <p className="text-xs text-base-content/60">
+            Marque quando a lista traz razão social ou nome fantasia no lugar do contato.
+            O nome vira empresa e a mensagem sai "Bom dia!" em vez de "Bom dia, PEQLOG!".
+            O sistema já reconhece os casos óbvios (LTDA, TRANSPORTES) sozinho.
+          </p>
+        </div>
+      </div>
 
       {descartes.length > 0 && (
         <details className="mt-4">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avaliarLinha, detectarSeparador, parseCsvDeLeads } from './lead-csv';
+import { avaliarLinha, detectarSeparador, parseCsvDeLeads, pareceRazaoSocial } from './lead-csv';
 
 describe('separador', () => {
   it('detecta ponto-e-vírgula do Excel brasileiro', () => {
@@ -215,5 +215,106 @@ describe('parseCsvDeLeads — colunas que disputam o mesmo campo', () => {
   it('sem whatsapp, o telefone entra normalmente', () => {
     const { linhas } = parseCsvDeLeads('whatsapp,telefone,email\n,+5519971051858,a@b.com.br');
     expect(linhas[0].phone).toBe('5519971051858');
+  });
+});
+
+/**
+ * Razão social na coluna do nome (20/08/2026).
+ *
+ * Os casos abaixo são LINHAS REAIS das planilhas de transportadoras — 71% dos leads
+ * quentes e 84% dos frios vinham assim. O disparo usa o primeiro nome, então isso
+ * saía como "Bom dia, OURO!" e "Bom dia, TB!".
+ *
+ * O que torna o defeito traiçoeiro: campo VAZIO produzia mensagem melhor. Sem nome,
+ * `tidyMissingName` tira o placeholder e a frase se recompõe. O estrago vinha de
+ * confiar num nome que não era nome.
+ */
+describe('pareceRazaoSocial', () => {
+  it('nome idêntico à empresa é razão social, mesmo sem marcador', () => {
+    expect(pareceRazaoSocial('Ostel', 'Ostel')).toBe(true);
+    expect(pareceRazaoSocial('OURO CARGO', 'ouro cargo')).toBe(true);
+  });
+
+  it('marcador de pessoa jurídica basta', () => {
+    expect(pareceRazaoSocial('OURO CARGO TRANSPORTES LTDA', null)).toBe(true);
+    expect(pareceRazaoSocial('TB LOG', null)).toBe(true);
+    expect(pareceRazaoSocial('TLZ TRANSPORTES LTDA', null)).toBe(true);
+    expect(pareceRazaoSocial('Aviat Cargo Express', null)).toBe(true);
+    expect(pareceRazaoSocial('BR01 -Transportes e Logística', null)).toBe(true);
+  });
+
+  it('nome de pessoa passa intacto', () => {
+    expect(pareceRazaoSocial('Carlos Mendes', 'Transportes Silva')).toBe(false);
+    expect(pareceRazaoSocial('Fernanda Dias', null)).toBe(false);
+    expect(pareceRazaoSocial('Ana', 'Carga Pesada MG')).toBe(false);
+  });
+
+  // `\b` no marcador: sem ele, "log" casa dentro de "Logan" e um sobrenome vira
+  // empresa — perder o nome de um lead bom é o custo do falso positivo.
+  it('marcador dentro de outra palavra não conta', () => {
+    expect(pareceRazaoSocial('Logan Ferreira', null)).toBe(false);
+    expect(pareceRazaoSocial('Mesquita Alves', null)).toBe(false);
+    expect(pareceRazaoSocial('Salvador Costa', null)).toBe(false);
+  });
+
+  it('vazio não é razão social', () => {
+    expect(pareceRazaoSocial(null, 'X')).toBe(false);
+    expect(pareceRazaoSocial('   ', 'X')).toBe(false);
+  });
+});
+
+describe('parseCsvDeLeads — razão social no lugar do nome', () => {
+  it('sem empresa na linha, a razão social ocupa a empresa e o nome fica vazio', () => {
+    const { linhas } = parseCsvDeLeads('nome;telefone\nOURO CARGO TRANSPORTES LTDA;11930256122');
+    expect(linhas[0].name).toBeNull();
+    expect(linhas[0].company).toBe('OURO CARGO TRANSPORTES LTDA');
+  });
+
+  // A coluna de empresa é a que o operador escolheu; trocar a razão social completa
+  // pela abreviação do outro campo perderia informação.
+  it('com empresa preenchida, ela manda — o nome só é descartado', () => {
+    const { linhas } = parseCsvDeLeads(
+      'nome;empresa;telefone\nTB LOG;TRANSPORTADORA BARBARENSE LTDA;5519971051858',
+    );
+    expect(linhas[0].name).toBeNull();
+    expect(linhas[0].company).toBe('TRANSPORTADORA BARBARENSE LTDA');
+  });
+
+  it('nome de pessoa continua chegando como nome', () => {
+    const { linhas } = parseCsvDeLeads('nome;empresa;telefone\nCarlos Mendes;Transportes Silva;11988887777');
+    expect(linhas[0].name).toBe('Carlos Mendes');
+    expect(linhas[0].company).toBe('Transportes Silva');
+  });
+
+  // A linha continua valendo: o que sumiu foi um nome que não servia, não o lead.
+  it('descartar o nome não descarta a linha', () => {
+    const { linhas } = parseCsvDeLeads('nome;telefone\nTLZ TRANSPORTES LTDA;5519992583389');
+    expect(linhas[0].descarte).toBeNull();
+    expect(linhas[0].temNome).toBe(false);
+  });
+});
+
+/**
+ * A marca abreviada como nome — "MAZALOG" para "MAZALOG TRANSPORTES E LOGISTICA
+ * LTDA". São 2.017 linhas só na base quente, e nenhuma é gente. Os outros dois
+ * sinais não a alcançam: a abreviação não tem marcador dentro de si.
+ */
+describe('pareceRazaoSocial — marca abreviada no lugar do nome', () => {
+  it('prefixo da razão social, com marcador no resto, é empresa', () => {
+    expect(pareceRazaoSocial('MAZALOG', 'MAZALOG TRANSPORTES E LOGISTICA LTDA')).toBe(true);
+    expect(pareceRazaoSocial('CONFCARGO', 'CONFCARGO TRANSPORTE E LOGISTICA LTDA')).toBe(true);
+    expect(pareceRazaoSocial('IRMAOS VIEIRA', 'IRMAOS VIEIRA MUDANCAS E TRANSPORTES LTDA.')).toBe(true);
+    expect(pareceRazaoSocial('KAYRO', 'KAYRO SOLUCOES LTDA')).toBe(true);
+  });
+
+  // O caso legítimo que a exigência de marcador NO RESTO protege: o dono da
+  // transportadora, cujo primeiro nome no cumprimento está certo.
+  it('nome que é começo da empresa SEM marcador no resto continua sendo nome', () => {
+    expect(pareceRazaoSocial('Carlos', 'Carlos Silva')).toBe(false);
+    expect(pareceRazaoSocial('Pedro', 'Pedro Henrique')).toBe(false);
+  });
+
+  it('prefixo parcial de palavra não conta — falta o espaço', () => {
+    expect(pareceRazaoSocial('Maza', 'MAZALOG TRANSPORTES LTDA')).toBe(false);
   });
 });

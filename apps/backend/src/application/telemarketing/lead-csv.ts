@@ -111,6 +111,60 @@ function chaveDoCabecalho(bruto: string): string | null {
   return null;
 }
 
+/**
+ * Marcadores de razão social. Só palavra inteira — `\b` importa: sem ele, "Log"
+ * casaria dentro de "Logan" e o sobrenome de uma pessoa viraria nome de empresa.
+ */
+const CARA_DE_EMPRESA =
+  /\b(ltda|me|epp|eireli|s\/a|sa|cia|transportes?|transportadora|logistica|log|cargas?|express|rodoviari[oa]|distribuidora|comercio|servicos|grupo)\b/i;
+
+/**
+ * O que veio na coluna `nome` é razão social, não nome de pessoa?
+ *
+ * A base real de transportadoras vem quase toda assim: 71% dos leads quentes e 84%
+ * dos frios trazem "OURO CARGO TRANSPORTES LTDA" ou "TB LOG" no campo do nome, e em
+ * 11.142 linhas o nome é IDÊNTICO à empresa. O disparo usa o primeiro nome, então
+ * isso saía como "Bom dia, OURO!" e "Bom dia, TB!" — que anuncia robô na primeira
+ * linha e queima o lead.
+ *
+ * A ironia é que o campo VAZIO era melhor: sem nome, `tidyMissingName` remove o
+ * placeholder e a frase se recompõe sozinha ("Bom dia! Uma pergunta rápida…").
+ * O estrago vem de o sistema confiar num nome que não é nome.
+ *
+ * Três sinais, e qualquer um basta:
+ *   • bate com a coluna `empresa` — quem exportou preencheu as duas iguais;
+ *   • carrega marcador de pessoa jurídica (LTDA, TRANSPORTES, LOG, CARGAS…);
+ *   • é o começo da razão social e o que sobra dela é marcador — "MAZALOG" para
+ *     "MAZALOG TRANSPORTES E LOGISTICA LTDA". São 2.017 linhas só na base quente,
+ *     e nenhuma delas é gente: "CONFCARGO", "FORTECARGO", "IRMAOS VIEIRA",
+ *     "GTX GUINCHO". A marca abreviada não tem marcador nenhum dentro de si, então
+ *     os dois primeiros sinais passam batido por ela.
+ *
+ * A exigência de marcador NO RESTO é o que protege o caso legítimo: "Carlos" com
+ * empresa "Carlos Silva" continua sendo Carlos, porque "Silva" não é marcador — ali
+ * o primeiro nome no cumprimento está certo, é o dono da transportadora.
+ *
+ * Função PURA e exportada: a decisão de quando um nome não é nome precisa de teste
+ * contra os casos reais, e ela não deveria exigir um CSV para ser verificada.
+ */
+export function pareceRazaoSocial(nome: string | null, empresa: string | null): boolean {
+  const n = nome?.trim();
+  if (!n) return false;
+
+  const e = empresa?.trim();
+  if (e) {
+    if (n.toLowerCase() === e.toLowerCase()) return true;
+
+    // Prefixo da razão social: o que sobra precisa ser marcador de PJ.
+    const prefixo = n.toLowerCase() + ' ';
+    if (e.toLowerCase().startsWith(prefixo) && CARA_DE_EMPRESA.test(e.slice(n.length))) {
+      return true;
+    }
+  }
+
+  return CARA_DE_EMPRESA.test(n);
+}
+
 function numeroOuNulo(bruto: string | null): number | null {
   if (!bruto) return null;
   const digits = bruto.replace(/\D/g, '');
@@ -152,7 +206,24 @@ export function avaliarLinha(
   return 'telefone_invalido';
 }
 
-export function parseCsvDeLeads(conteudo: string): ResultadoCsv {
+/** Opções da importação que dependem do que o operador SABE sobre a lista. */
+export interface OpcoesDeParse {
+  /**
+   * A coluna `nome` desta lista é nome fantasia da EMPRESA, não de uma pessoa.
+   *
+   * Existe porque a heurística tem teto. Numa base de transportadoras exportada da
+   * Receita, TODO nome é fantasia — e a parte que não carrega marcador nenhum
+   * ("PEQLOG", "RODA BRASIL", "S & M", "BAIA") é indistinguível de gente por
+   * qualquer regra que se escreva. São 3.033 linhas na base quente, e sem esta
+   * opção elas sairiam como "Boa tarde, PEQLOG!".
+   *
+   * Quem sobe a lista sabe a resposta num olhar; o parser, não. Marcar aqui é
+   * determinístico: nenhum nome de pessoa é inventado, e a saudação sai limpa.
+   */
+  nomeEhDaEmpresa?: boolean;
+}
+
+export function parseCsvDeLeads(conteudo: string, opcoes: OpcoesDeParse = {}): ResultadoCsv {
   const texto = conteudo.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const brutas = texto.split('\n').filter((l) => l.trim().length > 0);
   if (brutas.length === 0) return { linhas: [], colunasIgnoradas: [] };
@@ -185,10 +256,21 @@ export function parseCsvDeLeads(conteudo: string): ResultadoCsv {
     const foneNormalizado = campos.phone ? normalizePhone(campos.phone) : '';
     const emailNormalizado = campos.email ? normalizeEmail(campos.email) : '';
 
+    // Razão social na coluna do nome vira EMPRESA, e o nome fica vazio — ver
+    // `pareceRazaoSocial`. Só ocupa a empresa se ela estiver livre: quando as duas
+    // colunas vieram preenchidas, a de empresa é a que o operador escolheu, e
+    // sobrescrever trocaria a razão social completa por uma abreviação ("TB LOG"
+    // no lugar de "TRANSPORTADORA BARBARENSE LTDA").
+    const nomeBruto = campos.name ?? null;
+    const empresaBruta = campos.company ?? null;
+    // A escolha do operador vem antes da heurística: ele viu a lista inteira.
+    const nomeEhEmpresa =
+      opcoes.nomeEhDaEmpresa === true ? !!nomeBruto : pareceRazaoSocial(nomeBruto, empresaBruta);
+
     const linha: LinhaCsv = {
       linha: i + 1, // +1: o operador conta o cabeçalho como linha 1
-      name: campos.name ?? null,
-      company: campos.company ?? null,
+      name: nomeEhEmpresa ? null : nomeBruto,
+      company: empresaBruta ?? (nomeEhEmpresa ? nomeBruto : null),
       phone: foneNormalizado.length > 0 ? foneNormalizado : null,
       email: emailNormalizado.length > 0 ? emailNormalizado : null,
       fleetSize: numeroOuNulo(campos.fleetSize ?? null),

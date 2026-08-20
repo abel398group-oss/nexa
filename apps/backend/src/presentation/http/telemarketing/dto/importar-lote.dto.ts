@@ -60,4 +60,14 @@ export class ImportarLoteDto {
   @IsOptional()
   @IsBoolean()
   dryRun?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'A coluna "nome" desta lista é o nome fantasia da EMPRESA, não de uma pessoa. ' +
+      'Base exportada da Receita vem assim, e sem esta marca o disparo cumprimenta ' +
+      'o lead de "Boa tarde, PEQLOG!". Marcado, o nome vira empresa e a saudação sai limpa.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  nomeEhDaEmpresa?: boolean;
 }

@@ -65,6 +65,8 @@ export interface ImportarLotePayload {
   csv: string;
   dryRun: boolean;
   forcarJaNaBase?: boolean;
+  /** A coluna "nome" desta lista é o nome fantasia da empresa, não de uma pessoa. */
+  nomeEhDaEmpresa?: boolean;
   source?: string;
   consentBasis?: string;
 }

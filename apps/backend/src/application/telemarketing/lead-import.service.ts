@@ -33,6 +33,10 @@ export interface ImportarLoteInput {
   /// ponto do módulo 1 — o operador vê o que a lista vale ANTES de ela entrar. Sem
   /// isso ele descobre que a lista era ruim depois que ela já está dentro.
   dryRun?: boolean;
+  /// A coluna `nome` desta lista é nome fantasia da empresa — ver `OpcoesDeParse`.
+  /// Numa base exportada da Receita, todo "nome" é da empresa, e sem esta marca o
+  /// disparo cumprimenta o lead de "Boa tarde, PEQLOG!".
+  nomeEhDaEmpresa?: boolean;
 }
 
 export interface RelatorioImportacao {
@@ -75,7 +79,9 @@ export class LeadImportService {
       );
     }
 
-    const { linhas, colunasIgnoradas } = parseCsvDeLeads(csv);
+    const { linhas, colunasIgnoradas } = parseCsvDeLeads(csv, {
+      nomeEhDaEmpresa: input.nomeEhDaEmpresa,
+    });
 
     // A peneira de arquivo já rodou no parser (duplicado, sem canal utilizável).
     // Aqui entram os motivos que só o banco sabe.
