@@ -50,3 +50,16 @@ waha-sessions-vendas/
 
 # Backups pontuais de dados (playbook, etc) — ficam locais, nunca no repo.
 backup-*.json
+
+# Material comercial — fica só na máquina (20/08/2026, ao abrir o repositório).
+# Não é código: é posicionamento, cadência de prospecção, battle card de objeções e
+# os criativos. Num repositório público, é o manual de como vender contra quem a
+# gente compete — e o próprio código carrega a lista de concorrentes a bloquear.
+marketing-social/
+
+# Despejos de dados de produção. `import-prod-data.js` carregava contatos e conversas
+# REAIS — nome, telefone e e-mail de gente de verdade — para popular o banco local.
+# Num repositório público isso é vazamento de dado pessoal, não configuração.
+# Script que puxa dados de produção fica na máquina de quem puxou.
+apps/backend/prisma/import-prod-data.js
+**/import-prod-data.js

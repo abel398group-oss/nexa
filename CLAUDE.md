@@ -81,7 +81,9 @@ pnpm monorepo:
   "
   ```
 - **`prisma db push` falha** se algum índice já existir — preferir SQL manual com `IF NOT EXISTS` via node acima.
-- **Banco**: Postgres gerenciado DigitalOcean (`db-postgresql-nyc3-37059-do-user-16747874-0.k.db.ondigitalocean.com:25060`), database `nexa`. Não está no docker-compose — é externo.
+- **Banco**: Postgres gerenciado DigitalOcean, database `nexa`. Não está no docker-compose
+  — é externo. O host completo está no `DATABASE_URL` (`.env`, fora do repositório) e no
+  painel da DigitalOcean; não fica versionado desde que o repositório virou público.
 - **`/home/ueldermartin/hipervias/docker-compose.yml`**: arquivo antigo do HiperTMS v1, ignorar completamente.
 
 ## Migration rule — production safety
@@ -159,7 +161,7 @@ Dois ambientes distintos — nunca confundir:
 
 - **WAHA usa `latest` em produção** — cada redeploy pode puxar versão nova com formato de payload diferente. Nunca assuma que o formato do webhook é estável.
 - **LID (anonimização do WhatsApp)**: o WhatsApp envia remetentes como `<id>@lid` em vez do número real. O campo `payload.from` contém o LID, NÃO o número. Para resolver o número real, use a API do WAHA `/api/contacts?session=default&contactId=<lid>`.
-- **`resolveLidToPhone()` — campo correto é `data.id`, não `data.number`**: o WAHA retorna `{ "id": "5512988073788@c.us", "number": "234754356076551" }`. O `number` é só o user do LID (sem código de país — inválido como fone BR). O número real está em `id` (ex: `"5512988073788@c.us"` → pegar antes do `@`). **Nunca ler `data.number` como telefone definitivo.**
+- **`resolveLidToPhone()` — campo correto é `data.id`, não `data.number`**: o WAHA retorna `{ "id": "5511999999999@c.us", "number": "234754356076551" }`. O `number` é só o user do LID (sem código de país — inválido como fone BR). O número real está em `id` (ex: `"5511999999999@c.us"` → pegar antes do `@`). **Nunca ler `data.number` como telefone definitivo.**
 - **Ao tocar em `whatsapp.service.ts` / `normalize()` / `resolveLidToPhone()`**: sempre testar com mensagem real antes de commitar. O fluxo de rejeição silenciosa (sem log) é perigoso — adicione log explícito em qualquer novo early-return.
 - **Não adicionar early-returns sem `this.logger.warn()`**: todo caminho de descarte de mensagem DEVE logar o motivo. Silently dropping messages é o pior cenário para debug em produção.
 
