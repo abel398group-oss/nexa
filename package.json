@@ -25,10 +25,10 @@
     "test:e2e:visual": "pnpm --filter frontend test:e2e:visual"
   },
   "devDependencies": {
-    "@eslint/js": "^9.13.0",
-    "eslint": "^9.13.0",
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
     "globals": "^15.11.0",
-    "typescript-eslint": "^8.10.0"
+    "typescript-eslint": "^8.67.0"
   },
   "pnpm": {
     "//": "CVE em dependência TRANSITIVA — a vulnerável está dentro de outro pacote, e",
