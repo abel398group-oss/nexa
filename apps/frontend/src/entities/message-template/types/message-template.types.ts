@@ -9,6 +9,8 @@ export interface MessageTemplate {
   body: string;
   /** Posição na cadência (1 = primeiro toque). */
   step: number;
+  /** draft = ninguém revisou · approved = pode ser escolhido no Disparo. */
+  status: 'draft' | 'approved';
   active: boolean;
 }
 

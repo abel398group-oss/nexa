@@ -638,6 +638,12 @@ model MessageTemplate {
   /// Posição na cadência (1 = primeiro toque). Guardado desde já; o disparo
   /// automático da sequência ficou fora do primeiro corte — ver ADR 037.
   step        Int      @default(1)
+  /// draft = escrito, ninguém revisou · approved = pode ser escolhido no Disparo.
+  /// É a mesma ideia do material de campanha (MarketAsset): este texto chega ao
+  /// LEAD, e era o único da esteira sem revisão obrigatória — foi assim que dois
+  /// toques com preço e promessa proibida ficaram armados até 20/08/2026.
+  /// Editar corpo/assunto derruba para draft, pela mesma razão de lá.
+  status      String   @default("draft")
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

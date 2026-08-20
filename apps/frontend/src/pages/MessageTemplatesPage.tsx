@@ -6,7 +6,8 @@ import { useConfirm } from '@/app/providers/ConfirmContext';
 import { listMarkets } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
-  listTemplates, createTemplate, archiveTemplate, previewTemplate, sendTemplateTest,
+  listTemplates, createTemplate, archiveTemplate, approveTemplate, unapproveTemplate,
+  previewTemplate, sendTemplateTest,
   type MessageTemplate, type TemplatePreview,
 } from '@/entities/message-template';
 
@@ -63,7 +64,10 @@ export function MessageTemplatesPage() {
     mutationFn: () =>
       createTemplate({ productCode: codigo, name: nome, channel: canal, subject: assunto, body: corpo, step: passo }),
     onSuccess: () => {
-      toast.success('Modelo salvo. Já aparece em "Usar um modelo pronto" no Disparo deste mercado.');
+      // Nasce rascunho (20/08/2026): o texto que o LEAD recebe agora passa por
+      // revisão, como o material de campanha. Dizer "já aparece no Disparo" aqui
+      // seria a mentira antiga com sinal trocado.
+      toast.success('Modelo salvo como rascunho. Aprove-o na lista abaixo para aparecer no Disparo.');
       setNome(''); setAssunto(''); setCorpo(''); setPrevia(null);
       void qc.invalidateQueries({ queryKey: ['message-templates', codigo] });
       // "Nenhuma mensagem pronta" é uma das quatro travas de liberação, e ela é
@@ -74,6 +78,30 @@ export function MessageTemplatesPage() {
       void qc.invalidateQueries({ queryKey: ['markets'] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Não consegui salvar o modelo.'),
+  });
+
+  const aprovar = useMutation({
+    mutationFn: (id: string) => approveTemplate(id),
+    onSuccess: () => {
+      toast.success('Aprovado — já aparece no Disparo deste mercado.');
+      void qc.invalidateQueries({ queryKey: ['message-templates'] });
+    },
+    // 403 é o caso esperado para quem escreve sem carimbar (perm `settings`).
+    onError: (e: any) =>
+      toast.error(
+        e?.response?.status === 403
+          ? 'Aprovar exige a permissão de configuração — peça a quem gerencia a operação.'
+          : e?.response?.data?.message ?? 'Não consegui aprovar.',
+      ),
+  });
+
+  const reprovar = useMutation({
+    mutationFn: (id: string) => unapproveTemplate(id),
+    onSuccess: () => {
+      toast.info('Voltou para rascunho — saiu do Disparo.');
+      void qc.invalidateQueries({ queryKey: ['message-templates'] });
+    },
+    onError: () => toast.error('Não consegui reprovar.'),
   });
 
   const enviarTeste = useMutation({
@@ -240,12 +268,33 @@ export function MessageTemplatesPage() {
           modelos.map((t) => (
             <div key={t.id} className="flex items-center gap-3 border-b border-base-200 px-4 py-2 last:border-0">
               <StatusBadge tone="neutral">{t.channel === 'email' ? 'E-mail' : 'WhatsApp'}</StatusBadge>
+              {/* Rascunho em âmbar: é o que NÃO sai no Disparo até alguém revisar. */}
+              <StatusBadge tone={t.status === 'approved' ? 'success' : 'warning'}>
+                {t.status === 'approved' ? 'Aprovado' : 'Rascunho'}
+              </StatusBadge>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm text-base-content">
                   {t.name} <span className="text-xs text-base-content/40">· toque {t.step}</span>
                 </div>
                 <div className="truncate text-xs text-base-content/50">{t.subject || t.body.slice(0, 70)}</div>
               </div>
+              {t.status !== 'approved' ? (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-brand-600 underline"
+                  onClick={() => void aprovar.mutate(t.id)}
+                >
+                  Aprovar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="text-xs text-base-content/40 underline"
+                  onClick={() => void reprovar.mutate(t.id)}
+                >
+                  Reprovar
+                </button>
+              )}
               <button
                 type="button"
                 className="text-xs text-base-content/40 underline"

@@ -51,16 +51,18 @@ export interface ToqueDoRoteiro {
 }
 
 /**
- * `[nome]` e `[Nome]` do plano viram `{{nome}}`, que é o que o disparo entende.
+ * `[nome]` e `[empresa]` do plano viram `{{nome}}` e `{{empresa}}`, que é o que o
+ * disparo resolve (ver `SenderService.renderTemplate` e `renderEmpresa` — empresa
+ * sem valor vira "sua empresa", nunca a chave crua).
  *
- * O resto dos colchetes fica como está de propósito: `[link calculadora]` e
- * `[empresa]` não têm variável correspondente no envio (ver
- * `SenderService.renderTemplate`, que só resolve nome, saudação e remetente).
- * Trocar por uma variável inexistente mandaria `{{empresa}}` literal para o lead;
- * deixar em colchete deixa visível na revisão que ali falta uma decisão humana.
+ * O resto dos colchetes fica como está de propósito: `[link calculadora]` não tem
+ * variável correspondente no envio. Em colchete, salta aos olhos na revisão que
+ * ali falta uma decisão humana.
  */
 function normalizarPlaceholders(texto: string): string {
-  return texto.replace(/\[nome\]/gi, '{{nome}}');
+  return texto
+    .replace(/\[nome\]/gi, '{{nome}}')
+    .replace(/\[empresa\]/gi, '{{empresa}}');
 }
 
 /** Cabeçalho de uma peça: `**Toque 1 (D0) — abertura:**` */

@@ -268,11 +268,13 @@ export class EmailCampaignSenderService {
    * bem?" — o WhatsApp corrigiu isso (mais da metade da base entra sem nome) e o
    * e-mail tinha ficado para trás. Sem nome, `{{nome}}` some e a frase se recompõe.
    */
-  private render(template: string, name?: string | null): string {
+  private render(template: string, name?: string | null, empresa?: string | null): string {
     const first = SenderService.firstName(name);
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    // {{empresa}} com o mesmo fallback do WhatsApp — ver SenderService.renderEmpresa.
+    txt = SenderService.renderEmpresa(txt, empresa);
     // Spintax (ver spintax.ts): corpo idêntico repetido também pesa no score de
     // spam do provedor destinatário, não só no WhatsApp. Roda depois do {{...}}
     // pelo mesmo motivo do canal WhatsApp.
@@ -702,7 +704,7 @@ export class EmailCampaignSenderService {
       const conhecido = await this.jaRespondeuAlgumaVez(campaign.tenantId, email);
       const layout = conhecido ? 'marca' : 'simples';
 
-      let body = this.render(campaign.template, target.name);
+      let body = this.render(campaign.template, target.name, (upsertedContact as any).company);
 
       // Link MARCADO com a origem: sem isto o clique chega no site como visita
       // direta e "a campanha trouxe gente?" não tem resposta. Clique de e-mail
@@ -741,7 +743,7 @@ export class EmailCampaignSenderService {
       // pneus com assunto de TMS é a incoerência que termina em "Reportar spam".
       // Caminho raro (modelo de mensagem exige assunto), então a consulta só roda nele.
       const subject = campaign.subject
-        ? this.render(campaign.subject, target.name)
+        ? this.render(campaign.subject, target.name, (upsertedContact as any).company)
         : `Sobre o ${await this.nomeDoMercado(campaign.productCode)} — ${this.render('{{saudacao}}', target.name)}`;
 
       try {

@@ -1487,7 +1487,9 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      let text = this.render(campaign.template, target.name);
+      // A empresa vem do CONTATO, não do alvo: o CSV pode ter trazido a coluna numa
+      // importação anterior mesmo quando esta campanha veio de números avulsos.
+      let text = this.render(campaign.template, target.name, (contact as any).company);
       // Link na 1ª mensagem só com opt-in explícito (sendLinkOnFirst) — antes era
       // incondicional. Default: mensagem fria sem link (anti-ban); o lead que
       // responder recebe o link da Lia na conversa (sales-agent, signupUrl).
@@ -1745,10 +1747,22 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
    * `optOutFooter` desligado no e-mail: lá o descadastro é link no rodapé do HTML, e
    * "Responda SAIR" num e-mail manda o lead responder algo que ninguém lê.
    */
+  /**
+   * `{{empresa}}` → nome da empresa do contato; sem empresa vira "sua empresa".
+   *
+   * O fallback é frase, não remoção: "aí na {{empresa}}" precisa continuar de pé
+   * quando o CSV veio sem a coluna — e "aí na sua empresa" lê natural em todas as
+   * construções que os planos usam ("na", "a", "da"). Remover como o {{nome}} faz
+   * (tidyMissingName) quebraria a preposição no meio ("aí na , quanto tempo…").
+   */
+  static renderEmpresa(txt: string, empresa?: string | null): string {
+    return txt.replace(/\{\{\s*empresa\s*\}\}/gi, empresa?.trim() || 'sua empresa');
+  }
+
   static renderTemplate(
     template: string,
     name?: string | null,
-    opts: { optOutFooter?: boolean } = {},
+    opts: { optOutFooter?: boolean; empresa?: string | null } = {},
   ): string {
     const first = SenderService.firstName(name);
     // `{{remetente}}` = quem assina, da MESMA fonte da assinatura do e-mail.
@@ -1763,6 +1777,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*remetente\s*\}\}/gi, remetente)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    txt = SenderService.renderEmpresa(txt, opts.empresa);
     txt = spin(txt);
     if (!first) txt = SenderService.tidyMissingName(txt);
 
@@ -1771,7 +1786,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     return txt;
   }
 
-  private render(template: string, name?: string | null): string {
+  private render(template: string, name?: string | null, empresa?: string | null): string {
     // 2026-08-01: sem nome, `{{nome}}` some e a frase se recompõe sozinha.
     // Antes o fallback era a string "tudo bem", o que produzia aberrações como
     // "Bom dia tudo bem, tudo bem?" em 1.666 dos 3.097 leads (mais da metade da
@@ -1780,6 +1795,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     let txt = template
       .replace(/\{\{\s*nome\s*\}\}/gi, first)
       .replace(/\{\{\s*saudacao\s*\}\}/gi, SenderService.greeting());
+    txt = SenderService.renderEmpresa(txt, empresa);
     // Spintax DEPOIS do {{...}}: quando o lead não tem nome o placeholder já saiu,
     // então nenhuma chave remanescente pode ser confundida com grupo de variação.
     // Sem `|` no template o texto passa intacto — campanhas antigas não mudam.

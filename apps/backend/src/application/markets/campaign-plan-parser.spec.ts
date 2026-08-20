@@ -81,13 +81,14 @@ describe('extrairToques — as mensagens que já estão no roteiro', () => {
     expect(t[0].body).not.toContain('[nome]');
   });
 
-  // `[link calculadora]` e `[empresa]` não têm variável no envio: virar `{{empresa}}`
-  // mandaria a chave crua para o lead. Em colchete, salta aos olhos na revisão.
-  it('colchete sem variável correspondente fica como está', () => {
+  // `[empresa]` tem variável desde 20/08 (renderEmpresa, com fallback "sua
+  // empresa"); `[link calculadora]` segue sem — em colchete, salta aos olhos.
+  it('[empresa] vira variável; colchete sem variável fica como está', () => {
     const t = extrairToques('**Toque 1 (D0) — x:**\n> Teste em [link calculadora] na [empresa].');
 
     expect(t[0].body).toContain('[link calculadora]');
-    expect(t[0].body).toContain('[empresa]');
+    expect(t[0].body).toContain('{{empresa}}');
+    expect(t[0].body).not.toContain('[empresa]');
   });
 
   // O parser precisa parar no fim da seção — senão a tabela de "Conteúdo de apoio"

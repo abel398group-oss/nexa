@@ -58,13 +58,16 @@ class SendTestDto {
 export class MessageTemplatesController {
   constructor(private readonly templates: MessageTemplatesService) {}
 
+  /// `?approved=true` é o que o seletor do Disparo consome — rascunho não pode
+  /// ser oferecido a quem monta campanha. A tela de Mensagens lista tudo.
   @Get()
   list(
     @CurrentTenant() tenantId: string,
     @Query('productCode') productCode?: string,
     @Query('channel') channel?: string,
+    @Query('approved') approved?: string,
   ) {
-    return this.templates.list(tenantId, productCode, channel);
+    return this.templates.list(tenantId, productCode, channel, approved === 'true');
   }
 
   /**
@@ -90,6 +93,20 @@ export class MessageTemplatesController {
   @Patch(':id')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateTemplateDto) {
     return this.templates.update(tenantId, id, dto);
+  }
+
+  /// Aprovar fica atrás de `settings`, como o material de campanha: quem escreve
+  /// (`campaigns`) não carimba o próprio texto.
+  @Post(':id/approve')
+  @RequirePerm('settings')
+  approve(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.templates.approve(tenantId, id);
+  }
+
+  @Post(':id/unapprove')
+  @RequirePerm('settings')
+  unapprove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.templates.unapprove(tenantId, id);
   }
 
   // Arquiva, não apaga — a campanha antiga continua apontando para o texto que a gerou.

@@ -37,13 +37,19 @@ export class MessageTemplatesService {
     private readonly emailReply: EmailReplyService,
   ) {}
 
-  list(tenantId: string, productCode?: string, channel?: string) {
-    return this.prisma.messageTemplate.findMany({
+  /**
+   * `somenteAprovados` é o que o seletor do Disparo pede: rascunho não pode ser
+   * oferecido a quem monta campanha — é a trava toda. A tela de Mensagens lista
+   * tudo, porque rascunho enterrado é rascunho que ninguém revisa.
+   */
+  list(tenantId: string, productCode?: string, channel?: string, somenteAprovados = false) {
+    return (this.prisma as any).messageTemplate.findMany({
       where: {
         tenantId,
         active: true,
         ...(productCode ? { productCode } : {}),
         ...(channel ? { channel } : {}),
+        ...(somenteAprovados ? { status: 'approved' } : {}),
       },
       orderBy: [{ productCode: 'asc' }, { step: 'asc' }, { name: 'asc' }],
     });
@@ -83,15 +89,42 @@ export class MessageTemplatesService {
     if (dto.body !== undefined || dto.channel !== undefined) {
       this.validar({ ...atual, ...dto } as TemplateInput);
     }
-    return this.prisma.messageTemplate.update({
+    // Mexer no TEXTO derruba a aprovação — mesma regra do material de campanha:
+    // aprovar o texto de ontem e deixar o de hoje entrar por baixo dá a garantia
+    // sem cumpri-la. Renomear e reordenar (step) não derrubam: não mudam o que o
+    // lead recebe.
+    const mudouTexto = dto.body !== undefined || dto.subject !== undefined;
+    return (this.prisma as any).messageTemplate.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.subject !== undefined ? { subject: dto.subject?.trim() || null } : {}),
         ...(dto.body !== undefined ? { body: dto.body } : {}),
         ...(dto.step !== undefined ? { step: dto.step } : {}),
+        ...(mudouTexto ? { status: 'draft' } : {}),
       },
     });
+  }
+
+  /** Aprova: o modelo passa a aparecer no seletor do Disparo. */
+  async approve(tenantId: string, id: string) {
+    const r = await (this.prisma as any).messageTemplate.updateMany({
+      where: { id, tenantId },
+      data: { status: 'approved' },
+    });
+    if (r.count === 0) throw new NotFoundException('Modelo não encontrado');
+    this.logger.log(`Modelo ${id} aprovado — visível no Disparo`);
+    return { ok: true };
+  }
+
+  /** Volta para rascunho — some do seletor sem perder o texto. */
+  async unapprove(tenantId: string, id: string) {
+    const r = await (this.prisma as any).messageTemplate.updateMany({
+      where: { id, tenantId },
+      data: { status: 'draft' },
+    });
+    if (r.count === 0) throw new NotFoundException('Modelo não encontrado');
+    return { ok: true };
   }
 
   /**
@@ -138,12 +171,15 @@ export class MessageTemplatesService {
       : null;
 
     const nome = entrada.nomeTeste?.trim() || 'Carlos';
+    // Empresa de exemplo pelo mesmo motivo do nome: mostrar `{{empresa}}` cru
+    // esconde o que se quer julgar — a frase encaixa com um nome real no lugar?
+    const empresa = 'Transportes Silva';
     const ehEmail = entrada.channel === 'email';
     // No e-mail o descadastro é o link do rodapé; 'Responda SAIR' manda o lead
     // responder algo que ninguém lê.
-    const corpo = SenderService.renderTemplate(entrada.body, nome, { optOutFooter: !ehEmail });
+    const corpo = SenderService.renderTemplate(entrada.body, nome, { optOutFooter: !ehEmail, empresa });
     const assunto = entrada.subject
-      ? SenderService.renderTemplate(entrada.subject, nome, { optOutFooter: false })
+      ? SenderService.renderTemplate(entrada.subject, nome, { optOutFooter: false, empresa })
       : null;
 
     const brand: EmailBrand | undefined = mercado

@@ -46,3 +46,37 @@ describe('{{remetente}}', () => {
     expect(render('Bom dia!')).toBe('Bom dia!');
   });
 });
+
+/**
+ * {{empresa}} (20/08/2026) — o CSV traz a coluna `empresa`, e os planos escrevem
+ * "aí na [empresa]". Sem a variável, o parser deixava o colchete cru na revisão.
+ *
+ * O fallback é FRASE ("sua empresa"), não remoção como o {{nome}}: o placeholder
+ * vem sempre colado numa preposição ("na", "da"), e removê-lo quebraria a frase
+ * no meio — "aí na , quanto tempo…".
+ */
+describe('renderTemplate — {{empresa}}', () => {
+  it('substitui pela empresa do contato', () => {
+    const out = SenderService.renderTemplate('Aí na {{empresa}}, como cotam?', 'Carlos', {
+      optOutFooter: false,
+      empresa: 'Transportes Silva',
+    });
+    expect(out).toContain('Aí na Transportes Silva');
+  });
+
+  it('sem empresa vira "sua empresa" — a frase fica de pé', () => {
+    const out = SenderService.renderTemplate('Aí na {{empresa}}, como cotam?', 'Carlos', {
+      optOutFooter: false,
+    });
+    expect(out).toContain('Aí na sua empresa');
+    expect(out).not.toContain('{{empresa}}');
+  });
+
+  it('template sem a variável passa intacto', () => {
+    const out = SenderService.renderTemplate('Oi, {{nome}}!', 'Carlos', {
+      optOutFooter: false,
+      empresa: 'Transportes Silva',
+    });
+    expect(out).not.toContain('Transportes Silva');
+  });
+});

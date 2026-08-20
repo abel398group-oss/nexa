@@ -6,6 +6,8 @@ export {
   createTemplate,
   updateTemplate,
   archiveTemplate,
+  approveTemplate,
+  unapproveTemplate,
   previewTemplate,
   sendTemplateTest,
 } from './api/message-template.api';

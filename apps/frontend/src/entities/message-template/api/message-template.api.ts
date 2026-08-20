@@ -2,11 +2,30 @@
 import { api } from '@/shared/lib/api';
 import type { MessageTemplate, TemplatePreview } from '../types/message-template.types';
 
-export async function listTemplates(productCode?: string, channel?: string): Promise<MessageTemplate[]> {
+/** `approvedOnly` é o que o seletor do Disparo usa — rascunho fica de fora. */
+export async function listTemplates(
+  productCode?: string,
+  channel?: string,
+  approvedOnly = false,
+): Promise<MessageTemplate[]> {
   const r = await api.get('/message-templates', {
-    params: { productCode: productCode || undefined, channel: channel || undefined },
+    params: {
+      productCode: productCode || undefined,
+      channel: channel || undefined,
+      approved: approvedOnly ? 'true' : undefined,
+    },
   });
   return r.data;
+}
+
+/** Aprova: passa a aparecer no seletor do Disparo. Exige permissão `settings`. */
+export async function approveTemplate(id: string): Promise<void> {
+  await api.post(`/message-templates/${id}/approve`);
+}
+
+/** Volta para rascunho — some do seletor sem perder o texto. */
+export async function unapproveTemplate(id: string): Promise<void> {
+  await api.post(`/message-templates/${id}/unapprove`);
 }
 
 export async function createTemplate(input: {

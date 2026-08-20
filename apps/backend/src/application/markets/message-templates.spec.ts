@@ -170,3 +170,66 @@ describe('partirWordmark — destaque do nome da marca', () => {
     expect(partirWordmark('Michelin')).toEqual({ inicio: 'Michelin', destaque: '' });
   });
 });
+
+/**
+ * Aprovação no modelo (20/08/2026). O modelo é o texto que o LEAD recebe e era o
+ * único da esteira sem revisão — dois toques com preço e promessa proibida ficaram
+ * armados no disparo até a varredura de 20/08. As regras aqui são as mesmas do
+ * material de campanha: rascunho não aparece no seletor, e editar derruba.
+ */
+describe('MessageTemplatesService — aprovação', () => {
+  it('o seletor do Disparo só recebe aprovados', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.list('t1', 'hipertms', undefined, true);
+
+    expect(prisma.messageTemplate.findMany.mock.calls[0][0].where.status).toBe('approved');
+  });
+
+  it('a tela de Mensagens lista tudo — rascunho enterrado é rascunho sem revisão', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.list('t1', 'hipertms');
+
+    expect(prisma.messageTemplate.findMany.mock.calls[0][0].where.status).toBeUndefined();
+  });
+
+  it('editar o corpo derruba a aprovação', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.findFirst.mockResolvedValue({
+      id: 't1', channel: 'whatsapp', body: 'antigo', subject: null,
+    });
+
+    await svc.update('t1', 't1', { body: 'texto novo' });
+
+    expect(prisma.messageTemplate.update.mock.calls[0][0].data.status).toBe('draft');
+  });
+
+  it('renomear e reordenar NÃO derrubam — não mudam o que o lead recebe', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.findFirst.mockResolvedValue({
+      id: 't1', channel: 'whatsapp', body: 'texto', subject: null,
+    });
+
+    await svc.update('t1', 't1', { name: 'Toque 1 — novo nome', step: 2 });
+
+    expect(prisma.messageTemplate.update.mock.calls[0][0].data.status).toBeUndefined();
+  });
+
+  it('aprovar é escopado no tenant — id alheio é 404', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(svc.approve('t1', 'de-outro')).rejects.toThrow('Modelo não encontrado');
+  });
+
+  it('reprovar volta para rascunho sem apagar nada', async () => {
+    const { svc, prisma } = makeSvc();
+
+    await svc.unapprove('t1', 't1');
+
+    const call = prisma.messageTemplate.updateMany.mock.calls[0][0];
+    expect(call.where).toMatchObject({ id: 't1', tenantId: 't1' });
+    expect(call.data).toEqual({ status: 'draft' });
+  });
+});

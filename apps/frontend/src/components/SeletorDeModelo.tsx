@@ -29,9 +29,11 @@ export function SeletorDeModelo({
   onEscolher: (m: MessageTemplate) => void;
 }) {
   const code = productCode.trim();
+  // Só aprovado chega aqui: rascunho oferecido a quem monta campanha é a trava de
+  // revisão inteira anulada no último passo (20/08/2026).
   const { data: modelos = [], isLoading } = useQuery({
-    queryKey: ['message-templates', code],
-    queryFn: () => listTemplates(code),
+    queryKey: ['message-templates', code, 'aprovados'],
+    queryFn: () => listTemplates(code, undefined, true),
     enabled: !!code,
   });
 
