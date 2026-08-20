@@ -633,6 +633,23 @@ describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
     expect(out).toMatchObject({ requeued: 0, status: 'done' });
     expect(prisma.campaign.update).not.toHaveBeenCalled();
   });
+
+  // Ressuscitar `done` é um START: sem a trava aqui, o retry reativava disparo de
+  // mercado suspenso por uma porta que o setStatus não vigia.
+  it('campanha done de mercado suspenso não volta a rodar', async () => {
+    const prisma = {
+      campaign: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'done', productCode: 'pneus' }),
+        update: vi.fn(),
+      },
+      campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 3 }) },
+      product: { findUnique: vi.fn().mockResolvedValue({ name: 'Pneus', status: 'paused' }) },
+    } as any;
+
+    await expect(makeSvc(prisma).retryFailed('t1', 'c1')).rejects.toThrow(/não está liberado/);
+    expect(prisma.campaignTarget.updateMany).not.toHaveBeenCalled();
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
 });
 
 // ── Reenvio TOTAL (ferramenta de teste, 2026-08-08) ─────────────────────────

@@ -1081,9 +1081,16 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   async retryFailed(tenantId: string, id: string) {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
-      select: { id: true, name: true, status: true },
+      select: { id: true, name: true, status: true, productCode: true },
     });
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    // Campanha `done` volta a `running` aqui embaixo — e isso é um START, então a
+    // trava de mercado vale igual: sem ela, o retry ressuscitava disparo de mercado
+    // suspenso por uma porta que o setStatus não vigia.
+    if (campaign.status === 'done') {
+      await this.assertMercadoLiberado((campaign as any).productCode);
+    }
 
     const r = await this.prisma.campaignTarget.updateMany({
       where: { campaignId: id, tenantId, status: 'failed' },
@@ -1122,9 +1129,15 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
     const campaign = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
-      select: { id: true, name: true, status: true },
+      select: { id: true, name: true, status: true, productCode: true },
     });
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    // Mesma regra do retryFailed: `done` volta a rodar aqui, e voltar a rodar é
+    // start — a trava de mercado precisa valer.
+    if (campaign.status === 'done') {
+      await this.assertMercadoLiberado((campaign as any).productCode);
+    }
 
     // "Todos" NÃO inclui as exclusões deliberadas. Voltam para a fila os enviados,
     // os que falharam e os pulados por `ja_enviado` (o dedup entre campanhas, que é
