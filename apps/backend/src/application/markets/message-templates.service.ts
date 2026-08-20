@@ -17,8 +17,10 @@ import {
   SISTEMA_RASCUNHO,
   promptDoRascunho,
   peneirarRascunhos,
+  frasesProibidas,
   type RascunhoDeModelo,
 } from './template-draft';
+import { PlaybookService } from '@/application/playbook/playbook.service';
 
 export interface TemplateInput {
   productCode: string;
@@ -43,6 +45,7 @@ export class MessageTemplatesService {
     private readonly prisma: PrismaService,
     private readonly emailReply: EmailReplyService,
     private readonly ai: AnthropicService,
+    private readonly playbook: PlaybookService,
   ) {}
 
   /**
@@ -79,11 +82,18 @@ export class MessageTemplatesService {
       );
     }
 
+    // Frases que o operador já recusou, curadas por ele na tela de Mensagens. O
+    // playbook do mercado vale sobre o do tenant (a busca já faz esse fallback), então
+    // uma proibição geral da casa convive com uma específica de um mercado.
+    const evitar = frasesProibidas(
+      (await this.playbook.get(tenantId, productCode).catch(() => null))?.avoidPhrases,
+    );
+
     let bruto: unknown;
     try {
       bruto = await this.ai.completeJson(
         SISTEMA_RASCUNHO,
-        promptDoRascunho(canal, quantos, comTexto),
+        promptDoRascunho(canal, quantos, comTexto, evitar),
         // Teto alto: são `quantos` mensagens inteiras, e cortar no meio devolve um
         // JSON truncado que a peneira descarta por inteiro.
         { maxTokens: 1200 + quantos * 500 },
@@ -98,17 +108,23 @@ export class MessageTemplatesService {
       );
     }
 
-    const rascunhos = peneirarRascunhos(bruto, canal, quantos);
+    const rascunhos = peneirarRascunhos(bruto, canal, quantos, evitar);
     if (!rascunhos.length) {
-      this.logger.warn(`Rascunho de modelos veio vazio ou fora de formato (mercado=${productCode})`);
+      this.logger.warn(
+        `Rascunho de modelos veio vazio, fora de formato ou todo recusado pelas ` +
+          `${evitar.length} frase(s) proibida(s) (mercado=${productCode})`,
+      );
       throw new BadRequestException(
-        'A resposta veio fora do formato esperado. Tente de novo.',
+        evitar.length
+          ? 'As propostas repetiram frases que você já recusou. Clique de novo para gerar outras.'
+          : 'A resposta veio fora do formato esperado. Tente de novo.',
       );
     }
 
     this.logger.log(
       `Rascunhou ${rascunhos.length} modelo(s) de ${canal} a partir de ` +
-        `${comTexto.length} roteiro(s) aprovado(s) em ${productCode}`,
+        `${comTexto.length} roteiro(s) aprovado(s) em ${productCode}` +
+        (evitar.length ? ` — evitando ${evitar.length} frase(s)` : ''),
     );
     return rascunhos;
   }

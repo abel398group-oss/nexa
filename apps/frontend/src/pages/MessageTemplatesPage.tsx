@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, PageContainer, PageHeader, Breadcrumb, Icon, StatusBadge } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
+import { api } from '@/shared/lib/api';
 import { listMarkets } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
@@ -47,6 +48,11 @@ export function MessageTemplatesPage() {
   /// texto no formulário, e a partir daí é o mesmo caminho de sempre — ler, testar,
   /// salvar. Nada aqui está gravado.
   const [rascunhos, setRascunhos] = useState<RascunhoDeModelo[]>([]);
+  /// Frases recusadas, uma por linha. Vive no playbook (é configuração de voz), mas
+  /// é editada AQUI porque é aqui que se percebe o que proibir — ler o texto ruim e
+  /// ter de procurar outra tela para bani-lo é o atrito que faz ninguém banir nada.
+  const [evitar, setEvitar] = useState('');
+  const [evitarAberto, setEvitarAberto] = useState(false);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // O market vem do cabeçalho do cockpit, compartilhado com as outras abas. Antes
@@ -63,6 +69,25 @@ export function MessageTemplatesPage() {
     mutationFn: () => previewTemplate({ productCode: codigo, channel: canal, subject: assunto, body: corpo }),
     onSuccess: setPrevia,
     onError: () => toast.error('Não consegui gerar o teste.'),
+  });
+
+  // Carrega a lista uma vez. Falhar aqui não trava a tela: sem lista, o gerador cai
+  // nas regras gerais de tom, que é como ele funcionava antes de o campo existir.
+  useQuery({
+    queryKey: ['playbook', 'avoid'],
+    queryFn: async () => {
+      const r = await api.get('/playbook');
+      setEvitar(r.data?.avoidPhrases ?? '');
+      return r.data;
+    },
+  });
+
+  const salvarEvitar = useMutation({
+    // PUT parcial: o servidor só toca no campo enviado, então mandar a lista sozinha
+    // não apaga persona, CTAs nem objeções.
+    mutationFn: () => api.put('/playbook', { avoidPhrases: evitar }),
+    onSuccess: () => toast.success('Lista salva. Vale a partir da próxima geração.'),
+    onError: () => toast.error('Não consegui salvar a lista.'),
   });
 
   /// Lê o roteiro aprovado do mercado e propõe a cadência. Não grava nada — quem
@@ -314,6 +339,53 @@ export function MessageTemplatesPage() {
             <span className="text-xs text-base-content/40">
               {nome.trim().length < 2 ? 'Falta o nome do modelo' : 'Falta o assunto'}
             </span>
+          )}
+        </div>
+
+        {/* Frases recusadas. Fechado por padrão: é manutenção de voz, não o trabalho
+            do dia. O contador no rótulo existe para a lista não virar uma gaveta que
+            ninguém lembra que está cheia. */}
+        <div className="mt-3 border-t border-base-200 pt-2">
+          <button
+            type="button"
+            onClick={() => setEvitarAberto(!evitarAberto)}
+            className="flex w-full items-center justify-between gap-2 py-1 text-left text-xs font-medium uppercase tracking-wide text-base-content/50"
+          >
+            <span>
+              Frases que a Lia não deve usar
+              {evitar.trim() && ` · ${evitar.split('\n').filter((l) => l.trim()).length}`}
+            </span>
+            <span className={'transition-transform ' + (evitarAberto ? 'rotate-180' : '')}>▾</span>
+          </button>
+
+          {evitarAberto && (
+            <div className="pt-2">
+              <p className="mb-2 text-xs text-base-content/60">
+                Viu uma frase com tom errado? Copia e cola aqui, uma por linha. Ela não volta
+                nas próximas gerações — e frases parecidas também saem, porque a lista ensina o
+                estilo a evitar, não só as palavras exatas.
+              </p>
+              <textarea
+                className="input w-full py-2 font-mono text-xs"
+                style={{ minHeight: 90, resize: 'vertical' }}
+                placeholder={'não perca esta oportunidade\núltima chance de conhecer\njá pensou em quanto você economizaria'}
+                value={evitar}
+                onChange={(e) => setEvitar(e.target.value)}
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={salvarEvitar.isPending}
+                  onClick={() => salvarEvitar.mutate()}
+                >
+                  {salvarEvitar.isPending ? 'Salvando…' : 'Salvar lista'}
+                </Button>
+                <span className="text-xs text-base-content/40">
+                  Vale para todos os mercados. Salve e clique em "Gerar do roteiro" de novo.
+                </span>
+              </div>
+            </div>
           )}
         </div>
 

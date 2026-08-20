@@ -1040,6 +1040,14 @@ model SalesPlaybook {
   ctaWarm    String   @default("") @map("cta_warm")
   ctaHot     String   @default("") @map("cta_hot")
   signupUrl  String   @default("") @map("signup_url")
+  /// Frases que a Lia NÃO deve escrever, uma por linha (20/08/2026).
+  ///
+  /// Curada por quem lê a saída, e não adivinhada por quem escreveu o prompt: quando
+  /// aparece uma frase com tom errado, ela é colada aqui e passa a valer nas próximas
+  /// gerações. Entram no prompt como EXEMPLOS do que evitar, então derrubam também o
+  /// parente que ninguém digitou — banir "não perca esta chance" alcança "aproveite
+  /// antes que acabe". Vazio = só as regras gerais de tom.
+  avoidPhrases String @default("") @map("avoid_phrases")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   // Um playbook por mercado, mais um do tenant (product_code NULL) como base.

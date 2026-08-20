@@ -14,6 +14,9 @@ class UpdatePlaybookDto {
   @IsOptional() @IsString() ctaWarm?: string;
   @IsOptional() @IsString() ctaHot?: string;
   @IsOptional() @IsString() signupUrl?: string;
+  /// Frases proibidas, uma por linha. Editável na tela de Mensagens, ao lado de onde
+  /// o texto ruim aparece — que é o momento em que se percebe o que proibir.
+  @IsOptional() @IsString() avoidPhrases?: string;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

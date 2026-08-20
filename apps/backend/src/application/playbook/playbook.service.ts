@@ -13,6 +13,8 @@ export interface PlaybookConfig {
   ctaWarm: string;
   ctaHot: string;
   signupUrl: string; // link de cadastro no site do TMS (fechamento)
+  /** Frases que a Lia nao deve escrever, uma por linha. Vazio = so as regras gerais. */
+  avoidPhrases: string;
 }
 
 // Defaults = o playbook que já estava no código. Servem de base e de fallback.
@@ -88,6 +90,9 @@ export const PLAYBOOK_DEFAULTS: PlaybookConfig = {
     'propondo dia e horário concretos. NÃO envie link de cadastro, não mande criar conta, não fale de valor. ' +
     'Colete o que faltar para o especialista chegar informado (nome, empresa, frota, rotas, sistema atual) e use ACTION=handoff_human.',
   signupUrl: 'https://www.hipertms.com.br/signup',
+  // Nasce vazio de proposito: a lista se constroi do que o operador VE saindo, e
+  // pre-preencher com palpite nosso seria repetir o erro que ela existe para corrigir.
+  avoidPhrases: '',
 };
 
 @Injectable()
@@ -128,6 +133,7 @@ export class PlaybookService {
           ctaWarm: PLAYBOOK_DEFAULTS.ctaWarm,
           ctaHot: PLAYBOOK_DEFAULTS.ctaHot,
           signupUrl: PLAYBOOK_DEFAULTS.signupUrl,
+          avoidPhrases: PLAYBOOK_DEFAULTS.avoidPhrases,
         },
       });
     }
@@ -144,6 +150,7 @@ export class PlaybookService {
       ctaWarm: row.ctaWarm || PLAYBOOK_DEFAULTS.ctaWarm,
       ctaHot: row.ctaHot || PLAYBOOK_DEFAULTS.ctaHot,
       signupUrl: row.signupUrl || PLAYBOOK_DEFAULTS.signupUrl,
+      avoidPhrases: row.avoidPhrases || '',
     };
   }
 
@@ -173,6 +180,7 @@ export class PlaybookService {
         ...(dto.ctaWarm !== undefined ? { ctaWarm: dto.ctaWarm } : {}),
         ...(dto.ctaHot !== undefined ? { ctaHot: dto.ctaHot } : {}),
         ...(dto.signupUrl !== undefined ? { signupUrl: dto.signupUrl } : {}),
+        ...(dto.avoidPhrases !== undefined ? { avoidPhrases: dto.avoidPhrases } : {}),
       },
       create: {
         tenantId,
@@ -184,6 +192,7 @@ export class PlaybookService {
         ctaWarm: dto.ctaWarm ?? PLAYBOOK_DEFAULTS.ctaWarm,
         ctaHot: dto.ctaHot ?? PLAYBOOK_DEFAULTS.ctaHot,
         signupUrl: dto.signupUrl ?? PLAYBOOK_DEFAULTS.signupUrl,
+        avoidPhrases: dto.avoidPhrases ?? PLAYBOOK_DEFAULTS.avoidPhrases,
       },
     });
     return this.get(tenantId, productCode);
