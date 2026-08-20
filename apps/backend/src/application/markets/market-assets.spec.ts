@@ -10,7 +10,12 @@ import { MarketAssetsService, TAMANHO_MAXIMO } from './market-assets.service';
  * óbvio (subir já aprovado), é o silencioso: aprovar, editar o arquivo depois, e a
  * aprovação continuar valendo para um texto que ninguém releu.
  */
-function makeSvc(market: any = { code: 'hipertms' }, asset: any = null) {
+function makeSvc(
+  market: any = { code: 'hipertms' },
+  asset: any = null,
+  // Artigo derivado já existente na base (tag `asset:<id>`), quando o teste precisa.
+  artigoDerivado: any = null,
+) {
   const prisma = {
     product: { findUnique: vi.fn().mockResolvedValue(market) },
     marketAsset: {
@@ -20,8 +25,14 @@ function makeSvc(market: any = { code: 'hipertms' }, asset: any = null) {
       update: vi.fn().mockImplementation(({ data }: any) => ({ id: 'a1', ...asset, ...data })),
       delete: vi.fn().mockResolvedValue(asset),
     },
+    aiKnowledgeBase: { findFirst: vi.fn().mockResolvedValue(artigoDerivado) },
   };
-  return { svc: new MarketAssetsService(prisma as any), prisma };
+  const knowledge = {
+    create: vi.fn().mockResolvedValue({ id: 'kb1' }),
+    update: vi.fn().mockResolvedValue({ id: 'kb1' }),
+    remove: vi.fn().mockResolvedValue({ ok: true }),
+  };
+  return { svc: new MarketAssetsService(prisma as any, knowledge as any), prisma, knowledge };
 }
 
 describe('MarketAssetsService.subir', () => {
@@ -345,5 +356,100 @@ describe('MarketAssetsService.editar', () => {
     const { svc, prisma } = makeSvc(undefined, roteiro);
     await svc.editar('t1', 'a1', {});
     expect(prisma.marketAsset.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A ponte com a Lia (19/08/2026).
+ *
+ * A tela sempre prometeu "é só o aprovado que a Lia usa" — e nada cumpria: o
+ * aprovado só chegava às telas do SDR e do closer, e a Lia seguia lendo apenas a
+ * `aiKnowledgeBase`. Estes testes prendem a promessa: aprovar roteiro PUBLICA
+ * artigo na trilha de vendas; qualquer volta a pendente TIRA o artigo primeiro.
+ */
+describe('MarketAssetsService — ponte com a base de conhecimento', () => {
+  const ROTEIRO = {
+    id: 'a1', kind: 'plan', name: '02_eixo_cotacoes.md',
+    content: '# Cotações', productCode: 'hipertms', status: 'pending',
+  };
+
+  it('aprovar roteiro publica artigo aprovado na trilha de vendas, amarrado pela tag', async () => {
+    const { svc, knowledge } = makeSvc(undefined, ROTEIRO);
+
+    await svc.aprovar('t1', 'a1', 'u9');
+
+    const [tenant, dto, autor, autoApprove] = knowledge.create.mock.calls[0];
+    expect(tenant).toBe('t1');
+    // `vendas` está na lista branca da trilha de vendas — fora dela o artigo
+    // existiria e a Lia não o alcançaria, o mesmo furo com outra roupa.
+    expect(dto.category).toBe('vendas');
+    expect(dto.productCode).toBe('hipertms');
+    expect(dto.content).toBe('# Cotações');
+    expect(dto.tags).toContain('asset:a1');
+    expect(autor).toBe('u9');
+    expect(autoApprove).toBe(true);
+  });
+
+  it('reaprovar o mesmo roteiro atualiza o artigo em vez de acumular cópia', async () => {
+    const { svc, knowledge } = makeSvc(undefined, ROTEIRO, { id: 'kb1' });
+
+    await svc.aprovar('t1', 'a1');
+
+    expect(knowledge.update).toHaveBeenCalledWith('t1', 'kb1', expect.objectContaining({ content: '# Cotações' }));
+    expect(knowledge.create).not.toHaveBeenCalled();
+  });
+
+  it('portfólio aprovado NÃO vira artigo — PDF é para o vendedor mostrar, não para a Lia citar', async () => {
+    const { svc, knowledge } = makeSvc(undefined, {
+      id: 'a2', kind: 'portfolio', name: 'folder.pdf', content: null,
+      productCode: 'hipertms', status: 'pending',
+    });
+
+    await svc.aprovar('t1', 'a2');
+
+    expect(knowledge.create).not.toHaveBeenCalled();
+    expect(knowledge.update).not.toHaveBeenCalled();
+  });
+
+  // Se a publicação falha (embedding fora do ar), o material NÃO pode ficar
+  // carimbado: "aprovado" que a Lia não vê é a mentira que esta ponte veio matar.
+  it('falha na publicação segura a aprovação', async () => {
+    const { svc, prisma, knowledge } = makeSvc(undefined, ROTEIRO);
+    knowledge.create.mockRejectedValue(new Error('embedding fora do ar'));
+
+    await expect(svc.aprovar('t1', 'a1')).rejects.toThrow('embedding fora do ar');
+    expect(prisma.marketAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('reprovar tira o artigo da Lia antes de voltar a pendente', async () => {
+    const { svc, knowledge } = makeSvc(undefined, { ...ROTEIRO, status: 'approved' }, { id: 'kb1' });
+
+    await svc.reprovar('t1', 'a1');
+
+    expect(knowledge.remove).toHaveBeenCalledWith('t1', 'kb1');
+  });
+
+  it('excluir o material tira o artigo junto', async () => {
+    const { svc, knowledge } = makeSvc(undefined, { ...ROTEIRO, status: 'approved' }, { id: 'kb1' });
+
+    await svc.remover('t1', 'a1');
+
+    expect(knowledge.remove).toHaveBeenCalledWith('t1', 'kb1');
+  });
+
+  it('editar (que derruba a aprovação) também tira o artigo', async () => {
+    const { svc, knowledge } = makeSvc(undefined, { ...ROTEIRO, status: 'approved' }, { id: 'kb1' });
+
+    await svc.editar('t1', 'a1', { content: '# Cotações v2' });
+
+    expect(knowledge.remove).toHaveBeenCalledWith('t1', 'kb1');
+  });
+
+  it('re-subir o mesmo nome tira o artigo do texto antigo antes do novo entrar', async () => {
+    const { svc, knowledge } = makeSvc(undefined, { ...ROTEIRO, status: 'approved' }, { id: 'kb1' });
+
+    await svc.subir('t1', 'hipertms', { name: '02_eixo_cotacoes.md', content: 'texto novo' });
+
+    expect(knowledge.remove).toHaveBeenCalledWith('t1', 'kb1');
   });
 });

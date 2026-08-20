@@ -12,9 +12,21 @@
  */
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { KnowledgeService } from '@/application/knowledge/knowledge.service';
 
 /** Teto do ROTEIRO. Os planos reais têm 5–15 KB; 512 KB é folga, não convite. */
 export const TAMANHO_MAXIMO = 512 * 1024;
+
+/**
+ * Teto do que o roteiro publica na base de conhecimento. É o mesmo teto do artigo
+ * escrito à mão (CreateKnowledgeDto): o conteúdo recuperado entra INTEIRO no
+ * contexto da Lia a cada consulta — um plano de 512 KB viraria custo de token e
+ * resposta pior em toda conversa do mercado.
+ */
+const TETO_PUBLICACAO_LIA = 50_000;
+
+/** O elo entre o material e o artigo derivado dele na base de conhecimento. */
+const tagDoAsset = (assetId: string) => `asset:${assetId}`;
 
 /// Roteiro é texto e mora na linha. PDF chega pelo outro caminho (`subirPortfolio`),
 /// porque binário numa coluna `text` só quebra na hora de mostrar.
@@ -43,7 +55,10 @@ export interface SubirPortfolioInput {
 export class MarketAssetsService {
   private readonly logger = new Logger('MarketAssets');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly knowledge: KnowledgeService,
+  ) {}
 
   /**
    * Material do mercado, pendente primeiro.
@@ -137,6 +152,15 @@ export class MarketAssetsService {
       );
     }
 
+    // Se já existia aprovado, o artigo derivado sai da Lia ANTES do texto novo
+    // entrar — versão nova pendente com a antiga ainda respondendo é o mesmo furo
+    // do "aprovar ontem, trocar hoje".
+    const anterior = await this.prisma.marketAsset.findFirst({
+      where: { tenantId, productCode, name },
+      select: { id: true },
+    });
+    if (anterior) await this.tirarDaLia(tenantId, anterior.id);
+
     const asset = await this.prisma.marketAsset.upsert({
       where: { tenantId_productCode_name: { tenantId, productCode, name } },
       create: { tenantId, productCode, name, kind: 'plan', content, sizeBytes, status: 'pending' },
@@ -160,6 +184,14 @@ export class MarketAssetsService {
 
     const name = input.name.trim();
     if (!name) throw new BadRequestException('O arquivo precisa de um nome.');
+
+    // Mesmo cuidado do roteiro: se um plan aprovado de mesmo nome vira portfólio,
+    // o artigo derivado dele não pode ficar respondendo pela Lia.
+    const anterior = await this.prisma.marketAsset.findFirst({
+      where: { tenantId, productCode, name },
+      select: { id: true },
+    });
+    if (anterior) await this.tirarDaLia(tenantId, anterior.id);
 
     const asset = await this.prisma.marketAsset.upsert({
       where: { tenantId_productCode_name: { tenantId, productCode, name } },
@@ -244,6 +276,9 @@ export class MarketAssetsService {
 
     if (!Object.keys(data).length) return asset;
 
+    // Editar derruba a aprovação — então o artigo derivado sai da Lia junto.
+    await this.tirarDaLia(tenantId, id);
+
     // Renomear também derruba: o nome é o que o operador reconhece na lista, e um
     // "aprovado" carimbado num nome que mudou depois diz menos do que parece.
     const atualizado = await this.prisma.marketAsset.update({
@@ -265,6 +300,13 @@ export class MarketAssetsService {
     if (!asset) throw new NotFoundException('Material não encontrado');
     if (asset.status === 'approved') return asset;
 
+    // A publicação vem ANTES do carimbo, de propósito. "Aprovado" na tela sempre
+    // prometeu "a Lia usa" — e até 19/08/2026 nada cumpria: o aprovado só chegava
+    // às telas do SDR e do closer, e a Lia seguia lendo apenas a base de
+    // conhecimento. Se a publicação falhar (embedding fora do ar), o material fica
+    // pendente e o erro aparece — melhor que um "aprovado" que a Lia não vê.
+    await this.publicarParaLia(tenantId, asset, userId);
+
     const atualizado = await this.prisma.marketAsset.update({
       where: { id },
       data: { status: 'approved', approvedAt: new Date(), approvedBy: userId ?? null },
@@ -278,6 +320,10 @@ export class MarketAssetsService {
     const asset = await this.prisma.marketAsset.findFirst({ where: { id, tenantId } });
     if (!asset) throw new NotFoundException('Material não encontrado');
 
+    // Da Lia primeiro, do carimbo depois: se a limpeza falhar, nada muda — pior
+    // que a falha seria um artigo aprovado sobrando de um material pendente.
+    await this.tirarDaLia(tenantId, id);
+
     return this.prisma.marketAsset.update({
       where: { id },
       data: { status: 'pending', approvedAt: null, approvedBy: null },
@@ -288,8 +334,71 @@ export class MarketAssetsService {
     const asset = await this.prisma.marketAsset.findFirst({ where: { id, tenantId } });
     if (!asset) throw new NotFoundException('Material não encontrado');
 
+    await this.tirarDaLia(tenantId, id);
     await this.prisma.marketAsset.delete({ where: { id } });
     this.logger.warn(`Material "${asset.name}" removido de ${asset.productCode}`);
     return { ok: true, id };
+  }
+
+  /**
+   * Publica o roteiro aprovado na base de conhecimento — o que a Lia de fato lê.
+   *
+   * Um artigo por arquivo, amarrado pela tag `asset:<id>`: reaprovar o mesmo
+   * roteiro atualiza o artigo (e o embedding) em vez de acumular cópias.
+   * Categoria `vendas` porque é a trilha que o agente de vendas consulta
+   * (knowledge-tracks.const.ts) — fora dela o artigo existiria e a Lia não o
+   * alcançaria, que é o mesmo furo com outra roupa. Portfólio não entra: PDF e
+   * imagem são para o vendedor mostrar, não para a Lia citar.
+   */
+  private async publicarParaLia(
+    tenantId: string,
+    asset: { id: string; kind: string; name: string; content: string | null; productCode: string },
+    userId?: string,
+  ) {
+    if (asset.kind !== 'plan' || !asset.content) return;
+
+    let content = asset.content;
+    if (Buffer.byteLength(content, 'utf8') > TETO_PUBLICACAO_LIA) {
+      // Truncar avisando é melhor que recusar: o roteiro gigante continua íntegro
+      // no material — só o que vai ao contexto da Lia é cortado.
+      content = content.slice(0, TETO_PUBLICACAO_LIA);
+      this.logger.warn(
+        `Roteiro "${asset.name}" passa de ${TETO_PUBLICACAO_LIA / 1000} mil caracteres — publicado truncado para a Lia`,
+      );
+    }
+
+    const title = `Roteiro de campanha — ${asset.name}`;
+    const existente = await this.prisma.aiKnowledgeBase.findFirst({
+      where: { tenantId, tags: { has: tagDoAsset(asset.id) } },
+      select: { id: true },
+    });
+
+    if (existente) {
+      await this.knowledge.update(tenantId, existente.id, { title, content });
+    } else {
+      await this.knowledge.create(
+        tenantId,
+        {
+          topic: 'campanha',
+          category: 'vendas',
+          title,
+          content,
+          productCode: asset.productCode,
+          tags: [tagDoAsset(asset.id), 'roteiro-campanha'],
+        },
+        userId ?? 'validacao-campanha',
+        true, // já foi lido e aprovado por uma pessoa — é exatamente o que autoApprove pede
+      );
+    }
+    this.logger.log(`Roteiro "${asset.name}" publicado para a Lia (${asset.productCode})`);
+  }
+
+  /** Remove o artigo derivado — chamado sempre que o material deixa de valer. */
+  private async tirarDaLia(tenantId: string, assetId: string) {
+    const existente = await this.prisma.aiKnowledgeBase.findFirst({
+      where: { tenantId, tags: { has: tagDoAsset(assetId) } },
+      select: { id: true },
+    });
+    if (existente) await this.knowledge.remove(tenantId, existente.id);
   }
 }

@@ -219,13 +219,26 @@ export function CampaignValidationPage() {
 
   const aprovar = useMutation({
     mutationFn: (id: string) => approveMarketAsset(code, id),
-    onSuccess: () => { recarregar(); toast.success('Aprovado.'); },
-    onError: () => toast.error('Não consegui aprovar.'),
+    // Roteiro aprovado vira artigo na base de conhecimento (19/08/2026) — o toast
+    // confirma o efeito que a tela sempre prometeu, agora que ele existe.
+    onSuccess: (_data, id) => {
+      recarregar();
+      const item = itens.find((a) => a.id === id);
+      toast.success(
+        item?.kind === 'plan'
+          ? 'Aprovado — a Lia já pode usar este roteiro.'
+          : 'Aprovado — o vendedor já enxerga este material.',
+      );
+    },
+    // A publicação para a Lia acontece ANTES do carimbo: se ela falhar, o material
+    // fica pendente e o motivo do servidor aparece aqui.
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não consegui aprovar.'),
   });
 
   const reprovar = useMutation({
     mutationFn: (id: string) => rejectMarketAsset(code, id),
-    onSuccess: () => { recarregar(); toast.info('Voltou para a fila.'); },
+    onSuccess: () => { recarregar(); toast.info('Voltou para a fila — saiu da Lia.'); },
     onError: () => toast.error('Não consegui reprovar.'),
   });
 
