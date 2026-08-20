@@ -193,6 +193,43 @@ export class MessageTemplatesService {
     return { ok: true };
   }
 
+  /**
+   * Exclui de verdade — a linha some da tabela.
+   *
+   * Conviver com `archive` é de propósito: arquivar é para o modelo que JÁ RODOU e
+   * cujo texto explica um resultado; excluir é para o que nunca deveria estar ali —
+   * rascunho de IA descartado, teste, nome digitado errado. Antes só havia
+   * arquivar, e a lista acumulava lixo que ninguém conseguia tirar.
+   *
+   * Apagar não fere histórico: `campaigns` guarda o TEXTO enviado na própria linha
+   * (`campaign.template`) e não tem chave estrangeira para cá — conferido no schema.
+   * O que já saiu continua explicável depois que o modelo some.
+   */
+  async remove(tenantId: string, id: string) {
+    const r = await this.prisma.messageTemplate.deleteMany({ where: { id, tenantId } });
+    if (r.count === 0) throw new NotFoundException('Modelo não encontrado');
+    this.logger.warn(`Modelo ${id} EXCLUÍDO (definitivo)`);
+    return { ok: true, deleted: r.count };
+  }
+
+  /**
+   * Exclui todos os modelos de um mercado de uma vez.
+   *
+   * `productCode` é obrigatório e vai no `where` junto do tenant: sem ele, um
+   * deleteMany aqui apagaria a biblioteca de mensagens do cliente inteiro — e essa
+   * é a diferença entre limpar um mercado de teste e perder a operação.
+   */
+  async removeAll(tenantId: string, productCode: string) {
+    if (!productCode?.trim()) {
+      throw new BadRequestException('Informe o mercado. Excluir sem mercado apagaria a biblioteca inteira.');
+    }
+    const r = await this.prisma.messageTemplate.deleteMany({
+      where: { tenantId, productCode: productCode.trim() },
+    });
+    this.logger.warn(`${r.count} modelo(s) EXCLUÍDO(S) do mercado ${productCode}`);
+    return { ok: true, deleted: r.count };
+  }
+
   /** Volta para rascunho — some do seletor sem perder o texto. */
   async unapprove(tenantId: string, id: string) {
     const r = await (this.prisma as any).messageTemplate.updateMany({

@@ -6,7 +6,8 @@ import { useConfirm } from '@/app/providers/ConfirmContext';
 import { listMarkets } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
-  listTemplates, createTemplate, archiveTemplate, approveTemplate, unapproveTemplate,
+  listTemplates, createTemplate, archiveTemplate, deleteTemplate, deleteAllTemplates,
+  approveTemplate, unapproveTemplate,
   previewTemplate, sendTemplateTest, rascunharModelos,
   type MessageTemplate, type TemplatePreview, type RascunhoDeModelo,
 } from '@/entities/message-template';
@@ -144,6 +145,62 @@ export function MessageTemplatesPage() {
   async function pedirEnvioDeTeste() {
     const para = window.prompt('Enviar o teste para qual e-mail?');
     if (para?.includes('@')) enviarTeste.mutate(para);
+  }
+
+  /**
+   * Excluir um. O texto do aviso diz o que NÃO se perde — sem isso, quem hesita
+   * entre "Arquivar" e "Excluir" escolhe arquivar por medo e a lista nunca limpa.
+   */
+  async function pedirExclusao(t: MessageTemplate) {
+    const ok = await confirm({
+      title: `Excluir "${t.name}"?`,
+      message:
+        'Some da lista para sempre — não dá para desfazer. As campanhas que já usaram este ' +
+        'texto continuam intactas: elas guardam a mensagem enviada nelas mesmas. ' +
+        'Se o modelo já rodou e você quer preservar o texto, use "Arquivar".',
+      confirmLabel: 'Excluir',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteTemplate(t.id);
+      toast.info('Modelo excluído.');
+      void qc.invalidateQueries({ queryKey: ['message-templates'] });
+      void qc.invalidateQueries({ queryKey: ['markets'] });
+    } catch (e: any) {
+      toast.error(
+        e?.response?.status === 403
+          ? 'Excluir exige a permissão de configuração.'
+          : e?.response?.data?.message ?? 'Não consegui excluir.',
+      );
+    }
+  }
+
+  /** Excluir todos do mercado. A confirmação diz o número — é a única defesa real. */
+  async function pedirExclusaoTotal() {
+    const nomeDoMercado = mercados.find((m) => m.code === codigo)?.name ?? codigo;
+    const ok = await confirm({
+      title: `Excluir os ${modelos.length} modelos de ${nomeDoMercado}?`,
+      message:
+        'Todos os modelos deste mercado somem para sempre — não dá para desfazer. ' +
+        'Nenhum outro mercado é tocado, e as campanhas já enviadas continuam intactas. ' +
+        'Sem modelo nenhum, este mercado volta a ficar bloqueado para liberação.',
+      confirmLabel: `Excluir ${modelos.length}`,
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      const r = await deleteAllTemplates(codigo);
+      toast.info(`${r.deleted} modelo(s) excluído(s).`);
+      void qc.invalidateQueries({ queryKey: ['message-templates'] });
+      void qc.invalidateQueries({ queryKey: ['markets'] });
+    } catch (e: any) {
+      toast.error(
+        e?.response?.status === 403
+          ? 'Excluir exige a permissão de configuração.'
+          : e?.response?.data?.message ?? 'Não consegui excluir os modelos.',
+      );
+    }
   }
 
   async function pedirArquivamento(t: MessageTemplate) {
@@ -346,8 +403,19 @@ export function MessageTemplatesPage() {
 
       {/* ── Modelos deste mercado ────────────────────────────────────────── */}
       <Card className="p-0">
-        <div className="border-b border-base-200 px-4 py-2 text-xs text-base-content/60">
-          {modelos.length} modelo(s) neste mercado
+        <div className="flex items-center justify-between gap-3 border-b border-base-200 px-4 py-2 text-xs text-base-content/60">
+          <span>{modelos.length} modelo(s) neste mercado</span>
+          {/* Só aparece quando há o que excluir — botão destrutivo em lista vazia é
+              só um convite a clicar sem motivo. */}
+          {modelos.length > 0 && (
+            <button
+              type="button"
+              className="text-xs text-red-500 underline hover:text-red-600"
+              onClick={() => void pedirExclusaoTotal()}
+            >
+              Excluir todos
+            </button>
+          )}
         </div>
         {modelos.length === 0 ? (
           <p className="px-4 py-3 text-xs text-base-content/40">
@@ -393,6 +461,14 @@ export function MessageTemplatesPage() {
               </button>
               <button type="button" className="text-xs text-base-content/40 underline" onClick={() => void pedirArquivamento(t)}>
                 Arquivar
+              </button>
+              {/* Vermelho e por último: é o único da linha que não tem volta. */}
+              <button
+                type="button"
+                className="text-xs text-red-500 underline hover:text-red-600"
+                onClick={() => void pedirExclusao(t)}
+              >
+                Excluir
               </button>
             </div>
           ))

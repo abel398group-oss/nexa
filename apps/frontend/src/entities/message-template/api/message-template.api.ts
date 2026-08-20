@@ -49,6 +49,21 @@ export async function archiveTemplate(id: string): Promise<void> {
 }
 
 /**
+ * Exclui de vez — a linha some da tabela. Para o que nunca deveria estar na lista
+ * (rascunho descartado, teste, nome errado); o que já rodou some com `archive`.
+ * O histórico não sofre: a campanha guarda o texto enviado nela mesma.
+ */
+export async function deleteTemplate(id: string): Promise<void> {
+  await api.delete(`/message-templates/${id}/permanente`);
+}
+
+/** Exclui todos os modelos de um mercado. `productCode` é obrigatório no servidor. */
+export async function deleteAllTemplates(productCode: string): Promise<{ deleted: number }> {
+  const r = await api.delete('/message-templates/todos', { params: { productCode } });
+  return r.data;
+}
+
+/**
  * POST e não GET: o corpo da campanha inteiro numa query string estoura o limite e
  * ainda vaza a copy para o log de acesso do servidor.
  */

@@ -7,6 +7,8 @@ export {
   createTemplate,
   updateTemplate,
   archiveTemplate,
+  deleteTemplate,
+  deleteAllTemplates,
   approveTemplate,
   unapproveTemplate,
   previewTemplate,

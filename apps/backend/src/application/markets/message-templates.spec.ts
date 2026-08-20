@@ -241,3 +241,52 @@ describe('MessageTemplatesService — aprovação', () => {
     expect(call.data).toEqual({ status: 'draft' });
   });
 });
+
+/**
+ * Exclusão definitiva (20/08/2026). Antes só havia arquivar, e a lista acumulava
+ * o que nunca deveria estar lá — rascunho de IA descartado, teste, nome errado.
+ *
+ * O que estes testes prendem é sobretudo o ESCOPO: um deleteMany sem `productCode`
+ * apagaria a biblioteca do cliente inteiro, e a diferença entre limpar um mercado
+ * de teste e perder a operação é exatamente esse campo no `where`.
+ */
+describe('MessageTemplatesService — exclusão', () => {
+  it('exclui um, escopado no tenant', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+
+    await svc.remove('t1', 'tpl1');
+
+    expect(prisma.messageTemplate.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'tpl1', tenantId: 't1' },
+    });
+  });
+
+  it('modelo de outro cliente: 404, e nada é apagado', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+
+    await expect(svc.remove('t1', 'de-outro')).rejects.toThrow('Modelo não encontrado');
+  });
+
+  it('excluir todos exige mercado — sem ele apagaria a biblioteca inteira', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.deleteMany = vi.fn();
+
+    await expect(svc.removeAll('t1', '')).rejects.toThrow(/mercado/i);
+    await expect(svc.removeAll('t1', '   ')).rejects.toThrow(/mercado/i);
+    expect(prisma.messageTemplate.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('excluir todos apaga só o mercado pedido, dentro do tenant', async () => {
+    const { svc, prisma } = makeSvc();
+    prisma.messageTemplate.deleteMany = vi.fn().mockResolvedValue({ count: 4 });
+
+    const r = await svc.removeAll('t1', 'hipertms');
+
+    expect(r).toEqual({ ok: true, deleted: 4 });
+    expect(prisma.messageTemplate.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', productCode: 'hipertms' },
+    });
+  });
+});

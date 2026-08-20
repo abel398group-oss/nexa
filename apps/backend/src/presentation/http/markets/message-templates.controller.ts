@@ -134,9 +134,33 @@ export class MessageTemplatesController {
     return this.templates.unapprove(tenantId, id);
   }
 
+  /**
+   * Exclui TODOS os modelos de um mercado.
+   *
+   * Declarada ANTES de `:id` de propósito: sem isso o Nest casaria `/todos` com o
+   * parâmetro `:id` e a rota nunca seria alcançada.
+   *
+   * Atrás de `settings` como as outras destrutivas, e com `productCode`
+   * obrigatório — o service recusa sem ele.
+   */
+  @Delete('todos')
+  @RequirePerm('settings')
+  removeAll(@CurrentTenant() tenantId: string, @Query('productCode') productCode: string) {
+    return this.templates.removeAll(tenantId, productCode);
+  }
+
   // Arquiva, não apaga — a campanha antiga continua apontando para o texto que a gerou.
   @Delete(':id')
   archive(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.templates.archive(tenantId, id);
+  }
+
+  /// Exclusão definitiva de um modelo. Separada de `archive` na ROTA, e não num
+  /// parâmetro do mesmo DELETE: apagar de vez não pode depender de uma flag que
+  /// alguém esquece de mandar.
+  @Delete(':id/permanente')
+  @RequirePerm('settings')
+  remove(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.templates.remove(tenantId, id);
   }
 }
