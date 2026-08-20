@@ -28,6 +28,24 @@ const TETO_PUBLICACAO_LIA = 50_000;
 /** O elo entre o material e o artigo derivado dele na base de conhecimento. */
 const tagDoAsset = (assetId: string) => `asset:${assetId}`;
 
+/**
+ * Resolve o `/uploads/...` gravado no banco para a URL que o NAVEGADOR alcança.
+ *
+ * O banco guarda o caminho relativo de propósito (o domínio muda por ambiente),
+ * e o DISPARO já monta a URL com MEDIA_PUBLIC_BASE na hora do envio — mas as
+ * telas recebiam o relativo cru. Em dev funciona (o Vite faz proxy de /uploads
+ * para o backend); em produção o nginx do frontend não conhece /uploads e
+ * devolve o index.html do app — o operador via o Nexa DENTRO do quadro de
+ * pré-visualização no lugar do PDF que subiu. Mesma base, mesmo comportamento
+ * do anexo de campanha: se um chega, o outro chega.
+ */
+export function urlPublicaDoArquivo(fileUrl: string | null): string | null {
+  if (!fileUrl || fileUrl.startsWith('http')) return fileUrl;
+  const base = (process.env.MEDIA_PUBLIC_BASE || process.env.NEXA_PUBLIC_URL || '').replace(/\/$/, '');
+  if (!base) return fileUrl; // dev: o proxy do Vite resolve o relativo
+  return base + (fileUrl.startsWith('/') ? '' : '/') + fileUrl;
+}
+
 /// Roteiro é texto e mora na linha. PDF chega pelo outro caminho (`subirPortfolio`),
 /// porque binário numa coluna `text` só quebra na hora de mostrar.
 const EXTENSOES = ['.md', '.txt', '.markdown'];
@@ -70,7 +88,7 @@ export class MarketAssetsService {
    * toda abertura da tela é ~100 KB por render para exibir nome e tamanho.
    */
   async listar(tenantId: string, productCode: string, kind?: 'plan' | 'portfolio') {
-    return this.prisma.marketAsset.findMany({
+    const linhas = await this.prisma.marketAsset.findMany({
       where: { tenantId, productCode, ...(kind ? { kind } : {}) },
       select: {
         id: true,
@@ -89,6 +107,7 @@ export class MarketAssetsService {
       // teste, que afirma a ORDEM na tela e não o parâmetro.
       orderBy: [{ status: 'desc' }, { name: 'asc' }],
     });
+    return linhas.map((l: any) => ({ ...l, fileUrl: urlPublicaDoArquivo(l.fileUrl) }));
   }
 
   /**
@@ -99,7 +118,7 @@ export class MarketAssetsService {
    * roteiro na tela, não só listar nome e tamanho.
    */
   async listarAprovados(tenantId: string, productCode: string) {
-    return this.prisma.marketAsset.findMany({
+    const linhas = await this.prisma.marketAsset.findMany({
       where: { tenantId, productCode, status: 'approved' },
       select: {
         id: true, name: true, kind: true, content: true, fileUrl: true,
@@ -107,13 +126,14 @@ export class MarketAssetsService {
       },
       orderBy: { name: 'asc' },
     });
+    return linhas.map((l: any) => ({ ...l, fileUrl: urlPublicaDoArquivo(l.fileUrl) }));
   }
 
   /** O texto de um arquivo — só quando alguém abre para revisar. */
   async ler(tenantId: string, id: string) {
     const asset = await this.prisma.marketAsset.findFirst({ where: { id, tenantId } });
     if (!asset) throw new NotFoundException('Material não encontrado');
-    return asset;
+    return { ...asset, fileUrl: urlPublicaDoArquivo(asset.fileUrl) };
   }
 
   /**

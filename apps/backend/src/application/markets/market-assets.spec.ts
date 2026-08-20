@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
-import { MarketAssetsService, TAMANHO_MAXIMO } from './market-assets.service';
+import { MarketAssetsService, TAMANHO_MAXIMO, urlPublicaDoArquivo } from './market-assets.service';
 
 /**
  * O que estes testes protegem é a APROVAÇÃO.
@@ -451,5 +451,40 @@ describe('MarketAssetsService — ponte com a base de conhecimento', () => {
     await svc.subir('t1', 'hipertms', { name: '02_eixo_cotacoes.md', content: 'texto novo' });
 
     expect(knowledge.remove).toHaveBeenCalledWith('t1', 'kb1');
+  });
+});
+
+/**
+ * A URL que a tela recebe precisa ser alcançável pelo NAVEGADOR.
+ *
+ * O banco guarda `/uploads/...` relativo (o domínio muda por ambiente). Em dev o
+ * proxy do Vite resolve; em produção o nginx do frontend não conhece /uploads e
+ * devolve o index.html — o operador via o Nexa DENTRO do quadro de prévia no
+ * lugar do PDF (19/08/2026). A resolução usa a MESMA base do anexo de campanha.
+ */
+describe('urlPublicaDoArquivo', () => {
+  afterEach(() => {
+    delete process.env.MEDIA_PUBLIC_BASE;
+    delete process.env.NEXA_PUBLIC_URL;
+  });
+
+  it('sem base configurada, mantém o relativo — em dev o proxy resolve', () => {
+    expect(urlPublicaDoArquivo('/uploads/a.pdf')).toBe('/uploads/a.pdf');
+  });
+
+  it('com MEDIA_PUBLIC_BASE, monta a URL absoluta (sem barra dupla)', () => {
+    process.env.MEDIA_PUBLIC_BASE = 'https://material.hipertms.com.br/';
+    expect(urlPublicaDoArquivo('/uploads/a.pdf')).toBe('https://material.hipertms.com.br/uploads/a.pdf');
+  });
+
+  it('NEXA_PUBLIC_URL é o fallback, como no envio de anexo', () => {
+    process.env.NEXA_PUBLIC_URL = 'https://nexa.exemplo.com';
+    expect(urlPublicaDoArquivo('/uploads/a.pdf')).toBe('https://nexa.exemplo.com/uploads/a.pdf');
+  });
+
+  it('URL já absoluta e nulo passam intocados', () => {
+    process.env.MEDIA_PUBLIC_BASE = 'https://material.hipertms.com.br';
+    expect(urlPublicaDoArquivo('https://cdn.x/a.pdf')).toBe('https://cdn.x/a.pdf');
+    expect(urlPublicaDoArquivo(null)).toBeNull();
   });
 });

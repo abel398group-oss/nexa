@@ -557,8 +557,17 @@ export function CampaignValidationPage() {
                       {texto?.content ?? ''}
                     </pre>
                   )
+                ) : !selecionado.fileUrl ? (
+                  // Sem URL não há o que embutir — e `src=""` num iframe carrega o
+                  // PRÓPRIO app dentro do quadro, que foi exatamente o sintoma visto
+                  // em produção (19/08/2026). Dizer que o arquivo não está acessível
+                  // é honesto; mostrar o Nexa dentro do Nexa é desnorteante.
+                  <p className="text-xs text-amber-700">
+                    O arquivo existe mas não está acessível por aqui. Recarregue a página; se
+                    continuar, avise o suporte.
+                  </p>
                 ) : selecionado.mimeType?.startsWith('image/') ? (
-                  <img src={selecionado.fileUrl ?? ''} alt={selecionado.name} className="max-h-[32rem] rounded-lg" />
+                  <img src={selecionado.fileUrl} alt={selecionado.name} className="max-h-[32rem] rounded-lg" />
                 ) : (
                   <>
                     {/* O link vem ANTES do visualizador, e não como alternativa
@@ -568,7 +577,7 @@ export function CampaignValidationPage() {
                         tela não conseguiu mostrar é exatamente o que a aprovação existe
                         para impedir, então tem que haver sempre um caminho para ler. */}
                     <a
-                      href={selecionado.fileUrl ?? ''}
+                      href={selecionado.fileUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="mb-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
@@ -578,7 +587,7 @@ export function CampaignValidationPage() {
                     </a>
                     <iframe
                       title={selecionado.name}
-                      src={selecionado.fileUrl ?? ''}
+                      src={selecionado.fileUrl}
                       className="h-[32rem] w-full rounded-lg border border-base-200 bg-white"
                     />
                   </>
