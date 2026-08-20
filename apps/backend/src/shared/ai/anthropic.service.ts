@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { extrairJson } from './json-extract';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 export const AI_MODEL = process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001';
@@ -233,32 +234,26 @@ export class AnthropicService {
     return { text, tokensIn, tokensOut, costUsd: estimateCost(tokensIn, tokensOut) };
   }
 
-  // Completa esperando JSON; extrai e parseia o 1º objeto JSON válido da resposta.
-  // BUG-10 fix: regex greedy /\{[\s\S]*\}/ podia capturar do 1º ao último '}', produzindo
-  // JSON inválido quando o modelo incluía múltiplos objetos ou explicava exemplos.
-  // Solução: tenta parsear candidatos em ordem até encontrar um JSON válido.
+  /**
+   * Completa esperando JSON e devolve o valor já parseado.
+   *
+   * A extração vive em `json-extract.ts` — ver lá o porquê. Resumo: a versão
+   * anterior recortava com regex non-greedy e não sobrevivia a JSON aninhado nem a
+   * `{{nome}}` dentro do texto (que os nossos próprios prompts mandam escrever), e
+   * o único fallback exigia resposta sem uma linha sequer em volta. Em 20/08/2026
+   * isso derrubou o "Gerar do roteiro" com 400 em toda tentativa: o modelo
+   * respondia certo, dentro de uma cerca de markdown que ninguém descascava.
+   */
   async completeJson<T = any>(
     system: string,
     user: string,
     opts: { maxTokens?: number } = {},
   ): Promise<T> {
     const raw = await this.complete(system, user, { maxTokens: opts.maxTokens ?? 300, temperature: 0 });
-    // Extrai todos os candidatos {...} em ordem de aparição (non-greedy)
-    const candidates = [...raw.matchAll(/\{[\s\S]*?\}/g)].map((m) => m[0]);
-    // Tenta parsear do maior para o menor (objeto mais completo primeiro)
-    const sorted = candidates.sort((a, b) => b.length - a.length);
-    for (const candidate of sorted) {
-      try {
-        return JSON.parse(candidate) as T;
-      } catch {
-        // tenta o próximo candidato
-      }
-    }
-    // Fallback: tenta parsear a resposta inteira
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
+    const parsed = extrairJson<T>(raw);
+    if (parsed === null) {
       throw new Error(`JSON não encontrado na resposta: ${raw.slice(0, 120)}`);
     }
+    return parsed;
   }
 }
