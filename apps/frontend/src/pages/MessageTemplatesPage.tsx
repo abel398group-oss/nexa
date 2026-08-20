@@ -48,6 +48,12 @@ export function MessageTemplatesPage() {
   /// texto no formulário, e a partir daí é o mesmo caminho de sempre — ler, testar,
   /// salvar. Nada aqui está gravado.
   const [rascunhos, setRascunhos] = useState<RascunhoDeModelo[]>([]);
+  /// Qual proposta está no formulário agora. É o que substitui o antigo "some tudo":
+  /// destacar a escolhida resolve a confusão sem destruir as outras três.
+  const [rascunhoAtivo, setRascunhoAtivo] = useState<number | null>(null);
+  /// Quais já viraram modelo salvo. Sem esta marca, salvar quatro mensagens de uma
+  /// cadência vira contar nos dedos qual já foi — e salvar a mesma duas vezes.
+  const [rascunhosSalvos, setRascunhosSalvos] = useState<Set<number>>(new Set());
   /// Frases recusadas, uma por linha. Vive no playbook (é configuração de voz), mas
   /// é editada AQUI porque é aqui que se percebe o que proibir — ler o texto ruim e
   /// ter de procurar outra tela para bani-lo é o atrito que faz ninguém banir nada.
@@ -96,6 +102,10 @@ export function MessageTemplatesPage() {
     mutationFn: () => rascunharModelos({ productCode: codigo, channel: canal, quantos: 4 }),
     onSuccess: (r) => {
       setRascunhos(r);
+      // Marcas zeradas: são propostas NOVAS, e um "✓ salva" herdado da geração
+      // anterior apontaria para um texto que não existe mais na tela.
+      setRascunhoAtivo(null);
+      setRascunhosSalvos(new Set());
       toast.success(`${r.length} proposta(s) a partir do roteiro aprovado. Escolha uma para editar.`);
     },
     // A mensagem do servidor é específica ("este mercado não tem roteiro aprovado"),
@@ -104,16 +114,27 @@ export function MessageTemplatesPage() {
       toast.error(e?.response?.data?.message ?? 'Não consegui rascunhar as mensagens.'),
   });
 
-  /// Joga a proposta no formulário. A partir daqui é o caminho de sempre: ler,
-  /// "Gerar teste", salvar. A lista some para a tela não sugerir que o que está no
-  /// formulário ainda é "a proposta número 2".
-  function usarRascunho(r: RascunhoDeModelo) {
+  /**
+   * Joga a proposta no formulário. A partir daqui é o caminho de sempre: ler,
+   * "Gerar teste", salvar.
+   *
+   * A lista FICA (20/08/2026). Ela sumia ao escolher a primeira, para a tela não
+   * sugerir que o formulário ainda era "a proposta número 2" — o que resolvia uma
+   * confusão de leitura criando um problema pior: são quatro mensagens de uma
+   * cadência, feitas para serem salvas as quatro, e apagar as outras três obrigava a
+   * gerar tudo de novo (pagando outra chamada) para pegar a segunda.
+   *
+   * O que evita a confusão é destacar qual está no formulário, não esconder o resto.
+   */
+  function usarRascunho(i: number) {
+    const r = rascunhos[i];
+    if (!r) return;
     setNome(r.name);
     setAssunto(r.subject);
     setCorpo(r.body);
     setPasso(r.step);
     setPrevia(null); // a prévia é do texto ANTERIOR; deixá-la seria mostrar outra mensagem
-    setRascunhos([]);
+    setRascunhoAtivo(i);
   }
 
   const salvar = useMutation({
@@ -124,6 +145,13 @@ export function MessageTemplatesPage() {
       // revisão, como o material de campanha. Dizer "já aparece no Disparo" aqui
       // seria a mentira antiga com sinal trocado.
       toast.success('Modelo salvo como rascunho. Aprove-o na lista abaixo para aparecer no Disparo.');
+      // Marca a proposta que acabou de virar modelo, ANTES de limpar o formulário:
+      // é o que deixa a lista mostrar o que já foi salvo enquanto se trabalha a
+      // cadência inteira, em vez de obrigar a contar nos dedos.
+      if (rascunhoAtivo !== null) {
+        setRascunhosSalvos((s) => new Set(s).add(rascunhoAtivo));
+        setRascunhoAtivo(null);
+      }
       setNome(''); setAssunto(''); setCorpo(''); setPrevia(null);
       void qc.invalidateQueries({ queryKey: ['message-templates', codigo] });
       // "Nenhuma mensagem pronta" é uma das quatro travas de liberação, e ela é
@@ -390,35 +418,53 @@ export function MessageTemplatesPage() {
         </div>
 
         {/* Propostas do roteiro. Ficam AQUI, entre o formulário e a prévia, porque é
-            daqui que o texto vai para o campo de cima — e some assim que uma é
-            escolhida, para a tela nunca sugerir que o formulário ainda é "a proposta
-            número 2". Nada disto está salvo. */}
+            daqui que o texto vai para o campo de cima. A lista PERMANECE ao escolher
+            uma: são as mensagens de uma cadência, feitas para serem salvas todas, e
+            apagá-las na primeira obrigava a gerar tudo de novo para pegar a segunda.
+            O que evita confusão é o destaque de qual está no formulário. */}
         {rascunhos.length > 0 && (
           <div className="mt-4 border-t border-base-200 pt-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-                Propostas do roteiro aprovado — nenhuma salva ainda
+                Propostas do roteiro aprovado
+                {rascunhosSalvos.size > 0 && ` — ${rascunhosSalvos.size} de ${rascunhos.length} salva(s)`}
               </span>
               <button
                 type="button"
                 className="text-xs text-base-content/50 hover:text-base-content"
-                onClick={() => setRascunhos([])}
+                onClick={() => {
+                  setRascunhos([]);
+                  setRascunhoAtivo(null);
+                  setRascunhosSalvos(new Set());
+                }}
               >
                 descartar
               </button>
             </div>
             <div className="flex flex-col gap-2">
-              {rascunhos.map((r, i) => (
+              {rascunhos.map((r, i) => {
+                const ativo = rascunhoAtivo === i;
+                const salvo = rascunhosSalvos.has(i);
+                return (
                 <button
                   key={i}
                   type="button"
-                  onClick={() => usarRascunho(r)}
-                  className="rounded-lg border border-base-200 p-3 text-left transition-colors hover:border-brand-500 hover:bg-brand-500/5"
+                  onClick={() => usarRascunho(i)}
+                  className={
+                    'rounded-lg border p-3 text-left transition-colors ' +
+                    (ativo
+                      ? 'border-brand-500 bg-brand-500/10'
+                      : salvo
+                        ? 'border-base-200 bg-base-200/40 opacity-60 hover:opacity-100'
+                        : 'border-base-200 hover:border-brand-500 hover:bg-brand-500/5')
+                  }
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-sm font-medium">{r.name}</span>
                     <span className="shrink-0 text-[10px] uppercase tracking-wide text-base-content/40">
-                      toque {r.step}
+                      {/* O estado vem antes do número do toque: é o que se procura ao
+                          voltar para a lista depois de salvar uma. */}
+                      {ativo ? 'no formulário' : salvo ? '✓ salva' : `toque ${r.step}`}
                     </span>
                   </div>
                   {r.subject && (
@@ -431,7 +477,8 @@ export function MessageTemplatesPage() {
                     <p className="mt-1 text-[11px] italic text-base-content/40">{r.porque}</p>
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
