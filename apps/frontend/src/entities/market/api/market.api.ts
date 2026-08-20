@@ -23,7 +23,12 @@ export async function releaseMarket(code: string): Promise<Market> {
   return r.data;
 }
 
-export async function pauseMarket(code: string): Promise<Market> {
+/**
+ * Suspende o mercado. As campanhas dele que estavam RODANDO pausam junto —
+ * `pausedCampaigns` diz quantas, para a tela avisar. Elas só voltam quando o
+ * mercado for liberado de novo (a retomada é barrada pela trava de disparo).
+ */
+export async function pauseMarket(code: string): Promise<Market & { pausedCampaigns: number }> {
   const r = await api.post(`/markets/${code}/pause`);
   return r.data;
 }

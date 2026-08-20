@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { MarketsService } from './markets.service';
 
 /**
@@ -223,6 +223,7 @@ function makeSvcRemove(
     marketAsset: { count: vi.fn().mockResolvedValue(counts.materiais ?? 0) },
     messageTemplate: { count: vi.fn().mockResolvedValue(counts.modelos) },
     leadBatch: { count: vi.fn().mockResolvedValue(counts.lotes) },
+    campaign: { count: vi.fn().mockResolvedValue(counts.campanhas ?? 0) },
     sellerMarket: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
     $transaction: vi.fn().mockResolvedValue([{ count: 1 }, mercado]),
   };
@@ -300,5 +301,69 @@ describe('MarketsService.remove — material de campanha segura', () => {
     await expect(svc.remove('t1', 'd')).rejects.toThrow(
       /3 artigo\(s\) de conhecimento, 2 arquivo\(s\) de campanha/,
     );
+  });
+});
+
+// Campanha entrou na trava em 19/08/2026: antes da trava de mercado no disparo era
+// possível criar campanha apontando para um mercado em rascunho — apagar o mercado
+// deixaria essas campanhas com um código que não leva a nada.
+describe('MarketsService.remove — campanha segura', () => {
+  it('rascunho com campanha apontando para ele não é apagado', async () => {
+    const { svc, prisma } = makeSvcRemove(undefined, {
+      kb: 0, modelos: 0, lotes: 0, materiais: 0, campanhas: 2,
+    });
+
+    await expect(svc.remove('t1', 'd')).rejects.toThrow(/2 campanha\(s\)/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Suspender o mercado arrasta as campanhas RODANDO dele.
+ *
+ * Até 19/08/2026 o botão dizia "sumiu do disparo" e só valia para campanha nova:
+ * uma que já estava `running` continuava esvaziando a fila com a marca do
+ * parceiro. Pausar (não cancelar) é de propósito — a fila fica de pé, e a trava
+ * de retomada só a solta quando o mercado voltar a `active`.
+ */
+describe('MarketsService.pause', () => {
+  function makeSvcPause(pausadas = 0) {
+    const mercado = { id: 'p1', code: 'agabe', name: 'Agabê', status: 'paused' };
+    const prisma = {
+      product: {
+        findUnique: vi.fn().mockResolvedValue({ code: 'agabe' }),
+        update: vi.fn().mockResolvedValue(mercado),
+      },
+      campaign: { updateMany: vi.fn().mockResolvedValue({ count: pausadas }) },
+      $transaction: vi.fn().mockResolvedValue([{ count: pausadas }, mercado]),
+    };
+    return { svc: new MarketsService(prisma as any), prisma };
+  }
+
+  it('pausa só as campanhas running do mercado, escopadas no tenant', async () => {
+    const { svc, prisma } = makeSvcPause(2);
+
+    const r: any = await svc.pause('t1', 'agabe');
+    expect(r.pausedCampaigns).toBe(2);
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', productCode: 'agabe', status: 'running' },
+      data: { status: 'paused' },
+    });
+  });
+
+  it('mercado sem campanha rodando: suspende e devolve zero', async () => {
+    const { svc } = makeSvcPause(0);
+
+    const r: any = await svc.pause('t1', 'agabe');
+    expect(r.pausedCampaigns).toBe(0);
+    expect(r.status).toBe('paused');
+  });
+
+  it('código inexistente: 404 sem tocar em nada', async () => {
+    const { svc, prisma } = makeSvcPause();
+    prisma.product.findUnique.mockResolvedValue(null);
+
+    await expect(svc.pause('t1', 'nao-existe')).rejects.toThrow(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

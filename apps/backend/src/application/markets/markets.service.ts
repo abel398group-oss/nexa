@@ -335,11 +335,15 @@ export class MarketsService {
     // palavra, deixando o texto órfão na tabela — e, no caso do portfólio, o arquivo
     // largado em `uploads/` sem nada que o alcance. Toda tabela nova com `productCode`
     // precisa ser lembrada aqui.
-    const [kb, modelos, lotes, materiais] = await Promise.all([
+    const [kb, modelos, lotes, materiais, campanhas] = await Promise.all([
       this.prisma.aiKnowledgeBase.count({ where: { tenantId, productCode: code } }),
       this.prisma.messageTemplate.count({ where: { tenantId, productCode: code } }),
       this.prisma.leadBatch.count({ where: { tenantId, productCode: code } }),
       this.prisma.marketAsset.count({ where: { tenantId, productCode: code } }),
+      // Campanha entra na trava (19/08/2026): antes da trava de mercado no disparo
+      // era possível criar campanha apontando para um mercado em rascunho — apagar
+      // o mercado deixaria essas campanhas com um código que não leva a nada.
+      this.prisma.campaign.count({ where: { tenantId, productCode: code } }),
     ]);
 
     const usos = [
@@ -347,6 +351,7 @@ export class MarketsService {
       modelos > 0 ? `${modelos} modelo(s) de mensagem` : null,
       lotes > 0 ? `${lotes} lista(s) de lead` : null,
       materiais > 0 ? `${materiais} arquivo(s) de campanha` : null,
+      campanhas > 0 ? `${campanhas} campanha(s)` : null,
     ].filter(Boolean);
 
     if (usos.length) {
@@ -393,15 +398,31 @@ export class MarketsService {
    * `releasedAt` é preservado de propósito — é registro de que já esteve no ar, e
    * apagar perderia a única pista de quando começou a prospecção daquele parceiro.
    */
-  async pause(_tenantId: string, code: string) {
+  async pause(tenantId: string, code: string) {
     // Sem esta checagem, código inexistente virava P2025 do Prisma sem tratamento
     // e o cliente recebia 500 "Internal server error" — quem chamou não fica
     // sabendo se o mercado não existe ou se o servidor caiu.
     const existe = await this.prisma.product.findUnique({ where: { code }, select: { code: true } });
     if (!existe) throw new NotFoundException(`Mercado "${code}" não encontrado.`);
 
-    const market = await this.prisma.product.update({ where: { code }, data: { status: 'paused' } });
-    this.logger.warn(`Mercado "${market.name}" suspenso — sumiu do disparo`);
-    return market;
+    // As campanhas RODANDO pausam junto, na mesma transação. Até 19/08/2026 o botão
+    // dizia "sumiu do disparo" e não era verdade: a trava só barrava INICIAR/retomar
+    // campanha do mercado — uma que já estava `running` continuava esvaziando a fila
+    // com a marca do parceiro. Pausar (e não cancelar) de propósito: a fila fica de
+    // pé, e a trava de retomada só a solta quando o mercado for liberado de novo.
+    // Cobre WhatsApp e e-mail, que vivem na mesma tabela.
+    const [pausadas, market] = await this.prisma.$transaction([
+      this.prisma.campaign.updateMany({
+        where: { tenantId, productCode: code, status: 'running' },
+        data: { status: 'paused' },
+      }),
+      this.prisma.product.update({ where: { code }, data: { status: 'paused' } }),
+    ]);
+
+    this.logger.warn(
+      `Mercado "${market.name}" suspenso — sumiu do disparo` +
+        (pausadas.count > 0 ? ` e ${pausadas.count} campanha(s) em andamento foram pausadas` : ''),
+    );
+    return { ...market, pausedCampaigns: pausadas.count };
   }
 }

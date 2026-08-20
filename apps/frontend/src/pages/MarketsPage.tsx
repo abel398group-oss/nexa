@@ -20,6 +20,7 @@ import {
   type MarketSellers,
   type MarketCounts,
 } from '@/entities/market';
+import { listPartners } from '@/entities/partner';
 
 /**
  * Mercados (ADR 037).
@@ -102,10 +103,25 @@ function IdentidadeDoMercado({ market }: { market: Market }) {
     brandTagline: market.brandTagline ?? '',
     brandColor: market.brandColor ?? '',
     signupUrl: market.signupUrl ?? '',
+    partnerId: market.partnerId ?? '',
   });
 
+  // Trocar o dono só existia na criação: mercado antigo (HiperTMS e os criados
+  // antes do vínculo, 19/08/2026) não tinha como ganhar parceiro pela tela. O 403
+  // de quem tem `settings` sem `partners` não é erro — o seletor some e o resto
+  // da identidade segue editável (mesmo padrão da NewMarketModal).
+  const { data: parceiros = [], isError: semAcessoParceiros } = useQuery({
+    queryKey: ['partners'],
+    queryFn: () => listPartners(),
+    retry: false,
+  });
+  // O parceiro atual entra mesmo desativado — sumir com ele do seletor faria a
+  // tela mentir sobre o valor gravado.
+  const opcoesParceiro = parceiros.filter((p) => p.active || p.id === market.partnerId);
+
   const salvar = useMutation({
-    mutationFn: () => updateMarket(market.code, form),
+    // `''` vira `null` no envio: string vazia é "sem parceiro", e o backend limpa.
+    mutationFn: () => updateMarket(market.code, { ...form, partnerId: form.partnerId || null }),
     onSuccess: () => {
       // A lista inteira volta do servidor: gravar identidade muda o `readiness`,
       // e a pendência tem que sumir na hora — senão a tela segue cobrando o que
@@ -138,6 +154,24 @@ function IdentidadeDoMercado({ market }: { market: Market }) {
       </p>
 
       <div className="grid gap-2 sm:grid-cols-3">
+        {!semAcessoParceiros && (
+          <label className="block">
+            <span className="text-[11px] text-base-content/60">Parceiro dono</span>
+            <select
+              className="input !h-8 w-full text-xs"
+              value={form.partnerId}
+              onChange={(e) => setForm((f) => ({ ...f, partnerId: e.target.value }))}
+            >
+              <option value="">Mercado da casa (sem parceiro)</option>
+              {opcoesParceiro.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {!p.active ? ' (desativado)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="text-[11px] text-base-content/60">Nome de exibição</span>
           <Input className="!h-8 text-xs" placeholder="HiperTMS" {...campo('displayName')} />
@@ -358,7 +392,14 @@ export function MarketsPage() {
   const suspender = useMutation({
     mutationFn: (code: string) => pauseMarket(code),
     onSuccess: (m) => {
-      toast.info(`${m.name} suspenso — sumiu do Disparo.`);
+      // O número importa: quem suspendeu no meio de um disparo precisa da
+      // confirmação de que ele PAROU — antes a campanha seguia esvaziando a
+      // fila e nada na tela dizia isso.
+      toast.info(
+        m.pausedCampaigns > 0
+          ? `${m.name} suspenso — ${m.pausedCampaigns} campanha(s) em andamento pausada(s) junto.`
+          : `${m.name} suspenso — sumiu do Disparo.`,
+      );
       void qc.invalidateQueries({ queryKey: ['markets'] });
     },
     onError: () => toast.error('Não foi possível suspender.'),
@@ -393,7 +434,8 @@ export function MarketsPage() {
       title: `Suspender ${m.name}?`,
       message:
         'O mercado some do Disparo na hora e o vendedor deixa de poder criar campanha nele. ' +
-        'Campanhas já em andamento continuam. Dá para liberar de novo depois.',
+        'Campanhas em andamento deste mercado são pausadas junto — e só voltam quando ele ' +
+        'for liberado de novo. Dá para liberar depois.',
       confirmLabel: 'Suspender',
       variant: 'warning',
     });
