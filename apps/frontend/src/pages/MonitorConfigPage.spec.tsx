@@ -91,6 +91,26 @@ function makeSectorOverride(sector: { sendHour?: number; sendMinute?: number; se
 
 // ── Render helper ─────────────────────────────────────────────────────────────
 
+/**
+ * Espera a tela estar REALMENTE pronta para ser lida.
+ *
+ * `findByText('Contatos')` sozinho não bastava, e o motivo não é o teste ser
+ * apressado: a página mostra um esqueleto enquanto a config carrega, então o título
+ * "Contatos" só aparece com a config na mão. Só que a página COPIA essa config para
+ * estado local num `useEffect`, e efeito roda depois da renderização — existe um
+ * render em que "Contatos" já está na tela e `contacts`/`cfg` ainda são os valores
+ * iniciais. Quem lia ali encontrava "Nenhum contato cadastrado" e falhava dizendo
+ * que não existe tabela: verde na máquina do dev, vermelho na CI, que é mais lenta.
+ *
+ * O `waitFor` vazio existe para dar esse tick a mais e deixar o efeito acontecer.
+ * Não afirma nada — afirmar aqui seria escolher um elemento que nem todo teste tem
+ * (os que checam a lista VAZIA não têm nenhum).
+ */
+async function aguardarTelaPronta() {
+  await screen.findByText('Contatos');
+  await waitFor(() => {});
+}
+
 function renderPage() {
   const qc = new QueryClient({
     defaultOptions: {
@@ -394,7 +414,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('mostra "Nenhum contato cadastrado." quando não há contatos', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
     expect(screen.getByText('Nenhum contato cadastrado.')).toBeInTheDocument();
   });
 
@@ -412,11 +432,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    // Espera o DADO, não o rótulo da seção. "Contatos" é o título e aparece na
-    // primeira renderização, com a lista ainda carregando — o `getAllByRole` logo
-    // abaixo então lia o estado vazio ("Nenhum contato cadastrado") e falhava
-    // dizendo que não existe tabela. Passava aqui e quebrava na CI, que é mais lenta.
-    await screen.findByText('Maria');
+    await aguardarTelaPronta();
 
     const tables = screen.getAllByRole('table');
     expect(tables).toHaveLength(1);
@@ -450,7 +466,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     expect(await screen.findByText(/5511999990001/)).toBeInTheDocument();
     expect(screen.getByText(/5511999990002/)).toBeInTheDocument();
@@ -465,7 +481,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('wizard: navega pelos 3 passos (Avançar/Voltar) com o indicador de progresso refletindo o passo atual', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     const dialog = screen.getByRole('dialog');
@@ -503,7 +519,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
   // (c) contato sem canal → rejeitar (400 no backend; UI valida o mesmo antes de avançar do passo 1).
   it('(c) T10-WIZARD: cada ramo exige seu canal — validação bloqueia o "Avançar" no passo 1', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     // Ramo WhatsApp (default) sem número → bloqueia com pedido de WhatsApp.
@@ -520,7 +536,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('rejeita telefone inválido no passo 1', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '123' } });
@@ -531,7 +547,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('exige ao menos 1 setor antes de salvar (passo 3)', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -544,7 +560,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('"+ Novo contato" completa o wizard nos 3 passos e persiste o contato', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('Nome do contato'), { target: { value: 'João' } });
@@ -565,7 +581,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('permite até 3 horários (passo 3) e desabilita "+ adicionar horário" no limite', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -597,7 +613,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar Maria/i }));
 
@@ -629,7 +645,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar Maria/i }));
     advance();
@@ -656,7 +672,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     // digita o MESMO número da Maria, mas no formato local (sem o 55)
@@ -670,7 +686,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('novo contato nasce com Pendências e Receita×despesa ligados, periodicidade Mensal e caixa desligado; navega e salva os valores escolhidos', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -699,7 +715,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('periodicidade é seleção única — trocar de chip desmarca o anterior', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -718,7 +734,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
   // (b) matriz: closing só e-mail → WhatsApp não recebe (refletido no payload salvo).
   it('(b) desligar a pill de WhatsApp no card Receita × despesa mantém só e-mail no payload salvo', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -744,7 +760,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('chip 🍯 Visão do caixa liga/desliga cashView e reflete em aria-pressed', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -781,7 +797,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
     advance();
@@ -806,7 +822,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
     advance();
@@ -835,7 +851,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     expect(await screen.findByText('Pendências, Receita × despesa')).toBeInTheDocument();
   });
@@ -857,7 +873,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     expect(await screen.findByText('Pendências')).toBeInTheDocument();
   });
@@ -881,7 +897,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     expect(await screen.findByText('Pendências, Caixa')).toBeInTheDocument();
   });
@@ -898,7 +914,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Remover 5511999990001/i }));
     await waitFor(() => expect(mockConfirm).toHaveBeenCalledOnce());
@@ -911,7 +927,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('"Salvar contato" no passo 3 já persiste no backend (auto-save) — não depende do "Salvar" principal', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     // DDI fixo: digita LOCAL; o payload persiste com o 55 (asserção abaixo inalterada).
@@ -939,7 +955,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     mockPut.mockRejectedValueOnce({ response: { data: { message: 'Limite de números WhatsApp atingido.' } } });
 
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -959,7 +975,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
 
   it('payload do "Salvar" principal também inclui contacts com o shape esperado', async () => {
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -1007,7 +1023,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
     });
 
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     fireEvent.change(screen.getByLabelText('WhatsApp do contato'), { target: { value: '11988880000' } });
@@ -1044,7 +1060,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       { waNumbersUsed: 1, waNumbersLimit: 3 },
     );
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     expect(await screen.findByText(/1 de 3 números do plano · 2 disponíveis/)).toBeInTheDocument();
   });
@@ -1052,7 +1068,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
   it('(e) no limite, contato só-e-mail continua livre para adicionar (não bloqueado)', async () => {
     mockConfigWithContacts([], { waNumbersUsed: 1, waNumbersLimit: 1 });
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     // T10-WIZARD: escolhe o ramo e-mail antes de digitar (WhatsApp fica oculto).
@@ -1076,7 +1092,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
   it('(e) no limite, WhatsApp de contato NOVO fica bloqueado no passo 1 com upsell', async () => {
     mockConfigWithContacts([], { waNumbersUsed: 1, waNumbersLimit: 1 });
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(screen.getByRole('button', { name: /novo contato/i }));
     const dialog = screen.getByRole('dialog');
@@ -1101,7 +1117,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       { waNumbersUsed: 1, waNumbersLimit: 1 },
     );
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     fireEvent.click(await screen.findByRole('button', { name: /Editar 5511999990001/i }));
 
@@ -1124,7 +1140,7 @@ describe('MonitorConfigPage — T9 Contato unificado (wizard 3 passos)', () => {
       { sendWindowStart: 6, sendWindowEnd: 20 },
     );
     renderPage();
-    await screen.findByText('Contatos');
+    await aguardarTelaPronta();
 
     // Regex ancorado no ⚠️: antes de T9-FIX, `/fora da janela/i` batia também no
     // label estático "Crítico fora da janela:" do seletor de config geral (agora
