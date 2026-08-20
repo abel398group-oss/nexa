@@ -12,6 +12,7 @@ import {
 } from '@/shared/ui';
 import { useToast } from '@/app/providers/ToastContext';
 import { erroDoServidor } from '@/shared/lib/erroDoServidor';
+import { baixarModeloDeLeads } from '@/shared/lib/modeloDeLeads';
 import { getMarketSellers, listMarkets, type Market } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
@@ -247,6 +248,15 @@ export function LeadBatchesPage() {
           Aceita ponto-e-vírgula ou vírgula, com ou sem acento no cabeçalho. Nada é
           gravado até você confirmar.
         </p>
+        {/* O modelo fica AQUI, ao lado de onde se solta o arquivo — é neste momento
+            que a dúvida sobre o formato aparece. Numa página de ajuda, ninguém acha. */}
+        <button
+          type="button"
+          className="text-xs text-brand-600 underline hover:text-brand-700"
+          onClick={baixarModeloDeLeads}
+        >
+          Baixar planilha modelo (.csv)
+        </button>
       </Card>
 
       <AdicionarNaMao
