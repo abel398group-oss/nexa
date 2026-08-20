@@ -33,6 +33,14 @@ async function limpar() {
   await prisma.sellerMarket.deleteMany({ where: { tenantId: TENANT } });
   await prisma.seller.deleteMany({ where: { tenantId: TENANT } });
   await prisma.leadBatch.deleteMany({ where: { tenantId: TENANT } });
+  // A importação valida que o mercado existe (19/08/2026) — o lote de teste
+  // precisa do dele. Upsert: `products` é global e a linha pode sobrar de uma
+  // rodada anterior.
+  await prisma.product.upsert({
+    where: { code: MERCADO },
+    create: { code: MERCADO, name: 'Mercado de integração', connector: 'none', status: 'draft' },
+    update: {},
+  });
 }
 
 beforeEach(limpar);

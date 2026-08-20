@@ -60,6 +60,21 @@ export class LeadImportService {
     input: ImportarLoteInput,
     csv: string,
   ): Promise<RelatorioImportacao> {
+    // O mercado precisa existir ANTES de qualquer coisa — inclusive da prévia. Um typo
+    // no productCode gravaria a lista inteira (paga, mil linhas) apontando para um
+    // mercado que não leva a nada: sem roteiro para o SDR, invisível na tela do
+    // mercado certo, e o disparo por lote barrado pela trava. Mesma regra do
+    // market-gate no disparo e do modelo de mensagem.
+    const mercado = await this.prisma.product.findUnique({
+      where: { code: input.productCode },
+      select: { code: true },
+    });
+    if (!mercado) {
+      throw new BadRequestException(
+        `Mercado "${input.productCode}" não existe. Confira o código na tela de Mercados.`,
+      );
+    }
+
     const { linhas, colunasIgnoradas } = parseCsvDeLeads(csv);
 
     // A peneira de arquivo já rodou no parser (duplicado, sem canal utilizável).
