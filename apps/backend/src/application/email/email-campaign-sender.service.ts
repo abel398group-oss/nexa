@@ -686,19 +686,35 @@ export class EmailCampaignSenderService {
         return;
       }
 
-      // Upsert contato (garante que existe para gerar opt-out token)
-      const upsertedContact = await this.prisma.contact.upsert({
-        where: { tenantId_phone: { tenantId: campaign.tenantId, phone: emailToPhone(email) } },
-        update: { email },
-        create: {
-          tenantId: campaign.tenantId,
-          phone: emailToPhone(email),
-          email,
-          name: target.name ?? undefined,
-          source: 'email_campaign',
-          tags: [],
-        },
+      // Contato (garante que existe para gerar opt-out token).
+      //
+      // Procura por E-MAIL antes de qualquer coisa. `contacts` tem DOIS uniques —
+      // (tenant, phone) e (tenant, email) — e o upsert só sabe procurar por um deles.
+      // Indo direto pelo pseudo-telefone (`emailToPhone`), o lead que entrou por uma
+      // LISTA DE LEADS, com telefone de verdade, não é encontrado: o upsert cai no
+      // `create` e o insert bate no unique do e-mail.
+      //
+      // Isso derrubava o tick INTEIRO, a cada 15s, sem enviar nada — e no caminho
+      // mais comum que existe: importar a lista e disparar e-mail para ela.
+      // Visto em produção em 20/08/2026, com os quatro alvos parados em `sending`.
+      let upsertedContact = await this.prisma.contact.findFirst({
+        where: { tenantId: campaign.tenantId, email },
       });
+
+      if (!upsertedContact) {
+        upsertedContact = await this.prisma.contact.upsert({
+          where: { tenantId_phone: { tenantId: campaign.tenantId, phone: emailToPhone(email) } },
+          update: { email },
+          create: {
+            tenantId: campaign.tenantId,
+            phone: emailToPhone(email),
+            email,
+            name: target.name ?? undefined,
+            source: 'email_campaign',
+            tags: [],
+          },
+        });
+      }
 
       // Primeiro contato ou não — é o que decide o LAYOUT do e-mail.
       const conhecido = await this.jaRespondeuAlgumaVez(campaign.tenantId, email);

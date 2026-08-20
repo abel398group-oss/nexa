@@ -513,3 +513,96 @@ describe('worker — limite diário vem do banco', () => {
     await expect((svc as any).ultimoEnvio()).resolves.toBe(0);
   });
 });
+
+/**
+ * O lead que já existe por telefone, e o e-mail que não conseguia alcançá-lo.
+ *
+ * `contacts` tem DOIS uniques — (tenant, phone) e (tenant, email) — e o `upsert`
+ * só sabe procurar por um. O worker procurava pelo pseudo-telefone derivado do
+ * e-mail (`emailToPhone`), então NÃO encontrava o lead que entrou por uma lista de
+ * leads com telefone de verdade: caía no `create` e o insert batia no unique do
+ * e-mail.
+ *
+ * O estrago não ficava no alvo: o `tickLocked` inteiro morria, a cada 15 segundos,
+ * sem enviar nada e sem marcar falha em ninguém. Em produção, 20/08/2026, os quatro
+ * alvos ficaram parados em `sending` enquanto o log repetia
+ * `Unique constraint failed on the fields: (tenant_id, email)` — e o caminho que
+ * quebrava é o mais comum que existe: importar a lista e disparar e-mail para ela.
+ */
+describe('worker — lead vindo de lista de leads, com telefone real', () => {
+  function cenario(contatoExistente: any) {
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Teste 01', channel: 'email',
+      status: 'running', productCode: null, subject: 'assunto',
+      template: 'corpo', link: null, sendLinkOnFirst: false,
+      sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'carlos@transportes.com.br', name: 'Carlos' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contact: {
+        findMany: vi.fn().mockResolvedValue([]),
+        // Achado por E-MAIL: é o contato do lote, com telefone real.
+        findFirst: vi.fn().mockResolvedValue(contatoExistente),
+        // Se for chamado com um contato já existente, o insert bateria no unique.
+        upsert: vi.fn().mockRejectedValue(
+          new Error('Unique constraint failed on the fields: (`tenant_id`,`email`)'),
+        ),
+      },
+    });
+    prisma.aiConversation = { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() };
+
+    const emailReply = { send: vi.fn().mockResolvedValue({ sent: true, messageId: '<m@x>' }) };
+    const conversations = {
+      create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+      addMessage: vi.fn().mockResolvedValue({}),
+    };
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    return { svc, prisma, emailReply };
+  }
+
+  it('reaproveita o contato encontrado pelo e-mail, sem tentar criar outro', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const doLote = { id: 'ct-lote', phone: '5511994327713', email: 'carlos@transportes.com.br' };
+    const { svc, prisma, emailReply } = cenario(doLote);
+
+    await (svc as any).tickLocked();
+
+    // O upsert nem é tentado — é ele que estourava.
+    expect(prisma.contact.upsert).not.toHaveBeenCalled();
+    expect(prisma.contact.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tenantId: 't1', email: 'carlos@transportes.com.br' } }),
+    );
+    // E o e-mail SAI, que é o ponto: antes o tick inteiro morria aqui.
+    expect(emailReply.send).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it('sem contato pelo e-mail, segue criando pelo telefone sintético', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const { svc, prisma } = cenario(null);
+    prisma.contact.upsert = vi.fn().mockResolvedValue({ id: 'ct-novo' });
+
+    await (svc as any).tickLocked();
+
+    expect(prisma.contact.upsert).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+});
