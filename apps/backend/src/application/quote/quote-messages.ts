@@ -247,40 +247,51 @@ function resumoDaRota(estado: EstadoCotacao, r: ResultadoDaCotacao): { rota: str
   return { rota, detalhe };
 }
 
+/// Percentual legível a partir da fração do TMS: 0.12 → "12%", 0.045 → "4,5%".
+function pct(fracao: number): string {
+  const p = fracao * 100;
+  const arred = Math.round(p * 10) / 10;
+  return `${String(arred).replace('.', ',')}%`;
+}
+
 /**
  * O resultado — mensagem encaminhável, a que o vendedor repassa pro cliente.
  *
- * "Valor de referência" fica na mensagem de propósito: o número dito no WhatsApp já é um
- * preço na cabeça de quem lê, e a formalização ainda vai acontecer no TMS.
+ * Formato de linhas rotuladas pedido pelo Uelder em 20/08/2026, direto do uso real:
+ * termina na VALIDADE — "valor de referência, confirme antes de fechar" e "rascunho
+ * salvo" são instruções pro VENDEDOR, e numa mensagem que vai pro cliente viravam ruído
+ * (essas informações vivem na mensagem interna, que chega antes).
  *
- * Chega DEPOIS de `resultadoInterno` na conversa — ver `quote-conversation.service.ts`.
- * Isso é o que já existia como `resultado()` antes da mensagem interna nascer; o texto não
- * mudou, só o nome, pra deixar explícito quem lê esta.
+ * O ICMS sai destacado, mas como "incluso": o imposto é por dentro no TMS (R$ 34,89
+ * DENTRO dos R$ 290,73 no rascunho 017750). Somar "frete + ICMS = total" com três
+ * números diferentes inventaria uma decomposição que não bate com a proposta formal —
+ * o cliente compararia e veria divergência.
+ *
+ * Piso ANTT e margem continuam FORA — ver `resultadoInterno`.
  */
 export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotacao): string {
-  const { rota, detalhe } = resumoDaRota(estado, r);
+  const icms = r.taxes?.items.find((i) => i.acronym.toUpperCase() === 'ICMS') ?? null;
+  const veiculo = estado.veiculo ? estado.veiculo[0].toUpperCase() + estado.veiculo.slice(1) : null;
 
   return [
     // O número no TÍTULO, e não no rodapé: é por ele que a pessoa vai procurar a cotação
     // no sistema, e no fim da mensagem ele compete com o preço pela atenção.
     r.rascunhoId ? `*Cotação ${r.rascunhoId}* ✅` : '*Cotação pronta* ✅',
     '',
-    rota,
-    detalhe,
+    ...(estado.origem ? [`Origem: ${cidade(estado.origem)}`] : []),
+    ...(estado.destino ? [`Destino: ${cidade(estado.destino)}`] : []),
+    ...(r.distanciaKm ? [`Distância: ${Math.round(r.distanciaKm)} km`] : []),
+    `Modalidade: ${estado.modalidade === 'dedicado' ? 'Dedicado' : 'Fracionado'}`,
+    ...(veiculo ? [`Veículo: ${veiculo}`] : []),
+    ...(estado.pesoKg ? [`Peso: ${estado.pesoKg} kg`] : []),
     // Eco do valor da mercadoria: é o único número que a pessoa digitou livre, e trocar
     // 10.000 por 100.000 muda o seguro sem ninguém perceber.
     ...(estado.valorMercadoria ? [`Mercadoria: ${brl(estado.valorMercadoria)}`] : []),
     '',
-    `💰 *${brl(r.valor)}*`,
-    // O piso ANTT fica FORA da mensagem de propósito, e continua gravado no rascunho.
-    // Esta mensagem é encaminhável com um toque: se ela chegar ao cliente com o piso,
-    // ele passa a saber a margem. Quem precisa dele lê na mensagem interna, antes desta.
+    `💰 *Frete total: ${brl(r.valor)}*`,
+    ...(icms ? [`ICMS incluso: ${brl(icms.value)}${icms.rate > 0 ? ` (${pct(icms.rate)})` : ''}`] : []),
     '',
-    ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
-    'Valor de referência — confirme antes de fechar com o cliente.',
-    ...(r.rascunhoId
-      ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
-      : []),
+    ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*`] : []),
   ]
     .filter((l) => l !== null)
     .join('\n');
@@ -337,6 +348,10 @@ export function resultadoInterno(estado: EstadoCotacao, r: ResultadoDaCotacao): 
     ...analiseCritica,
     '',
     ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*.`] : []),
+    // A cautela morava na mensagem-cliente; saiu de lá a pedido do Uelder (20/08/2026) —
+    // instrução pro vendedor não é coisa que o cliente deva ler. O aviso continua
+    // existindo, aqui, onde só o vendedor vê.
+    'Valor de referência — confirme antes de fechar com o cliente.',
     ...(r.rascunhoId
       ? [`📋 Rascunho salvo. Complete em *Vendas › Cotações › ${r.rascunhoId}*`]
       : []),

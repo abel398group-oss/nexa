@@ -95,8 +95,13 @@ describe('resultado — mensagem pro cliente (resultadoParaCliente)', () => {
       rascunhoId: '017749',
     });
     expect(t.split(String.fromCharCode(10))[0]).toContain('017749');
-    expect(t).toContain('Campinas/SP → Belo Horizonte/MG');
-    expect(t).toContain('586 km');
+    // Linhas rotuladas (formato pedido pelo Uelder em 20/08/2026).
+    expect(t).toContain('Origem: Campinas/SP');
+    expect(t).toContain('Destino: Belo Horizonte/MG');
+    expect(t).toContain('Distância: 586 km');
+    expect(t).toContain('Veículo: Carreta');
+    // `brl()` separa "R$" do número com espaço não-quebrável — asserta as partes.
+    expect(t).toContain('Frete total:');
     expect(t).toContain('5.200,00');
   });
 
@@ -113,14 +118,41 @@ describe('resultado — mensagem pro cliente (resultadoParaCliente)', () => {
     expect(resultadoParaCliente(pronto, { valor: 5200 })).toContain('80.000,00');
   });
 
-  it('diz ONDE achar o rascunho, não só que ele existe', () => {
-    expect(resultadoParaCliente(pronto, { valor: 5200, rascunhoId: '017749' })).toContain(
-      'Vendas › Cotações › 017749',
-    );
+  it('TERMINA na validade — rascunho e "valor de referência" são instrução de vendedor', () => {
+    // Pedido do Uelder (20/08/2026): a mensagem vai pro cliente, e cliente não completa
+    // rascunho nem precisa ser lembrado de confirmar preço. Isso mora na interna.
+    const t = resultadoParaCliente(pronto, {
+      valor: 5200,
+      rascunhoId: '017749',
+      validoAte: '2026-09-03T13:19:00.000Z',
+    });
+    expect(t).not.toContain('Rascunho');
+    expect(t).not.toContain('referência');
+    expect(t.trim().split(String.fromCharCode(10)).pop()).toContain('Válida até');
   });
 
-  it('diz que é referência — o número já vira preço na cabeça de quem lê', () => {
-    expect(resultadoParaCliente(pronto, { valor: 5200 })).toContain('referência');
+  it('destaca o ICMS como INCLUSO — imposto por dentro não soma por fora', () => {
+    // Somar "frete + ICMS" com três números inventaria uma decomposição que não bate
+    // com a proposta formal do TMS. O total não muda; o ICMS aparece destacado.
+    const t = resultadoParaCliente(pronto, {
+      valor: 290.73,
+      taxes: { total: 52.48, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 34.89 }] },
+    });
+    expect(t).toContain('Frete total:');
+    expect(t).toContain('290,73');
+    expect(t).toContain('ICMS incluso:');
+    expect(t).toContain('34,89');
+    expect(t).toContain('(12%)');
+  });
+
+  it('sem item de ICMS, a linha simplesmente não existe', () => {
+    const semTaxes = resultadoParaCliente(pronto, { valor: 5200 });
+    expect(semTaxes).not.toContain('ICMS');
+    const outroImposto = resultadoParaCliente(pronto, {
+      valor: 5200,
+      taxes: { total: 10, items: [{ acronym: 'PIS', name: 'PIS', rate: 0.0165, value: 10 }] },
+    });
+    expect(outroImposto).not.toContain('ICMS');
   });
 
   it('sem piso e sem rascunho, não imprime linha vazia no lugar', () => {
@@ -129,13 +161,14 @@ describe('resultado — mensagem pro cliente (resultadoParaCliente)', () => {
     expect(t).not.toContain('Rascunho salvo');
   });
 
-  it('fracionado mostra o peso no lugar do veículo', () => {
+  it('fracionado mostra o peso e não tem linha de veículo', () => {
     const t = resultadoParaCliente(
       estado({ etapa: 'pronto', origem: CAMPINAS, destino: BH, modalidade: 'fracionado', pesoKg: 500 }),
       { valor: 900 },
     );
-    expect(t).toContain('Fracionado');
-    expect(t).toContain('500 kg');
+    expect(t).toContain('Modalidade: Fracionado');
+    expect(t).toContain('Peso: 500 kg');
+    expect(t).not.toContain('Veículo');
   });
 });
 
@@ -170,8 +203,10 @@ describe('resultado — mensagem interna (resultadoInterno)', () => {
     expect(resultadoInterno(pronto, { valor: 5200 })).toContain('encaminhar ao cliente');
   });
 
-  it('NÃO tem o aviso de "valor de referência" — esse é só da mensagem-cliente', () => {
-    expect(resultadoInterno(pronto, { valor: 5200 })).not.toContain('referência');
+  it('TEM o aviso de "valor de referência" — a cautela migrou da mensagem-cliente pra cá', () => {
+    // Desde 20/08/2026 a mensagem-cliente termina na validade; a instrução de vendedor
+    // vive aqui, onde só o vendedor lê.
+    expect(resultadoInterno(pronto, { valor: 5200 })).toContain('referência');
   });
 
   it('o número da cotação também vai no título', () => {
