@@ -12,6 +12,13 @@ import { SenderService } from '@/application/sender/sender.service';
 import { renderEmailHtml, type EmailBrand } from '@/application/email/email-template';
 import { EmailReplyService } from '@/application/email/email-reply.service';
 import { identidadeDoMercado } from '@/application/email/email-market-identity';
+import { AnthropicService } from '@/shared/ai/anthropic.service';
+import {
+  SISTEMA_RASCUNHO,
+  promptDoRascunho,
+  peneirarRascunhos,
+  type RascunhoDeModelo,
+} from './template-draft';
 
 export interface TemplateInput {
   productCode: string;
@@ -35,7 +42,76 @@ export class MessageTemplatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailReply: EmailReplyService,
+    private readonly ai: AnthropicService,
   ) {}
+
+  /**
+   * Rascunha modelos a partir do ROTEIRO APROVADO do mercado (19/08/2026).
+   *
+   * Fecha o elo que faltava na esteira: `market_assets` e `message_templates` eram
+   * tabelas sem referência uma à outra, e nenhum código lia a primeira para escrever a
+   * segunda. Quem aprovava um plano de 11 KB abria esta tela e via zero modelos — o
+   * documento ficava do lado, para ser relido e redigitado à mão.
+   *
+   * Devolve PROPOSTA, não grava nada. Quem salva é a pessoa, depois de ler e de rodar
+   * o "Gerar teste" para ver como a mensagem chega. Afrouxar isso justamente no passo
+   * em que quem escreveu foi a máquina seria trocar a revisão pelo palpite dela.
+   */
+  async rascunhar(
+    tenantId: string,
+    productCode: string,
+    canal: 'email' | 'whatsapp',
+    quantos: number,
+  ): Promise<RascunhoDeModelo[]> {
+    const roteiros = await this.prisma.marketAsset.findMany({
+      // `approved` e `plan`: portfólio é PDF (não tem texto para ler) e pendente é,
+      // por definição, texto que ninguém revisou — a fonte do rascunho não pode ser
+      // menos confiável que o que a aprovação garante.
+      where: { tenantId, productCode, kind: 'plan', status: 'approved' },
+      select: { name: true, content: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const comTexto = roteiros.filter((r): r is { name: string; content: string } => !!r.content);
+    if (!comTexto.length) {
+      throw new BadRequestException(
+        'Este mercado ainda não tem roteiro aprovado. Suba e aprove o plano em Validação de campanha.',
+      );
+    }
+
+    let bruto: unknown;
+    try {
+      bruto = await this.ai.completeJson(
+        SISTEMA_RASCUNHO,
+        promptDoRascunho(canal, quantos, comTexto),
+        // Teto alto: são `quantos` mensagens inteiras, e cortar no meio devolve um
+        // JSON truncado que a peneira descarta por inteiro.
+        { maxTokens: 1200 + quantos * 500 },
+      );
+    } catch (e) {
+      // REGRA 3: o motivo original vai para o log antes de virar 4xx genérico.
+      this.logger.warn(
+        `Rascunho de modelos falhou (mercado=${productCode} canal=${canal}): ${(e as Error).message}`,
+      );
+      throw new BadRequestException(
+        'Não consegui rascunhar as mensagens agora. Tente de novo em alguns instantes.',
+      );
+    }
+
+    const rascunhos = peneirarRascunhos(bruto, canal, quantos);
+    if (!rascunhos.length) {
+      this.logger.warn(`Rascunho de modelos veio vazio ou fora de formato (mercado=${productCode})`);
+      throw new BadRequestException(
+        'A resposta veio fora do formato esperado. Tente de novo.',
+      );
+    }
+
+    this.logger.log(
+      `Rascunhou ${rascunhos.length} modelo(s) de ${canal} a partir de ` +
+        `${comTexto.length} roteiro(s) aprovado(s) em ${productCode}`,
+    );
+    return rascunhos;
+  }
 
   /**
    * `somenteAprovados` é o que o seletor do Disparo pede: rascunho não pode ser

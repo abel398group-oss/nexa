@@ -21,7 +21,15 @@ function makeSvc(mercado: any = null) {
     },
   };
   const emailReply = { sendAlertEmail: vi.fn().mockResolvedValue({ sent: true }) };
-  return { svc: new MessageTemplatesService(prisma as any, emailReply as any), prisma, emailReply };
+  // O rascunho a partir do roteiro aprovado chama a IA; nestes testes ela só precisa
+  // existir e não ser tocada — a regra do rascunho tem spec própria (template-draft).
+  const ai = { completeJson: vi.fn() };
+  return {
+    svc: new MessageTemplatesService(prisma as any, emailReply as any, ai as any),
+    prisma,
+    emailReply,
+    ai,
+  };
 }
 
 describe('MessageTemplatesService — criação', () => {

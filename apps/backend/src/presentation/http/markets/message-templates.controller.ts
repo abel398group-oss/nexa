@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, Min, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { Trim, NOME_MAX } from '@/shared/dto/trim.decorator';
 import { Type } from 'class-transformer';
 import { MessageTemplatesService } from '@/application/markets/message-templates.service';
@@ -52,6 +52,14 @@ class SendTestDto {
   @IsString() @MinLength(1) body!: string;
 }
 
+class RascunharDto {
+  @IsString() @MinLength(1) productCode!: string;
+  @IsIn(['email', 'whatsapp']) channel!: string;
+  /// Teto de 6: acima disso a cadência vira insistência, e o custo por clique sobe
+  /// sem a lista responder mais.
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(6) quantos?: number;
+}
+
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePerm('campaigns')
 @Controller('message-templates')
@@ -83,6 +91,23 @@ export class MessageTemplatesController {
   @Post('send-test')
   sendTest(@CurrentTenant() tenantId: string, @Body() dto: SendTestDto) {
     return this.templates.sendTest(tenantId, dto.to, dto);
+  }
+
+  /**
+   * Rascunha modelos a partir do roteiro APROVADO do mercado.
+   *
+   * `POST` e não `GET` porque a chamada custa tokens e não é idempotente — cada
+   * clique gera um texto novo. Nada é gravado: a resposta é proposta, e quem salva
+   * continua sendo quem lê.
+   */
+  @Post('rascunhar')
+  rascunhar(@CurrentTenant() tenantId: string, @Body() dto: RascunharDto) {
+    return this.templates.rascunhar(
+      tenantId,
+      dto.productCode,
+      dto.channel as 'email' | 'whatsapp',
+      dto.quantos ?? 4,
+    );
   }
 
   @Post()

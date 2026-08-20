@@ -65,3 +65,27 @@ export async function sendTemplateTest(input: {
   const r = await api.post('/message-templates/send-test', input);
   return r.data;
 }
+
+/** Uma proposta de modelo — ainda NÃO salva. Espelha o formulário desta tela. */
+export interface RascunhoDeModelo {
+  name: string;
+  subject: string;
+  body: string;
+  step: number;
+  /** Por que a IA propôs esta mensagem. Some ao salvar; serve para escolher. */
+  porque: string;
+}
+
+/**
+ * Rascunha modelos a partir do roteiro APROVADO do mercado.
+ *
+ * Devolve proposta, não grava: quem salva continua sendo quem lê, depois de rodar o
+ * "Gerar teste" e ver como a mensagem chega. É POST porque custa tokens e cada
+ * chamada devolve um texto novo — nada aqui é idempotente.
+ */
+export async function rascunharModelos(input: {
+  productCode: string; channel: 'email' | 'whatsapp'; quantos?: number;
+}): Promise<RascunhoDeModelo[]> {
+  const r = await api.post('/message-templates/rascunhar', input);
+  return r.data;
+}

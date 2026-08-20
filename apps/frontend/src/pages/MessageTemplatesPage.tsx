@@ -7,8 +7,8 @@ import { listMarkets } from '@/entities/market';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
   listTemplates, createTemplate, archiveTemplate, approveTemplate, unapproveTemplate,
-  previewTemplate, sendTemplateTest,
-  type MessageTemplate, type TemplatePreview,
+  previewTemplate, sendTemplateTest, rascunharModelos,
+  type MessageTemplate, type TemplatePreview, type RascunhoDeModelo,
 } from '@/entities/message-template';
 
 /**
@@ -42,6 +42,10 @@ export function MessageTemplatesPage() {
   const [corpo, setCorpo] = useState('');
   const [passo, setPasso] = useState(1);
   const [previa, setPrevia] = useState<TemplatePreview | null>(null);
+  /// Propostas vindas do roteiro aprovado. Vivem só na tela: escolher uma joga o
+  /// texto no formulário, e a partir daí é o mesmo caminho de sempre — ler, testar,
+  /// salvar. Nada aqui está gravado.
+  const [rascunhos, setRascunhos] = useState<RascunhoDeModelo[]>([]);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // O market vem do cabeçalho do cockpit, compartilhado com as outras abas. Antes
@@ -59,6 +63,32 @@ export function MessageTemplatesPage() {
     onSuccess: setPrevia,
     onError: () => toast.error('Não consegui gerar o teste.'),
   });
+
+  /// Lê o roteiro aprovado do mercado e propõe a cadência. Não grava nada — quem
+  /// salva continua sendo quem lê.
+  const rascunhar = useMutation({
+    mutationFn: () => rascunharModelos({ productCode: codigo, channel: canal, quantos: 4 }),
+    onSuccess: (r) => {
+      setRascunhos(r);
+      toast.success(`${r.length} proposta(s) a partir do roteiro aprovado. Escolha uma para editar.`);
+    },
+    // A mensagem do servidor é específica ("este mercado não tem roteiro aprovado"),
+    // e trocá-la por um genérico manda a pessoa procurar defeito no lugar errado.
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não consegui rascunhar as mensagens.'),
+  });
+
+  /// Joga a proposta no formulário. A partir daqui é o caminho de sempre: ler,
+  /// "Gerar teste", salvar. A lista some para a tela não sugerir que o que está no
+  /// formulário ainda é "a proposta número 2".
+  function usarRascunho(r: RascunhoDeModelo) {
+    setNome(r.name);
+    setAssunto(r.subject);
+    setCorpo(r.body);
+    setPasso(r.step);
+    setPrevia(null); // a prévia é do texto ANTERIOR; deixá-la seria mostrar outra mensagem
+    setRascunhos([]);
+  }
 
   const salvar = useMutation({
     mutationFn: () =>
@@ -200,6 +230,18 @@ export function MessageTemplatesPage() {
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* Primeiro botão da fila: é por onde a mensagem NASCE quando existe roteiro
+              aprovado. Os outros dois agem sobre um texto que já está escrito. */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!codigo || rascunhar.isPending}
+            onClick={() => rascunhar.mutate()}
+            title="Lê o roteiro aprovado deste mercado e propõe a cadência"
+          >
+            <Icon name="bot" className="h-4 w-4" />
+            {rascunhar.isPending ? 'Lendo o roteiro…' : 'Gerar do roteiro'}
+          </Button>
           <Button size="sm" variant="outline" disabled={!podeGerar || gerar.isPending} onClick={() => gerar.mutate()}>
             <Icon name="play" className="h-4 w-4" /> Gerar teste
           </Button>
@@ -217,6 +259,53 @@ export function MessageTemplatesPage() {
             </span>
           )}
         </div>
+
+        {/* Propostas do roteiro. Ficam AQUI, entre o formulário e a prévia, porque é
+            daqui que o texto vai para o campo de cima — e some assim que uma é
+            escolhida, para a tela nunca sugerir que o formulário ainda é "a proposta
+            número 2". Nada disto está salvo. */}
+        {rascunhos.length > 0 && (
+          <div className="mt-4 border-t border-base-200 pt-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                Propostas do roteiro aprovado — nenhuma salva ainda
+              </span>
+              <button
+                type="button"
+                className="text-xs text-base-content/50 hover:text-base-content"
+                onClick={() => setRascunhos([])}
+              >
+                descartar
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {rascunhos.map((r, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => usarRascunho(r)}
+                  className="rounded-lg border border-base-200 p-3 text-left transition-colors hover:border-brand-500 hover:bg-brand-500/5"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium">{r.name}</span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-base-content/40">
+                      toque {r.step}
+                    </span>
+                  </div>
+                  {r.subject && (
+                    <p className="mt-0.5 text-xs text-base-content/70">Assunto: {r.subject}</p>
+                  )}
+                  <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-base-content/60">
+                    {r.body.length > 220 ? `${r.body.slice(0, 220)}…` : r.body}
+                  </p>
+                  {r.porque && (
+                    <p className="mt-1 text-[11px] italic text-base-content/40">{r.porque}</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── Como chega ───────────────────────────────────────────────────── */}
