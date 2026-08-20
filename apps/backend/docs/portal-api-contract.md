@@ -521,7 +521,7 @@ Content-Type: application/json
 | `suspects[].paths` | não | Máx. 20; a mensagem mostra 3. |
 | `dryRun` | não | Valida e devolve `preview` **sem enviar e sem consumir o ritmo**. |
 
-**Resposta `200`:**
+**Resposta `201`** (padrão do NestJS para POST — trate qualquer `2xx` como sucesso):
 
 ```json
 { "received": 3, "alerted": 1, "throttled": 2, "dryRun": false,
