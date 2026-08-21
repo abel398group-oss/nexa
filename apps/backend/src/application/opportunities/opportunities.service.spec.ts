@@ -10,6 +10,14 @@ function makePrisma() {
     },
     opportunityStageHistory: { create: vi.fn() },
     partner: { findFirst: vi.fn() },
+    // `createFromLead` deriva a campanha de origem lendo a última mensagem de
+    // campanha da conversa. Sem o modelo no mock base, todo teste que cria lead
+    // estourava com "Cannot read properties of undefined" — e o `.catch` do serviço
+    // não pega, porque o erro é síncrono, antes da promise existir.
+    // `null` por padrão = lead que não veio de disparo, que é o caso da maioria
+    // destes testes; quem precisar de campanha sobrescreve.
+    aiMessage: { findFirst: vi.fn().mockResolvedValue(null) },
+    contact: { findFirst: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(),
   } as any;
 }
@@ -159,6 +167,10 @@ describe('OpportunitiesService', () => {
     it('idempotente: conversa que ja virou oportunidade nao duplica', async () => {
       prisma.aiConversation.findFirst.mockResolvedValue({ id: 'c1', phone: '5511', contactId: null, assignedSellerId: null });
       prisma.opportunity.findFirst.mockResolvedValue({ id: 'existente', assignedSellerId: 's1' });
+      // A oportunidade encontrada ADOTA a conversa (não devolve intacta), então o
+      // caminho passa por `update`. O que o teste afirma continua sendo o mesmo:
+      // não nasce uma segunda oportunidade.
+      prisma.opportunity.update.mockResolvedValue({ id: 'existente', conversationId: 'c1' });
 
       const out = await svc.createFromConversation('t1', 'c1');
 

@@ -434,26 +434,56 @@ export class OpportunitiesService {
   // duplicar o lead nem "reviver" um won/lost/discarded antigo do mesmo contato.
   async createFromLead(
     tenantId: string,
-    input: { conversationId?: string; contactId?: string; phone?: string; name?: string; company?: string; interestScore?: number; intent?: string; summary?: string; assignedTo?: string; assignedSellerId?: string },
+    input: { conversationId?: string; contactId?: string; phone?: string; name?: string; company?: string; interestScore?: number; intent?: string; summary?: string; assignedTo?: string; assignedSellerId?: string; productCode?: string | null },
   ) {
-    const dedupeWhere = input.conversationId
-      ? { tenantId, conversationId: input.conversationId }
-      : input.contactId
-        ? { tenantId, contactId: input.contactId, stage: { notIn: ['won', 'lost', 'discarded'] } }
-        : null;
+    let existing = input.conversationId
+      ? await this.prisma.opportunity.findFirst({ where: { tenantId, conversationId: input.conversationId } })
+      : null;
 
-    if (dedupeWhere) {
-      const existing = await this.prisma.opportunity.findFirst({ where: dedupeWhere as any });
-      if (existing) {
-        // cast: campo novo pre-`prisma generate` (ver comentario no moveStage)
-        if (!(existing as any).assignedSellerId && input.assignedSellerId) {
-          return this.prisma.opportunity.update({
-            where: { id: existing.id },
-            data: { assignedSellerId: input.assignedSellerId, assignedTo: input.assignedTo ?? existing.assignedTo } as any,
-          });
-        }
-        return existing;
+    // Fallback por CONTATO quando a busca por conversa não achou (21/08/2026).
+    //
+    // O lead importado por CSV nasce com `conversationId: null` (a campanha nunca
+    // atualiza a oportunidade), então quando ele respondia e chegava aqui com a
+    // conversa, o dedup por conversationId não encontrava NADA e nascia uma
+    // SEGUNDA oportunidade — todo lead de lista aparecia duplicado na fila do SDR,
+    // muitas vezes com donos diferentes (rodízio vs distribuição do lote).
+    //
+    // Só contra oportunidades ABERTAS (não "revive" won/lost/discarded) e só do
+    // MESMO mercado ou sem mercado: a mesma transportadora pode ser lead legítimo
+    // de dois mercados — duas oportunidades, dois donos (ver schema.prisma).
+    if (!existing && input.contactId) {
+      existing = await this.prisma.opportunity.findFirst({
+        where: {
+          tenantId,
+          contactId: input.contactId,
+          stage: { notIn: ['won', 'lost', 'discarded'] },
+          ...(input.productCode
+            ? { OR: [{ productCode: null }, { productCode: input.productCode }] }
+            : {}),
+        } as any,
+        orderBy: { createdAt: 'asc' }, // a do lote veio primeiro — é ela que adota a conversa
+      });
+    }
+
+    if (existing) {
+      // ADOTA em vez de devolver intacta: a oportunidade do lote ganha a conversa
+      // (rastreabilidade e a aba Conversa do cockpit), a campanha de origem e o
+      // mercado que faltavam — sem isso o SDR com escopo de mercado nunca a via.
+      const adocao: Record<string, unknown> = {};
+      if (input.conversationId && !(existing as any).conversationId) {
+        adocao.conversationId = input.conversationId;
+        const campanha = await this.campanhaDeOrigem(input.conversationId);
+        if (campanha && !(existing as any).campaignId) adocao.campaignId = campanha;
       }
+      if (input.productCode && !(existing as any).productCode) adocao.productCode = input.productCode;
+      if (!(existing as any).assignedSellerId && input.assignedSellerId) {
+        adocao.assignedSellerId = input.assignedSellerId;
+        adocao.assignedTo = input.assignedTo ?? existing.assignedTo;
+      }
+      if (Object.keys(adocao).length) {
+        return this.prisma.opportunity.update({ where: { id: existing.id }, data: adocao as any });
+      }
+      return existing;
     }
     // Nome e empresa do contato quando o chamador nao passou (2026-08-05): a
     // lista da campanha ja trazia e o contato foi criado com eles, mas o
@@ -468,6 +498,37 @@ export class OpportunitiesService {
       company = company ?? contato?.company ?? undefined;
     }
 
-    return this.prisma.opportunity.create({ data: { tenantId, stage: 'new', ...input, name, company } as any });
+    const campaignId = await this.campanhaDeOrigem(input.conversationId);
+
+    return this.prisma.opportunity.create({
+      data: { tenantId, stage: 'new', ...input, name, company, campaignId } as any,
+    });
+  }
+
+  /**
+   * Qual disparo trouxe este lead (21/08/2026).
+   *
+   * Derivado, e não recebido do chamador: a atribuição precisa valer para as DUAS
+   * portas que criam oportunidade — o lead quente e o morno —, e depender de cada uma
+   * lembrar de passar o campo é depender de alguém não esquecer. Aqui é o ponto por
+   * onde as duas passam.
+   *
+   * A campanha mora na MENSAGEM (`AiMessage.campaignId`, gravado no disparo), não na
+   * conversa: a mesma conversa pode receber várias campanhas ao longo de meses.
+   *
+   * `desc` de propósito: quando houve mais de uma, a que fez o lead responder é a
+   * ÚLTIMA antes da resposta, não a primeira que já tinha sido ignorada. Atribuir à
+   * primeira daria crédito à campanha que não converteu.
+   */
+  private async campanhaDeOrigem(conversationId?: string): Promise<string | null> {
+    if (!conversationId) return null;
+    const msg = await this.prisma.aiMessage
+      .findFirst({
+        where: { conversationId, direction: 'outbound', campaignId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        select: { campaignId: true },
+      })
+      .catch(() => null);
+    return msg?.campaignId ?? null;
   }
 }
