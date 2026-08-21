@@ -79,6 +79,18 @@ export async function descartarLead(
   return r.data;
 }
 
+/**
+ * Recalibra o termômetro do lead.
+ *
+ * O número era escrito só pela IA, a partir do texto que o lead mandou. Quem falou
+ * com a pessoa sabe mais que o classificador — e o servidor grava uma atividade com o
+ * de-para, para depois se saber quem mexeu.
+ */
+export async function ajustarScore(id: string, interestScore: number) {
+  const r = await api.patch(`/sdr/opportunities/${id}/score`, { interestScore });
+  return r.data;
+}
+
 export async function transferirParaCloser(
   id: string,
   dados: {

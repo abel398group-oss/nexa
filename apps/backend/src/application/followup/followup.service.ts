@@ -116,6 +116,39 @@ export class FollowUpService {
     this.logger.debug(`Follow-up parado p/ conversa ${conversationId} (${reason})`);
   }
 
+  /**
+   * Para a cadência de um TELEFONE — o caminho do vendedor humano (20/08/2026).
+   *
+   * ## Por que por telefone, e não por conversa
+   *
+   * `stop()` exige o id da conversa, que é o que o WhatsApp tem em mãos quando o lead
+   * responde. O SDR não tem: ele trabalha uma oportunidade, e a oportunidade importada
+   * de um CSV nasce sem `conversationId` — a conversa só passa a existir quando a
+   * campanha dispara. Exigir o id ali deixaria justamente o lead de lista, que é a
+   * maioria, sem como calar o robô.
+   *
+   * ## Por que isto precisa existir
+   *
+   * A cadência só parava quando o LEAD respondia. O vendedor ligar, conversar vinte
+   * minutos e registrar a atividade não parava nada: no dia seguinte o automático
+   * mandava "passando pra saber se você viu minha mensagem", como se ninguém tivesse
+   * falado com ele. O lead conclui que é robô, ou que o vendedor não anotou.
+   *
+   * O kill switch da Lia não cobria isso — `followup.service` nunca consultou a
+   * autonomia, então "desligar a IA" nunca desligou a cadência.
+   */
+  async stopByPhone(tenantId: string, phone: string, reason = 'vendedor assumiu') {
+    if (!phone) return 0;
+    const r = await this.prisma.followUp.updateMany({
+      where: { tenantId, phone, status: 'pending' },
+      data: { status: 'stopped' },
+    });
+    if (r.count) {
+      this.logger.log(`Follow-up parado p/ ${phone}: ${r.count} cadência(s) — ${reason}`);
+    }
+    return r.count;
+  }
+
   list(tenantId: string) {
     return this.prisma.followUp.findMany({ where: { tenantId }, orderBy: { nextRunAt: 'asc' } });
   }

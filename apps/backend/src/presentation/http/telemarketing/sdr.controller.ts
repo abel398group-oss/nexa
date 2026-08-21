@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '@/shared/auth/jwt-auth.guard';
 import { PermissionsGuard, RequirePerm } from '@/shared/auth/permissions.guard';
 import { CurrentTenant, CurrentUser } from '@/shared/decorators/current-user.decorator';
 import {
+  AjustarScoreDto,
   DescartarDto,
   PausarDto,
   RegistrarAtividadeDto,
@@ -87,6 +88,24 @@ export class SdrController {
     @Query('q') q?: string,
   ) {
     return this.sdr.materialDoMercado(tenantId, productCode, q, user);
+  }
+
+  /**
+   * O SDR recalibra o score do lead.
+   *
+   * O número era escrito só pela IA, a partir do texto. Quem falou com a pessoa sabe
+   * mais que o classificador — e a mudança fica registrada como atividade, com o
+   * de-para, senão o score muda e ninguém sabe quem mexeu.
+   */
+  @Patch('opportunities/:id/score')
+  @RequirePerm('sdr')
+  ajustarScore(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Param('id') id: string,
+    @Body() dto: AjustarScoreDto,
+  ) {
+    return this.sdr.ajustarScore(tenantId, user, id, dto.interestScore);
   }
 
   /// Material aprovado do mercado (roteiro + portfólio validados na Validação de

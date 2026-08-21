@@ -1,8 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
 import { MarketAssetsService } from '@/application/markets/market-assets.service';
+import { FollowUpService } from '@/application/followup/followup.service';
 import { agruparPorContato, ordenarFila } from './sdr-queue';
 import { naoAusente } from './seller-availability';
 
@@ -11,10 +12,13 @@ const ETAPAS_DO_SDR = ['new'];
 
 @Injectable()
 export class SdrService {
+  private readonly logger = new Logger('Sdr');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly marketScope: MarketScopeService,
     private readonly marketAssets: MarketAssetsService,
+    private readonly followup: FollowUpService,
   ) {}
 
   /**
@@ -49,6 +53,13 @@ export class SdrService {
         company: true,
         phone: true,
         assignedSellerId: true,
+        // Termômetro do lead. Era calculado pela IA, gravado no banco e SUMIA aqui:
+        // o `select` não o trazia, então a fila mostrava tentativa e prioridade sem
+        // nunca dizer quanto o lead vale (20/08/2026).
+        interestScore: true,
+        // A chave da aba Conversa do cockpit. Sem ela a tela não tem o que abrir —
+        // é null no lead que veio de CSV e ainda não recebeu campanha.
+        conversationId: true,
         // `Opportunity` não declara relação com `Contact` — só guarda `contactId`.
         // Então a ficha vem numa segunda query em lote, nunca uma por lead.
         contactId: true,
@@ -77,6 +88,11 @@ export class SdrService {
             phone: true,
             email: true,
             fleetSize: true,
+            // Temperatura e marcação que a operação já mantinha no contato e que a
+            // mesa nunca mostrou — o SDR abria a ficha sem saber se aquele lead já
+            // tinha sido classificado.
+            leadStatus: true,
+            tags: true,
             batch: { select: { id: true, name: true, source: true } },
           },
         })
@@ -125,7 +141,7 @@ export class SdrService {
       );
     }
 
-    return this.prisma.sellerActivity.create({
+    const atividade = await this.prisma.sellerActivity.create({
       data: {
         tenantId,
         sellerId,
@@ -137,6 +153,83 @@ export class SdrService {
         scriptVersion: dados.scriptVersion ?? null,
       },
     });
+
+    /**
+     * O vendedor assumiu — o robô cala (20/08/2026).
+     *
+     * A cadência automática só parava quando o LEAD respondia. O SDR ligar, conversar
+     * e registrar não parava nada: no dia seguinte o follow-up mandava "passando pra
+     * saber se você viu minha mensagem", como se ninguém tivesse falado com ele.
+     *
+     * Desligar a Lia nunca cobriu isso: `followup.service` não consulta a autonomia,
+     * é um relógio à parte. Enquanto a operação é manual, quem decide o próximo toque
+     * é quem falou com a pessoa.
+     *
+     * Best-effort de propósito: falhar aqui não pode derrubar o registro da atividade,
+     * que é o esforço do vendedor e a base da comissão. Mas some do log NUNCA (REGRA 3).
+     */
+    if (oportunidade.phone) {
+      await this.followup
+        .stopByPhone(tenantId, oportunidade.phone, `SDR registrou ${dados.type}`)
+        .catch((e) =>
+          this.logger.warn(
+            `Não consegui parar a cadência de ${oportunidade.phone} ` +
+              `(oportunidade ${oportunidade.id}): ${(e as Error).message}`,
+          ),
+        );
+    }
+
+    return atividade;
+  }
+
+  /**
+   * O SDR recalibra o score do lead (20/08/2026).
+   *
+   * O `interestScore` era escrito só pela IA, a partir do texto que o lead mandou.
+   * Quem falou com a pessoa por telefone sabe mais que o modelo: o lead que escreveu
+   * "manda mais informação" pode ter dito na ligação que decide na semana que vem, e
+   * nada disso passa por um classificador de mensagem.
+   *
+   * A mudança grava uma atividade junto, com o de-para no texto. Sem esse registro o
+   * número muda e ninguém sabe quem mexeu nem por quê — e a comparação entre a
+   * calibragem humana e a da IA, que é o que dá para aprender disto, fica impossível.
+   */
+  async ajustarScore(
+    tenantId: string,
+    user: UsuarioComEscopo & { sellerId?: string | null },
+    opportunityId: string,
+    score: number,
+  ) {
+    const atual = await this.doEscopo(tenantId, user, opportunityId);
+
+    // Fora da faixa não é ajuste, é engano — e um score de 250 estragaria em silêncio
+    // toda ordenação e todo corte de "lead quente" daqui para a frente.
+    if (!Number.isInteger(score) || score < 0 || score > 100) {
+      throw new ForbiddenException('O score precisa ser um número inteiro de 0 a 100.');
+    }
+
+    const anterior = (atual as any).interestScore ?? 0;
+    if (anterior === score) return atual;
+
+    const atualizada = await this.prisma.opportunity.update({
+      where: { id: opportunityId },
+      data: { interestScore: score },
+    });
+
+    // A atividade é o registro de quem mexeu. Best-effort: se o vendedor não tem
+    // vínculo, o ajuste vale do mesmo jeito — recusar a recalibragem por causa do
+    // histórico seria proteger o registro contra o próprio trabalho.
+    await this.registrarAtividade(tenantId, user, {
+      opportunityId,
+      type: 'note',
+      result: 'outro',
+      notes: `Score ajustado de ${anterior} para ${score} pelo vendedor.`,
+    }).catch(() => null);
+
+    this.logger.log(
+      `Score da oportunidade ${opportunityId}: ${anterior} → ${score} (vendedor ${user.sellerId ?? '—'})`,
+    );
+    return atualizada;
   }
 
   /// "Ligar depois" com data: sai da fila até o prazo. A atividade fica registrada
@@ -408,6 +501,10 @@ export class SdrService {
         assignedSellerId: true,
         contactId: true,
         productCode: true,
+        // Usado para calar a cadência automática quando o vendedor assume o lead
+        // (ver `registrarAtividade`). O `FollowUp` é indexado por telefone, e não por
+        // oportunidade — lead de CSV não tem conversa até a campanha disparar.
+        phone: true,
       },
     });
     if (!o) throw new NotFoundException('Oportunidade não encontrada.');

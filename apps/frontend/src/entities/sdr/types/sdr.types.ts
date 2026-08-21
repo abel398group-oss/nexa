@@ -20,6 +20,10 @@ export interface FichaDoContato {
   phone: string;
   email: string | null;
   fleetSize: number | null;
+  /// new | cold | warm | hot — a classificação que a operação já mantinha no contato
+  /// e que a mesa nunca mostrou.
+  leadStatus: string | null;
+  tags: string[];
   batch: { id: string; name: string; source: string | null } | null;
 }
 
@@ -33,6 +37,13 @@ export interface ItemDaFila {
   phone: string | null;
   assignedSellerId: string | null;
   contactId: string | null;
+  /// Termômetro do lead, 0 a 100. Vinha sendo calculado pela IA e gravado no banco,
+  /// mas o payload da fila não o trazia — a mesa mostrava tentativa e prioridade sem
+  /// nunca dizer quanto o lead vale. Editável pelo SDR desde 20/08/2026.
+  interestScore: number;
+  /// Conversa deste lead, quando existe. É a chave da aba Conversa do cockpit; nula
+  /// no lead que veio de CSV e ainda não recebeu campanha.
+  conversationId: string | null;
   contact: FichaDoContato | null;
   activities: AtividadeRecente[];
   tentativas: number;

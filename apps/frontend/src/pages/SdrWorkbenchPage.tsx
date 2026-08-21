@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
+  Icon,
   Input,
   Label,
   Modal,
@@ -15,6 +16,7 @@ import { podeDiscar } from '@/shared/lib/dialable';
 import { identidadeVisivel } from '@/shared/lib/conversation';
 import { getRoteiro } from '@/entities/sales-script';
 import {
+  ajustarScore,
   descartarLead,
   listClosers,
   listMaterial,
@@ -209,6 +211,39 @@ export function SdrWorkbenchPage() {
   );
 }
 
+/**
+ * Termômetro do lead, 0 a 100, em cinco bolinhas.
+ *
+ * Convive com o selo de prioridade em vez de substituí-lo, porque as duas coisas
+ * respondem perguntas diferentes: prioridade diz O QUE FAZER AGORA (quem prometeu
+ * retorno para hoje vem antes), score diz QUANTO O LEAD VALE. Um lead morno com
+ * retorno prometido continua sendo o próximo a ligar.
+ */
+function Termometro({ score, className = '' }: { score: number; className?: string }) {
+  const cheias = Math.round(Math.min(100, Math.max(0, score)) / 20);
+  return (
+    <span
+      className={'inline-flex items-center gap-1 ' + className}
+      title={`Interesse ${score} de 100`}
+    >
+      <span className="tracking-tight" aria-hidden>
+        {'●'.repeat(cheias)}
+        <span className="text-base-content/25">{'○'.repeat(5 - cheias)}</span>
+      </span>
+      <span className="sr-only">Interesse {score} de 100</span>
+    </span>
+  );
+}
+
+/// Frio some, quente aparece. Zero é o estado de quem nunca foi classificado — pintar
+/// isso de vermelho diria "lead ruim" onde a verdade é "ninguém olhou ainda".
+function corDoScore(score: number): string {
+  if (score >= 70) return 'text-red-500';
+  if (score >= 40) return 'text-amber-500';
+  if (score > 0) return 'text-brand-600';
+  return 'text-base-content/30';
+}
+
 const COR_PRIORIDADE: Record<string, string> = {
   retorno_hoje: 'bg-amber-100 text-amber-800',
   nunca_tocado: 'bg-brand-500/10 text-brand-700',
@@ -266,6 +301,12 @@ function Fila({
                   >
                     {ROTULO_PRIORIDADE[f.prioridade]}
                   </span>
+                  {/* Termômetro antes das tentativas: esforço já gasto é histórico,
+                      temperatura é o que decide se vale gastar mais. */}
+                  <Termometro
+                    score={f.interestScore ?? 0}
+                    className={'text-[10px] ' + corDoScore(f.interestScore ?? 0)}
+                  />
                   {f.tentativas > 0 && (
                     <span className="text-[10px] text-base-content/50">
                       {f.tentativas} {f.tentativas === 1 ? 'tentativa' : 'tentativas'}
@@ -586,6 +627,91 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string | number | nul
   );
 }
 
+/**
+ * O termômetro do lead, editável pelo SDR.
+ *
+ * O número vinha só da IA, que lê o texto que o lead escreveu. Quem falou com a pessoa
+ * por telefone sabe coisas que não passam por um classificador de mensagem — que ele
+ * decide junto com o sócio, que o orçamento vira mês que vem. Recalibrar é o SDR
+ * devolvendo ao sistema o que a ligação ensinou.
+ *
+ * Fecha ao salvar e ao cancelar; o servidor grava uma atividade com o de-para, então a
+ * mudança não é silenciosa nem irrastreável.
+ */
+function ScoreDoLead({ lead }: { lead: ItemDaFila }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(lead.interestScore ?? 0);
+
+  // O lead muda debaixo do componente quando o SDR troca de item na fila. Sem isto o
+  // seletor abriria com o número do lead anterior.
+  useEffect(() => {
+    setValor(lead.interestScore ?? 0);
+    setEditando(false);
+  }, [lead.id, lead.interestScore]);
+
+  const salvar = useMutation({
+    mutationFn: () => ajustarScore(lead.id, valor),
+    onSuccess: () => {
+      toast.success('Termômetro atualizado.');
+      setEditando(false);
+      void qc.invalidateQueries({ queryKey: ['sdr', 'queue'] });
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não consegui ajustar o termômetro.'),
+  });
+
+  const atual = lead.interestScore ?? 0;
+
+  if (!editando) {
+    return (
+      <div className="flex items-center justify-between gap-3 py-1 text-sm">
+        <span className="text-base-content/60">Interesse</span>
+        <button
+          type="button"
+          onClick={() => setEditando(true)}
+          className="flex items-center gap-1.5 rounded px-1 hover:bg-base-200"
+          title="Ajustar o termômetro deste lead"
+        >
+          <Termometro score={atual} className={corDoScore(atual)} />
+          <span className="text-xs text-base-content/50">{atual}</span>
+          <Icon name="edit" className="h-3 w-3 text-base-content/40" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-y border-base-200 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-base-content/60">Interesse</span>
+        <span className={'text-sm font-medium ' + corDoScore(valor)}>{valor}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={valor}
+        onChange={(e) => setValor(Number(e.target.value))}
+        className="mt-1 w-full accent-brand-500"
+      />
+      <div className="mt-1 flex items-center justify-end gap-2">
+        <Button size="xs" variant="ghost" onClick={() => { setValor(atual); setEditando(false); }}>
+          Cancelar
+        </Button>
+        <Button size="xs" loading={salvar.isPending} onClick={() => salvar.mutate()}>
+          Salvar
+        </Button>
+      </div>
+      <p className="mt-1 text-[11px] text-base-content/40">
+        Fica registrado no histórico com o valor anterior.
+      </p>
+    </div>
+  );
+}
+
 function FichaDoLead({ lead }: { lead: ItemDaFila }) {
   const c = lead.contact;
   const fone = c?.phone ?? lead.phone ?? null;
@@ -641,6 +767,7 @@ function FichaDoLead({ lead }: { lead: ItemDaFila }) {
         </div>
 
         <div className="mt-4 border-t border-base-300 pt-3">
+          <ScoreDoLead lead={lead} />
           <Linha rotulo="E-mail" valor={c?.email ?? null} />
           <Linha rotulo="Frota" valor={c?.fleetSize ? `${c.fleetSize} veículos` : null} />
           <Linha rotulo="Mercado" valor={lead.productCode} />

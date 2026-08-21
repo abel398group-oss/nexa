@@ -20,7 +20,12 @@ const MERCADO = 'int-transfer-tms';
 const service = new SdrService(
   prisma as any,
   new MarketScopeService(prisma as any),
-  new MarketAssetsService(prisma as any),
+  // KnowledgeService não é tocado neste cenário — o material aprovado só entra na
+  // mesa do SDR, e a transferência não lê nada dele.
+  new MarketAssetsService(prisma as any, {} as any),
+  // A cadência não é exercida aqui: o cenário não cria `FollowUp`, e `stopByPhone`
+  // num telefone sem cadência é um UPDATE que casa zero linhas.
+  { stopByPhone: async () => 0 } as any,
 );
 
 async function limpar() {

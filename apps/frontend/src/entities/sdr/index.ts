@@ -10,6 +10,7 @@ export type {
 export { ROTULO_PRIORIDADE, ROTULO_RESULTADO } from './types/sdr.types';
 
 export {
+  ajustarScore,
   descartarLead,
   listClosers,
   listMaterial,

@@ -11,6 +11,10 @@ import { SdrController } from '@/presentation/http/telemarketing/sdr.controller'
 import { CloserController } from '@/presentation/http/telemarketing/closer.controller';
 import { MarketScopeService } from '@/shared/auth/market-scope.service';
 import { MarketsModule } from '@/application/markets/markets.module';
+// A cadência automática precisa parar quando o SDR assume o lead (20/08/2026).
+// `FollowUpModule` importa só `ConversationsModule`, que não conhece telemarketing —
+// sem ciclo.
+import { FollowUpModule } from '@/application/followup/followup.module';
 
 /**
  * Módulo 1 do telemarketing (docs/features/telemarketing/prd.md).
@@ -29,7 +33,7 @@ import { MarketsModule } from '@/application/markets/markets.module';
  * SellersModule → EmailModule → AgentsModule).
  */
 @Module({
-  imports: [MarketsModule],
+  imports: [MarketsModule, FollowUpModule],
   controllers: [
     LeadBatchesController,
     SdrController,

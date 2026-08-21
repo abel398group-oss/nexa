@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsIn,
@@ -6,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -119,4 +121,20 @@ export class DescartarDto extends ComCarimboDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+}
+
+/**
+ * Recalibragem do score pelo vendedor.
+ *
+ * `Max(100)` aqui e a mesma checagem no service, de propósito: a faixa decide
+ * ordenação de fila e corte de lead quente, e um 250 que passasse estragaria os dois
+ * em silêncio. Regra que sustenta ordenação não fica só na borda.
+ */
+export class AjustarScoreDto {
+  @ApiProperty({ minimum: 0, maximum: 100, description: 'Temperatura do lead, 0 a 100.' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  interestScore!: number;
 }
