@@ -93,6 +93,23 @@ export class OpportunitiesController {
   }
 
   // F7 (RevOps): fila de trabalho do vendedor, ja priorizada. Antes de :id.
+  /**
+   * Leads sem dono — o ponto cego do funil.
+   *
+   * Antes de `:id` pelo mesmo motivo de `summary`: senão o Nest casaria
+   * "sem-dono" como um id.
+   *
+   * O VENDEDOR não vê esta lista, e é de propósito: ele não reatribui lead (o
+   * `update` já derruba `assignedSellerId` no escopo dele), então mostrar o que
+   * ele não pode resolver seria só ansiedade. Quem distribui é admin/gestor.
+   */
+  @Get('sem-dono')
+  semDono(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query('take') take?: string) {
+    if (sellerScopeOf(user)) return { total: 0, itens: [] };
+    const n = Number(take);
+    return this.opps.semDono(tenantId, Number.isFinite(n) ? n : 50);
+  }
+
   @Get('queue')
   queue(@CurrentTenant() tenantId: string, @CurrentUser() user: any, @Query('take') take?: string) {
     const n = take ? parseInt(take, 10) : 30;

@@ -100,3 +100,89 @@ describe('StaleLeadService', () => {
     await expect(svc.tick()).resolves.toBeUndefined();
   });
 });
+
+/**
+ * Lead órfão e lead parado são problemas diferentes — e mandá-los para o mesmo
+ * lugar quebrava os dois avisos.
+ *
+ * `/fila` esconde quem não tem dono (`sdr.service.ts`), então o SDR que clicasse
+ * num aviso de órfão caía numa lista onde aquele lead não está. Aviso que leva a
+ * lugar nenhum ensina a ignorar aviso.
+ */
+describe('StaleLeadService — órfão vai para quem pode distribuir', () => {
+  function cenario(oportunidades: any[]) {
+    const notifications = { create: vi.fn().mockResolvedValue({}) };
+    const prisma: any = {
+      opportunity: {
+        findMany: vi.fn().mockResolvedValue(oportunidades),
+        updateMany: vi.fn().mockResolvedValue({}),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      sellerActivity: { findMany: vi.fn().mockResolvedValue([]) },
+      leadBatch: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const svc = new StaleLeadService(prisma, notifications as any, {} as any);
+    return { svc, notifications, prisma };
+  }
+
+  const velho = new Date('2026-08-01T10:00:00Z');
+  const agora = new Date('2026-08-20T10:00:00Z');
+
+  it('lead COM dono é cobrança do dono, e aponta para a fila', async () => {
+    const { svc, notifications } = cenario([
+      { id: 'o1', tenantId: 't1', company: 'Transportes Silva', assignedSellerId: 's1', updatedAt: velho },
+    ]);
+
+    await svc.varrer(agora);
+
+    const aviso = notifications.create.mock.calls[0][1];
+    expect(aviso.title).toMatch(/Lead parado/);
+    expect(aviso.link).toBe('/fila');
+  });
+
+  it('lead SEM dono vira pedido de distribuição, e aponta para onde se atribui', async () => {
+    const { svc, notifications } = cenario([
+      { id: 'o1', tenantId: 't1', company: 'Ouro Cargo', assignedSellerId: null, updatedAt: velho },
+    ]);
+
+    await svc.varrer(agora);
+
+    const aviso = notifications.create.mock.calls[0][1];
+    expect(aviso.title).toMatch(/sem vendedor/);
+    // O texto NÃO manda "retomar": quem nunca recebeu o lead não tem o que retomar.
+    expect(aviso.body).toMatch(/[Dd]istribua/);
+    expect(aviso.link).toBe('/opportunities');
+  });
+
+  // Um pedido, uma notificação. Cinco órfãos não são cinco avisos do mesmo assunto.
+  it('vários órfãos viram UM aviso com a contagem', async () => {
+    const { svc, notifications } = cenario([
+      { id: 'o1', tenantId: 't1', company: 'A', assignedSellerId: null, updatedAt: velho },
+      { id: 'o2', tenantId: 't1', company: 'B', assignedSellerId: null, updatedAt: velho },
+      { id: 'o3', tenantId: 't1', company: 'C', assignedSellerId: null, updatedAt: velho },
+    ]);
+
+    await svc.varrer(agora);
+
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create.mock.calls[0][1].title).toMatch(/3 lead/);
+  });
+
+  it('lote importado e não distribuído é avisado pela causa, com link do lote', async () => {
+    const { svc, notifications, prisma } = cenario([]);
+    prisma.opportunity.findMany.mockResolvedValue([
+      { id: 'o1', tenantId: 't1', company: 'X', assignedSellerId: 's1', updatedAt: velho },
+    ]);
+    prisma.leadBatch.findMany.mockResolvedValue([
+      { id: 'b1', tenantId: 't1', name: 'Feira ago/26', createdAt: velho },
+    ]);
+    prisma.opportunity.count.mockResolvedValue(42);
+
+    await svc.varrer(agora);
+
+    const doLote = notifications.create.mock.calls.find((c: any[]) => /sem distribuir/.test(c[1].title));
+    expect(doLote).toBeTruthy();
+    expect(doLote![1].body).toMatch(/42 lead/);
+    expect(doLote![1].link).toBe('/lead-batches');
+  });
+});

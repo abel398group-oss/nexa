@@ -85,6 +85,52 @@ export class OpportunitiesService {
     return rows.map((r: any) => ({ stage: r.stage, count: r._count as number, value: Number(r._sum.value ?? 0) }));
   }
 
+  /** Etapas em que um lead ainda está vivo — as mesmas do funil aberto. */
+  private static readonly ABERTAS = ['new', 'contacted', 'qualified', 'proposal', 'negotiation'];
+
+  /**
+   * Leads sem dono — os que NENHUM SDR enxerga.
+   *
+   * A fila do SDR esconde oportunidade sem dono de propósito (`sdr.service.ts`):
+   * dois SDRs ligando para o mesmo lead é briga de comissão. A regra está certa, e
+   * cria um ponto cego — o lead existe no funil e não aparece para ninguém
+   * trabalhar. Sem esta consulta, só se descobre abrindo a tela como admin e
+   * reparando; com volume, não se descobre.
+   *
+   * `assignedSellerId: null` é a definição inteira de órfão: o lead morno nasce
+   * assim quando o contato não veio de um lote distribuído, e o lote importado e
+   * não distribuído deixa todos assim.
+   *
+   * Só faz sentido para quem PODE distribuir — por isso não recebe `sellerScope`:
+   * a rota já está atrás de permissão de gestão.
+   */
+  async semDono(tenantId: string, take = 50) {
+    const where = {
+      tenantId,
+      assignedSellerId: null,
+      stage: { in: OpportunitiesService.ABERTAS },
+    };
+
+    const [total, itens] = await Promise.all([
+      this.prisma.opportunity.count({ where }),
+      this.prisma.opportunity.findMany({
+        where,
+        // Mais antigo primeiro: é o que está esfriando há mais tempo, e é por ele
+        // que se começa a distribuir.
+        orderBy: { createdAt: 'asc' },
+        take: Math.min(take, 200),
+        // Sem `email`: a oportunidade não carrega o campo — quem tem é o Contact.
+        // Para distribuir basta saber de quem é o lead e de quando ele está parado.
+        select: {
+          id: true, name: true, company: true, phone: true,
+          productCode: true, stage: true, createdAt: true, batchId: true,
+        },
+      }),
+    ]);
+
+    return { total, itens };
+  }
+
   // America/Sao_Paulo nao observa horario de verao desde 2019 — deslocamento
   // fixo. Usado pra alinhar os buckets semanais ao calendario do Brasil sem
   // depender do TZ do processo/servidor (que pode estar em UTC em producao).

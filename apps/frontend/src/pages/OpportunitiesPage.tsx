@@ -21,6 +21,7 @@ import { displayPhone } from '@/shared/lib/phone';
 import { StandardListPage } from '@/components/shared/StandardListPage';
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable';
 import { listPartners, recordPartnerConsent, shareLeadWithPartner } from '@/entities/partner';
+import { listSellersMini } from '@/entities/seller';
 import type { EvolutionPoint } from './OpportunitiesEvolutionChart';
 
 // F6+: recharts em chunk async (mesmo padrão do DashboardActivityChart)
@@ -123,6 +124,34 @@ async function listOpportunities(params: { search?: string; stage?: string; limi
 async function getOpportunitiesSummary() {
   const r = await api.get('/opportunities/summary');
   return r.data as OppSummaryRow[];
+}
+
+/** Lead sem vendedor — ver `OpportunitiesService.semDono`. */
+interface LeadOrfao {
+  id: string;
+  name: string | null;
+  company: string | null;
+  phone: string | null;
+  stage: string;
+  createdAt: string;
+}
+
+/**
+ * Os leads que NENHUM SDR enxerga.
+ *
+ * A fila do SDR esconde oportunidade sem dono de propósito — dois SDRs no mesmo
+ * lead é briga de comissão. O efeito colateral é que o lead fica invisível para
+ * quem trabalha, e só quem distribui pode desfazer isso. O backend devolve lista
+ * vazia para vendedor: ele não reatribui lead, então mostrar seria só ansiedade.
+ */
+async function getLeadsSemDono() {
+  const r = await api.get('/opportunities/sem-dono?take=50');
+  return r.data as { total: number; itens: LeadOrfao[] };
+}
+
+/** Atribui o lead a um vendedor. Só admin/gestor — o backend recusa vendedor. */
+async function atribuirVendedor(id: string, sellerId: string) {
+  await api.patch(`/opportunities/${id}`, { assignedSellerId: sellerId });
 }
 
 // F6+: evolução semanal recebidos × fechados (escopo do usuário vem do JWT no backend)
@@ -242,6 +271,99 @@ function buildColumns(
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
+
+
+/**
+ * Painel dos leads sem vendedor.
+ *
+ * Fica no TOPO da tela de Oportunidades, e só aparece quando há o que resolver.
+ * O motivo de existir é um ponto cego: a fila do SDR esconde lead sem dono (dois
+ * SDRs no mesmo lead é briga de comissão), então esses leads não aparecem para
+ * ninguém trabalhar — e nada avisava. Um lote importado e não distribuído deixa
+ * a lista inteira assim, em silêncio.
+ *
+ * Mostra E resolve na mesma tela: avisar sem dar como agir é o erro que a gente
+ * acabou de corrigir no alerta de lead parado, que mandava o SDR para uma fila
+ * onde o lead não estava.
+ */
+function PainelSemDono() {
+  const toast = useToast();
+  const qc = useQueryClient();
+
+  const orfaosQ = useQuery({ queryKey: ['opportunities-sem-dono'], queryFn: getLeadsSemDono });
+  const sellersQ = useQuery({ queryKey: ['sellers-mini'], queryFn: listSellersMini });
+
+  const [aberto, setAberto] = useState(false);
+  const [atribuindo, setAtribuindo] = useState<string | null>(null);
+
+  const total = orfaosQ.data?.total ?? 0;
+  // Nada a resolver: o painel some. Um card zerado permanente vira paisagem.
+  if (total === 0) return null;
+
+  const vendedores = (sellersQ.data ?? []).filter((s: any) => s.active !== false);
+
+  async function atribuir(leadId: string, sellerId: string) {
+    if (!sellerId) return;
+    setAtribuindo(leadId);
+    try {
+      await atribuirVendedor(leadId, sellerId);
+      toast.success('Lead atribuído — já aparece na fila do vendedor.');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['opportunities-sem-dono'] }),
+        qc.invalidateQueries({ queryKey: ['opportunities'] }),
+      ]);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Nao consegui atribuir.');
+    } finally {
+      setAtribuindo(null);
+    }
+  }
+
+  return (
+    <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/50 dark:bg-amber-950/20">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            {total} lead(s) sem vendedor
+          </p>
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/70">
+            Nenhum SDR consegue ve-los: a fila so mostra lead com dono. Distribua para a fila andar.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => setAberto((v) => !v)}>
+          {aberto ? 'Fechar' : 'Ver e distribuir'}
+        </Button>
+      </div>
+
+      {aberto && (
+        <ul className="mt-3 flex max-h-80 flex-col gap-1 overflow-y-auto">
+          {(orfaosQ.data?.itens ?? []).map((l) => (
+            <li
+              key={l.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white/60 px-3 py-2 text-xs dark:border-amber-800/40 dark:bg-black/20"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                <strong>{l.company || l.name || l.phone || 'Lead sem nome'}</strong>
+                {l.phone && <span className="ml-2 text-base-content/50">{displayPhone(l.phone)}</span>}
+              </span>
+              <select
+                className="input !h-8 min-w-44 text-xs"
+                defaultValue=""
+                disabled={atribuindo === l.id}
+                onChange={(e) => void atribuir(l.id, e.target.value)}
+              >
+                <option value="">Atribuir a...</option>
+                {vendedores.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function OpportunitiesPage() {
   const qc = useQueryClient();
@@ -564,6 +686,7 @@ export function OpportunitiesPage() {
         }
         topContent={
           <>
+            <PainelSemDono />
             <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <KpiCard label="Total" value={String(totalCount)} sub={fmtBrl(totalValue)} tone="muted" />
               {STAGES.map((s) => {
