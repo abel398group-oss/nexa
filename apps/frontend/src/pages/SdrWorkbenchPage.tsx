@@ -15,6 +15,7 @@ import { useAuth } from '@/app/providers/AuthContext';
 import { podeDiscar } from '@/shared/lib/dialable';
 import { identidadeVisivel } from '@/shared/lib/conversation';
 import { getRoteiro } from '@/entities/sales-script';
+import { ConversaDoLead } from '@/components/sdr/ConversaDoLead';
 import {
   ajustarScore,
   qualificarLead,
@@ -51,6 +52,9 @@ export function SdrWorkbenchPage() {
   const [dialogo, setDialogo] = useState<'ligacao' | 'pausar' | 'descartar' | 'transferir' | null>(
     null,
   );
+  /// Aba do centro. Ver `AbasDoCentro` e o efeito abaixo, que escolhe sozinho pelo
+  /// estado do lead em vez de guardar uma preferência.
+  const [aba, setAba] = useState<'conversa' | 'roteiro'>('roteiro');
 
   const { data: fila = [], isLoading } = useQuery<ItemDaFila[]>({
     queryKey: ['sdr', 'queue'],
@@ -77,6 +81,21 @@ export function SdrWorkbenchPage() {
   useEffect(() => {
     if (!selecionado && fila.length) setSelecionado(fila[0].id);
   }, [fila, selecionado]);
+
+  /**
+   * A aba certa para ESTE lead, escolhida pelo estado dele.
+   *
+   * Já existe conversa → o SDR quer ler o que foi dito antes de agir. Não existe → é
+   * primeiro contato, e o trabalho é o roteiro no telefone.
+   *
+   * Depende do `lead.id`, e não do lead inteiro: sem isso qualquer refetch da fila
+   * (que roda ao registrar atividade) devolveria o SDR para a aba automática no meio
+   * de uma frase que ele estava escrevendo.
+   */
+  useEffect(() => {
+    if (lead) setAba(lead.conversationId ? 'conversa' : 'roteiro');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
 
   /// Chamado depois das ações que tiram o lead da fila. Anda para o próximo item da
   /// lista ATUAL, antes do refetch — assim a escolha não depende de quando a resposta
@@ -153,11 +172,26 @@ export function SdrWorkbenchPage() {
           onSelecionar={setSelecionado}
         />
         {lead ? (
-          // Roteiro à esquerda e maior: é o que ele lê enquanto fala. Ficha e histórico
-          // são consulta; o roteiro é o trabalho.
+          // Centro maior, ficha à direita: o centro é onde ele TRABALHA — lendo o
+          // roteiro numa ligação ou escrevendo na thread. Ficha e histórico são
+          // consulta.
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <RoteiroDoMercado productCode={lead.productCode} lead={lead} />
-            <FichaDoLead lead={lead} />
+            <div className="flex flex-col gap-2">
+              <AbasDoCentro aba={aba} onTrocar={setAba} temConversa={!!lead.conversationId} />
+              {aba === 'conversa' ? (
+                <ConversaDoLead
+                  conversationId={lead.conversationId}
+                  contactId={lead.contactId}
+                  productCode={lead.productCode}
+                  nomeDoLead={
+                    lead.contact?.name ?? lead.name ?? lead.contact?.company ?? 'este lead'
+                  }
+                />
+              ) : (
+                <RoteiroDoMercado productCode={lead.productCode} lead={lead} />
+              )}
+            </div>
+            <FichaDoLead lead={lead} onLigar={() => setAba('roteiro')} />
           </div>
         ) : (
           <Card className="flex items-center justify-center p-10 text-sm text-base-content/60">
@@ -244,6 +278,49 @@ function corDoScore(score: number): string {
   if (score >= 40) return 'text-amber-500';
   if (score > 0) return 'text-brand-600';
   return 'text-base-content/30';
+}
+
+/**
+ * As duas abas do centro.
+ *
+ * O SDR nunca está falando e digitando ao mesmo tempo: ou está numa ligação, e o
+ * roteiro é o trabalho, ou está respondendo por texto, e a thread é o trabalho. Somar
+ * uma quarta coluna espremeria as duas; alternar mantém a que ele está usando inteira
+ * na tela.
+ */
+function AbasDoCentro({
+  aba,
+  onTrocar,
+  temConversa,
+}: {
+  aba: 'conversa' | 'roteiro';
+  onTrocar: (a: 'conversa' | 'roteiro') => void;
+  temConversa: boolean;
+}) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-base-200 p-1 text-sm">
+      {(
+        [
+          ['conversa', temConversa ? '💬 Conversa' : '💬 Conversa'],
+          ['roteiro', '📖 Roteiro'],
+        ] as const
+      ).map(([k, label]) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => onTrocar(k)}
+          className={
+            'flex-1 rounded-md py-1.5 transition-colors ' +
+            (aba === k
+              ? 'bg-white text-base-content shadow-sm dark:bg-base-100'
+              : 'text-base-content/60 hover:text-base-content')
+          }
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const COR_PRIORIDADE: Record<string, string> = {
@@ -783,7 +860,7 @@ function QualificacaoDoLead({ lead }: { lead: ItemDaFila }) {
   );
 }
 
-function FichaDoLead({ lead }: { lead: ItemDaFila }) {
+function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void }) {
   const c = lead.contact;
   const fone = c?.phone ?? lead.phone ?? null;
   // wa.me com o WhatsApp do próprio SDR: o número do Nexa é o número das campanhas, e
@@ -814,7 +891,10 @@ function FichaDoLead({ lead }: { lead: ItemDaFila }) {
               // `podeDiscar` e não `fone &&`: o campo é texto livre e guarda coisa que
               // não é telefone na base real. No meio de uma ligação, botão que abre o
               // discador com lixo custa o tempo que o SDR não tem.
-              <a href={`tel:${fone}`}>
+              //
+              // `onLigar` chaveia para a aba Roteiro: ele está prestes a FALAR, e o
+              // que precisa sob a mão é o texto — não a thread que estava lendo.
+              <a href={`tel:${fone}`} onClick={onLigar}>
                 <Button variant="outline" size="sm">
                   Ligar
                 </Button>

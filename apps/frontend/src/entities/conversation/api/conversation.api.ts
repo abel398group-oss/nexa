@@ -13,6 +13,14 @@ export interface ListConversationsParams {
   status?: string;
   sellerId?: string;
   search?: string;
+  /**
+   * Conversas de UM contato — a mesa do SDR abrindo a thread do lead na tela.
+   *
+   * Sem ele restava buscar por telefone em `search` e torcer: um número citado na
+   * mensagem de outra pessoa traria a conversa errada, e o SDR responderia no lugar
+   * errado sem perceber.
+   */
+  contactId?: string;
   limit?: number;
   offset?: number;
 }

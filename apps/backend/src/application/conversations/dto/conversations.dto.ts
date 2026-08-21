@@ -48,6 +48,18 @@ export class ListConversationsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   sellerId?: string;
+
+  /**
+   * Conversas de UM contato (21/08/2026).
+   *
+   * A mesa do SDR precisa abrir a thread do lead que está na tela. Sem este filtro
+   * restava buscar por telefone em `search` e torcer — um número que aparecesse na
+   * mensagem de outra pessoa traria a conversa errada, e o SDR responderia no lugar
+   * errado sem perceber.
+   */
+  @IsOptional()
+  @IsString()
+  contactId?: string;
 }
 
 /**

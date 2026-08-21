@@ -79,6 +79,7 @@ export class ConversationsController {
       status: q.status,
       onlyWaitingInternal: q.queue === 'waiting_internal',
       filterSellerId: q.sellerId,
+      contactId: q.contactId,
     });
     this.logger.log(`[list] tenantId=${tenantId} role=${user?.role} scope=${q.scope ?? '-'} queue=${q.queue ?? 'all'} total=${result.total} items=${result.items.length}`);
     return result;

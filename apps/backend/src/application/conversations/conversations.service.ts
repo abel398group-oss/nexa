@@ -103,6 +103,13 @@ export class ConversationsService {
       onlyWaitingInternal?: boolean;
       /** Filtro de vendedor pedido pelo USUÁRIO (≠ sellerId, que é escopo de segurança). */
       filterSellerId?: string;
+      /**
+       * Conversas de um contato — a mesa do SDR abrindo a thread do lead na tela.
+       *
+       * Complementa o escopo, nunca o substitui: o `sellerId` acima continua sendo
+       * aplicado, então pedir o contato de outro vendedor não devolve nada.
+       */
+      contactId?: string;
     } = {},
   ): Promise<Paginated<any> & { statusCounts: Record<string, number> }> {
     // Exclui conversas arquivadas da listagem padrão.
@@ -127,6 +134,10 @@ export class ConversationsService {
     }
 
     if (assignedAnalystId !== undefined) where.assignedAnalystId = assignedAnalystId;
+
+    // Depois do escopo, nunca no lugar dele: pedir o contato de outro vendedor
+    // continua esbarrando no `assignedSellerId` acima.
+    if (opts.contactId) where.contactId = opts.contactId;
 
     // Contagem por status para os chips de filtro: precisa ignorar o próprio
     // filtro de status, senão o chip selecionado mostraria o total e todos os

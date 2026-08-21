@@ -60,15 +60,28 @@ class RascunharDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(6) quantos?: number;
 }
 
+/**
+ * A permissão vive por ROTA, não na classe (21/08/2026).
+ *
+ * Era `@RequirePerm('campaigns')` na classe inteira, e isso barrava o SDR com 403 na
+ * própria leitura: ele precisa dos modelos aprovados para responder um lead na mesa
+ * dele, e não tem — nem deve ter — o poder de montar campanha.
+ *
+ * Só o `GET` abriu. Escrever, aprovar e excluir continuam onde estavam: quem lê a
+ * biblioteca não ganha o direito de mexer nela.
+ */
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-@RequirePerm('campaigns')
 @Controller('message-templates')
 export class MessageTemplatesController {
   constructor(private readonly templates: MessageTemplatesService) {}
 
   /// `?approved=true` é o que o seletor do Disparo consome — rascunho não pode
   /// ser oferecido a quem monta campanha. A tela de Mensagens lista tudo.
+  ///
+  /// `sdr` entra aqui porque o cockpit dele oferece o modelo aprovado ao responder
+  /// o lead. `RequirePerm` é OU: basta uma das duas.
   @Get()
+  @RequirePerm('campaigns', 'sdr')
   list(
     @CurrentTenant() tenantId: string,
     @Query('productCode') productCode?: string,
@@ -84,11 +97,13 @@ export class MessageTemplatesController {
    * para o log de acesso do servidor.
    */
   @Post('preview')
+  @RequirePerm('campaigns', 'sdr')
   preview(@CurrentTenant() tenantId: string, @Body() dto: PreviewDto) {
     return this.templates.preview(tenantId, dto);
   }
 
   @Post('send-test')
+  @RequirePerm('campaigns')
   sendTest(@CurrentTenant() tenantId: string, @Body() dto: SendTestDto) {
     return this.templates.sendTest(tenantId, dto.to, dto);
   }
@@ -100,7 +115,10 @@ export class MessageTemplatesController {
    * clique gera um texto novo. Nada é gravado: a resposta é proposta, e quem salva
    * continua sendo quem lê.
    */
+  /// Só `campaigns`: rascunhar gasta tokens e monta a cadência de uma campanha, que
+  /// não é trabalho da mesa do SDR. Ele LÊ o que já foi aprovado.
   @Post('rascunhar')
+  @RequirePerm('campaigns')
   rascunhar(@CurrentTenant() tenantId: string, @Body() dto: RascunharDto) {
     return this.templates.rascunhar(
       tenantId,
@@ -111,11 +129,13 @@ export class MessageTemplatesController {
   }
 
   @Post()
+  @RequirePerm('campaigns')
   create(@CurrentTenant() tenantId: string, @Body() dto: CreateTemplateDto) {
     return this.templates.create(tenantId, dto);
   }
 
   @Patch(':id')
+  @RequirePerm('campaigns')
   update(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: UpdateTemplateDto) {
     return this.templates.update(tenantId, id, dto);
   }
@@ -151,6 +171,7 @@ export class MessageTemplatesController {
 
   // Arquiva, não apaga — a campanha antiga continua apontando para o texto que a gerou.
   @Delete(':id')
+  @RequirePerm('campaigns')
   archive(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.templates.archive(tenantId, id);
   }
