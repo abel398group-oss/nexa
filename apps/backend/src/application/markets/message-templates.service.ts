@@ -96,7 +96,17 @@ export class MessageTemplatesService {
         promptDoRascunho(canal, quantos, comTexto, evitar),
         // Teto alto: são `quantos` mensagens inteiras, e cortar no meio devolve um
         // JSON truncado que a peneira descarta por inteiro.
-        { maxTokens: 1200 + quantos * 500 },
+        //
+        // E timeout à altura: o padrão de 20s é dimensionado para a Lia responder
+        // um lead, e aqui vai um roteiro inteiro no prompt (17 KB no plano de
+        // agosto) pedindo milhares de tokens de volta. Com o teto padrão isto
+        // NUNCA terminava — abortava, retentava e abortava de novo, e a tela
+        // dizia "tente de novo em alguns instantes" para algo que não ia melhorar.
+        // 8s por mensagem sobre uma base de 40s, teto de 2 minutos.
+        {
+          maxTokens: 1200 + quantos * 500,
+          timeoutMs: Math.min(40_000 + quantos * 8_000, 120_000),
+        },
       );
     } catch (e) {
       // REGRA 3: o motivo original vai para o log antes de virar 4xx genérico.

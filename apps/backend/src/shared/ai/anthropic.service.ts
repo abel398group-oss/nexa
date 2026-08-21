@@ -122,7 +122,7 @@ export class AnthropicService {
   private async request(
     system: string,
     user: string,
-    opts: { maxTokens?: number; temperature?: number } = {},
+    opts: { maxTokens?: number; temperature?: number; timeoutMs?: number } = {},
   ): Promise<any> {
     await this.acquireSlot();
     try {
@@ -139,7 +139,7 @@ export class AnthropicService {
   private async requestInner(
     system: string,
     user: string,
-    opts: { maxTokens?: number; temperature?: number } = {},
+    opts: { maxTokens?: number; temperature?: number; timeoutMs?: number } = {},
   ): Promise<any> {
     if (!this.configured) throw new Error('ANTHROPIC_API_KEY ausente/placeholder');
 
@@ -166,7 +166,12 @@ export class AnthropicService {
           },
           body,
           // timeout por tentativa — aborta requisições penduradas (C1)
-          signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+          // Timeout POR CHAMADA. O teto de 20s existe para a Lia respondendo um
+          // lead: acima disso a conversa trava e o lead percebe. Geração de
+          // conteúdo é outro bicho — rascunhar a cadência manda um roteiro de
+          // 17 KB e pede ~3.200 tokens de volta, o que passa de 20s sempre.
+          // Com um teto só, o caso lento não é lento: ele nunca termina.
+          signal: AbortSignal.timeout(opts.timeoutMs ?? AI_TIMEOUT_MS),
         });
       } catch (err) {
         // timeout/rede: retenta se ainda houver tentativa; senão, propaga
@@ -215,7 +220,7 @@ export class AnthropicService {
   async complete(
     system: string,
     user: string,
-    opts: { maxTokens?: number; temperature?: number } = {},
+    opts: { maxTokens?: number; temperature?: number; timeoutMs?: number } = {},
   ): Promise<string> {
     const data = await this.request(system, user, opts);
     return data.content[0].text.trim();
@@ -225,7 +230,7 @@ export class AnthropicService {
   async completeWithUsage(
     system: string,
     user: string,
-    opts: { maxTokens?: number; temperature?: number } = {},
+    opts: { maxTokens?: number; temperature?: number; timeoutMs?: number } = {},
   ): Promise<AiUsage> {
     const data = await this.request(system, user, opts);
     const text = data.content[0].text.trim();
@@ -247,9 +252,9 @@ export class AnthropicService {
   async completeJson<T = any>(
     system: string,
     user: string,
-    opts: { maxTokens?: number } = {},
+    opts: { maxTokens?: number; timeoutMs?: number } = {},
   ): Promise<T> {
-    const raw = await this.complete(system, user, { maxTokens: opts.maxTokens ?? 300, temperature: 0 });
+    const raw = await this.complete(system, user, { maxTokens: opts.maxTokens ?? 300, temperature: 0, timeoutMs: opts.timeoutMs });
     const parsed = extrairJson<T>(raw);
     if (parsed === null) {
       throw new Error(`JSON não encontrado na resposta: ${raw.slice(0, 120)}`);
