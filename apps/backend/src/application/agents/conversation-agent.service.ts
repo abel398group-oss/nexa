@@ -1062,6 +1062,9 @@ export class ConversationAgentService {
         leadScore: route.leadScore,
         summary: handoffSummary,
         kind: isHot ? 'hot_lead' : 'human_request',
+        // O mercado da conversa manda no rodízio: vendedor que não trabalha este
+        // produto não recebe o lead (21/08/2026).
+        productCode: (conv as any).productCode ?? null,
       });
       if (isHot) {
         await this.opportunities
@@ -1326,6 +1329,7 @@ export class ConversationAgentService {
         leadScore: route.leadScore,
         summary: await this.buildHandoffSummary(tenantId, conv.phone, input.message),
         kind: isHot ? 'hot_lead' : 'human_request',
+        productCode: (conv as any).productCode ?? null,
       });
       await this.notifications.create(tenantId, {
         type: isHot ? 'hot_lead' : 'info',

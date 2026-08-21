@@ -497,13 +497,30 @@ export class SdrService {
 
     // Mesma exclusão da lista que a tela mostrou: se ele não pode se ver na lista, não
     // pode passar pra si mandando o próprio id na mão.
-    const elegiveis = atual.productCode
-      ? await this.closersDoMercado(tenantId, atual.productCode, user.sellerId)
-      : [];
-    if (atual.productCode && !elegiveis.some((c) => c.id === dados.closerId)) {
-      throw new ForbiddenException(
-        'Este closer não trabalha o mercado deste lead.',
-      );
+    if (atual.productCode) {
+      const elegiveis = await this.closersDoMercado(tenantId, atual.productCode, user.sellerId);
+      if (!elegiveis.some((c) => c.id === dados.closerId)) {
+        throw new ForbiddenException('Este closer não trabalha o mercado deste lead.');
+      }
+    } else {
+      /**
+       * Lead sem mercado: valida o que ainda dá para validar (21/08/2026).
+       *
+       * Antes, `productCode` nulo pulava a checagem INTEIRA — e com ela a garantia de
+       * que o destino existe, é do tenant, está ativo e não está de férias. Bastava um
+       * lead importado sem mercado para qualquer id de closer ser aceito, inclusive de
+       * alguém desligado. O buraco não estava na regra de mercado: estava em ela ser a
+       * única porta, e a porta ficar aberta quando o mercado não existe.
+       */
+      const destino = await this.prisma.seller.findFirst({
+        where: { id: dados.closerId, tenantId, active: true, ...naoAusente() },
+        select: { id: true },
+      });
+      if (!destino) {
+        throw new ForbiddenException(
+          'Closer não encontrado, inativo ou ausente — escolha outro.',
+        );
+      }
     }
 
     // Atividade primeiro, enquanto o lead ainda é do SDR: depois da troca de posse o
@@ -535,6 +552,47 @@ export class SdrService {
           where: { id: atual.contactId },
           data: { ownerSellerId: dados.closerId },
         });
+
+        /**
+         * As oportunidades IRMÃS saem da fila junto (21/08/2026).
+         *
+         * A fila agrupa por contato: o mesmo lead importado em três lotes aparece uma
+         * vez. Mas a transferência movia só a linha representante — as outras duas
+         * ficavam em `new`, com zero tentativas, e voltavam ao topo da fila como
+         * "nunca contatado" no refresh seguinte. O SDR ligava para alguém que já era
+         * do closer, e o lead atendia a segunda ligação da mesma empresa.
+         *
+         * Vão como `discarded`/`duplicado`, e não como `qualified`: três linhas
+         * qualificadas para um negócio só inflariam o funil e o relatório de conversão
+         * do vendedor. Uma venda, uma oportunidade — as duplicatas são ruído de
+         * importação e é assim que ficam registradas.
+         */
+        const irmas = await tx.opportunity.findMany({
+          where: {
+            tenantId,
+            contactId: atual.contactId,
+            stage: { in: ETAPAS_DO_SDR },
+            id: { not: opportunityId },
+          },
+          select: { id: true, stage: true },
+        });
+
+        for (const irma of irmas) {
+          await tx.opportunity.update({
+            where: { id: irma.id },
+            data: { stage: 'discarded', discardReason: 'duplicado' },
+          });
+          // Histórico também para as irmãs: etapa que muda sem registro deixa o funil
+          // sem como explicar de onde o movimento veio.
+          await tx.opportunityStageHistory.create({
+            data: {
+              opportunityId: irma.id,
+              fromStage: irma.stage,
+              toStage: 'discarded',
+              reason: `duplicado do lead transferido (${opportunityId})`,
+            },
+          });
+        }
       }
 
       await tx.opportunityStageHistory.create({

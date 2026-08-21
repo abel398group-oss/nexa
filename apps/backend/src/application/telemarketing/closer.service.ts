@@ -232,10 +232,17 @@ export class CloserService {
       });
 
       if (opts.marcarCliente && atual.contactId) {
-        await tx.contact.update({
-          where: { id: atual.contactId },
-          // Só estampa se ainda não é cliente: a data que vale é a do primeiro
-          // contrato, não a do último.
+        // `updateMany` com `customerSince: null` no filtro é o que faz o comentário
+        // virar verdade (21/08/2026). O `update` daqui carimbava SEMPRE: o segundo
+        // contrato do mesmo cliente apagava a data do primeiro, e a data que vale é
+        // a da primeira venda.
+        //
+        // Não é só histórico bonito. A peneira da importação usa `customerSince`
+        // para não mandar campanha fria a quem já comprou; movê-la para frente a
+        // cada venda é reescrever a resposta de "desde quando ele é cliente" — e
+        // relatório de safra passa a mentir sem ninguém perceber.
+        await tx.contact.updateMany({
+          where: { id: atual.contactId, customerSince: null },
           data: { customerSince: new Date() },
         });
       }

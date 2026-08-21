@@ -202,12 +202,47 @@ export class SellersService {
   // transacao) permitiam duas conversas virando lead quente ao mesmo tempo
   // lerem o mesmo "menos atribuido" antes de qualquer uma incrementar,
   // desbalanceando o round-robin sob concorrencia.
-  private async pickAndClaimSeller(tenantId: string) {
+  private async pickAndClaimSeller(tenantId: string, productCode?: string | null) {
+    /**
+     * Duas regras entraram aqui em 21/08/2026, e as duas já valiam na passagem do
+     * SDR — o rodízio da IA era o único caminho que as ignorava.
+     *
+     * AUSÊNCIA: quem está de férias ou afastado não recebe. Lead quente entregue a
+     * quem não vai abrir o inbox esfria duas semanas sem ninguém perceber, e é o
+     * pior destino possível justamente para o lead que mais vale.
+     *
+     * MERCADO: vendedor que não trabalha aquele produto não recebe lead dele. Sem
+     * isto a separação por mercado do módulo 1 vale na tela do SDR e não vale
+     * quando a própria Lia distribui — o que é pior que não ter separação, porque
+     * ninguém desconfia.
+     *
+     * O filtro de mercado só LIGA quando o tenant usa mercados (existe ao menos uma
+     * linha em `seller_markets`). É o mesmo precedente do `MarketScopeService`: a
+     * regra entra em vigor quando alguém a adota, e quem nunca vinculou vendedor a
+     * mercado continua com o comportamento de sempre em vez de parar de receber
+     * lead da noite para o dia.
+     */
+    const usaMercados =
+      !!productCode &&
+      (await this.prisma.sellerMarket.count({ where: { tenantId } })) > 0;
+
     const rows = await this.prisma.$queryRaw<any[]>`
       UPDATE sellers SET assigned_count = assigned_count + 1
       WHERE id = (
         SELECT id FROM sellers
-        WHERE tenant_id = ${tenantId} AND active = true
+        WHERE tenant_id = ${tenantId}
+          AND active = true
+          -- away_until é a data de VOLTA: no passado significa que já voltou.
+          AND (away_until IS NULL OR away_until <= now())
+          AND (
+            ${!usaMercados}::boolean
+            OR EXISTS (
+              SELECT 1 FROM seller_markets sm
+               WHERE sm.seller_id = sellers.id
+                 AND sm.tenant_id = ${tenantId}
+                 AND sm.product_code = ${productCode ?? ''}
+            )
+          )
         ORDER BY assigned_count ASC, created_at ASC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
@@ -231,6 +266,9 @@ export class SellersService {
       leadScore: number;
       summary?: string;
       kind?: 'hot_lead' | 'human_request';
+      /// Mercado do lead. Sem ele o rodízio não tem como respeitar o vínculo de
+      /// mercado, e cai no comportamento antigo (qualquer vendedor ativo).
+      productCode?: string | null;
     },
   ) {
     const kind = input.kind ?? 'hot_lead';
@@ -273,10 +311,16 @@ export class SellersService {
 
     // escolhe + incrementa o contador atomicamente (evita corrida entre
     // conversas concorrentes — ver comentario em pickAndClaimSeller)
-    const seller = await this.pickAndClaimSeller(tenantId);
+    const seller = await this.pickAndClaimSeller(tenantId, input.productCode);
     if (!seller) {
-      this.logger.warn('Nenhum vendedor ativo p/ handoff');
-      return { assigned: false, reason: 'sem vendedor ativo' };
+      // O motivo entra no log: "sem vendedor" agora tem três causas (nenhum ativo,
+      // todos ausentes, nenhum vinculado ao mercado) e sem distinguir manda quem for
+      // investigar procurar no lugar errado.
+      this.logger.warn(
+        `Nenhum vendedor disponível p/ handoff (mercado=${input.productCode ?? 'sem mercado'}) ` +
+          `— verifique ativos, ausências e vínculo de mercado`,
+      );
+      return { assigned: false, reason: 'sem vendedor disponível' };
     }
 
     // atribui conversa + registra dedup (o contador ja foi incrementado acima)

@@ -118,4 +118,72 @@ describe('passar pro closer', () => {
     // O carimbo do roteiro atravessa a transferência.
     expect(ativ?.scriptVersion).toBe(7);
   });
+
+  /**
+   * O mesmo lead importado em lotes diferentes vira UMA linha na fila, mas continuam
+   * sendo várias oportunidades. Antes, a transferência movia só a representante — as
+   * irmãs ficavam em `new`, com zero tentativas, e voltavam ao topo como "nunca
+   * contatado". O SDR ligava para quem já era do closer.
+   */
+  it('as oportunidades irmãs saem da fila junto, como duplicadas', async () => {
+    const { sdr, closer, contato, op } = await cenario();
+    const irma = await prisma.opportunity.create({
+      data: {
+        tenantId: TENANT,
+        contactId: contato.id,
+        productCode: MERCADO,
+        stage: 'new',
+        assignedSellerId: sdr.id,
+      },
+    });
+
+    await service.transferir(TENANT, { role: 'vendedor', sellerId: sdr.id }, op.id, {
+      closerId: closer.id,
+    });
+
+    const depois = await prisma.opportunity.findUnique({ where: { id: irma.id } });
+    // `discarded`, e não `qualified`: três linhas qualificadas para um negócio só
+    // inflariam o funil e a conversão do vendedor.
+    expect(depois?.stage).toBe('discarded');
+    expect(depois?.discardReason).toBe('duplicado');
+
+    const hist = await prisma.opportunityStageHistory.findFirst({
+      where: { opportunityId: irma.id },
+    });
+    expect(hist?.reason).toContain(op.id);
+  });
+
+  /**
+   * Lead sem mercado pulava a checagem INTEIRA, e com ela a garantia de que o destino
+   * existe e está ativo. Bastava um lead importado sem mercado para qualquer id ser
+   * aceito.
+   */
+  it('lead sem mercado ainda recusa closer inativo', async () => {
+    const { sdr, closer, contato } = await cenario();
+    await prisma.seller.update({ where: { id: closer.id }, data: { active: false } });
+    const semMercado = await prisma.opportunity.create({
+      data: { tenantId: TENANT, contactId: contato.id, stage: 'new', assignedSellerId: sdr.id },
+    });
+
+    await expect(
+      service.transferir(TENANT, { role: 'vendedor', sellerId: sdr.id }, semMercado.id, {
+        closerId: closer.id,
+      }),
+    ).rejects.toThrow('inativo ou ausente');
+  });
+
+  it('lead sem mercado aceita closer ativo', async () => {
+    const { sdr, closer, contato } = await cenario();
+    const semMercado = await prisma.opportunity.create({
+      data: { tenantId: TENANT, contactId: contato.id, stage: 'new', assignedSellerId: sdr.id },
+    });
+
+    await service.transferir(TENANT, { role: 'vendedor', sellerId: sdr.id }, semMercado.id, {
+      closerId: closer.id,
+    });
+
+    const depois = await prisma.opportunity.findUnique({ where: { id: semMercado.id } });
+    expect(depois?.stage).toBe('qualified');
+    expect(depois?.assignedSellerId).toBe(closer.id);
+  });
 });
