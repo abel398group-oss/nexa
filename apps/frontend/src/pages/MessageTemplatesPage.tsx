@@ -63,7 +63,7 @@ export function MessageTemplatesPage() {
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // O market vem do cabeçalho do cockpit, compartilhado com as outras abas. Antes
   // era um `useState` local por aba, e a escolha derivava entre elas.
-  const [codigo, setMercado] = useMarketAtivo(marketPadrao(mercados));
+  const [codigo, setMercado] = useMarketAtivo(mercados, { listaCompleta: true });
 
   const { data: modelos = [] } = useQuery({
     queryKey: ['message-templates', codigo],

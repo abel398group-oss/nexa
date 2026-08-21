@@ -67,7 +67,10 @@ export function marketPadrao(markets: { code: string; status?: string }[]): stri
  * enquanto ninguém escolheu — mas ele NÃO é gravado: gravar transformaria um palpite
  * em escolha, e é assim que se volta a mandar mensagem para o market errado.
  */
-export function useMarketAtivo(fallback?: string): [string, (code: string) => void] {
+export function useMarketAtivo(
+  markets: { code: string; status?: string }[] = [],
+  opcoes: { listaCompleta?: boolean } = {},
+): [string, (code: string) => void] {
   const [code, setCode] = useState<string | null>(() => getMarketAtivo());
 
   useEffect(() => {
@@ -80,7 +83,27 @@ export function useMarketAtivo(fallback?: string): [string, (code: string) => vo
     };
   }, []);
 
+  /**
+   * Mercado guardado que não existe mais é DESCARTADO.
+   *
+   * A escolha vive na sessão do navegador e sobrevive ao mercado: apagado o
+   * `sverino-bot`, a tela continuava dizendo "vendendo Sverino Bot" e oferecendo
+   * criar campanha para ele. O disparo até recusaria no fim (a trava de mercado
+   * pede um mercado que exista), mas só depois da campanha inteira escrita.
+   *
+   * A lista VAZIA não descarta nada: ela também é o estado de "ainda carregando",
+   * e limpar ali apagaria a escolha legítima a cada abertura de tela.
+   */
+  useEffect(() => {
+    // `listaCompleta` é o que separa "o mercado não existe" de "esta tela não
+    // mostra este mercado". A tela de Listas pede só os LIBERADOS: um mercado em
+    // rascunho legitimamente escolhido não está lá, e apagá-lo por isso jogaria
+    // fora a escolha do operador toda vez que ele abrisse aquela aba.
+    if (!opcoes.listaCompleta || !markets.length || !code) return;
+    if (!markets.some((m) => m.code === code)) setMarketAtivo(null);
+  }, [markets, code, opcoes.listaCompleta]);
+
   const escolher = useCallback((novo: string) => setMarketAtivo(novo || null), []);
 
-  return [code || fallback || '', escolher];
+  return [code || marketPadrao(markets) || '', escolher];
 }

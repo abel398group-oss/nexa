@@ -56,7 +56,7 @@ export function LeadBatchesPage() {
     queryFn: () => listMarkets(true),
   });
   // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
-  const [productCode, setProductCode] = useMarketAtivo(marketPadrao(mercados));
+  const [productCode, setProductCode] = useMarketAtivo(mercados);
 
   const { data: lotes = [] } = useQuery<LeadBatch[]>({
     queryKey: ['lead-batches'],

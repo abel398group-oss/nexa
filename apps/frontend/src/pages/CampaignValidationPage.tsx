@@ -91,7 +91,7 @@ export function CampaignValidationPage() {
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
   // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
-  const [code, setCode] = useMarketAtivo(marketPadrao(mercados));
+  const [code, setCode] = useMarketAtivo(mercados, { listaCompleta: true });
 
   const chave = ['markets', code, 'assets'];
   const { data: itens = [], isLoading } = useQuery({

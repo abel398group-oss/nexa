@@ -27,7 +27,7 @@ export function SeletorDeMarket() {
     queryFn: () => listMarkets(false),
   });
 
-  const [ativo, escolher] = useMarketAtivo(marketPadrao(markets));
+  const [ativo, escolher] = useMarketAtivo(markets, { listaCompleta: true });
 
   if (markets.length === 0) return null;
 

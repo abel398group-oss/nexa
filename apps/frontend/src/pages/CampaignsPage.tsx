@@ -283,9 +283,9 @@ export function CampaignsPage() {
   const [emailFormat, setEmailFormat] = useState<'html' | 'text'>('html');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailsText, setEmailsText] = useState('');
-  const [emailTemplate, setEmailTemplate] = useState(
-    '{{saudacao}}, {{nome}}!\n\nAqui é a Lia do HiperTMS.\n\nGostaria de apresentar como nossa plataforma de gestão de fretes pode ajudar sua empresa a reduzir custos logísticos e emitir CT-e, MDF-e com muito mais agilidade.\n\nPosso enviar uma demonstração?',
-  );
+  /// Vazio pelo mesmo motivo do WhatsApp: marca errada, palavra proibida e
+  /// concorrência com o modelo aprovado. O texto vem do seletor logo acima.
+  const [emailTemplate, setEmailTemplate] = useState('');
 
   // Shared
   const [limitMode, setLimitMode] = useState<'all' | 'limit'>('all');

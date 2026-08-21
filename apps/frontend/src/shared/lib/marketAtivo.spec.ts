@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { getMarketAtivo, marketPadrao, setMarketAtivo, useMarketAtivo } from './marketAtivo';
 
 /**
@@ -11,15 +11,15 @@ describe('useMarketAtivo', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('sem escolha nenhuma, cai no fallback', () => {
-    const { result } = renderHook(() => useMarketAtivo('hipertms'));
+    const { result } = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
     expect(result.current[0]).toBe('hipertms');
   });
 
   // O ponto do arquivo inteiro: escolher numa aba muda a outra na mesma janela.
   // `storage` não serve — ele só dispara para OUTRAS abas do navegador.
   it('escolher num lugar muda em todos', () => {
-    const cabecalho = renderHook(() => useMarketAtivo('hipertms'));
-    const mensagens = renderHook(() => useMarketAtivo('hipertms'));
+    const cabecalho = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
+    const mensagens = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
 
     act(() => cabecalho.result.current[1]('agabe'));
 
@@ -31,7 +31,7 @@ describe('useMarketAtivo', () => {
   // renderizar decidiria pelas outras — que é exatamente a deriva que o hook
   // existe para acabar, só que mais difícil de enxergar.
   it('o fallback não vira escolha gravada', () => {
-    renderHook(() => useMarketAtivo('hipertms'));
+    renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
     expect(getMarketAtivo()).toBeNull();
   });
 
@@ -40,15 +40,15 @@ describe('useMarketAtivo', () => {
   it('havendo escolha, o fallback de cada tela é ignorado', () => {
     setMarketAtivo('agabe');
 
-    const todos = renderHook(() => useMarketAtivo('hipertms'));
-    const liberados = renderHook(() => useMarketAtivo('outro'));
+    const todos = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
+    const liberados = renderHook(() => useMarketAtivo([{ code: 'outro', status: 'active' }]));
 
     expect(todos.result.current[0]).toBe('agabe');
     expect(liberados.result.current[0]).toBe('agabe');
   });
 
   it('limpar a escolha devolve a tela ao fallback', () => {
-    const { result } = renderHook(() => useMarketAtivo('hipertms'));
+    const { result } = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
 
     act(() => result.current[1]('agabe'));
     act(() => result.current[1](''));
@@ -66,7 +66,7 @@ describe('useMarketAtivo', () => {
       get() { throw new Error('bloqueado'); },
     });
     try {
-      const { result } = renderHook(() => useMarketAtivo('hipertms'));
+      const { result } = renderHook(() => useMarketAtivo([{ code: 'hipertms', status: 'active' }]));
       expect(result.current[0]).toBe('hipertms');
       act(() => result.current[1]('agabe'));
     } finally {
@@ -106,5 +106,68 @@ describe('marketPadrao', () => {
 
   it('lista vazia não tem palpite', () => {
     expect(marketPadrao([])).toBeUndefined();
+  });
+});
+
+/**
+ * Mercado apagado não pode continuar escolhido.
+ *
+ * A escolha vive na sessão do navegador e sobrevivia ao mercado: apagado o
+ * `sverino-bot`, o cockpit seguia dizendo "vendendo Sverino Bot" e oferecendo criar
+ * campanha para ele. O disparo recusaria no fim — a trava de mercado exige um que
+ * exista — mas só depois da campanha inteira escrita.
+ */
+describe('useMarketAtivo — mercado que não existe mais', () => {
+  it('descarta o guardado quando ele sumiu da lista', async () => {
+    setMarketAtivo('sverino-bot');
+    const { result } = renderHook(() =>
+      useMarketAtivo([{ code: 'hipertms', status: 'active' }], { listaCompleta: true }),
+    );
+
+    await waitFor(() => expect(result.current[0]).toBe('hipertms'));
+    expect(getMarketAtivo()).toBeNull();
+  });
+
+  it('mantém o guardado quando ele ainda existe', async () => {
+    setMarketAtivo('hipertms');
+    const { result } = renderHook(() =>
+      useMarketAtivo(
+        [
+          { code: 'hipertms', status: 'active' },
+          { code: 'pneus', status: 'draft' },
+        ],
+        { listaCompleta: true },
+      ),
+    );
+
+    expect(result.current[0]).toBe('hipertms');
+    expect(getMarketAtivo()).toBe('hipertms');
+  });
+
+  // Lista vazia é também o estado de "ainda carregando": limpar ali apagaria a
+  // escolha legítima a cada abertura de tela.
+  it('lista vazia não descarta nada', () => {
+    setMarketAtivo('hipertms');
+    renderHook(() => useMarketAtivo([], { listaCompleta: true }));
+    expect(getMarketAtivo()).toBe('hipertms');
+  });
+});
+
+/**
+ * Lista PARCIAL não descarta.
+ *
+ * A tela de Listas de lead pede só os mercados liberados. Um mercado em rascunho
+ * legitimamente escolhido não aparece ali — e apagar a escolha por isso jogaria
+ * fora a decisão do operador toda vez que ele abrisse aquela aba.
+ */
+describe('useMarketAtivo — lista parcial', () => {
+  it('sem listaCompleta, o guardado sobrevive mesmo fora da lista', () => {
+    setMarketAtivo('pneus');
+    const { result } = renderHook(() =>
+      useMarketAtivo([{ code: 'hipertms', status: 'active' }]),
+    );
+
+    expect(result.current[0]).toBe('pneus');
+    expect(getMarketAtivo()).toBe('pneus');
   });
 });
