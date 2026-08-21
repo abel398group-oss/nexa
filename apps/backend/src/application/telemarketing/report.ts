@@ -43,6 +43,52 @@ export function conversaoDoLote(l: LinhaDeLote): TaxaCalculada {
   return { percentual: (l.ganhos / base) * 100, amostraPequena: false, base };
 }
 
+export interface LinhaDeCampanha {
+  nome: string;
+  canal: string;
+  /// Alvos que o disparo efetivamente ENTREGOU. É o denominador da conversão.
+  enviados: number;
+  /// Oportunidades atribuídas a esta campanha — quem respondeu e virou lead no funil.
+  oportunidades: number;
+  ganhos: number;
+  perdidos: number;
+  emAndamento: number;
+}
+
+/**
+ * Conversão de uma campanha: de cada cem mensagens entregues, quantas viraram venda.
+ *
+ * Denominador é `enviados`, não `oportunidades`. Sobre oportunidades a conta responde
+ * "de quem respondeu, quantos fecharam" — número alto e bonito que não diz se valeu
+ * disparar. A pergunta que a coluna existe para responder é sobre o DISPARO.
+ *
+ * Amostra mínima vale igual: uma campanha de teste com 8 envios e 1 ganho viraria
+ * "12,5% de conversão", e alguém repetiria a campanha por causa disso.
+ */
+export function conversaoDaCampanha(c: LinhaDeCampanha): TaxaCalculada {
+  const base = c.enviados;
+  if (base < AMOSTRA_MINIMA) {
+    return { percentual: null, amostraPequena: true, base };
+  }
+  return { percentual: (c.ganhos / base) * 100, amostraPequena: false, base };
+}
+
+/**
+ * Taxa de RESPOSTA: de cada cem entregues, quantas viraram lead no funil.
+ *
+ * Anda junto da conversão porque as duas separam problemas diferentes: resposta baixa
+ * é lista ou mensagem ruim; resposta alta com conversão baixa é lead entrando e o
+ * comercial não fechando. Uma taxa só não distingue as duas, e o time conserta o lado
+ * errado.
+ */
+export function respostaDaCampanha(c: LinhaDeCampanha): TaxaCalculada {
+  const base = c.enviados;
+  if (base < AMOSTRA_MINIMA) {
+    return { percentual: null, amostraPequena: true, base };
+  }
+  return { percentual: (c.oportunidades / base) * 100, amostraPequena: false, base };
+}
+
 export interface LinhaDeVendedor {
   nome: string;
   atividades: number;

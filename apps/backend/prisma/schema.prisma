@@ -1295,6 +1295,20 @@ model Opportunity {
   /// aparição do mesmo contato gerava oportunidade que a distribuição do lote novo não
   /// encontrava — ficava sem dono e invisível para todo SDR.
   batchId         String?   @map("batch_id")
+  /// CAMPANHA que originou esta oportunidade (21/08/2026).
+  ///
+  /// Fecha a corrente de atribuição: parceiro → mercado → campanha → SDR → closer →
+  /// venda. Sem esta coluna o funil andava inteiro e não sabia responder "de onde veio
+  /// o que fechou" — ganho e perda não voltavam para informar campanha nenhuma, e
+  /// decidir qual lista comprar de novo era palpite.
+  ///
+  /// Separada de `batchId` porque as perguntas são diferentes e as respostas divergem:
+  /// o lote diz de qual LISTA a pessoa veio, a campanha diz qual DISPARO a fez
+  /// responder. A mesma lista rende três campanhas, e só uma delas converteu.
+  ///
+  /// NULL em oportunidade que não nasceu de disparo — lead que chegou sozinho, que
+  /// veio de indicação, ou que o SDR criou na mão.
+  campaignId      String?   @map("campaign_id")
   /// Reunião agendada pelo closer (módulo 3). Só registro — sem integração com
   /// Google Calendar/Outlook nesta versão.
   meetingAt       DateTime? @map("meeting_at")
@@ -1321,6 +1335,8 @@ model Opportunity {
   @@index([tenantId, assignedSellerId])
   @@index([tenantId, sharedWithPartnerId])
   @@index([tenantId, updatedAt])
+  /// "O que esta campanha rendeu" — a pergunta que a coluna existe para responder.
+  @@index([tenantId, campaignId])
   @@map("opportunities")
 }
 

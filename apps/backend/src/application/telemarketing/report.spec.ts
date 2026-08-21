@@ -3,10 +3,64 @@ import {
   AMOSTRA_MINIMA,
   aproveitamento,
   compararRoteiros,
+  conversaoDaCampanha,
   conversaoDoLote,
+  respostaDaCampanha,
+  type LinhaDeCampanha,
   type LinhaDeLote,
   type LinhaDeVendedor,
 } from './report';
+
+const campanha = (p: Partial<LinhaDeCampanha>): LinhaDeCampanha => ({
+  nome: 'Campanha',
+  canal: 'email',
+  enviados: 100,
+  oportunidades: 10,
+  ganhos: 2,
+  perdidos: 3,
+  emAndamento: 5,
+  ...p,
+});
+
+describe('conversão e resposta por campanha', () => {
+  // O denominador é o que foi ENTREGUE, e é isso que separa "valeu disparar?" de
+  // "de quem respondeu, quantos fecharam?".
+  it('conversão é sobre entregues, não sobre quem respondeu', () => {
+    const c = conversaoDaCampanha(campanha({ enviados: 100, oportunidades: 10, ganhos: 2 }));
+    expect(c.percentual).toBe(2); // 2 de 100, não 2 de 10
+    expect(c.base).toBe(100);
+  });
+
+  it('resposta mede quantos entregues viraram lead no funil', () => {
+    const r = respostaDaCampanha(campanha({ enviados: 200, oportunidades: 20 }));
+    expect(r.percentual).toBe(10);
+  });
+
+  // As duas juntas separam problemas diferentes: resposta baixa é lista ou mensagem;
+  // resposta alta com conversão baixa é o comercial não fechando.
+  it('resposta alta com conversão baixa aparece como dois números distintos', () => {
+    const c = campanha({ enviados: 100, oportunidades: 30, ganhos: 1 });
+    expect(respostaDaCampanha(c).percentual).toBe(30);
+    expect(conversaoDaCampanha(c).percentual).toBe(1);
+  });
+
+  // Campanha de teste com meia dúzia de envios não pode virar percentual: alguém
+  // repetiria o disparo por causa de um número que é ruído.
+  it('amostra pequena não vira percentual, nas duas taxas', () => {
+    const c = campanha({ enviados: AMOSTRA_MINIMA - 1, oportunidades: 3, ganhos: 1 });
+    expect(conversaoDaCampanha(c).percentual).toBeNull();
+    expect(conversaoDaCampanha(c).amostraPequena).toBe(true);
+    expect(respostaDaCampanha(c).percentual).toBeNull();
+  });
+
+  // Campanha que não entregou nada precisa aparecer no relatório sem quebrar — é
+  // justamente a que alguém precisa investigar.
+  it('campanha sem envio nenhum não divide por zero', () => {
+    const c = campanha({ enviados: 0, oportunidades: 0, ganhos: 0 });
+    expect(conversaoDaCampanha(c).percentual).toBeNull();
+    expect(conversaoDaCampanha(c).base).toBe(0);
+  });
+});
 
 const lote = (p: Partial<LinhaDeLote>): LinhaDeLote => ({
   nome: 'Lote',

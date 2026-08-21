@@ -3,7 +3,10 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import {
   aproveitamento,
   compararRoteiros,
+  conversaoDaCampanha,
   conversaoDoLote,
+  respostaDaCampanha,
+  type LinhaDeCampanha,
   type LinhaDeLote,
   type LinhaDeRoteiro,
   type LinhaDeVendedor,
@@ -15,26 +18,70 @@ import {
  *  1. qual lista prestou       → por lote
  *  2. quem está produzindo     → por vendedor
  *  3. qual roteiro converte    → por versão (só possível por causa do carimbo na atividade)
+ *  4. qual CAMPANHA rendeu     → por disparo (21/08/2026, só possível com o campaignId)
  *
- * Nenhuma das três existia antes de hoje, e nenhuma se reconstrói depois: dado de esforço
- * e de origem só existe se alguém gravar no momento.
+ * Nenhuma das quatro existia antes, e nenhuma se reconstrói depois: dado de esforço e de
+ * origem só existe se alguém gravar no momento.
+ *
+ * A quarta fecha a corrente. Lote responde de qual LISTA a pessoa veio; campanha
+ * responde qual DISPARO a fez responder — e a mesma lista rende várias campanhas, das
+ * quais só uma converteu.
  */
 @Injectable()
 export class TelemarketingReportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async relatorio(tenantId: string, productCode?: string) {
-    const [lotes, vendedores, roteiros] = await Promise.all([
+    const [lotes, vendedores, roteiros, campanhas] = await Promise.all([
       this.porLote(tenantId, productCode),
       this.porVendedor(tenantId),
       this.porRoteiro(tenantId, productCode),
+      this.porCampanha(tenantId, productCode),
     ]);
 
     return {
       lotes: lotes.map((l) => ({ ...l, conversao: conversaoDoLote(l) })),
       vendedores: vendedores.map((v) => ({ ...v, aproveitamento: aproveitamento(v) })),
       roteiros: compararRoteiros(roteiros),
+      campanhas: campanhas.map((c) => ({
+        ...c,
+        conversao: conversaoDaCampanha(c),
+        resposta: respostaDaCampanha(c),
+      })),
     };
+  }
+
+  /**
+   * Por campanha. O denominador é o que foi ENTREGUE (`campaign_targets` com
+   * `status = 'sent'`), não o que entrou na fila: alvo pulado por opt-out ou que
+   * falhou no envio nunca teve chance de responder, e contá-lo afunda a taxa de uma
+   * campanha que funcionou.
+   *
+   * `LEFT JOIN` na oportunidade porque campanha sem nenhuma resposta é justamente a
+   * que precisa aparecer no relatório — sumir com ela deixaria a lista só com as
+   * campanhas boas, que é como se conclui que tudo vai bem.
+   */
+  private async porCampanha(tenantId: string, productCode?: string): Promise<LinhaDeCampanha[]> {
+    const filtro = productCode ? 'AND c.product_code = $2' : '';
+    const args = productCode ? [tenantId, productCode] : [tenantId];
+
+    return this.prisma.$queryRawUnsafe<LinhaDeCampanha[]>(
+      `SELECT c.name                                                         AS "nome",
+              c.channel                                                      AS "canal",
+              (SELECT count(*)::int FROM campaign_targets t
+                WHERE t.campaign_id = c.id AND t.status = 'sent')            AS "enviados",
+              count(o.id)::int                                               AS "oportunidades",
+              count(*) FILTER (WHERE o.stage = 'won')::int                    AS "ganhos",
+              count(*) FILTER (WHERE o.stage IN ('lost','discarded'))::int    AS "perdidos",
+              count(*) FILTER (WHERE o.stage IN ('new','qualified','proposal','paused'))::int AS "emAndamento"
+         FROM campaigns c
+         LEFT JOIN opportunities o ON o.campaign_id = c.id
+        WHERE c.tenant_id = $1 ${filtro}
+        GROUP BY c.id, c.name, c.channel, c.created_at
+        ORDER BY c.created_at DESC
+        LIMIT 50`,
+      ...args,
+    );
   }
 
   /**
