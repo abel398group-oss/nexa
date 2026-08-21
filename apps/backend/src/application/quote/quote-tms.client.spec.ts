@@ -218,6 +218,28 @@ describe('cliente do TMS — campos aditivos da análise crítica (2026-08-19)',
     expect((r as any).taxes).toBeNull();
   });
 
+  it('rate em PERCENTUAL (como a produção manda) é normalizado pra fração', async () => {
+    // Contrato dizia fração (0.12), produção manda 12.00 — a mensagem chegou a exibir
+    // "(1200%)" ao vivo em 20/08/2026. Alíquota > 1 só pode ser percentual.
+    globalThis.fetch = vi.fn(async () =>
+      respostaFake({
+        price: 1310.82,
+        draftId: '1',
+        taxes: {
+          total: 236.6,
+          items: [
+            { acronym: 'ICMS', name: 'ICMS', rate: 12.0, value: 157.3 },
+            { acronym: 'PIS', name: 'PIS', rate: 0.0165, value: 10 },
+          ],
+        },
+      }),
+    ) as any;
+    const r: any = await new QuoteTmsClient().cotar('u', corpo, '55119');
+    expect(r.taxes.items[0].rate).toBe(0.12);
+    // Fração de verdade passa intocada.
+    expect(r.taxes.items[1].rate).toBe(0.0165);
+  });
+
   it('item de imposto sem acronym é descartado da lista', async () => {
     globalThis.fetch = vi.fn(async () =>
       respostaFake({

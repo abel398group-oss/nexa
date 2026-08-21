@@ -200,12 +200,20 @@ export class QuoteTmsClient {
     if (!Number.isFinite(total)) return null;
     const itens = Array.isArray(bruto?.items) ? bruto.items : [];
     const items: ImpostoDaCotacao[] = itens
-      .map((i: any) => ({
-        acronym: String(i?.acronym ?? ''),
-        name: String(i?.name ?? ''),
-        rate: Number.isFinite(Number(i?.rate)) ? Number(i.rate) : 0,
-        value: Number.isFinite(Number(i?.value)) ? Number(i.value) : 0,
-      }))
+      .map((i: any) => {
+        const rateBruto = Number.isFinite(Number(i?.rate)) ? Number(i.rate) : 0;
+        return {
+          acronym: String(i?.acronym ?? ''),
+          name: String(i?.name ?? ''),
+          // O contrato combinado dizia fração (0.12 = 12%), mas a produção manda
+          // PERCENTUAL (12.00) — visto ao vivo em 20/08/2026: a mensagem saiu "(1200%)".
+          // Alíquota de imposto acima de 100% não existe, então > 1 só pode ser
+          // percentual: normaliza pra fração aqui, na entrada, e o resto do módulo
+          // continua com uma convenção só.
+          rate: rateBruto > 1 ? rateBruto / 100 : rateBruto,
+          value: Number.isFinite(Number(i?.value)) ? Number(i.value) : 0,
+        };
+      })
       .filter((i: ImpostoDaCotacao) => i.acronym);
     return { total, items };
   }
