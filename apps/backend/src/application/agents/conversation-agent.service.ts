@@ -1077,6 +1077,11 @@ export class ConversationAgentService {
             summary: input.message.slice(0, 120),
             assignedSellerId: handoff?.sellerId,
             assignedTo: handoff?.sellerName,
+            // O MERCADO da conversa vai junto (21/08/2026): sem ele a oportunidade
+            // nascia com productCode null e o filtro de mercado do SDR/closer
+            // (`productCode IN (...)`) nunca a mostrava — o lead que respondeu à
+            // campanha ficava invisível exatamente para quem devia atendê-lo.
+            productCode: (conv as any).productCode ?? null,
           })
           .catch(() => null);
       }
@@ -1126,6 +1131,9 @@ export class ConversationAgentService {
           intent: route.intent,
           summary: input.message.slice(0, 120),
           assignedSellerId: dono?.ownerSellerId ?? undefined,
+          // Mesmo motivo do lead quente acima: sem o mercado a oportunidade morna
+          // some da fila de todo SDR com escopo de mercado.
+          productCode: (conv as any).productCode ?? null,
         })
         .catch((e) => {
           // Nunca derruba a resposta ao lead por causa do funil, mas também não some:

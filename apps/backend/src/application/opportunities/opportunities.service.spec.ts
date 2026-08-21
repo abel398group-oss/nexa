@@ -135,6 +135,61 @@ describe('OpportunitiesService', () => {
     expect(prisma.opportunity.update.mock.calls[0][0].data).toMatchObject({ assignedSellerId: 's1', assignedTo: 'João' });
   });
 
+  // ── A dupla oportunidade do lead importado (auditoria 21/08/2026) ─────────
+  // O lead de CSV nasce com conversationId null e a campanha nunca o atualiza.
+  // Quando ele respondia, o dedup por conversationId não achava nada e nascia
+  // uma SEGUNDA oportunidade — o mesmo contato duas vezes na fila do SDR, com
+  // donos diferentes. O fallback por contactId ADOTA a oportunidade do lote.
+
+  it('createFromLead: conversa nova + oportunidade do lote existente -> ADOTA, nao duplica', async () => {
+    prisma.opportunity.findFirst = vi.fn()
+      .mockResolvedValueOnce(null) // por conversationId: nada
+      .mockResolvedValueOnce({    // por contactId: a oportunidade do CSV
+        id: 'do-lote', conversationId: null, campaignId: null, productCode: null,
+        assignedSellerId: 's-lote', assignedTo: 'Mateus',
+      });
+    prisma.aiMessage.findFirst.mockResolvedValue({ campaignId: 'camp-x' });
+    prisma.opportunity.update.mockResolvedValue({ id: 'do-lote', conversationId: 'c1' });
+
+    const out = await svc.createFromLead('t1', {
+      conversationId: 'c1', contactId: 'ct1', productCode: 'pneus', interestScore: 80,
+    });
+
+    expect(out).toMatchObject({ id: 'do-lote' });
+    expect(prisma.opportunity.create).not.toHaveBeenCalled();
+    // e a adoção preenche o que faltava: conversa, campanha de origem e mercado
+    expect(prisma.opportunity.update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'do-lote' },
+      data: { conversationId: 'c1', campaignId: 'camp-x', productCode: 'pneus' },
+    });
+    // o dono da distribuição do lote NÃO é sobrescrito
+    expect(prisma.opportunity.update.mock.calls[0][0].data.assignedSellerId).toBeUndefined();
+  });
+
+  it('createFromLead: fallback por contato só olha oportunidade ABERTA e do mesmo mercado (ou sem mercado)', async () => {
+    prisma.opportunity.findFirst = vi.fn().mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c1', contactId: 'ct1', productCode: 'pneus' });
+
+    const whereFallback = prisma.opportunity.findFirst.mock.calls[1][0].where;
+    expect(whereFallback).toMatchObject({
+      tenantId: 't1',
+      contactId: 'ct1',
+      stage: { notIn: ['won', 'lost', 'discarded'] },
+      OR: [{ productCode: null }, { productCode: 'pneus' }],
+    });
+  });
+
+  it('createFromLead: propaga o productCode na criacao', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue(null);
+    prisma.opportunity.create.mockResolvedValue({ id: 'nova' });
+
+    await svc.createFromLead('t1', { conversationId: 'c1', contactId: 'ct1', productCode: 'pneus' });
+
+    expect(prisma.opportunity.create.mock.calls[0][0].data).toMatchObject({ productCode: 'pneus' });
+  });
+
   // ── F7 (RevOps): promover conversa a oportunidade (decisao do vendedor) ───
 
   describe('createFromConversation', () => {

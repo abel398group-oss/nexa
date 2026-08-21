@@ -113,12 +113,19 @@ describe('filtroDeMercado — o que entra no where', () => {
     expect(filtroDeMercado(undefined)).toEqual({});
   });
 
-  it('com escopo restringe aos mercados', () => {
-    expect(filtroDeMercado(['agabe'])).toEqual({ productCode: { in: ['agabe'] } });
+  // Lead sem mercado (`productCode: null`) ENTRA no escopo de quem tem vínculo
+  // (21/08/2026): `IN (...)` exclui NULL em SQL, e a oportunidade que nascia sem
+  // mercado ficava invisível para SDR e closer ao mesmo tempo — não aparecia em
+  // lugar nenhum da operação.
+  it('com escopo restringe aos mercados, mas o lead sem mercado continua visível', () => {
+    expect(filtroDeMercado(['agabe'])).toEqual({
+      OR: [{ productCode: { in: ['agabe'] } }, { productCode: null }],
+    });
   });
 
   // `{ in: [] }` não casa com nada — é o fail-closed. Um `{}` aqui devolveria a base
-  // inteira para quem não tem vínculo, que é o oposto do pedido.
+  // inteira para quem não tem vínculo, que é o oposto do pedido. E o lead sem mercado
+  // NÃO entra aqui: quem não tem vínculo nenhum não ganha visão por tabela vazia.
   it('lista vazia não casa com nada, em vez de liberar tudo', () => {
     expect(filtroDeMercado([])).toEqual({ productCode: { in: [] } });
   });

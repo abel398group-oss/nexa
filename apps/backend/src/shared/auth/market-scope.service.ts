@@ -111,10 +111,19 @@ export class MarketScopeService {
  *
  * `productCode: { in: [] }` não é acidente: é o fail-closed. Um `{}` no lugar devolveria
  * a base inteira para quem não tem vínculo, que é o oposto do pedido.
+ *
+ * Lead SEM mercado (`productCode: null`) entra no escopo de quem TEM vínculo
+ * (21/08/2026): `IN (...)` exclui NULL em SQL, então a oportunidade que nascia sem
+ * mercado — todo lead criado pelo agente antes da propagação do productCode — era
+ * invisível para o SDR e para o closer ao mesmo tempo, e não aparecia em lugar
+ * nenhum da operação. Ela é de alguém até prova em contrário; esconder de todos é
+ * o único resultado certamente errado. O fail-closed de quem não tem vínculo
+ * nenhum continua intacto.
  */
 export function filtroDeMercado(mercados: string[] | undefined): Record<string, unknown> {
   if (!mercados) return {};
-  return { productCode: { in: mercados } };
+  if (!mercados.length) return { productCode: { in: [] } };
+  return { OR: [{ productCode: { in: mercados } }, { productCode: null }] };
 }
 
 /** Recusa a ação quando o mercado não é do operador. Usado onde o code vem por parâmetro. */
