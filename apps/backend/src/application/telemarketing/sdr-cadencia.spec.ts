@@ -74,6 +74,70 @@ describe('SdrService.registrarAtividade — pausa da cadência', () => {
   });
 });
 
+/**
+ * Qualificação — PATCH de verdade.
+ *
+ * O SDR marca um critério durante a ligação e escreve a observação depois de
+ * desligar. Se o segundo salvamento apagasse o primeiro, ele aprenderia a preencher
+ * tudo de uma vez — ou a não preencher.
+ */
+describe('SdrService.qualificar', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('preserva o que já estava gravado ao mudar um campo só', async () => {
+    const { svc, prisma } = montar();
+    prisma.opportunity.findFirst.mockResolvedValue({
+      ...OPORTUNIDADE,
+      qualification: { decisor: true, observacao: 'sócio decide junto' },
+    });
+
+    await svc.qualificar('t1', USER, 'op1', { temOrcamento: true });
+
+    const gravado = prisma.opportunity.update.mock.calls[0][0].data.qualification;
+    expect(gravado).toMatchObject({
+      decisor: true,
+      observacao: 'sócio decide junto',
+      temOrcamento: true,
+    });
+  });
+
+  it('marcar como false grava false, e não apaga o campo', async () => {
+    const { svc, prisma } = montar();
+    prisma.opportunity.findFirst.mockResolvedValue({
+      ...OPORTUNIDADE,
+      qualification: { decisor: true },
+    });
+
+    await svc.qualificar('t1', USER, 'op1', { decisor: false });
+
+    expect(prisma.opportunity.update.mock.calls[0][0].data.qualification).toMatchObject({
+      decisor: false,
+    });
+  });
+
+  // Quem avaliou e quando é o que responde "esta qualificação ainda vale?" seis meses
+  // depois, e o que distingue o lead avaliado do nunca olhado.
+  it('carimba quem avaliou e quando', async () => {
+    const { svc, prisma } = montar();
+
+    await svc.qualificar('t1', USER, 'op1', { decisor: true });
+
+    const gravado = prisma.opportunity.update.mock.calls[0][0].data.qualification;
+    expect(gravado.avaliadoPor).toBe('s1');
+    expect(gravado.avaliadoEm).toEqual(expect.any(String));
+  });
+
+  it('a observação é gravada sem espaço sobrando nas pontas', async () => {
+    const { svc, prisma } = montar();
+
+    await svc.qualificar('t1', USER, 'op1', { observacao: '  retomar dia 20  ' });
+
+    expect(prisma.opportunity.update.mock.calls[0][0].data.qualification.observacao).toBe(
+      'retomar dia 20',
+    );
+  });
+});
+
 describe('SdrService.ajustarScore', () => {
   beforeEach(() => vi.clearAllMocks());
 

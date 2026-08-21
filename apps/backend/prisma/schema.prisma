@@ -1255,6 +1255,18 @@ model Opportunity {
   assignedSeller Seller?  @relation(fields: [assignedSellerId], references: [id], onDelete: SetNull)
   pausedUntil    DateTime? @map("paused_until")   // stage=paused: quando retomar
   discardReason  String?   @map("discard_reason") // stage=discarded: sem_fit | sem_resposta | concorrente | outro
+  /// Qualificação do SDR (20/08/2026): critérios marcados na ligação mais a
+  /// observação dele. `{ decisor, frotaPropria, temOrcamento, observacao,
+  /// avaliadoEm, avaliadoPor }`.
+  ///
+  /// JSONB e não três colunas porque os critérios são do time comercial e vão mudar
+  /// ("tem TMS hoje?", "quantas filiais?") — cada ajuste viraria migration em
+  /// produção. O DTO valida o formato, então a flexibilidade não vira lixo.
+  ///
+  /// Na OPORTUNIDADE e não no contato: a qualificação é daquele ciclo de venda. O
+  /// mesmo contato pode ser recusado hoje por falta de orçamento e qualificar em seis
+  /// meses — duas oportunidades, duas avaliações, as duas preservadas.
+  qualification  Json?     @map("qualification")
   // F7 (RevOps): ultimo aviso de "lead parado" — evita repetir o mesmo lead
   // todo dia no sino ate alguem mexer nele.
   staleNotifiedAt DateTime? @map("stale_notified_at")

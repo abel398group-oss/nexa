@@ -1,0 +1,13 @@
+-- Qualificação do SDR na oportunidade.
+--
+-- Até aqui não havia nada estruturado: o único registro do que o vendedor descobriu
+-- na ligação era o texto livre da anotação. "Quantos leads com decisor na mesa?" não
+-- tinha resposta, porque a informação existia só em prosa.
+--
+-- JSONB e não três colunas: os critérios são do time comercial e vão mudar. Cada
+-- ajuste viraria migration em produção, e é assim que uma tabela ganha coluna morta.
+-- O formato é validado no DTO.
+--
+-- Aditiva e anulável: as oportunidades que já existem entram com NULL, que é o
+-- estado honesto de "ninguém qualificou ainda".
+ALTER TABLE "opportunities" ADD COLUMN IF NOT EXISTS "qualification" JSONB;

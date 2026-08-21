@@ -7,10 +7,12 @@ export type {
   AtividadeRecente,
 } from './types/sdr.types';
 
-export { ROTULO_PRIORIDADE, ROTULO_RESULTADO } from './types/sdr.types';
+export { ROTULO_PRIORIDADE, ROTULO_RESULTADO, CRITERIOS_QUALIFICACAO } from './types/sdr.types';
+export type { Qualificacao } from './types/sdr.types';
 
 export {
   ajustarScore,
+  qualificarLead,
   descartarLead,
   listClosers,
   listMaterial,

@@ -7,6 +7,7 @@ import {
   AjustarScoreDto,
   DescartarDto,
   PausarDto,
+  QualificarDto,
   RegistrarAtividadeDto,
   TransferirDto,
 } from './dto/sdr.dto';
@@ -88,6 +89,23 @@ export class SdrController {
     @Query('q') q?: string,
   ) {
     return this.sdr.materialDoMercado(tenantId, productCode, q, user);
+  }
+
+  /**
+   * O que o SDR descobriu na ligação.
+   *
+   * PATCH de verdade: campo ausente não é tocado, para ele poder marcar um critério
+   * durante a ligação e escrever a observação depois sem apagar o primeiro.
+   */
+  @Patch('opportunities/:id/qualification')
+  @RequirePerm('sdr')
+  qualificar(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Usuario,
+    @Param('id') id: string,
+    @Body() dto: QualificarDto,
+  ) {
+    return this.sdr.qualificar(tenantId, user, id, dto);
   }
 
   /**

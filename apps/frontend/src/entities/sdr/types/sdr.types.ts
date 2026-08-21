@@ -13,6 +13,31 @@ export interface AtividadeRecente {
   createdAt: string;
 }
 
+/**
+ * Qualificação do lead — o que o SDR descobriu na ligação.
+ *
+ * Os três critérios são os que o time definiu; quando mudarem, muda este tipo. A
+ * coluna no banco é JSONB justamente para essa mudança não custar migration.
+ *
+ * Campo ausente é diferente de `false`: significa que ninguém respondeu aquela
+ * pergunta ainda. É por isso que são opcionais em vez de `boolean` com default.
+ */
+export interface Qualificacao {
+  decisor?: boolean;
+  frotaPropria?: boolean;
+  temOrcamento?: boolean;
+  observacao?: string;
+  avaliadoEm?: string;
+  avaliadoPor?: string | null;
+}
+
+/// Os critérios na ordem em que aparecem na tela, com o rótulo que o SDR lê.
+export const CRITERIOS_QUALIFICACAO = [
+  { campo: 'decisor', rotulo: 'Fala com quem decide' },
+  { campo: 'frotaPropria', rotulo: 'Tem frota própria' },
+  { campo: 'temOrcamento', rotulo: 'Tem orçamento agora' },
+] as const;
+
 export interface FichaDoContato {
   id: string;
   name: string | null;
@@ -44,6 +69,9 @@ export interface ItemDaFila {
   /// Conversa deste lead, quando existe. É a chave da aba Conversa do cockpit; nula
   /// no lead que veio de CSV e ainda não recebeu campanha.
   conversationId: string | null;
+  /// O que o SDR descobriu na ligação. `null` = ninguém qualificou ainda, que é
+  /// diferente de "qualificou e marcou tudo como não".
+  qualification: Qualificacao | null;
   contact: FichaDoContato | null;
   activities: AtividadeRecente[];
   tentativas: number;

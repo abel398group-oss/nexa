@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -130,6 +131,39 @@ export class DescartarDto extends ComCarimboDto {
  * ordenação de fila e corte de lead quente, e um 250 que passasse estragaria os dois
  * em silêncio. Regra que sustenta ordenação não fica só na borda.
  */
+/**
+ * Qualificação do lead — o que o SDR descobriu na ligação.
+ *
+ * Todos opcionais porque é PATCH de verdade: ele marca "decisor" durante a ligação e
+ * escreve a observação depois de desligar. Exigir tudo de uma vez ensinaria a
+ * preencher no fim, ou a não preencher.
+ *
+ * Os três critérios são os que o time definiu em 20/08/2026. Quando mudarem, muda
+ * este DTO — a coluna é JSONB justamente para a mudança não custar migration.
+ */
+export class QualificarDto {
+  @ApiPropertyOptional({ description: 'Fala com quem decide a compra.' })
+  @IsOptional()
+  @IsBoolean()
+  decisor?: boolean;
+
+  @ApiPropertyOptional({ description: 'Tem frota própria (não é só agenciador).' })
+  @IsOptional()
+  @IsBoolean()
+  frotaPropria?: boolean;
+
+  @ApiPropertyOptional({ description: 'Tem orçamento disponível neste ciclo.' })
+  @IsOptional()
+  @IsBoolean()
+  temOrcamento?: boolean;
+
+  @ApiPropertyOptional({ description: 'O que não cabe em caixa de marcar.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  observacao?: string;
+}
+
 export class AjustarScoreDto {
   @ApiProperty({ minimum: 0, maximum: 100, description: 'Temperatura do lead, 0 a 100.' })
   @Type(() => Number)

@@ -60,6 +60,10 @@ export class SdrService {
         // A chave da aba Conversa do cockpit. Sem ela a tela não tem o que abrir —
         // é null no lead que veio de CSV e ainda não recebeu campanha.
         conversationId: true,
+        // O que o SDR descobriu na ligação. Vem na fila (e não numa segunda chamada)
+        // porque a tela precisa dele já preenchido ao abrir o lead — buscar depois
+        // faria as caixas piscarem de vazio para marcado a cada troca.
+        qualification: true,
         // `Opportunity` não declara relação com `Contact` — só guarda `contactId`.
         // Então a ficha vem numa segunda query em lote, nunca uma por lead.
         contactId: true,
@@ -180,6 +184,49 @@ export class SdrService {
     }
 
     return atividade;
+  }
+
+  /**
+   * O SDR grava o que descobriu na ligação (21/08/2026).
+   *
+   * Antes disto o único registro era o texto livre da anotação: "quantos leads com
+   * decisor na mesa?" não tinha resposta, porque a informação existia só em prosa.
+   *
+   * PATCH de verdade — campo ausente não é tocado. O SDR marca "decisor" durante a
+   * ligação e escreve a observação depois de desligar; se o segundo salvamento
+   * apagasse o primeiro, ele aprenderia a preencher tudo de uma vez ou a não
+   * preencher nada.
+   */
+  async qualificar(
+    tenantId: string,
+    user: UsuarioComEscopo & { sellerId?: string | null },
+    opportunityId: string,
+    dados: {
+      decisor?: boolean;
+      frotaPropria?: boolean;
+      temOrcamento?: boolean;
+      observacao?: string;
+    },
+  ) {
+    const atual = await this.doEscopo(tenantId, user, opportunityId);
+    const anterior = ((atual as any).qualification ?? {}) as Record<string, unknown>;
+
+    const qualification = {
+      ...anterior,
+      ...(dados.decisor !== undefined ? { decisor: dados.decisor } : {}),
+      ...(dados.frotaPropria !== undefined ? { frotaPropria: dados.frotaPropria } : {}),
+      ...(dados.temOrcamento !== undefined ? { temOrcamento: dados.temOrcamento } : {}),
+      ...(dados.observacao !== undefined ? { observacao: dados.observacao.trim() } : {}),
+      // Quem avaliou e quando. É o que responde "esta qualificação ainda vale?" seis
+      // meses depois, e o que distingue o lead avaliado do nunca olhado.
+      avaliadoEm: new Date().toISOString(),
+      avaliadoPor: user.sellerId ?? null,
+    };
+
+    return this.prisma.opportunity.update({
+      where: { id: opportunityId },
+      data: { qualification: qualification as any },
+    });
   }
 
   /**

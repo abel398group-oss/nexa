@@ -17,6 +17,8 @@ import { identidadeVisivel } from '@/shared/lib/conversation';
 import { getRoteiro } from '@/entities/sales-script';
 import {
   ajustarScore,
+  qualificarLead,
+  CRITERIOS_QUALIFICACAO,
   descartarLead,
   listClosers,
   listMaterial,
@@ -712,6 +714,75 @@ function ScoreDoLead({ lead }: { lead: ItemDaFila }) {
   );
 }
 
+/**
+ * O que o SDR descobriu na ligação.
+ *
+ * Antes disto o único registro era o texto livre da anotação, e "quantos leads com
+ * decisor na mesa?" não tinha resposta — a informação existia só em prosa.
+ *
+ * As caixas salvam NA HORA, uma a uma. O SDR está com o telefone no ouvido: obrigar a
+ * marcar tudo e clicar em "Salvar" no fim é o que faz ele não marcar nada. A
+ * observação salva ao sair do campo, porque salvar a cada tecla seria uma requisição
+ * por letra.
+ */
+function QualificacaoDoLead({ lead }: { lead: ItemDaFila }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const q = lead.qualification;
+  const [observacao, setObservacao] = useState(q?.observacao ?? '');
+
+  // O lead troca debaixo do componente quando o SDR anda na fila. Sem isto a
+  // observação de um apareceria no campo do outro — e salvaria no lead errado.
+  useEffect(() => setObservacao(lead.qualification?.observacao ?? ''), [lead.id]);
+
+  const salvar = useMutation({
+    mutationFn: (dados: Parameters<typeof qualificarLead>[1]) => qualificarLead(lead.id, dados),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['sdr', 'queue'] }),
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Não consegui salvar a qualificação.'),
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">Qualificação</p>
+        {q?.avaliadoEm && (
+          <span className="text-[10px] text-base-content/40">
+            {new Date(q.avaliadoEm).toLocaleDateString('pt-BR')}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        {CRITERIOS_QUALIFICACAO.map(({ campo, rotulo }) => (
+          <label key={campo} className="flex cursor-pointer items-center gap-2 py-0.5 text-sm">
+            <input
+              type="checkbox"
+              checked={q?.[campo] === true}
+              disabled={salvar.isPending}
+              onChange={(e) => salvar.mutate({ [campo]: e.target.checked })}
+            />
+            {rotulo}
+          </label>
+        ))}
+      </div>
+
+      <Textarea
+        className="mt-2 text-sm"
+        rows={3}
+        placeholder="O que não cabe em caixa de marcar — quem decide junto, quando fecha o mês…"
+        value={observacao}
+        onChange={(e) => setObservacao(e.target.value)}
+        // Ao sair do campo, e só se mudou: sem a comparação, clicar fora sem digitar
+        // nada dispararia uma escrita e carimbaria "avaliado agora" à toa.
+        onBlur={() => {
+          if (observacao !== (q?.observacao ?? '')) salvar.mutate({ observacao });
+        }}
+      />
+    </Card>
+  );
+}
+
 function FichaDoLead({ lead }: { lead: ItemDaFila }) {
   const c = lead.contact;
   const fone = c?.phone ?? lead.phone ?? null;
@@ -775,6 +846,10 @@ function FichaDoLead({ lead }: { lead: ItemDaFila }) {
           <Linha rotulo="Origem" valor={c?.batch?.source ?? null} />
         </div>
       </Card>
+
+      {/* Entre a ficha e o histórico: a qualificação é o que ele PREENCHE durante a
+          ligação, então fica acima do que ele só consulta. */}
+      <QualificacaoDoLead lead={lead} />
 
       <Card className="p-5">
         <p className="mb-2 text-sm font-medium">Histórico</p>

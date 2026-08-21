@@ -80,6 +80,20 @@ export async function descartarLead(
 }
 
 /**
+ * Grava o que o SDR descobriu na ligação.
+ *
+ * PATCH de verdade: manda só o que mudou. Ele marca um critério durante a ligação e
+ * escreve a observação depois — o segundo salvamento não pode apagar o primeiro.
+ */
+export async function qualificarLead(
+  id: string,
+  dados: { decisor?: boolean; frotaPropria?: boolean; temOrcamento?: boolean; observacao?: string },
+) {
+  const r = await api.patch(`/sdr/opportunities/${id}/qualification`, dados);
+  return r.data;
+}
+
+/**
  * Recalibra o termômetro do lead.
  *
  * O número era escrito só pela IA, a partir do texto que o lead mandou. Quem falou
