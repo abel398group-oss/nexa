@@ -136,8 +136,24 @@ function corpoParaHtml(texto: string, cor: string = LARANJA): string {
       out += `<a href="${esc(url)}" class="c-accent" style="color:${cor};text-decoration:underline;">${esc(rotuloDeLink(url))}</a>`;
       cursor = (m.index ?? 0) + url.length;
     }
-    return out + esc(linha.slice(cursor));
+    return negrito(out + esc(linha.slice(cursor)));
   };
+
+  /**
+   * `**assim**` vira negrito de verdade.
+   *
+   * Os planos de campanha são escritos em markdown, e quem escreve marca a frase
+   * que quer destacar do jeito que o editor mostra. Sem esta conversão o lead
+   * recebia os asteriscos crus — "existe uma **tabela pronta**" —, que anuncia
+   * texto copiado de outro lugar logo na frase que era para ser a mais forte.
+   *
+   * Roda DEPOIS do escape, sobre o HTML já seguro: os `*` não são caracteres
+   * escapáveis, então sobrevivem intactos ao `esc`, e a tag entra sem reabrir
+   * caminho para injeção. Um asterisco solto (`2*3`) não casa — o par é exigido.
+   */
+  function negrito(html: string): string {
+    return html.replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');
+  }
 
   return texto
     .split(/\n{2,}/)

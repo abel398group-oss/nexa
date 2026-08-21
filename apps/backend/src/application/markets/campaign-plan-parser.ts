@@ -60,19 +60,54 @@ export interface ToqueDoRoteiro {
  * ali falta uma decisão humana.
  */
 function normalizarPlaceholders(texto: string): string {
-  return texto
-    .replace(/\[nome\]/gi, '{{nome}}')
-    .replace(/\[empresa\]/gi, '{{empresa}}');
+  return (
+    texto
+      // Quem assina × a quem se escreve — a caixa NÃO decide isso.
+      //
+      // Os dois planos usam `[Nome]` com maiúscula para coisas opostas: no de
+      // julho é o lead no começo da frase ("[Nome], a maioria dos sistemas…"), no
+      // de agosto é o remetente na assinatura ("Abraço,\n[Nome]"). Uma regra por
+      // maiúscula acerta um e erra o outro — e errar aqui produz "Abraço, Carlos"
+      // assinado para o próprio Carlos.
+      //
+      // O que separa os dois é a POSIÇÃO: assinatura é o placeholder SOZINHO na
+      // linha. Frase é o placeholder com texto ao redor.
+      .replace(/^[ \t]*\[nome\][ \t]*$/gim, '{{remetente}}')
+      .replace(/\[nome\]/gi, '{{nome}}')
+      .replace(/\[empresa\]/gi, '{{empresa}}')
+  );
 }
 
 /** Cabeçalho de uma peça: `**Toque 1 (D0) — abertura:**` */
 const CABECALHO = /^\*\*(Toque|Email)\s+(\d+)\s*(\([^)]*\))?\s*(?:—|-|–)?\s*([^*]*?):?\*\*\s*$/i;
+
+/**
+ * O outro formato que os roteiros usam — e o mais recente deles:
+ *
+ *     ### E1 · D0 — Tabela de frete pronta (o diferencial)
+ *
+ * Título de seção em vez de negrito, `E1` em vez de "Email 1", e o dia separado
+ * por `·`. Quem escreve o plano não pensa no parser, pensa no documento; ensinar
+ * as duas formas custa uma regex e evita pedir a alguém que reescreva um plano
+ * pronto para caber num formato que só existe aqui dentro.
+ */
+const CABECALHO_SECAO =
+  /^#{2,4}\s*(E|W|Toque|Email|WhatsApp)\s*(\d+)\s*(?:·|-|—|–)?\s*(D\d+)?\s*(?:·|—|-|–)?\s*(.*?)\s*$/i;
 
 /** Linha de citação (`> texto`) — o corpo do WhatsApp. */
 const CITACAO = /^>\s?(.*)$/;
 
 /** `- Assunto: \`texto\`` (com ou sem crase). */
 const ASSUNTO = /^[-*]\s*Assunto:\s*`?(.+?)`?\s*$/i;
+
+/**
+ * `**Assunto (A):** \`texto\`` — o formato do plano de agosto/2026.
+ *
+ * O `(A)` é a variante do teste A/B, e só a primeira entra: o modelo guarda UM
+ * assunto, e escolher o vencedor é decisão de quem lê o resultado do A/B, não do
+ * parser. A variante B fica no documento, para ser usada quando alguém quiser.
+ */
+const ASSUNTO_NEGRITO = /^\*\*Assunto(?:\s*\([^)]*\))?:?\*\*:?\s*`?(.+?)`?\s*$/i;
 
 /** `- Corpo: texto` */
 const CORPO = /^[-*]\s*Corpo:\s*(.+)$/i;
@@ -122,6 +157,26 @@ export function extrairToques(markdown: string): ToqueDoRoteiro[] {
       continue;
     }
 
+    // `### E1 · D0 — Título`. Testado DEPOIS do formato em negrito e antes do
+    // corte por título de seção, que é o que fecha a peça anterior.
+    const secao = linha.match(CABECALHO_SECAO);
+    if (secao) {
+      fechar();
+      const [, tipo, numero, dia, titulo] = secao;
+      // `E` = e-mail, `W` = WhatsApp. "Toque" sozinho continua sendo WhatsApp,
+      // como no formato antigo.
+      const ehEmail = /^(e|email)$/i.test(tipo);
+      const rotuloDia = dia ? ` (${dia.trim()})` : '';
+      const rotuloTitulo = titulo?.trim() ? ` — ${titulo.trim()}` : '';
+      atual = {
+        channel: ehEmail ? 'email' : 'whatsapp',
+        step: Number(numero),
+        name: `${ehEmail ? 'Email' : 'Toque'} ${numero}${rotuloDia}${rotuloTitulo}`,
+        partes: [],
+      };
+      continue;
+    }
+
     if (!atual) continue;
 
     // Um título de seção (`## 6. Conteúdo de apoio`) encerra a peça aberta —
@@ -131,11 +186,18 @@ export function extrairToques(markdown: string): ToqueDoRoteiro[] {
       continue;
     }
 
-    const assunto = linha.match(ASSUNTO);
+    const assunto = linha.match(ASSUNTO) ?? linha.match(ASSUNTO_NEGRITO);
+    // `??=`: só o PRIMEIRO assunto entra. O plano traz variante A e B para o
+    // teste A/B, e a segunda sobrescreveria a primeira em silêncio.
     if (assunto) {
-      atual.subject = normalizarPlaceholders(assunto[1].trim());
+      atual.subject ??= normalizarPlaceholders(assunto[1].trim());
       continue;
     }
+
+    // `**Pré-header:** …` é instrução de envio, não corpo da mensagem: o
+    // pré-header vive num campo próprio do provedor. Entrando no corpo, ele
+    // apareceria como primeira frase do e-mail, repetindo o assunto.
+    if (/^\*\*Pr[ée]-?header/i.test(linha)) continue;
 
     const corpo = linha.match(CORPO);
     if (corpo) {

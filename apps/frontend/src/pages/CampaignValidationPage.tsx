@@ -4,6 +4,7 @@ import { Button, Card, Icon, PageContainer, PageHeader, Breadcrumb, StatusBadge 
 import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { marketPadrao, useMarketAtivo } from '@/shared/lib/marketAtivo';
+import { INSTRUCAO_DE_FORMATO } from '@/shared/lib/formatoDoRoteiro';
 import {
   listMarkets,
   listMarketAssets,
@@ -118,6 +119,22 @@ export function CampaignValidationPage() {
    * decide o tipo no servidor, e descobrir isso levando recusa depois de escrever o
    * texto inteiro seria o pior momento possível.
    */
+  /**
+   * Copia a instrução de formato para colar na IA que escreve o roteiro.
+   *
+   *  pede permissão em alguns navegadores e falha em contexto não
+   * seguro; o fallback abre o texto para copiar à mão em vez de dizer "copiado"
+   * sem ter copiado nada.
+   */
+  async function copiarFormato() {
+    try {
+      await navigator.clipboard.writeText(INSTRUCAO_DE_FORMATO);
+      toast.success('Formato copiado. Cole junto com o pedido do texto para a IA.');
+    } catch {
+      window.prompt('Copie o formato (Ctrl+C):', INSTRUCAO_DE_FORMATO);
+    }
+  }
+
   function escreverDoZero() {
     setAberto(null);
     setEdicao({ id: null, name: 'novo-roteiro.md', content: '' });
@@ -362,6 +379,13 @@ export function CampaignValidationPage() {
                 arrastado — o texto não sabe por onde entrou. */}
             <Button variant="outline" onClick={escreverDoZero}>
               <Icon name="edit" className="h-4 w-4" /> Escrever roteiro
+            </Button>
+            {/* O roteiro é escrito FORA daqui, numa IA. Esta é a instrução que
+                faz o texto voltar no formato que a aprovação consegue ler — sem
+                ela, o plano entra, a Lia passa a usá-lo e nenhum modelo é criado.
+                Ver formatoDoRoteiro.ts. */}
+            <Button variant="ghost" onClick={() => void copiarFormato()}>
+              <Icon name="bot" className="h-4 w-4" /> Copiar formato p/ IA
             </Button>
             {/* Só aparece com material na tela: botão de esvaziar num mercado já
                 vazio não tem o que fazer, e ocupa o lugar de quem importa. */}

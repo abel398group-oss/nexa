@@ -119,3 +119,104 @@ describe('extrairToques — as mensagens que já estão no roteiro', () => {
     expect(extrairToques('')).toEqual([]);
   });
 });
+
+/**
+ * O formato do plano de agosto/2026 (`12_sequencia_email_solucoes.md`).
+ *
+ * Título de seção em vez de negrito, `E1` em vez de "Email 1", dia separado por
+ * `·`, assunto em `**Assunto (A):**` e corpo inteiro em citação. Quem escreve o
+ * plano não pensa no parser — pensa no documento —, e pedir que reescreva um
+ * plano pronto para caber num formato que só existe aqui dentro é o caminho para
+ * a transcrição manual voltar.
+ */
+describe('extrairToques — formato de seção (### E1 · D0)', () => {
+  const PLANO = [
+    '### E1 · D0 — Tabela de frete pronta (o diferencial)',
+    '',
+    '**Assunto (A):** `tabela de frete cidade por cidade — até quando?`',
+    '**Assunto (B):** `[cidade] → qualquer cidade do Brasil`',
+    '**Pré-header:** A maioria ainda monta tabela na mão.',
+    '',
+    '> Oi, [nome].',
+    '>',
+    '> Quando chega cotação para uma cidade que a [empresa] não atende, o que acontece?',
+    '>',
+    '> Abraço,',
+    '> [Nome]',
+    '',
+    '### E2 · D3 — Cotação em uma tela',
+    '',
+    '**Assunto (A):** `a carga vai para quem responde primeiro`',
+    '',
+    '> [nome], uma conta rápida.',
+  ].join('\n');
+
+  it('lê os toques do formato de seção', () => {
+    const t = extrairToques(PLANO);
+    expect(t).toHaveLength(2);
+    expect(t[0].channel).toBe('email');
+    expect(t[0].step).toBe(1);
+    expect(t[0].name).toContain('D0');
+    expect(t[1].step).toBe(2);
+  });
+
+  // A variante B existe para o teste A/B; o modelo guarda UM assunto, e escolher
+  // o vencedor é decisão de quem lê o resultado, não do parser.
+  it('só o primeiro assunto entra — a variante B não sobrescreve', () => {
+    const t = extrairToques(PLANO);
+    expect(t[0].subject).toBe('tabela de frete cidade por cidade — até quando?');
+  });
+
+  // Pré-header é campo do provedor. No corpo, viraria a primeira frase do e-mail,
+  // repetindo o assunto.
+  it('pré-header não entra no corpo', () => {
+    const t = extrairToques(PLANO);
+    expect(t[0].body).not.toMatch(/monta tabela na mão/);
+  });
+
+  /**
+   * `[Nome]` com maiúscula é QUEM ASSINA — os planos declaram essa convenção.
+   * Caindo na regra de `[nome]`, a assinatura sairia com o nome do LEAD: "Abraço,
+   * Carlos" assinado para o próprio Carlos.
+   */
+  // O que separa assinatura de frase é a POSIÇÃO, não a maiúscula: os dois planos
+  // usam `[Nome]` capitalizado para coisas opostas.
+  it('[Nome] SOZINHO na linha é assinatura — vira {{remetente}}', () => {
+    const t = extrairToques(PLANO);
+    expect(t[0].body).toContain('{{remetente}}');
+    expect(t[0].body).toContain('Oi, {{nome}}.');
+  });
+
+  it('[empresa] vira variável no formato novo também', () => {
+    const t = extrairToques(PLANO);
+    expect(t[0].body).toContain('{{empresa}}');
+  });
+
+  // O formato antigo (`**Toque 1 (D0) — x:**`) não pode parar de funcionar.
+  it('o formato antigo continua sendo lido', () => {
+    const t = extrairToques('**Toque 1 (D0) — abertura:**\n> Oi, [nome]!');
+    expect(t).toHaveLength(1);
+    expect(t[0].channel).toBe('whatsapp');
+  });
+});
+
+/**
+ * Quem assina × a quem se escreve.
+ *
+ * Os dois planos usam `[Nome]` capitalizado para coisas OPOSTAS: no de julho é o
+ * lead abrindo a frase, no de agosto é o remetente assinando. Uma regra por caixa
+ * acerta um e erra o outro — e errar aqui produz "Abraço, Carlos" assinado para o
+ * próprio Carlos. O que separa é a posição.
+ */
+describe('extrairToques — assinatura × abertura de frase', () => {
+  it('sozinho na linha é assinatura', () => {
+    const t = extrairToques('### E1 · D0 — x\n\n**Assunto:** `a`\n\n> Oi.\n>\n> Abraço,\n> [Nome]');
+    expect(t[0].body).toMatch(/Abraço,\n\{\{remetente\}\}/);
+  });
+
+  it('abrindo a frase é o lead', () => {
+    const t = extrairToques('**Toque 1 (D0) — x:**\n> [Nome], a maioria dos sistemas só emite CT-e.');
+    expect(t[0].body).toContain('{{nome}}, a maioria');
+    expect(t[0].body).not.toContain('{{remetente}}');
+  });
+});
