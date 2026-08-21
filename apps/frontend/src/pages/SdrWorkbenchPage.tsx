@@ -33,6 +33,7 @@ import {
   ROTULO_RESULTADO,
   type Closer,
   type ItemDaFila,
+  type Qualificacao,
 } from '@/entities/sdr';
 
 /**
@@ -246,6 +247,7 @@ export function SdrWorkbenchPage() {
       {lead && (dialogo === 'transferir' || dialogo === 'reuniao') && (
         <DialogoTransferencia
           productCode={lead.productCode}
+          qualificacao={lead.qualification}
           modo={dialogo}
           onFechar={() => setDialogo(null)}
           salvando={transferir.isPending}
@@ -1096,8 +1098,15 @@ function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void
 
       <Card className="p-5">
         <p className="mb-2 text-sm font-medium">Histórico</p>
+        {/* "Nenhuma LIGAÇÃO", não "nenhum contato": este card conta o que o SDR
+            registrou, e o card "Já recebeu", logo acima, costuma estar listando
+            dois e-mails de campanha. Dizer "nenhum contato ainda" contradizia o
+            vizinho e mandava o SDR abrir a ligação como se o lead nunca tivesse
+            ouvido falar da empresa — quando ele já recebeu (e talvez leu). */}
         {!lead.activities.length && (
-          <p className="text-sm text-base-content/60">Nenhum contato ainda — a primeira ligação é sua.</p>
+          <p className="text-sm text-base-content/60">
+            Nenhuma ligação registrada — a primeira é sua. Veja acima o que já foi enviado.
+          </p>
         )}
         <ul className="flex flex-col">
           {lead.activities.map((a) => (
@@ -1393,12 +1402,16 @@ function DialogoDescarte({
  */
 function DialogoTransferencia({
   productCode,
+  qualificacao,
   modo,
   onFechar,
   salvando,
   onSalvar,
 }: {
   productCode: string | null;
+  /// O que o SDR marcou na ficha. Entra aqui só para o aviso — a decisão de
+  /// passar continua sendo dele.
+  qualificacao?: Qualificacao | null;
   modo: 'transferir' | 'reuniao';
   onFechar: () => void;
   salvando: boolean;
@@ -1409,6 +1422,10 @@ function DialogoTransferencia({
     notes?: string;
   }) => void;
 }) {
+  /// Nenhum dos três critérios marcado. Observação em prosa não conta: ela é útil,
+  /// mas não responde às perguntas que o closer precisa antes da reunião.
+  const semQualificacao = !CRITERIOS_QUALIFICACAO.some(({ campo }) => qualificacao?.[campo] === true);
+
   const [closerId, setCloserId] = useState('');
   const [quando, setQuando] = useState('');
   const [link, setLink] = useState('');
@@ -1453,6 +1470,17 @@ function DialogoTransferencia({
       }
     >
       <div className="flex flex-col gap-4">
+        {/* Aviso, não trava: o SDR pode ter motivo para passar rápido (o lead pediu
+            para falar com alguém agora), e bloquear aqui empurraria para a gambiarra
+            de marcar caixa sem saber. Mas o silêncio também não servia: as três
+            perguntas são a razão de a etapa existir, e o closer recebia sem elas
+            sem que ninguém tivesse decidido isso. */}
+        {semQualificacao && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+            Você não marcou nenhuma qualificação. O closer vai receber sem saber se
+            fala com quem decide, se tem frota própria ou se tem orçamento agora.
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="closer">{ehReuniao ? 'Quem vai na reunião' : 'Quem vai atender'}</Label>
           <select
