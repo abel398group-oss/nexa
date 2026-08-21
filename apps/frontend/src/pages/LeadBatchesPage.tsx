@@ -51,9 +51,20 @@ export function LeadBatchesPage() {
   const [arrastando, setArrastando] = useState(false);
   const inputArquivo = useRef<HTMLInputElement>(null);
 
+  /**
+   * TODOS os mercados, inclusive os em rascunho.
+   *
+   * Era `listMarkets(true)` — só os liberados —, e isso invertia a ordem do
+   * trabalho: subir a lista é parte de PREPARAR o mercado, e a liberação vem
+   * depois, quando tudo está pronto. Com o filtro, o mercado recém-criado não
+   * aparecia no seletor e a tela ficava intransponível, sem dizer por quê.
+   *
+   * O disparo continua exigindo mercado liberado (market-gate) — lá a trava faz
+   * sentido, porque é o momento em que a mensagem sai para gente de verdade.
+   */
   const { data: mercados = [] } = useQuery<Market[]>({
-    queryKey: ['markets', 'liberados'],
-    queryFn: () => listMarkets(true),
+    queryKey: ['markets'],
+    queryFn: () => listMarkets(false),
   });
   // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
   const [productCode, setProductCode] = useMarketAtivo(mercados);
@@ -178,6 +189,9 @@ export function LeadBatchesPage() {
               {mercados.map((m) => (
                 <option key={m.code} value={m.code}>
                   {m.name}
+                  {/* Rascunho aparece, mas dito: a lista entra, e o disparo só
+                      acontece depois que o mercado for liberado. */}
+                  {m.status !== 'active' ? ' (rascunho)' : ''}
                 </option>
               ))}
             </select>
