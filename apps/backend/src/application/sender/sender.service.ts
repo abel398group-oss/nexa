@@ -1109,7 +1109,18 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     }
 
     const r = await this.prisma.campaignTarget.updateMany({
-      where: { campaignId: id, tenantId, status: 'failed' },
+      // Devolução PERMANENTE fica de fora (21/08/2026): o alvo `failed` com
+      // `error: 'bounce …'` é um endereço morto confirmado pelo servidor de
+      // destino. Reenfileirá-lo era o loop de bounce — cada clique em "Reenviar
+      // falhas" gerava outro hard bounce, e taxa de rejeição acima de 2% joga o
+      // domínio INTEIRO no spam. O contato pode nem existir mais (CSV + limpeza),
+      // então `Contact.emailBouncedAt` sozinho não segura o reenvio.
+      where: {
+        campaignId: id,
+        tenantId,
+        status: 'failed',
+        NOT: { error: { startsWith: 'bounce' } },
+      },
       data: { status: 'queued', error: null, sentAt: null },
     });
     if (r.count === 0) return { requeued: 0, status: campaign.status };
@@ -1163,7 +1174,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // Isto não é excesso de zelo: o worker reavalia opt-out no disparo, mas NÃO
     // reavalia blocklist nem concorrente. Requeue cego mandaria e-mail comercial
     // para @bsoft.com.br — o único destinatário que nunca pode receber.
-    const EXCLUSAO_DELIBERADA = ['bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente'];
+    // `email_invalido` (devolução permanente) e `endereco_invalido` (sintaxe
+    // quebrada) entraram em 21/08/2026: o vocabulário era só do WhatsApp, e num
+    // reenvio de campanha de E-MAIL os dois voltavam à fila — hard bounce
+    // garantido, que é justamente o que derruba a entrega do domínio inteiro.
+    const EXCLUSAO_DELIBERADA = [
+      'bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente',
+      'email_invalido', 'endereco_invalido',
+    ];
     const r = await this.prisma.campaignTarget.updateMany({
       where: {
         campaignId: id,
@@ -1175,7 +1193,12 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
         // diferença para o mesmo destinatário). Quem está em voo vira 'sent' sozinho
         // em segundos; basta clicar de novo depois.
         status: { not: 'sending' },
-        NOT: { status: 'skipped', error: { in: EXCLUSAO_DELIBERADA } },
+        NOT: [
+          { status: 'skipped', error: { in: EXCLUSAO_DELIBERADA } },
+          // Devolução permanente confirmada (alvo `failed` com 'bounce …') também
+          // nunca volta — mesma regra do retryFailed, mesmo loop a evitar.
+          { error: { startsWith: 'bounce' } },
+        ],
       },
       data: { status: 'queued', error: null, sentAt: null },
     });

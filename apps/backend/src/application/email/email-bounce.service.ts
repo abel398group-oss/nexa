@@ -133,7 +133,7 @@ export class EmailBounceService {
     //
     // `insensitive` porque o relatório de devolução devolve o endereço na caixa em
     // que o servidor remoto o escreveu, que não precisa bater com a nossa.
-    const marcados = await this.prisma.contact
+    let marcados = await this.prisma.contact
       .updateMany({
         where: { tenantId, email: { equals: info.recipient, mode: 'insensitive' } },
         data: { emailBouncedAt: new Date(), emailBounceReason: motivo },
@@ -143,11 +143,59 @@ export class EmailBounceService {
         return { count: 0 };
       });
 
+    // Fallback de IMAP por .env roda com tenant "default" (ver EmailImapService) —
+    // um tenant que NÃO existe na tabela de contatos. Toda devolução chegava, era
+    // processada, e marcava ZERO contatos: o painel mostrava 0% de bounce eterno
+    // enquanto os endereços mortos continuavam elegíveis. Só neste caso a marcação
+    // procura o endereço sem o filtro de tenant — o dado (endereço morto) é
+    // verdade para qualquer tenant que o tenha.
+    if (marcados.count === 0 && tenantId === 'default') {
+      marcados = await this.prisma.contact
+        .updateMany({
+          where: { email: { equals: info.recipient, mode: 'insensitive' } },
+          data: { emailBouncedAt: new Date(), emailBounceReason: motivo },
+        })
+        .catch(() => ({ count: 0 }));
+      if (marcados.count > 0) {
+        this.logger.warn(
+          `Devolução processada pelo fallback de .env (tenant "default"): ${info.recipient} ` +
+          `marcado em ${marcados.count} contato(s) fora do tenant sintético — cadastre a caixa em Configurações → E-mail.`,
+        );
+      }
+    }
+
     if (marcados.count === 0) {
-      this.logger.warn(
-        `Devolução DEFINITIVA para ${info.recipient} — nenhum contato com esse e-mail no tenant ${tenantId}. ` +
-        'O endereço NÃO ficou bloqueado; se ele voltar numa planilha, será tentado de novo.',
-      );
+      // Sem contato, o veredito não tinha onde morar — e o endereço morto voltava
+      // elegível na próxima planilha (o loop de bounce). O stub dá endereço fixo ao
+      // veredito: a peneira de criação e o recheck do tick leem `emailBouncedAt`
+      // do contato, e agora ele existe. Mesmo padrão de telefone sintético do
+      // disparo de e-mail (`email:<addr>`); corrida com outro insert só perde o
+      // stub, nunca o processamento — por isso o catch calado com log.
+      const criado = await this.prisma.contact
+        .create({
+          data: {
+            tenantId,
+            phone: `email:${info.recipient}`,
+            email: info.recipient,
+            source: 'bounce',
+            tags: [],
+            emailBouncedAt: new Date(),
+            emailBounceReason: motivo,
+          },
+        })
+        .catch((e: any) => {
+          this.logger.warn(
+            `Devolução DEFINITIVA para ${info.recipient} — sem contato e o stub não pôde ser criado ` +
+            `(${e?.message}). O endereço segue DESPROTEGIDO contra reimportação.`,
+          );
+          return null;
+        });
+      if (criado) {
+        this.logger.warn(
+          `Devolução DEFINITIVA para ${info.recipient} — nenhum contato existia; criado registro ` +
+          `com o veredito (source=bounce) para o endereço nunca mais entrar em campanha.`,
+        );
+      }
     }
 
     // 2) Marca o alvo mais recente que constava como entregue para este endereço.

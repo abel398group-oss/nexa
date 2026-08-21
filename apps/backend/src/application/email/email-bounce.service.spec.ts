@@ -9,6 +9,7 @@ function makeDeps() {
     },
     contact: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      create: vi.fn().mockResolvedValue({ id: 'stub-1' }),
     },
   } as any;
   return { prisma };
@@ -190,6 +191,72 @@ describe('EmailBounceService — bloqueio do contato (protege a reputação do d
     deps.prisma.contact.updateMany.mockRejectedValue(new Error('db fora'));
     await svc.record('t1', svc.parse(DSN_GOOGLE));
     expect(deps.prisma.campaignTarget.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * O elo que fechava o loop de bounce (21/08/2026): endereço morto SEM contato
+ * correspondente não tinha onde guardar o veredito — voltava elegível na próxima
+ * planilha e gerava outro hard bounce a cada reimportação.
+ */
+describe('EmailBounceService — endereço sem contato ganha um registro com o veredito', () => {
+  let deps: ReturnType<typeof makeDeps>;
+  let svc: EmailBounceService;
+  beforeEach(() => { deps = makeDeps(); svc = new EmailBounceService(deps.prisma); });
+
+  it('sem contato: cria o stub já marcado como bounced', async () => {
+    deps.prisma.contact.updateMany.mockResolvedValue({ count: 0 });
+
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+
+    const { data } = deps.prisma.contact.create.mock.calls[0][0];
+    expect(data).toMatchObject({
+      tenantId: 't1',
+      email: 'nao-existe@gmail.com',
+      phone: 'email:nao-existe@gmail.com',
+      source: 'bounce',
+    });
+    expect(data.emailBouncedAt).toBeInstanceOf(Date);
+    expect(data.emailBounceReason).toContain('5.1.1');
+  });
+
+  it('com contato existente NÃO cria stub', async () => {
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+    expect(deps.prisma.contact.create).not.toHaveBeenCalled();
+  });
+
+  it('falha ao criar o stub não impede a marcação do alvo', async () => {
+    deps.prisma.contact.updateMany.mockResolvedValue({ count: 0 });
+    deps.prisma.contact.create.mockRejectedValue(new Error('unique quebrou'));
+
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+
+    expect(deps.prisma.campaignTarget.update).toHaveBeenCalledTimes(1);
+  });
+
+  // O fallback de IMAP por .env roda com tenant "default", que não existe na
+  // tabela de contatos — toda devolução marcava zero contatos e o painel exibia
+  // 0% de bounce eterno. Só nesse caso a busca abre mão do filtro de tenant.
+  it('tenant "default" (fallback de .env) procura o endereço sem filtro de tenant', async () => {
+    deps.prisma.contact.updateMany
+      .mockResolvedValueOnce({ count: 0 })  // com tenant 'default': nada
+      .mockResolvedValueOnce({ count: 2 }); // sem tenant: achou os donos reais
+
+    await svc.record('default', svc.parse(DSN_GOOGLE));
+
+    expect(deps.prisma.contact.updateMany).toHaveBeenCalledTimes(2);
+    const segunda = deps.prisma.contact.updateMany.mock.calls[1][0];
+    expect(segunda.where.tenantId).toBeUndefined();
+    expect(deps.prisma.contact.create).not.toHaveBeenCalled();
+  });
+
+  it('tenant REAL nunca abre a busca para outros tenants', async () => {
+    deps.prisma.contact.updateMany.mockResolvedValue({ count: 0 });
+
+    await svc.record('t1', svc.parse(DSN_GOOGLE));
+
+    expect(deps.prisma.contact.updateMany).toHaveBeenCalledTimes(1);
+    expect(deps.prisma.contact.updateMany.mock.calls[0][0].where.tenantId).toBe('t1');
   });
 });
 

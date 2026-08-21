@@ -643,6 +643,21 @@ describe('SenderService.retryFailed — só falhas voltam para a fila', () => {
     expect(call.data).toMatchObject({ status: 'queued', error: null });
   });
 
+  // Loop de bounce (21/08/2026): alvo `failed` com 'bounce …' é endereço morto
+  // CONFIRMADO pelo servidor de destino. Reenfileirá-lo gera outro hard bounce, e
+  // taxa de rejeição acima de 2% joga o domínio inteiro no spam.
+  it('devolução permanente (bounce) NÃO volta para a fila', async () => {
+    const prisma = {
+      campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'running' }), update: vi.fn() },
+      campaignTarget: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    } as any;
+
+    await makeSvc(prisma).retryFailed('t1', 'c1');
+
+    const { where } = prisma.campaignTarget.updateMany.mock.calls[0][0];
+    expect(where.NOT).toEqual({ error: { startsWith: 'bounce' } });
+  });
+
   it('campanha concluída volta a rodar (senão o worker não pega os alvos)', async () => {
     const prisma = {
       campaign: { findFirst: vi.fn().mockResolvedValue({ id: 'c1', name: 'X', status: 'done' }), update: vi.fn() },
@@ -711,19 +726,28 @@ describe('SenderService.resendAll — reenvio total atrás de interruptor', () =
     expect(prisma.campaignTarget.updateMany).not.toHaveBeenCalled();
   });
 
-  it('NÃO recoloca opt-out, blocklist, concorrente nem cliente TMS', async () => {
+  it('NÃO recoloca opt-out, blocklist, concorrente, cliente TMS nem endereço morto', async () => {
     process.env.CAMPAIGN_RESEND_ALL_ENABLED = 'true';
     const prisma = makePrisma();
 
     await makeSvc(prisma).resendAll('t1', 'c1');
 
     const { where } = prisma.campaignTarget.updateMany.mock.calls[0][0];
-    expect(where.NOT.status).toBe('skipped');
-    expect(where.NOT.error.in).toEqual(
-      expect.arrayContaining(['bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente']),
+    // O NOT virou lista (21/08/2026): exclusões deliberadas E devolução permanente.
+    const [deliberadas, devolucao] = where.NOT;
+    expect(deliberadas.status).toBe('skipped');
+    expect(deliberadas.error.in).toEqual(
+      expect.arrayContaining([
+        'bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente',
+        // vocabulário do canal de e-mail — sem estes, o reenvio total mandava
+        // de novo para endereço com hard bounce e para sintaxe quebrada
+        'email_invalido', 'endereco_invalido',
+      ]),
     );
     // ...mas 'ja_enviado' PODE voltar — é justamente o que travava o teste
-    expect(where.NOT.error.in).not.toContain('ja_enviado');
+    expect(deliberadas.error.in).not.toContain('ja_enviado');
+    // alvo `failed` por devolução permanente também fica fora (loop de bounce)
+    expect(devolucao).toEqual({ error: { startsWith: 'bounce' } });
   });
 
   it('recoloca os já enviados (é o ponto do botão) e limpa sentAt', async () => {
