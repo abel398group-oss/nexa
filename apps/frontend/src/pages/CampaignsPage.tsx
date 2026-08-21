@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '@/shared/lib/api';
 import { getMarketAtivo } from '@/shared/lib/marketAtivo';
+import { listMarkets } from '@/entities/market';
 import { SeletorDeModelo } from '@/components/SeletorDeModelo';
 import { displayPhone, toBrPhone } from '@/shared/lib/phone';
 import { useUnsavedGuard } from '@/shared/lib/useUnsavedGuard';
@@ -207,7 +208,24 @@ export function CampaignsPage() {
   // campanha no HiperTMS, e digitar de novo é só chance de divergir. Continua
   // editável e continua podendo ficar vazio — só o ponto de partida mudou.
   const [productCode, setProductCode] = useState(() => getMarketAtivo() ?? '');
-  // Produtos que já têm conhecimento — sugestão + aviso de produto sem base.
+  /**
+   * Mercados que o disparo ACEITA — os liberados.
+   *
+   * O campo era texto livre com autocomplete da base de conhecimento, e as duas
+   * listas não são a mesma coisa: dava para digitar um mercado apagado (o
+   * `sverino-bot` ficou lá depois de excluído) ou um typo, escrever a campanha
+   * inteira e só então levar a recusa do servidor, que exige mercado existente e
+   * liberado. Perguntar cedo custa um select; perguntar tarde custa a campanha.
+   */
+  const [mercados, setMercados] = useState<{ code: string; name: string }[]>([]);
+  useEffect(() => {
+    listMarkets(true)
+      .then((r) => setMercados(r.map((m) => ({ code: m.code, name: m.name }))))
+      .catch(() => setMercados([])); // sem lista, o campo fica só com o produto principal
+  }, []);
+
+  // Produtos que já têm conhecimento — usado só para AVISAR que a Lia responderá
+  // sem base. É outra pergunta: o mercado pode existir e estar sem conhecimento.
   const [productCodes, setProductCodes] = useState<{ productCode: string; artigos: number }[]>([]);
   useEffect(() => {
     api.get('/knowledge/product-codes')
@@ -1812,16 +1830,24 @@ export function CampaignsPage() {
               <label className="mb-1 block text-xs font-medium text-base-content/60">
                 Produto / parceiro <span className="font-normal text-base-content/40">(opcional)</span>
               </label>
-              <input
+              <select
                 className="input w-full"
-                list="campaign-product-codes"
                 value={productCode}
                 onChange={(e) => setProductCode(e.target.value)}
-                placeholder="Deixe vazio para o produto principal"
-              />
-              <datalist id="campaign-product-codes">
-                {productCodes.map((p) => <option key={p.productCode} value={p.productCode} />)}
-              </datalist>
+              >
+                <option value="">Produto principal (sem mercado)</option>
+                {mercados.map((m) => (
+                  <option key={m.code} value={m.code}>
+                    {m.name}
+                  </option>
+                ))}
+                {/* O mercado gravado numa campanha antiga pode ter sido suspenso ou
+                    apagado. Sem esta linha o select cairia calado no primeiro item e
+                    trocaria o mercado da campanha sem ninguém pedir. */}
+                {!!productCode && !mercados.some((m) => m.code === productCode) && (
+                  <option value={productCode}>{productCode} (não está liberado)</option>
+                )}
+              </select>
               {productCode.trim() && !productCodes.some((p) => p.productCode === productCode.trim()) ? (
                 <p className="mt-1 text-xs text-amber-500">
                   Ainda não há conhecimento cadastrado para "{productCode.trim()}". A Lia vai responder
