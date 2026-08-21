@@ -25,7 +25,8 @@ function makeSvc(record: any) {
     contact: { updateMany: vi.fn().mockReturnValue({ __op: 'contact' }) },
     $transaction: vi.fn().mockResolvedValue([]),
   } as any;
-  return { svc: new EmailOptOutService(prisma), prisma };
+  const registro = { register: vi.fn().mockResolvedValue(undefined) } as any;
+  return { svc: new EmailOptOutService(prisma, registro), prisma, registro };
 }
 
 const valido = {
@@ -81,6 +82,24 @@ describe('EmailOptOutService.consume — idempotente por decisão', () => {
     await svc.consume('tk1');
 
     expect(prisma.emailOptOutToken.updateMany.mock.calls[0][0].where).toEqual({ token: 'tk1', usedAt: null });
+  });
+
+  // Caso Patrícia por e-mail: o pedido tem que sobreviver à limpeza da base.
+  // O registro fica FORA do contato — reimportar o CSV não traz a pessoa de volta.
+  it('grava o pedido no registro permanente (LGPD)', async () => {
+    const { svc, registro } = makeSvc(valido);
+
+    await svc.consume('tk1');
+
+    expect(registro.register).toHaveBeenCalledWith('t1', { email: 'joao@x.com' }, 'pedido_email');
+  });
+
+  it('token desconhecido não registra nada', async () => {
+    const { svc, registro } = makeSvc(null);
+
+    await svc.consume('nao-existe');
+
+    expect(registro.register).not.toHaveBeenCalled();
   });
 });
 

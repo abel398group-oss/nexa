@@ -36,8 +36,16 @@ function makePrisma(over: any = {}) {
   } as any;
 }
 
+/** Registro LGPD vazio e TMS sem clientes — o caso neutro dos testes que não são deles. */
+const registroVazio = () =>
+  ({ blockedEmails: async () => new Set<string>(), isBlocked: async () => false }) as any;
+const tmsSemClientes = () =>
+  ({ clientesPorEmailVerificado: async () => ({ clientes: new Set<string>(), falhou: false }) }) as any;
+
 function makeSvc(prisma: any = makePrisma()) {
-  const svc = new EmailCampaignSenderService(prisma, {} as any, {} as any, {} as any);
+  const svc = new EmailCampaignSenderService(
+    prisma, {} as any, {} as any, {} as any, registroVazio(), tmsSemClientes(),
+  );
   return { svc, prisma };
 }
 
@@ -173,6 +181,86 @@ describe('createEmailCampaign — normalização de endereço', () => {
     const r: any = await svc.createEmailCampaign('t1', { ...base, emails: [{ email: 'JOAO@X.com' }] });
 
     expect(r.skippedAlreadySent).toBe(1);
+  });
+});
+
+describe('createEmailCampaign — lista de bloqueio LGPD (registro permanente)', () => {
+  // Caso Patrícia por e-mail: contato apagado + CSV reimportado = o `status` do
+  // contato não existe mais, e só o registro FORA do contato lembra do pedido.
+  it('endereço no registro permanente é pulado como opted_out mesmo sem contato', async () => {
+    const { svc: _, prisma } = makeSvc();
+    const registro = {
+      blockedEmails: async () => new Set(['patricia@x.com']),
+      isBlocked: async () => false,
+    } as any;
+    const svc = new EmailCampaignSenderService(
+      prisma, {} as any, {} as any, {} as any, registro, tmsSemClientes(),
+    );
+
+    const r: any = await svc.createEmailCampaign('t1', {
+      ...base,
+      emails: [{ email: 'Patricia@X.com' }, { email: 'livre@y.com' }],
+    });
+
+    expect(r.skippedOptOut).toBe(1);
+    expect(alvosEnfileirados(prisma).map((t) => t.email)).toEqual(['livre@y.com']);
+    expect(alvosPulados(prisma)).toContainEqual(
+      expect.objectContaining({ email: 'patricia@x.com', error: 'opted_out' }),
+    );
+  });
+});
+
+describe('createEmailCampaign — filtro de cliente TMS (fail-closed)', () => {
+  it('cliente TMS por e-mail é pulado como tms_cliente', async () => {
+    const { svc: _, prisma } = makeSvc();
+    const tms = {
+      clientesPorEmailVerificado: async () => ({ clientes: new Set(['cliente@x.com']), falhou: false }),
+    } as any;
+    const svc = new EmailCampaignSenderService(
+      prisma, {} as any, {} as any, {} as any, registroVazio(), tms,
+    );
+
+    const r: any = await svc.createEmailCampaign('t1', {
+      ...base,
+      emails: [{ email: 'Cliente@X.com' }, { email: 'lead@y.com' }],
+    });
+
+    expect(r.skippedTms).toBe(1);
+    expect(alvosEnfileirados(prisma).map((t) => t.email)).toEqual(['lead@y.com']);
+    expect(alvosPulados(prisma)).toContainEqual(
+      expect.objectContaining({ email: 'cliente@x.com', error: 'tms_cliente' }),
+    );
+  });
+
+  // Mesma decisão do WhatsApp: Set vazio por falha ≠ "ninguém é cliente". Sem o
+  // fail-closed, o TMS fora do ar mandava oferta fria para quem já paga.
+  it('TMS indisponível RECUSA a criação em vez de disparar sem peneira', async () => {
+    const { svc: _, prisma } = makeSvc();
+    const tms = {
+      clientesPorEmailVerificado: async () => ({ clientes: new Set<string>(), falhou: true, motivo: 'timeout' }),
+    } as any;
+    const svc = new EmailCampaignSenderService(
+      prisma, {} as any, {} as any, {} as any, registroVazio(), tms,
+    );
+
+    await expect(
+      svc.createEmailCampaign('t1', { ...base, emails: [{ email: 'a@b.com' }] }),
+    ).rejects.toThrow(/HiperTMS/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+
+  it('TMS não configurado não é falha — a campanha sai sem a peneira', async () => {
+    const { svc: _, prisma } = makeSvc();
+    const tms = {
+      clientesPorEmailVerificado: async () =>
+        ({ clientes: new Set<string>(), falhou: false, motivo: 'tms_nao_configurado' }),
+    } as any;
+    const svc = new EmailCampaignSenderService(
+      prisma, {} as any, {} as any, {} as any, registroVazio(), tms,
+    );
+
+    const r: any = await svc.createEmailCampaign('t1', { ...base, emails: [{ email: 'a@b.com' }] });
+    expect(r.included).toBe(1);
   });
 });
 
@@ -365,7 +453,7 @@ describe('worker — a marca do mercado chega ao envio (ADR 037)', () => {
       create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
       addMessage: vi.fn().mockResolvedValue({}),
     };
-    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any, registroVazio(), tmsSemClientes());
 
     await (svc as any).tickLocked();
 
@@ -377,6 +465,50 @@ describe('worker — a marca do mercado chega ao envio (ADR 037)', () => {
     // e a conversa criada herda o mercado — é o que faz a Lia responder como
     // o mercado quando o lead volta
     expect(conversations.create.mock.calls[0][1]).toMatchObject({ productCode: 'pneus' });
+
+    vi.useRealTimers();
+  });
+});
+
+describe('worker — recheck LGPD na hora do envio (defesa em profundidade)', () => {
+  // A fila esvazia a 20-75/dia: quem pede para sair DEPOIS da criação ainda tem
+  // que ser barrado no tick — igual ao WhatsApp, e ANTES de tocar no contato.
+  it('alvo na lista de bloqueio é pulado sem chamar o SMTP', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00')); // segunda, 10h BRT
+
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Agosto', channel: 'email', status: 'running',
+      productCode: null, subject: 's', template: 'corpo', link: null,
+      sendLinkOnFirst: false, sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(), updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha), update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'saiu@x.com', name: 'Ana' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    });
+
+    const emailReply = { send: vi.fn() };
+    const registro = { blockedEmails: async () => new Set<string>(), isBlocked: async () => true } as any;
+    const svc = new EmailCampaignSenderService(
+      prisma, emailReply as any, {} as any, {} as any, registro, tmsSemClientes(),
+    );
+
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send).not.toHaveBeenCalled();
+    expect(prisma.campaignTarget.update).toHaveBeenCalledWith({
+      where: { id: 'alvo-1' },
+      data: { status: 'skipped', error: 'opted_out' },
+    });
 
     vi.useRealTimers();
   });
@@ -426,7 +558,7 @@ describe('worker — layout muda no segundo toque', () => {
       create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
       addMessage: vi.fn().mockResolvedValue({}),
     };
-    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any, registroVazio(), tmsSemClientes());
     return { svc, emailReply };
   }
 
@@ -568,7 +700,7 @@ describe('worker — lead vindo de lista de leads, com telefone real', () => {
       create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
       addMessage: vi.fn().mockResolvedValue({}),
     };
-    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any, registroVazio(), tmsSemClientes());
     return { svc, prisma, emailReply };
   }
 
@@ -651,7 +783,7 @@ describe('worker — formato do e-mail (html × texto puro)', () => {
       create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
       addMessage: vi.fn().mockResolvedValue({}),
     };
-    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any, registroVazio(), tmsSemClientes());
     return { svc, emailReply };
   }
 

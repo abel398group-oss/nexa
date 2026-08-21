@@ -22,6 +22,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
 import { randomBytes } from 'crypto';
 
 /**
@@ -46,7 +47,10 @@ export interface OptOutContext {
 export class EmailOptOutService {
   private readonly logger = new Logger('EmailOptOutService');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly optOutRegistry: OptOutRegistryService,
+  ) {}
 
   /** Gera um token de opt-out para incluir no rodapé do e-mail. */
   async generateToken(tenantId: string, contactId: string, email: string): Promise<string> {
@@ -113,6 +117,12 @@ export class EmailOptOutService {
         data: { status: 'opted_out', interestScore: 0, optOutAt: new Date() },
       }),
     ]);
+
+    // Registro PERMANENTE (LGPD), fora do contato: apagar a base e reimportar o CSV
+    // não pode trazer de volta quem pediu para sair — ver opt-out-registry.service.ts
+    // (caso Patrícia, 03/08/2026; o canal WhatsApp registra desde então, o e-mail não).
+    // `register` nunca lança — o descadastro no contato acima já aconteceu.
+    await this.optOutRegistry.register(record.tenantId, { email: record.email }, 'pedido_email');
 
     this.logger.log(`Email opt-out confirmado: ${record.email} (contact=${record.contactId})`);
     return { email: record.email, tenantId: record.tenantId };

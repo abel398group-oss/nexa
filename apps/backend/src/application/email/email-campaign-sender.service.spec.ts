@@ -25,6 +25,10 @@ function makeSvc(overrides: {
     prisma,
     {} as any, // EmailReplyService
     { acquire: async () => async () => {} } as any, // RedisLockService
+    {} as any, // ConversationsService (não usado na criação)
+    // Registro LGPD vazio e TMS sem clientes — o neutro destes testes de filtro
+    { blockedEmails: async () => new Set<string>(), isBlocked: async () => false } as any,
+    { clientesPorEmailVerificado: async () => ({ clientes: new Set<string>(), falhou: false }) } as any,
   );
   return { svc, prisma };
 }

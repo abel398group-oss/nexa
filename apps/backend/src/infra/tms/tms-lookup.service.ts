@@ -430,6 +430,66 @@ export class TmsLookupService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Quais destes E-MAILS pertencem a clientes do TMS (usuário ou empresa).
+   *
+   * Espelho por e-mail do `batchLookupVerificado`: o disparo de E-MAIL não tem
+   * telefone para consultar — o alvo é o endereço — e ficou meses sem peneira
+   * nenhuma de cliente enquanto o WhatsApp recusava campanha até com o TMS fora
+   * do ar. Mesmo contrato de decisão: `falhou` separa "ninguém é cliente" de
+   * "não deu para perguntar", e quem decide o que fazer com a falha é o chamador.
+   *
+   * Comparação em minúsculas dos DOIS lados: o TMS guarda o e-mail como o
+   * usuário digitou, e "Joao@X.com" tem que casar com "joao@x.com".
+   */
+  async clientesPorEmailVerificado(
+    emails: string[],
+  ): Promise<{ clientes: Set<string>; falhou: boolean; motivo?: string }> {
+    const result = new Set<string>();
+    const limpos = [...new Set(emails.map((e) => (e ?? '').trim().toLowerCase()).filter(Boolean))];
+    if (!limpos.length) return { clientes: result, falhou: false };
+
+    const pool = this.getPool();
+    if (!pool) {
+      this.logger.warn('TMS_DB_URL ausente — nenhum filtro de cliente TMS será aplicado (e-mail)');
+      return { clientes: result, falhou: false, motivo: 'tms_nao_configurado' };
+    }
+
+    const client = await pool.connect().catch((e: any) => {
+      this.logger.error(`TMS DB indisponível: ${e?.message}`);
+      return null;
+    });
+    if (!client) {
+      return { clientes: result, falhou: true, motivo: 'conexão com o banco do TMS recusada' };
+    }
+
+    try {
+      const usersRes = await client.query<{ email: string }>(
+        `SELECT email FROM tenant_core_user
+          WHERE email IS NOT NULL AND email <> ''
+            AND lower(trim(email)) = ANY($1::text[])`,
+        [limpos],
+      );
+      for (const row of usersRes.rows) result.add(row.email.trim().toLowerCase());
+
+      const companiesRes = await client.query<{ email: string }>(
+        `SELECT "contatoEmail" AS email FROM tenant_company
+          WHERE "contatoEmail" IS NOT NULL AND "contatoEmail" <> ''
+            AND lower(trim("contatoEmail")) = ANY($1::text[])
+            AND "isActive" = true`,
+        [limpos],
+      );
+      for (const row of companiesRes.rows) result.add(row.email.trim().toLowerCase());
+    } catch (e: any) {
+      this.logger.error(`clientesPorEmailVerificado falhou: ${e?.message}`);
+      return { clientes: result, falhou: true, motivo: e?.message ?? 'erro na consulta ao TMS' };
+    } finally {
+      client.release();
+    }
+
+    return { clientes: result, falhou: false };
+  }
+
+  /**
    * Empresa de cada pessoa: `tenant_core_user.id` → `tenantId`.
    *
    * A conversa de suporte do Nexa guarda o id da PESSOA que abriu o chamado (confirmado

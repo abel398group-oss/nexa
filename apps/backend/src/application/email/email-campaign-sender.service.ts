@@ -50,6 +50,8 @@ import { motivoDeBloqueioDoDisparo } from '@/application/markets/market-gate';
 import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 import { normalizarMessageId } from './campaign-reply-linker';
 import { ConversationsService } from '@/application/conversations/conversations.service';
+import { OptOutRegistryService } from '@/application/contacts/opt-out-registry.service';
+import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
 import { normalizeEmail, isSendableEmail } from './email-address';
 import { avisosDeSpam, encurtadoresEncontrados } from './email-spam-check';
 
@@ -103,6 +105,12 @@ export class EmailCampaignSenderService {
     private readonly emailReply: EmailReplyService,
     private readonly lock: RedisLockService,
     private readonly conversations: ConversationsService,
+    // Paridade com o canal WhatsApp (21/08/2026): a lista de bloqueio LGPD e a
+    // peneira de cliente TMS existiam SÓ lá — apagar o contato e reimportar o CSV
+    // fazia quem pediu para sair voltar a receber, e cliente pagante entrava na
+    // audiência de e-mail frio. Ver opt-out-registry.service.ts (caso Patrícia).
+    private readonly optOutRegistry: OptOutRegistryService,
+    private readonly tmsLookup: TmsLookupService,
   ) {}
 
   // ── Helpers ─────────────────────────────────────────────────────
@@ -408,6 +416,20 @@ export class EmailCampaignSenderService {
       (t) => !optedSet.has(t.email) && !blockedSet.has(t.email) && !bouncedSet.has(t.email),
     );
 
+    // Lista de bloqueio PERMANENTE (LGPD) — fora do contato, de propósito: o pedido
+    // de sair sobrevive à limpeza da base e à reimportação do CSV. O canal WhatsApp
+    // consulta este registro desde o caso Patrícia (03/08/2026); o e-mail passava
+    // reto e reproduzia o mesmo incidente por outro canal.
+    const registroLgpd = await this.optOutRegistry.blockedEmails(tenantId, targets.map((t) => t.email));
+    const lgpdList = targets.filter((t) => registroLgpd.has(t.email));
+    if (lgpdList.length) {
+      this.logger.warn(
+        `Campanha "${dto.name}": ${lgpdList.length} endereço(s) na lista de bloqueio LGPD — pulados: ` +
+        lgpdList.map((t) => t.email).join(', '),
+      );
+      targets = targets.filter((t) => !registroLgpd.has(t.email));
+    }
+
     // Concorrente por NOME (heurística) ou por DOMÍNIO do e-mail (certeza) —
     // @bsoft.com.br não tem como ser lead. Ver competitor-names.const.ts.
     const suspectList = targets.filter((t) => looksLikeCompetitor(t.name) || isCompetitorEmail(t.email));
@@ -456,12 +478,41 @@ export class EmailCampaignSenderService {
       );
     }
 
+    // ── Filtro TMS por E-MAIL: cliente pagante não recebe prospecção fria ─────
+    // Mesma regra fail-closed do canal WhatsApp (sender.service.ts): Map/Set vazio
+    // tem dois significados opostos — "ninguém é cliente" e "o TMS não respondeu" —
+    // e enquanto os dois se pareciam a peneira sumia em silêncio. Recusar a criação
+    // custa minutos; oferta fria na caixa do cliente pagante não tem desfazer.
+    // TMS não configurado não é falha (ambiente sem conector roda sem a peneira).
+    const tms = await this.tmsLookup.clientesPorEmailVerificado(targets.map((t) => t.email));
+    if (tms.falhou) {
+      this.logger.error(
+        `Campanha de e-mail "${dto.name}" recusada: filtro de cliente TMS indisponível (${tms.motivo})`,
+      );
+      throw new BadRequestException(
+        'Não foi possível consultar a base do HiperTMS para excluir quem já é cliente. ' +
+        'A campanha não foi criada — sem essa checagem, clientes pagantes receberiam ' +
+        'prospecção fria. Tente novamente em alguns minutos.',
+      );
+    }
+    const tmsList = targets.filter((t) => tms.clientes.has(t.email));
+    targets = targets.filter((t) => !tms.clientes.has(t.email));
+    if (tmsList.length) {
+      this.logger.log(
+        `Campanha "${dto.name}": ${tmsList.length} endereço(s) já são clientes TMS — pulados`,
+      );
+    }
+
     const skippedRows = [
       ...blockedList.map((t) => ({ status: 'skipped', error: 'bloqueado', t })),
       ...bouncedList.map((t) => ({ status: 'skipped', error: 'email_invalido', t })),
       ...invalidList.map((t) => ({ status: 'skipped', error: 'endereco_invalido', t })),
       ...suspectList.map((t) => ({ status: 'skipped', error: 'suspeito_concorrente', t })),
       ...dupList.map((t) => ({ status: 'skipped', error: 'ja_enviado', t })),
+      // pediu para não receber mais (lista de bloqueio LGPD) — paridade com WhatsApp
+      ...lgpdList.map((t) => ({ status: 'skipped', error: 'opted_out', t })),
+      // já é cliente TMS — prospecção fria não vai para quem paga pelo produto
+      ...tmsList.map((t) => ({ status: 'skipped', error: 'tms_cliente', t })),
     ];
 
     const campaign = await this.prisma.campaign.create({
@@ -511,7 +562,10 @@ export class EmailCampaignSenderService {
     return {
       ...campaign,
       included: targets.length,
-      skippedOptOut,
+      // Contato marcado opted_out + registro permanente LGPD: o mesmo número que a
+      // campanha de WhatsApp devolve, e a tela já mostra.
+      skippedOptOut: skippedOptOut + lgpdList.length,
+      skippedTms: tmsList.length,
       skippedBlocked: blockedList.length,
       skippedBounced: bouncedList.length,
       skippedInvalid: invalidList.length,
@@ -675,6 +729,20 @@ export class EmailCampaignSenderService {
       // esvaziar a 20 e-mails/dia. `insensitive` porque alvo antigo (anterior à
       // normalização) pode ter caixa mista gravada. Ver email-address.ts.
       const email = normalizeEmail(target.email);
+
+      // Lista de bloqueio LGPD ANTES de tocar no contato (defesa em profundidade,
+      // igual ao WhatsApp): quem pediu para sair DEPOIS da campanha criada é barrado
+      // aqui — a fila leva dias para esvaziar a 20-75 e-mails/dia — e nem tem o
+      // cadastro recriado a partir da campanha.
+      if (await this.optOutRegistry.isBlocked(campaign.tenantId, { email })) {
+        this.logger.log(`Email disparo pulado → ${email} (lista de bloqueio LGPD)`);
+        await this.prisma.campaignTarget.update({
+          where: { id: target.id },
+          data: { status: 'skipped', error: 'opted_out' },
+        });
+        return;
+      }
+
       const contact = await this.prisma.contact.findFirst({
         where: { tenantId: campaign.tenantId, email: { equals: email, mode: 'insensitive' } },
       });

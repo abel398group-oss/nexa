@@ -355,7 +355,14 @@ export class ContactsService {
 
   // marca um contato como descadastrado (opt-out) — não recebe mais disparos (LGPD)
   async optOut(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
+    const c = await this.findOne(tenantId, id);
+    // Registro PERMANENTE também no opt-out manual: sem ele, apagar o contato e
+    // reimportar a lista trazia a pessoa de volta (o mesmo furo do caso Patrícia —
+    // o pedido morava só no registro que foi apagado). `register` nunca lança.
+    // O telefone sintético `email:<addr>` de contato nascido por e-mail fica de
+    // fora: os dígitos do endereço virariam um "telefone" de lixo no registro.
+    const phoneReal = c.phone && !c.phone.startsWith('email:') ? c.phone : null;
+    await this.optOutRegistry.register(tenantId, { phone: phoneReal, email: c.email }, 'pedido_manual');
     return this.prisma.contact.update({ where: { id }, data: { status: 'opted_out', optOutAt: new Date() } });
   }
 
