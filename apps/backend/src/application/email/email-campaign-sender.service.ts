@@ -33,8 +33,9 @@
  *   SENDER_EMAIL_WARMUP_STAGE   (padrão: 0 — começa conservador)
  *   SENDER_EMAIL_WEEKEND        (padrão: false — não dispara sábado/domingo)
  */
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { NotificationsService } from '@/application/notifications/notifications.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { EmailReplyService } from './email-reply.service';
 import { emailToPhone } from './email.service';
@@ -100,6 +101,27 @@ export class EmailCampaignSenderService {
    */
   private nextDelayMs = DELAY_MIN_MS;
 
+  /**
+   * Circuit breaker do SMTP (21/08/2026). Antes, com o servidor fora do ar, cada
+   * tick de 15s marcava um alvo como `failed` — uma hora de pane destruía ~240
+   * alvos, recuperáveis só por clique manual em "Reenviar falhas".
+   *
+   * Agora falha TRANSITÓRIA (conexão, timeout, autenticação — ver
+   * EmailReplyService.erroTransitorio) devolve o alvo à fila, e três seguidas
+   * abrem o circuito: o worker para de tentar por 5 min (dobrando até o teto de
+   * 15 min a cada reabertura) e avisa o painel. Falha PERMANENTE (destinatário
+   * recusado com 5xx) continua marcando só aquele alvo.
+   *
+   * Estado em memória de propósito: o tick roda numa réplica só (lock Redis), e
+   * um restart zerar o breaker apenas antecipa a próxima tentativa — o custo é
+   * uma falha a mais, não uma fila queimada.
+   */
+  private falhasSeguidas = 0;
+  private aberturasSeguidas = 0;
+  private circuitoAbertoAte = 0;
+  /** Âncora do compasso também na FALHA — sem ela o gate de 90-180s nunca engatava. */
+  private ultimaFalhaAt = 0;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailReply: EmailReplyService,
@@ -111,6 +133,9 @@ export class EmailCampaignSenderService {
     // audiência de e-mail frio. Ver opt-out-registry.service.ts (caso Patrícia).
     private readonly optOutRegistry: OptOutRegistryService,
     private readonly tmsLookup: TmsLookupService,
+    // Opcional pelo mesmo motivo do SenderService: as specs constroem
+    // posicionalmente, e o aviso do breaker não pode ser condição para enviar.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   // ── Helpers ─────────────────────────────────────────────────────
@@ -219,9 +244,13 @@ export class EmailCampaignSenderService {
    * cada processo.
    */
   private async enviadosHoje(): Promise<number> {
+    // Conta por `sentAt`, NÃO por `status` (21/08/2026): a devolução permanente
+    // vira `sent → failed` (EmailBounceService) mas mantém o sentAt — contar por
+    // status fazia cada hard bounce DEVOLVER um envio ao orçamento do dia, o
+    // oposto exato do que preaquecer significa. O envio aconteceu; a devolução
+    // não o desfaz.
     return this.prisma.campaignTarget.count({
       where: {
-        status: 'sent',
         sentAt: { gte: inicioDoDiaBrasilia() },
         campaign: { channel: 'email' },
       },
@@ -258,10 +287,14 @@ export class EmailCampaignSenderService {
     return (m as any)?.displayName || (m as any)?.name || 'HiperTMS';
   }
 
-  /** Instante do último e-mail de campanha que saiu — base do intervalo anti-spam. */
+  /**
+   * Instante do último e-mail de campanha que saiu — base do intervalo anti-spam.
+   * Por `sentAt` e não `status` pelo mesmo motivo do enviadosHoje: um bounce que
+   * flipar o alvo para `failed` não pode REBOBINAR o compasso do domínio.
+   */
   private async ultimoEnvio(): Promise<number> {
     const alvo = await this.prisma.campaignTarget.findFirst({
-      where: { status: 'sent', sentAt: { not: null }, campaign: { channel: 'email' } },
+      where: { sentAt: { not: null }, campaign: { channel: 'email' } },
       orderBy: { sentAt: 'desc' },
       select: { sentAt: true },
     });
@@ -672,6 +705,11 @@ export class EmailCampaignSenderService {
         data: { status: 'done' },
       });
 
+      // Circuito aberto: o SMTP acabou de falhar 3x seguidas — esperar é a única
+      // jogada que não queima fila nem reputação. Sem log a cada tick: quem abriu
+      // o circuito já registrou o motivo e o horário de retomada.
+      if (Date.now() < this.circuitoAbertoAte) return;
+
       const enviadosHoje = await this.enviadosHoje();
       if (enviadosHoje >= this.dailyLimit()) {
         this.logger.warn(
@@ -679,7 +717,11 @@ export class EmailCampaignSenderService {
         );
         return;
       }
-      if (Date.now() - (await this.ultimoEnvio()) < this.nextDelayMs) return;
+      // O compasso vale para SUCESSO e FALHA: só ancorar no último `sent` fazia o
+      // worker varrer a fila a 1 alvo/15s durante uma pane de SMTP — mesma lição
+      // do DISP-001 no WhatsApp.
+      const ancora = Math.max(await this.ultimoEnvio(), this.ultimaFalhaAt);
+      if (Date.now() - ancora < this.nextDelayMs) return;
 
       // Pega campanha rodando — respeitando agendamento (scheduledAt no futuro = espera)
       const campaign = await this.prisma.campaign.findFirst({
@@ -696,10 +738,10 @@ export class EmailCampaignSenderService {
       // janela de envio de e-mail do tenant — fora do horário, espera
       if (!(await this.withinEmailWindow(campaign.tenantId))) return;
 
-      // Respeita sendLimit
+      // Respeita sendLimit (por `sentAt`: bounce não devolve cota — ver enviadosHoje)
       if (campaign.sendLimit) {
         const enviados = await this.prisma.campaignTarget.count({
-          where: { campaignId: campaign.id, status: 'sent' },
+          where: { campaignId: campaign.id, sentAt: { not: null } },
         });
         if (enviados >= campaign.sendLimit) {
           await this.prisma.campaign.update({ where: { id: campaign.id }, data: { status: 'done' } });
@@ -723,6 +765,29 @@ export class EmailCampaignSenderService {
         data: { status: 'sending' },
       });
       if (claim.count === 0) return;
+
+      // ── Trava de reenvio pós-crash (21/08/2026) ─────────────────────────────
+      // O token em ProcessedMessage é o PONTO DE COMPROMISSO do envio: gravado
+      // imediatamente antes do SMTP, apagado quando o envio comprovadamente
+      // falhou. Um alvo requeuado que ainda carrega o token significa que o
+      // processo morreu DEPOIS de falar com o SMTP e antes de gravar `sent` —
+      // reenviar aqui era a duplicata. Na dúvida, vale o DISP-021: incerto conta
+      // como enviado; duplicar frio é pior que perder um envio.
+      const tokenEnvio = `email-envio:${target.id}`;
+      const jaComprometido = await this.prisma.processedMessage
+        .findUnique({ where: { messageId: tokenEnvio } })
+        .catch(() => null);
+      if (jaComprometido) {
+        this.logger.warn(
+          `Alvo ${target.id} (${target.email}) já tinha compromisso de envio de uma tentativa ` +
+          'interrompida — marcado como enviado SEM reenviar (anti-duplicata)',
+        );
+        await this.prisma.campaignTarget.update({
+          where: { id: target.id },
+          data: { status: 'sent', sentAt: new Date(), error: null },
+        });
+        return;
+      }
 
       // Última checagem antes de sair: opt-out e devolução permanente podem ter
       // acontecido DEPOIS da criação da campanha — a fila pode levar dias para
@@ -837,6 +902,11 @@ export class EmailCampaignSenderService {
         : `Sobre o ${await this.nomeDoMercado(campaign.productCode)} — ${this.render('{{saudacao}}', target.name)}`;
 
       try {
+        // Compromisso ANTES do SMTP — ver o comentário do tokenEnvio acima. Sem
+        // catch: se nem o insert do token sai, o banco está doente e o certo é a
+        // falha transitória devolver o alvo à fila.
+        await this.prisma.processedMessage.create({ data: { messageId: tokenEnvio } });
+
         const result = await this.emailReply.send({
           to: email,
           subject,
@@ -900,8 +970,14 @@ export class EmailCampaignSenderService {
               status: 'sent',
               sentAt: new Date(),
               messageId: normalizarMessageId(result.messageId),
+              // Limpa o rastro de uma tentativa transitória anterior: `sent` com
+              // texto de erro antigo é o relatório mentindo nos dois sentidos.
+              error: null,
             },
           });
+          // Envio bem-sucedido fecha o ciclo do breaker.
+          this.falhasSeguidas = 0;
+          this.aberturasSeguidas = 0;
           // Delay aleatório 90–180s (anti-spam). O `sentAt` que acabou de ser gravado
           // é a base do próximo intervalo — por isso não há mais contador em memória.
           this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
@@ -910,19 +986,97 @@ export class EmailCampaignSenderService {
             `[${enviadosHoje + 1}/${this.dailyLimit()} hoje · próx em ${Math.round(this.nextDelayMs / 1000)}s]`,
           );
         } else {
-          await this.prisma.campaignTarget.update({
-            where: { id: target.id },
-            data: { status: 'failed', error: result.reason ?? 'smtp_error' },
+          await this.registrarFalhaDeEnvio(campaign, target.id, email, tokenEnvio, {
+            motivo: result.reason ?? 'smtp_error',
+            transitoria: result.transient !== false,
           });
         }
       } catch (err: any) {
-        await this.prisma.campaignTarget.update({
-          where: { id: target.id },
-          data: { status: 'failed', error: String(err?.message).slice(0, 200) },
+        // Exceção inesperada (o send() não lança mais): sem código SMTP para ler,
+        // vale a regra do transitório — retentar é recuperável, `failed` não.
+        await this.registrarFalhaDeEnvio(campaign, target.id, email, tokenEnvio, {
+          motivo: String(err?.message ?? err).slice(0, 200),
+          transitoria: true,
         });
       }
     } catch (err: any) {
       this.logger.error(`EmailCampaignSender tick falhou: ${err?.message}`);
     }
+  }
+
+  /**
+   * Registra uma falha de envio e decide o destino do alvo.
+   *
+   * TRANSITÓRIA (SMTP fora, timeout, autenticação, banco doente): o alvo volta
+   * para a fila — o problema é NOSSO, não do endereço — e a falha conta no
+   * breaker: 3 seguidas abrem o circuito por 5 min (dobrando a cada reabertura,
+   * teto 15 min), com aviso no painel. PERMANENTE (destinatário recusado com
+   * 5xx): só aquele alvo vira `failed`, sem parar a esteira.
+   *
+   * Nos dois casos o token de compromisso é apagado (o envio comprovadamente NÃO
+   * aconteceu — ver tokenEnvio no tick) e o compasso anti-spam avança: retentar
+   * no ritmo de envio, nunca a 1 alvo/15s.
+   */
+  private async registrarFalhaDeEnvio(
+    campaign: { id: string; tenantId: string; name: string },
+    targetId: string,
+    email: string,
+    tokenEnvio: string,
+    falha: { motivo: string; transitoria: boolean },
+  ): Promise<void> {
+    await this.prisma.processedMessage
+      .deleteMany({ where: { messageId: tokenEnvio } })
+      .catch((e: any) =>
+        this.logger.warn(`Falha ao liberar token de envio ${tokenEnvio}: ${e?.message}`),
+      );
+
+    this.ultimaFalhaAt = Date.now();
+    this.nextDelayMs = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS));
+
+    if (!falha.transitoria) {
+      this.logger.warn(
+        `Email disparo FALHOU (permanente) → ${email} (campanha "${campaign.name}"): ${falha.motivo}`,
+      );
+      await this.prisma.campaignTarget.update({
+        where: { id: targetId },
+        data: { status: 'failed', error: falha.motivo },
+      });
+      return;
+    }
+
+    // O motivo fica no alvo mesmo em `queued`: é o que responde "por que esta
+    // campanha não anda" no detalhe, e o envio bem-sucedido o limpa.
+    await this.prisma.campaignTarget.update({
+      where: { id: targetId },
+      data: { status: 'queued', error: falha.motivo },
+    });
+
+    this.falhasSeguidas += 1;
+    this.logger.warn(
+      `Email disparo FALHOU (transitória ${this.falhasSeguidas}/3) → ${email} ` +
+      `(campanha "${campaign.name}"): ${falha.motivo} — alvo devolvido à fila`,
+    );
+    if (this.falhasSeguidas < 3) return;
+
+    // 3 seguidas = o problema não é um alvo, é o servidor. Abre o circuito.
+    this.falhasSeguidas = 0;
+    this.aberturasSeguidas += 1;
+    const pausaMs = Math.min(this.aberturasSeguidas * 5 * 60_000, 15 * 60_000);
+    this.circuitoAbertoAte = Date.now() + pausaMs;
+    const ate = new Date(this.circuitoAbertoAte).toISOString();
+    this.logger.error(
+      `SMTP com falhas seguidas — circuito ABERTO por ${Math.round(pausaMs / 60_000)} min (até ${ate}). ` +
+      `Último motivo: ${falha.motivo}. Nenhum alvo é consumido nesse período.`,
+    );
+    await this.notifications
+      ?.create(campaign.tenantId, {
+        type: 'info',
+        title: '⏸️ Disparo de e-mail pausado — SMTP com falhas',
+        body:
+          `O envio falhou 3 vezes seguidas (${falha.motivo}). O disparo pausou por ` +
+          `${Math.round(pausaMs / 60_000)} min e retoma sozinho; os alvos voltaram à fila.`,
+        link: '/disparo',
+      })
+      .catch(() => null);
   }
 }

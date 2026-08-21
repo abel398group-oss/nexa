@@ -33,6 +33,14 @@ function makePrisma(over: any = {}) {
     },
     product: { findUnique: vi.fn().mockResolvedValue(null), ...over.product },
     senderSettings: { findUnique: vi.fn().mockResolvedValue(null), ...over.senderSettings },
+    // Trava de reenvio pós-crash: o tick consulta/gra­va o token de compromisso
+    // antes do SMTP. O neutro é "sem token" — envio segue normal.
+    processedMessage: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      ...over.processedMessage,
+    },
   } as any;
 }
 
@@ -515,6 +523,154 @@ describe('worker — recheck LGPD na hora do envio (defesa em profundidade)', ()
 });
 
 /**
+ * Resiliência do worker (21/08/2026): pane de SMTP não pode queimar a fila, e
+ * crash entre o aceite do SMTP e o write no banco não pode duplicar o e-mail.
+ */
+describe('worker — circuit breaker, backoff e trava anti-duplicata', () => {
+  function harness(sendImpl: any) {
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Agosto', channel: 'email', status: 'running',
+      productCode: null, subject: 's', template: 'corpo', link: null,
+      sendLinkOnFirst: false, sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(), updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha), update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'lead@x.com', name: 'Ana' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contact: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({ id: 'ct-1' }),
+      },
+    });
+    prisma.aiConversation = { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() };
+    const emailReply = { send: sendImpl };
+    const conversations = {
+      create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+      addMessage: vi.fn().mockResolvedValue({}),
+    };
+    const svc = new EmailCampaignSenderService(
+      prisma, emailReply as any, {} as any, conversations as any, registroVazio(), tmsSemClientes(),
+    );
+    return { svc, prisma, emailReply };
+  }
+
+  /** Estado do alvo depois do último update. */
+  const ultimoUpdate = (prisma: any) =>
+    prisma.campaignTarget.update.mock.calls.at(-1)?.[0]?.data;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00')); // segunda, 10h BRT
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('falha TRANSITÓRIA devolve o alvo à fila com o motivo — nunca failed', async () => {
+    const { svc, prisma } = harness(
+      vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_error: ECONNREFUSED', transient: true }),
+    );
+
+    await (svc as any).tickLocked();
+
+    expect(ultimoUpdate(prisma)).toMatchObject({ status: 'queued', error: 'smtp_error: ECONNREFUSED' });
+  });
+
+  it('falha PERMANENTE (5xx do destinatário) marca só aquele alvo como failed', async () => {
+    const { svc, prisma } = harness(
+      vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_error: 550 5.1.1 user unknown', transient: false }),
+    );
+
+    await (svc as any).tickLocked();
+
+    expect(ultimoUpdate(prisma)).toMatchObject({ status: 'failed', error: 'smtp_error: 550 5.1.1 user unknown' });
+  });
+
+  it('a falha avança o compasso: o tick seguinte espera o intervalo anti-spam', async () => {
+    const send = vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_error: timeout', transient: true });
+    const { svc, prisma } = harness(send);
+
+    await (svc as any).tickLocked();
+    await (svc as any).tickLocked(); // 15s depois, na vida real — aqui, imediato
+
+    // Sem o compasso na falha, o segundo tick tentaria de novo (1 alvo/15s).
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(prisma.campaign.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('3 falhas transitórias seguidas ABREM o circuito — o worker para de consumir', async () => {
+    const send = vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_error: timeout', transient: true });
+    const { svc, prisma } = harness(send);
+
+    for (let i = 0; i < 3; i++) {
+      await (svc as any).tickLocked();
+      vi.advanceTimersByTime(200_000); // passa do intervalo de 90-180s
+    }
+    expect(send).toHaveBeenCalledTimes(3);
+
+    // Circuito aberto por 5 min: mesmo com o compasso vencido, nada roda.
+    await (svc as any).tickLocked();
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(prisma.campaign.findFirst).toHaveBeenCalledTimes(3);
+
+    // E fecha sozinho depois da pausa.
+    vi.advanceTimersByTime(5 * 60_000 + 1_000);
+    await (svc as any).tickLocked();
+    expect(send).toHaveBeenCalledTimes(4);
+  });
+
+  it('sucesso zera o breaker e limpa o rastro de erro do alvo', async () => {
+    const send = vi.fn()
+      .mockResolvedValueOnce({ sent: false, reason: 'smtp_error: timeout', transient: true })
+      .mockResolvedValue({ sent: true, messageId: '<m@x>' });
+    const { svc, prisma } = harness(send);
+
+    await (svc as any).tickLocked();
+    vi.advanceTimersByTime(200_000);
+    await (svc as any).tickLocked();
+
+    expect(ultimoUpdate(prisma)).toMatchObject({ status: 'sent', error: null });
+    expect((svc as any).falhasSeguidas).toBe(0);
+  });
+
+  it('alvo com compromisso de tentativa interrompida vira sent SEM reenviar (anti-duplicata)', async () => {
+    const send = vi.fn();
+    const { svc, prisma } = harness(send);
+    prisma.processedMessage.findUnique.mockResolvedValue({ messageId: 'email-envio:alvo-1' });
+
+    await (svc as any).tickLocked();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(ultimoUpdate(prisma)).toMatchObject({ status: 'sent' });
+  });
+
+  it('o compromisso é gravado ANTES do SMTP e liberado quando a falha é comprovada', async () => {
+    const chamadas: string[] = [];
+    const { svc, prisma } = harness(
+      vi.fn().mockImplementation(async () => {
+        chamadas.push('smtp');
+        return { sent: false, reason: 'smtp_error: timeout', transient: true };
+      }),
+    );
+    prisma.processedMessage.create.mockImplementation(async () => { chamadas.push('token'); return {}; });
+
+    await (svc as any).tickLocked();
+
+    expect(chamadas).toEqual(['token', 'smtp']); // compromisso primeiro
+    expect(prisma.processedMessage.deleteMany).toHaveBeenCalledWith({
+      where: { messageId: 'email-envio:alvo-1' },
+    });
+  });
+});
+
+/**
  * A troca automática de layout no segundo toque.
  *
  * Faixa colorida, botão e rodapé são os marcadores que o Gmail usa para separar
@@ -623,7 +779,10 @@ describe('worker — limite diário vem do banco', () => {
 
     await expect((svc as any).enviadosHoje()).resolves.toBe(7);
     const where = prisma.campaignTarget.count.mock.calls[0][0].where;
-    expect(where.status).toBe('sent');
+    // SEM filtro de status (21/08/2026): o bounce flipa `sent → failed` mantendo
+    // o sentAt — filtrar por status devolvia um envio ao orçamento a cada
+    // devolução, o oposto do que preaquecer significa. O envio aconteceu.
+    expect(where.status).toBeUndefined();
     expect(where.campaign).toEqual({ channel: 'email' });
     expect(where.sentAt.gte.toISOString()).toBe('2026-08-10T03:00:00.000Z');
 
