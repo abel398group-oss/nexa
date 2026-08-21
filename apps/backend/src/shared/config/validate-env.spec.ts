@@ -16,6 +16,7 @@ const KEYS = [
   'REDIS_URL',
   'APP_BASE_URL',
   'TMS_SYNC_SECRET',
+  'EMAIL_ENCRYPTION_KEY',
 ];
 
 const STRONG_A = 'A1b2C3d4'.repeat(5); // 40 chars
@@ -35,6 +36,7 @@ function setValidProd() {
   process.env.REDIS_URL = 'redis://redis:6379';
   process.env.APP_BASE_URL = 'https://nexa.hipertms.com.br';
   process.env.TMS_SYNC_SECRET = 'tms_sync_secret_prod_1234567890abcdef';
+  process.env.EMAIL_ENCRYPTION_KEY = 'a'.repeat(64); // hex de 64 chars
 }
 
 describe('validateEnv', () => {
@@ -77,6 +79,20 @@ describe('validateEnv', () => {
   it('produção com JWT_SECRET == JWT_REFRESH_SECRET → aborta', () => {
     setValidProd();
     process.env.JWT_REFRESH_SECRET = STRONG_A;
+    expect(() => validateEnv()).toThrow();
+  });
+
+  // Sem a chave, o EmailCryptoService grava senha SMTP em texto puro — e chave
+  // em formato errado é tratada como "sem chave", que é o mesmo furo em silêncio.
+  it('produção sem EMAIL_ENCRYPTION_KEY → aborta', () => {
+    setValidProd();
+    delete process.env.EMAIL_ENCRYPTION_KEY;
+    expect(() => validateEnv()).toThrow();
+  });
+
+  it('produção com EMAIL_ENCRYPTION_KEY fora do formato (não hex-64) → aborta', () => {
+    setValidProd();
+    process.env.EMAIL_ENCRYPTION_KEY = 'chave-curta-e-invalida';
     expect(() => validateEnv()).toThrow();
   });
 

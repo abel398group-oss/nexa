@@ -27,6 +27,11 @@ const REQUIRED_IN_PROD = [
   'TMS_SYNC_SECRET',
   // Email opt-out link (LGPD) — sem isso o link no e-mail aponta para localhost
   'APP_BASE_URL',
+  // Senhas SMTP/IMAP dos canais de e-mail (AES-256-GCM). Sem a chave, o
+  // EmailCryptoService grava senha em TEXTO PURO na tabela email_channels — e
+  // se a chave sumir DEPOIS, toda linha "ENC:" vira erro de decrypt e o canal
+  // de e-mail inteiro para. Obrigatória antes do primeiro canal salvo.
+  'EMAIL_ENCRYPTION_KEY',
   // Infra
   'REDIS_URL',
 ];
@@ -62,6 +67,19 @@ export function validateEnv(): void {
     process.env.JWT_SECRET === process.env.JWT_REFRESH_SECRET
   ) {
     problems.push('JWT_SECRET e JWT_REFRESH_SECRET são iguais — use segredos diferentes');
+  }
+
+  // A chave de criptografia tem formato fixo (hex de 64 chars = 32 bytes).
+  // Formato errado é tratado pelo EmailCryptoService como "sem chave" — ou seja,
+  // senha em texto puro em silêncio. Melhor recusar o boot com a explicação.
+  {
+    const key = process.env.EMAIL_ENCRYPTION_KEY ?? '';
+    if (key && !/^[0-9a-fA-F]{64}$/.test(key)) {
+      problems.push(
+        'EMAIL_ENCRYPTION_KEY inválida (esperado hex de 64 caracteres) — gere com: ' +
+        'node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+      );
+    }
   }
 
   // CORS não pode apontar para localhost em produção

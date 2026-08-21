@@ -31,10 +31,14 @@ export class EmailCryptoService {
       this.key = Buffer.from(raw, 'hex');
     } else {
       // Sem chave configurada → modo "passthrough" (sem criptografia).
-      // Adequado para dev local; em produção, configure EMAIL_ENCRYPTION_KEY.
+      // Adequado para dev local; em produção o validate-env recusa o boot.
       this.key = null;
       if (raw) {
         this.logger.warn('EMAIL_ENCRYPTION_KEY inválida (esperado hex de 64 chars) — email passwords NÃO criptografadas');
+      } else {
+        // Antes este caso era MUDO: a senha ia para o banco em texto puro e
+        // ninguém ficava sabendo até a auditoria de 21/08/2026 apontar.
+        this.logger.warn('EMAIL_ENCRYPTION_KEY ausente — senhas de e-mail serão gravadas em TEXTO PURO (só aceitável em dev)');
       }
     }
   }
