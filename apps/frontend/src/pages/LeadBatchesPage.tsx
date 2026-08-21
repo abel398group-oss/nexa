@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -131,6 +132,27 @@ export function LeadBatchesPage() {
     reader.readAsText(file, 'utf-8');
   }
 
+  /**
+   * O mercado escolhido tem alguém para trabalhar a lista?
+   *
+   * A pergunta é feita AQUI, antes de importar — e não depois, na distribuição,
+   * que é onde ela era feita até 21/08/2026. O dado é o mesmo nos dois momentos
+   * (o vínculo em Mercados não muda por causa do upload), mas o custo de descobrir
+   * tarde é a lista inteira gravada e nenhum SDR enxergando: a fila esconde lead
+   * sem dono de propósito. Estavam 11 oportunidades assim no banco quando isto
+   * foi escrito.
+   */
+  const { data: equipeDoMercado } = useQuery({
+    queryKey: ['markets', productCode, 'sellers'],
+    queryFn: () => getMarketSellers(productCode),
+    enabled: !!productCode,
+  });
+  /// Só acusa depois de saber: enquanto a consulta não volta, `equipeDoMercado` é
+  /// `undefined` e o aviso fica calado — acusar antes de ter o dado assustaria a
+  /// cada troca de mercado, inclusive nos que têm time.
+  const mercadoSemNinguem =
+    !!productCode && !!equipeDoMercado && equipeDoMercado.vinculados.length === 0;
+
   const podeSimular = !!productCode && !!nome.trim() && !!csv;
   const emVoo = previa.isPending || confirmar.isPending;
 
@@ -162,6 +184,18 @@ export function LeadBatchesPage() {
             <p className="text-xs text-base-content/50">
               O roteiro do SDR vive no mercado, então a lista precisa declarar o dela.
             </p>
+            {/* Aviso PREVENTIVO com o caminho da correção junto. Sem o link, quem lê
+                precisa sair da tela, adivinhar onde fica o vínculo e voltar do zero
+                — e é nesse atrito que a lista entra assim mesmo. */}
+            {mercadoSemNinguem && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Ninguém trabalha este mercado ainda. Se importar agora, os leads entram
+                sem dono e <b>nenhum SDR vai vê-los</b>.{' '}
+                <Link to="/markets" className="underline">
+                  Vincular vendedor
+                </Link>
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -556,7 +590,15 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
         // operador clicar de novo achando que travou.
         toast.info('Nada a distribuir — estes leads já têm dono.');
       } else {
-        toast.success(`${r.distribuidos} leads divididos entre ${abertos.length}.`);
+        // Diz PARA QUEM, não só quantos: "6 divididos entre 2" deixa o operador
+        // sem saber se caiu em quem ele marcou. Com dois nomes cabe a lista; de
+        // três em diante vira contagem, senão o toast fica maior que a tela.
+        const nomes = (data?.vinculados ?? [])
+          .filter((v) => abertos.includes(v.id))
+          .map((v) => v.name);
+        const paraQuem =
+          nomes.length && nomes.length <= 2 ? nomes.join(' e ') : `${abertos.length} vendedores`;
+        toast.success(`${r.distribuidos} lead(s) na fila de ${paraQuem}.`);
       }
       setAberto(false);
       setAbertos([]);
@@ -626,7 +668,7 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
           loading={distribuir.isPending}
           onClick={() => distribuir.mutate()}
         >
-          Dividir
+          Distribuir
         </Button>
         <Button size="xs" variant="ghost" onClick={() => setAberto(false)}>
           Cancelar
@@ -653,8 +695,10 @@ function Historico({ lotes }: { lotes: LeadBatch[] }) {
                     {l.productCode} · {new Date(l.createdAt).toLocaleDateString('pt-BR')}
                   </span>
                 </span>
-                <span className="tabular-nums text-base-content/70">
-                  {l.validCount} de {l.receivedCount}
+                {/* O número mais visível da linha era o mais ambíguo: "6 de 8"
+                    lia-se como distribuídos, contatados ou válidos. É válidos. */}
+                <span className="tabular-nums text-xs text-base-content/70">
+                  {l.validCount} <span className="text-base-content/45">válidos de {l.receivedCount} linhas</span>
                 </span>
               </summary>
               <div className="flex flex-col gap-2 pb-3">
