@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { escopoDeVendedor, type UsuarioComEscopo } from '@/shared/auth/seller-scope';
 import { MarketScopeService, filtroDeMercado, assertMercado } from '@/shared/auth/market-scope.service';
 import { MarketAssetsService } from '@/application/markets/market-assets.service';
+import { FollowUpService } from '@/application/followup/followup.service';
 import { agruparPorBloco } from './closer-today';
 import { empresaDoNegocio } from './lead-import';
 
@@ -13,10 +14,13 @@ const ABERTAS = ['qualified', 'proposal', 'paused'];
 
 @Injectable()
 export class CloserService {
+  private readonly logger = new Logger('Closer');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly marketScope: MarketScopeService,
     private readonly marketAssets: MarketAssetsService,
+    private readonly followup: FollowUpService,
   ) {}
 
   /**
@@ -257,6 +261,12 @@ export class CloserService {
     result: string,
     notes?: string,
   ) {
+    // A cadência para ANTES do `if (sellerId)`: quem agiu foi gente, mesmo quando é um
+    // admin sem vínculo de vendedor e a atividade não é gravada. O robô não pode
+    // continuar mandando follow-up num negócio que alguém acabou de trabalhar só
+    // porque quem trabalhou não tem KPI. Mesma regra do SDR (21/08/2026).
+    await this.pararCadencia(tenantId, opportunityId);
+
     const sellerId = user.sellerId;
     // Admin sem vínculo de vendedor age no painel sem gerar atividade: atribuir o
     // esforço a um vendedor qualquer estragaria o KPI dele em silêncio.
@@ -264,6 +274,28 @@ export class CloserService {
     return this.prisma.sellerActivity.create({
       data: { tenantId, sellerId, opportunityId, type, result, notes: notes ?? null },
     });
+  }
+
+  /**
+   * Cala a cadência automática do lead que acabou de ser trabalhado.
+   *
+   * Best-effort: falhar aqui não pode derrubar o registro da proposta ou do
+   * fechamento, que é o que o closer veio fazer. Mas some do log NUNCA (REGRA 3).
+   */
+  private async pararCadencia(tenantId: string, opportunityId: string): Promise<void> {
+    try {
+      const o = await this.prisma.opportunity.findFirst({
+        where: { id: opportunityId, tenantId },
+        select: { phone: true },
+      });
+      if (o?.phone) {
+        await this.followup.stopByPhone(tenantId, o.phone, 'closer trabalhou o negócio');
+      }
+    } catch (e) {
+      this.logger.warn(
+        `Não consegui parar a cadência do negócio ${opportunityId}: ${(e as Error).message}`,
+      );
+    }
   }
 
   /// Escopo no service, não só na tela: closer não alcança negócio de outro por

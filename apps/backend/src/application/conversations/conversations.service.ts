@@ -14,6 +14,9 @@ import { PaginationQueryDto, Paginated } from '@/shared/dto/pagination.dto';
 import { WahaClientService } from '@/shared/waha/waha-client.service';
 import { AuditService } from '@/shared/audit/audit.service';
 import { trackWhere } from './conversation-track';
+// Só o TIPO do evento: importar o tipo não cria dependência de módulo, e é o que
+// impede o contrato de derivar entre quem emite e quem escuta.
+import type { HumanSpokeEvent } from '@/application/followup/human-activity.listener';
 
 @Injectable()
 export class ConversationsService {
@@ -998,6 +1001,23 @@ export class ConversationsService {
       });
       this.logger.log(`ADR 035: takeover humano ativado na conversa ${conv.id} — Lia em modo rascunho`);
       this.events.emit('conversation.updated', { tenantId, conversationId: conv.id });
+      /**
+       * A cadência automática também para (21/08/2026).
+       *
+       * O takeover já calava a Lia na conversa, mas o follow-up é outro relógio: ele
+       * só parava quando o LEAD respondia ou pedia opt-out — nunca quando o vendedor
+       * falava. Então o vendedor mandava mensagem hoje e o robô mandava
+       * "passando pra saber se você viu" amanhã, por cima dele.
+       *
+       * Vai por EVENTO e não por chamada direta porque `FollowUpModule` já importa
+       * `ConversationsModule`: injetar o serviço aqui fecharia o ciclo. Este é o
+       * mesmo caminho que o resto do sistema usa para reagir a algo que aconteceu.
+       */
+      this.events.emit('human.spoke', {
+        tenantId,
+        conversationId: conv.id,
+        phone: conv.phone,
+      } satisfies HumanSpokeEvent);
     }
     // C3: espelha metadata.campaignId numa coluna dedicada indexada (evita filtrar JSON
     // sem índice em ai_messages). Derivado aqui → nenhum chamador precisa mudar.
