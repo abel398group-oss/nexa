@@ -131,6 +131,14 @@ class CreateEmailCampaignDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sendLimit?: number;
   @IsOptional() @IsString() scheduledAt?: string;
   /**
+   * Como o e-mail sai: `html` (marca, cor, botão) ou `text` (texto puro).
+   *
+   * `@IsIn` e não `@IsString`: valor torto aqui produziria um e-mail sem HTML sem
+   * ninguém entender por quê — o service já normaliza, mas recusar na porta diz
+   * qual é o problema.
+   */
+  @IsOptional() @IsIn(['html', 'text']) emailFormat?: string;
+  /**
    * TESTE: ignora o "já enviado" NESTA campanha, para reenviar ao mesmo endereço.
    *
    * Só tem efeito com `CAMPAIGN_RESEND_ALL_ENABLED` ligado (ver podeIgnorarDedup) —

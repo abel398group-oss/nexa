@@ -606,3 +606,86 @@ describe('worker — lead vindo de lista de leads, com telefone real', () => {
     vi.useRealTimers();
   });
 });
+
+/**
+ * Texto puro é a AUSÊNCIA da parte HTML, não um HTML mais simples.
+ *
+ * O envio sempre montou as duas versões e mandou as duas no mesmo e-mail
+ * (multipart/alternative). O cliente escolhe qual exibir, e o Gmail escolhe o
+ * HTML — então "mandar em texto" nunca era o que o lead via. Em prospecção fria
+ * isso decide caixa de entrada × Promoções.
+ */
+describe('worker — formato do e-mail (html × texto puro)', () => {
+  function cenario(emailFormat: string | undefined) {
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Frio', channel: 'email',
+      status: 'running', productCode: null, subject: 'assunto',
+      template: 'corpo', link: null, sendLinkOnFirst: false,
+      sendLimit: null, scheduledAt: null,
+      ...(emailFormat === undefined ? {} : { emailFormat }),
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'lead@x.com', name: 'Ana' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contact: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue({ id: 'ct-1', email: 'lead@x.com' }),
+        upsert: vi.fn().mockResolvedValue({ id: 'ct-1' }),
+      },
+    });
+    prisma.aiConversation = { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() };
+
+    const emailReply = { send: vi.fn().mockResolvedValue({ sent: true, messageId: '<m@x>' }) };
+    const conversations = {
+      create: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+      addMessage: vi.fn().mockResolvedValue({}),
+    };
+    const svc = new EmailCampaignSenderService(prisma, emailReply as any, {} as any, conversations as any);
+    return { svc, emailReply };
+  }
+
+  it('emailFormat=text pede envio sem HTML', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const { svc, emailReply } = cenario('text');
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send.mock.calls[0][0].somenteTexto).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('emailFormat=html mantém o HTML', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const { svc, emailReply } = cenario('html');
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send.mock.calls[0][0].somenteTexto).toBe(false);
+    vi.useRealTimers();
+  });
+
+  // Campanha criada antes da coluna existir não pode mudar de comportamento.
+  it('campanha sem o campo continua com HTML', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const { svc, emailReply } = cenario(undefined);
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send.mock.calls[0][0].somenteTexto).toBe(false);
+    vi.useRealTimers();
+  });
+});

@@ -277,6 +277,10 @@ export function CampaignsPage() {
   // Email-only fields
   const [emailLinkMode, setEmailLinkMode] = useState<'upload' | 'manual'>('upload');
   const [sendLinkOnFirst, setSendLinkOnFirst] = useState(false);
+  /// Como o e-mail SAI. `text` manda só a parte de texto — sem HTML nenhum.
+  /// Ver `Campaign.emailFormat`: enquanto a parte HTML for junto, é ela que o
+  /// Gmail exibe, e o texto puro nunca é visto.
+  const [emailFormat, setEmailFormat] = useState<'html' | 'text'>('html');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailsText, setEmailsText] = useState('');
   const [emailTemplate, setEmailTemplate] = useState(
@@ -1014,6 +1018,7 @@ export function CampaignsPage() {
         if (fromContacts) payload.fromContacts = true;
         else payload.emails = parseEmailList(emailsText).map((e) => ({ email: e }));
         if (link.trim()) { payload.link = link.trim(); payload.sendLinkOnFirst = sendLinkOnFirst; }
+        payload.emailFormat = emailFormat;
         if (limitMode === 'limit') payload.sendLimit = sendLimit;
         if (scheduledAt) payload.scheduledAt = new Date(scheduledAt).toISOString();
         // Ferramenta de teste: manda de novo para quem já recebeu. O servidor ignora
@@ -1965,6 +1970,32 @@ export function CampaignsPage() {
                       <p className="mt-1 text-[11px] text-base-content/35">
                         Links do Google Drive, Dropbox, site ou qualquer URL pública.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Como o e-mail sai: com marca (HTML) ou texto puro.
+                      Só e-mail — no WhatsApp não existe HTML. */}
+                  {channel === 'email' && (
+                    <div className="mt-3 rounded-xl border border-base-200 px-4 py-3">
+                      <p className="mb-2 text-xs font-medium text-base-content/60">Como o e-mail vai chegar?</p>
+                      <div className="flex flex-col gap-2">
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input type="radio" className="mt-0.5" checked={emailFormat === 'text'}
+                                 onChange={() => setEmailFormat('text')} />
+                          <div>
+                            <p className="text-sm font-medium text-base-content">Texto puro <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Recomendado p/ 1º contato</span></p>
+                            <p className="text-[11px] text-base-content/40">Sem marca, sem cor, sem botão — chega como um e-mail escrito por uma pessoa. Costuma entregar melhor na caixa de entrada em prospecção fria.</p>
+                          </div>
+                        </label>
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input type="radio" className="mt-0.5" checked={emailFormat === 'html'}
+                                 onChange={() => setEmailFormat('html')} />
+                          <div>
+                            <p className="text-sm text-base-content/70">Com a marca do mercado (HTML)</p>
+                            <p className="text-[11px] text-base-content/40">Faixa colorida, assinatura e botão. Bom para quem já conhece você; em contato frio, o Gmail tende a mandar para Promoções.</p>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   )}
 

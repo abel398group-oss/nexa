@@ -297,6 +297,8 @@ export class EmailCampaignSenderService {
       ignoreDedup?: boolean;
       link?: string;
       sendLinkOnFirst?: boolean; // false (padrão) = só envia link após resposta do lead
+      /// `html` (marca, cor, botão) ou `text` (texto puro). Ver Campaign.emailFormat.
+      emailFormat?: string;
       sendLimit?: number;
       scheduledAt?: string; // agendamento: só começa a enviar a partir desse horário
       /** Vendedor dono. Vem do token quando quem cria é vendedor. */
@@ -472,6 +474,10 @@ export class EmailCampaignSenderService {
         template: dto.template,
         link: dto.link?.trim() || null,
         sendLinkOnFirst: dto.sendLinkOnFirst ?? false,
+        // Só `text` desliga o HTML; qualquer outro valor cai no padrão. Validar
+        // aqui (e não confiar no DTO) evita que um valor torto vindo de outro
+        // cliente da API produza um e-mail sem HTML e sem ninguém entender por quê.
+        emailFormat: dto.emailFormat === 'text' ? 'text' : 'html',
         // Dono do disparo (11/08/2026). A conversa que nascer daqui herda este
         // vendedor — ver registrarNaConversa.
         ownerSellerId: dto.ownerSellerId || null,
@@ -785,6 +791,10 @@ export class EmailCampaignSenderService {
           },
           // Discreto no primeiro contato, com a marca depois que a pessoa respondeu.
           layout,
+          // Escolha de quem montou a campanha. Em `text` o HTML nem é anexado —
+          // enquanto ele vai junto, o Gmail mostra o HTML e o texto puro nunca é
+          // visto. Campanha antiga não muda: a coluna nasce com 'html'.
+          somenteTexto: (campaign as any).emailFormat === 'text',
           ctaUrl,
           ctaLabel: 'Ver como funciona',
           // Sem leadScore em campanha outbound — sem convite WhatsApp automático

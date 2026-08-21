@@ -90,6 +90,19 @@ export interface SendEmailOptions {
   ctaUrl?: string;
   ctaLabel?: string;
   /**
+   * Manda SÓ a versão de texto — sem a parte HTML.
+   *
+   * Não é o mesmo que "layout simples". O layout muda o desenho do HTML; isto
+   * remove o HTML do envio. Importa porque a mensagem sempre saiu multipart, com
+   * texto e HTML juntos, e o cliente escolhe qual mostrar — o Gmail escolhe o
+   * HTML. Enquanto a parte HTML for junto, o lead nunca vê o texto puro.
+   *
+   * Em prospecção fria, e-mail com marca e botão é lido como disparo em massa;
+   * texto puro parece o que é, uma pessoa escrevendo. Quem decide é quem monta a
+   * campanha (`Campaign.emailFormat`), não este serviço.
+   */
+  somenteTexto?: boolean;
+  /**
    * Message-ID da mensagem que estamos respondendo (forma canônica, sem `<>`).
    *
    * É o que faz o cliente do lead ENCADEAR a nossa resposta embaixo da mensagem
@@ -316,7 +329,10 @@ export class EmailReplyService {
         to: opts.to,
         subject,
         text: bodyText,
-        html: bodyHtml,
+        // `somenteTexto` OMITE a chave — não adianta mandar html vazio ou igual ao
+        // texto: qualquer parte HTML presente é a que o Gmail exibe, e o e-mail
+        // continua sendo lido como multipart pelos filtros.
+        ...(opts.somenteTexto ? {} : { html: bodyHtml }),
         replyTo: config.replyTo,
         // Encadeamento RFC 5322 §3.6.4 — ver `inReplyTo` em SendEmailOptions.
         // Os sinais `<>` são obrigatórios no cabeçalho; guardamos a forma canônica

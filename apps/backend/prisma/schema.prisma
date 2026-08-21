@@ -904,6 +904,17 @@ model Campaign {
   mediaUrl  String?   @map("media_url")
   mediaName String?   @map("media_name")
   sendLimit Int?      @map("send_limit")
+  /// Como o e-mail SAI: `html` (marca, cor, botão) ou `text` (texto puro).
+  ///
+  /// O envio sempre montou as duas versões e mandava as duas (multipart), e o
+  /// Gmail escolhe o HTML — então "texto" nunca era o que o lead via. Em
+  /// prospecção fria isso importa: e-mail com marca e botão é lido como
+  /// disparo em massa e vai para Promoções; texto puro parece o que é, uma
+  /// pessoa escrevendo. Ver ADR 021 e `renderEmailHtml`.
+  ///
+  /// Default `html` de propósito: preserva o comportamento das campanhas que já
+  /// existem. Quem quiser texto puro escolhe na criação.
+  emailFormat String @default("html") @map("email_format")
   // Canal Status WhatsApp (ADR-026) — aditivo; default "message" preserva campanhas existentes
   type           String    @default("message") // "message" | "status"
   statusPostId   String?   @map("status_post_id")    // id do post retornado pelo WAHA
