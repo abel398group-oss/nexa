@@ -195,6 +195,25 @@ export class EmailReplyService {
   }
 
   /**
+   * O erro é do NOSSO lado (conexão, autenticação, timeout) ou do destinatário?
+   *
+   * A distinção decide o destino do alvo no worker de campanha: infra caída é
+   * transitória — o alvo volta para a fila e o circuit breaker conta a falha;
+   * destinatário recusado (5xx no envelope) é permanente — o alvo vira `failed`
+   * e insistir só machucaria a reputação.
+   *
+   * `EAUTH` entra como transitório mesmo vindo com 535 (>=500): senha errada é
+   * problema de configuração NOSSA, não do endereço — é exatamente o caso em que
+   * queimar a fila inteira como `failed` seria o pior resultado possível.
+   */
+  static erroTransitorio(err: any): boolean {
+    if (err?.code === 'EAUTH') return true;
+    const rc = Number(err?.responseCode);
+    if (!Number.isFinite(rc)) return true; // timeout/rede/DNS: sem código = não sabemos = transitório
+    return rc < 500;
+  }
+
+  /**
    * Envia e devolve o Message-ID atribuído pelo SMTP.
    *
    * O `messageId` volta porque é a ÚNICA âncora que sobrevive a uma resposta vinda de
@@ -202,25 +221,46 @@ export class EmailReplyService {
    * Quem dispara campanha guarda no alvo (ver CampaignTarget.messageId) para
    * reconhecer a resposta depois. É informativo — nunca vem vazio em envio bem
    * sucedido, mas quem consome trata `undefined` sem quebrar.
+   *
+   * NUNCA lança (21/08/2026): as exceções que nasciam ANTES do try interno —
+   * `crypto.decrypt` sem EMAIL_ENCRYPTION_KEY e o insert do token de opt-out —
+   * subiam até o EmailOutboundListener como unhandled rejection, e a resposta do
+   * Inbox ficava "enviando" para sempre. Falha aqui vira `{sent:false}` com o
+   * motivo, e `transient` diz se vale retentar (ver erroTransitorio).
    */
-  async send(opts: SendEmailOptions): Promise<{ sent: boolean; reason?: string; messageId?: string }> {
+  async send(
+    opts: SendEmailOptions,
+  ): Promise<{ sent: boolean; reason?: string; messageId?: string; transient?: boolean }> {
     // Comercial: disparo de campanha E a resposta da Lia na mesma conversa. As duas
     // PRECISAM sair do mesmo endereço — separar aqui faria o lead ver dois remetentes
     // numa thread só, e a resposta dele cairia numa caixa que ninguém lê.
-    const config = await this.resolveConfig(opts.tenantId, 'comercial');
+    let cfg: SmtpConfig | undefined;
+    let optOutUrl = '';
+    try {
+      const resolvido = await this.resolveConfig(opts.tenantId, 'comercial');
 
-    if (!config) {
-      this.logger.warn(
-        'Configuração SMTP não encontrada (banco nem .env) — e-mail não enviado (dev mode)',
+      if (!resolvido) {
+        this.logger.warn(
+          'Configuração SMTP não encontrada (banco nem .env) — e-mail não enviado (dev mode)',
+        );
+        this.logger.debug(`[dev] Para: ${opts.to} | ${opts.subject}\n${opts.body}`);
+        return { sent: false, reason: 'smtp_not_configured', transient: true };
+      }
+
+      // Gera token de opt-out (TTL longo — ver email-optout.service.ts)
+      const baseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3001';
+      const optOutToken = await this.optout.generateToken(opts.tenantId, opts.contactId, opts.to);
+      optOutUrl = `${baseUrl}/api/email/optout?token=${optOutToken}`;
+      cfg = resolvido;
+    } catch (err: any) {
+      // REGRA 3: o motivo original no log, com contexto para achar a mensagem.
+      this.logger.error(
+        `Falha ao preparar envio para ${opts.to} (tenant=${opts.tenantId}): ${err?.message}`,
       );
-      this.logger.debug(`[dev] Para: ${opts.to} | ${opts.subject}\n${opts.body}`);
-      return { sent: false, reason: 'smtp_not_configured' };
+      return { sent: false, reason: `config_error: ${err?.message}`.slice(0, 200), transient: true };
     }
-
-    // Gera token de opt-out (TTL 30 dias)
-    const baseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3001';
-    const optOutToken = await this.optout.generateToken(opts.tenantId, opts.contactId, opts.to);
-    const optOutUrl = `${baseUrl}/api/email/optout?token=${optOutToken}`;
+    // `!` seguro: o catch acima retorna — chegar aqui implica `cfg` atribuído.
+    const config = cfg!;
 
     // Convite WhatsApp para leads qualificados (score ≥ 40 — ADR 021 D6)
     const waLink = process.env.WHATSAPP_INVITE_LINK ?? 'https://wa.me/5511994327713';
@@ -366,8 +406,12 @@ export class EmailReplyService {
       this.logger.log(`E-mail enviado via SMTP para ${opts.to} (tenant=${opts.tenantId})`);
       return { sent: true, messageId: info?.messageId };
     } catch (err: any) {
-      this.logger.error(`Erro SMTP ao enviar para ${opts.to}: ${err?.message}`);
-      return { sent: false, reason: `smtp_error: ${err?.message}` };
+      const transient = EmailReplyService.erroTransitorio(err);
+      this.logger.error(
+        `Erro SMTP ao enviar para ${opts.to} (${transient ? 'transitório' : 'permanente'}, ` +
+        `code=${err?.code ?? '-'} rc=${err?.responseCode ?? '-'}): ${err?.message}`,
+      );
+      return { sent: false, reason: `smtp_error: ${err?.message}`.slice(0, 200), transient };
     }
   }
 

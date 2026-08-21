@@ -412,7 +412,7 @@ model AiMessage {
   // O filtro por JSON não usava índice (seq scan na maior tabela). Populada por
   // ConversationsService.addMessage a partir de metadata.campaignId.
   campaignId       String?          @map("campaign_id")
-  ack              Int              @default(0) // 0 pend,1 enviado ✓,2 entregue ✓✓,3 lido ✓✓azul
+  ack              Int              @default(0) // -1 falhou ⚠,0 pend,1 enviado ✓,2 entregue ✓✓,3 lido ✓✓azul
   createdAt        DateTime         @default(now()) @map("created_at")
   // F12 (2026-08-06): nota interna — visível só pra equipe de suporte, NUNCA
   // despachada pro cliente (WAHA/widget/portal). Default false preserva todo

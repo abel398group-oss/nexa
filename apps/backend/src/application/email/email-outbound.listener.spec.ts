@@ -72,13 +72,47 @@ describe('EmailOutboundListener', () => {
     });
   });
 
-  it('falha no SMTP não marca ack (a mensagem não saiu)', async () => {
+  // ack=-1: a mensagem sai do limbo "enviando" e o Inbox mostra "falhou" — o
+  // analista reenvia em vez de descobrir pelo lead que nada chegou.
+  it('falha no SMTP marca ack=-1 e avisa o Inbox (a mensagem não saiu)', async () => {
     deps.emailReply.send.mockResolvedValue({ sent: false, reason: 'smtp_error: timeout' });
 
     await listener.handle(evento);
 
-    expect(deps.prisma.aiMessage.update).not.toHaveBeenCalled();
-    expect(deps.events.emit).not.toHaveBeenCalled();
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { ack: -1 },
+    });
+    expect(deps.events.emit).toHaveBeenCalledWith('message.updated', {
+      conversationId: 'conv-1',
+      id: 'msg-1',
+      ack: -1,
+    });
+  });
+
+  // A rede de segurança (21/08/2026): o evento é async — exceção que escapasse
+  // daqui virava unhandled rejection e a mensagem ficava "enviando" para sempre.
+  it('exceção inesperada no envio não estoura e marca ack=-1', async () => {
+    deps.emailReply.send.mockRejectedValue(new Error('EMAIL_ENCRYPTION_KEY ausente'));
+
+    await expect(listener.handle(evento)).resolves.toBeUndefined();
+
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { ack: -1 },
+    });
+  });
+
+  it('conversa não encontrada também marca ack=-1 (nada vai sair)', async () => {
+    deps.prisma.aiConversation.findUnique.mockResolvedValue(null);
+
+    await listener.handle(evento);
+
+    expect(deps.emailReply.send).not.toHaveBeenCalled();
+    expect(deps.prisma.aiMessage.update).toHaveBeenCalledWith({
+      where: { id: 'msg-1' },
+      data: { ack: -1 },
+    });
   });
 
   it('phone sem o prefixo email: não envia (não é conversa de e-mail de verdade)', async () => {

@@ -130,6 +130,9 @@ function fmtElapsed(iso?: string | null): string {
 
 function Recibo({ ack }: { ack?: number }) {
   const a = ack ?? 0;
+  // ack=-1: o backend tentou entregar e falhou (SMTP fora, credencial quebrada).
+  // Antes ficava "enviando" para sempre e o analista só descobria pelo lead.
+  if (a < 0) return <span className="font-semibold text-red-300" title="Falhou — a mensagem não saiu; envie novamente">⚠ falhou</span>;
   if (a >= 3) return <span className="font-semibold text-sky-200" title="Lido">✓✓ lido</span>;
   if (a === 2) return <span className="text-white/75" title="Entregue">✓✓ entregue</span>;
   if (a >= 1) return <span className="text-white/75" title="Enviado">✓ enviado</span>;

@@ -38,6 +38,23 @@ export class EmailOutboundListener {
 
   @OnEvent('conversation.outbound.email', { async: true })
   async handle(event: ConversationOutboundEmailEvent): Promise<void> {
+    // O try/catch de fora é a rede de segurança (21/08/2026): o evento é
+    // `{async:true}`, então qualquer exceção que escape daqui vira unhandled
+    // rejection — sem log útil e com a mensagem presa em "enviando" no Inbox.
+    // O send() já não lança mais (ver EmailReplyService), mas este handler não
+    // pode DEPENDER disso: uma falha inesperada aqui é uma resposta humana
+    // perdida em silêncio, que é o pior defeito que este arquivo pode ter.
+    try {
+      await this.entregar(event);
+    } catch (err: any) {
+      this.logger.error(
+        `Falha inesperada ao entregar e-mail (conv=${event.conversationId} msg=${event.messageId}): ${err?.message}`,
+      );
+      await this.marcarFalha(event.conversationId, event.messageId);
+    }
+  }
+
+  private async entregar(event: ConversationOutboundEmailEvent): Promise<void> {
     const { tenantId, conversationId, messageId } = event;
 
     const conv = await this.prisma.aiConversation
@@ -52,6 +69,7 @@ export class EmailOutboundListener {
 
     if (!conv) {
       this.logger.warn(`msg=${messageId}: conversa ${conversationId} não encontrada — e-mail NÃO enviado`);
+      await this.marcarFalha(conversationId, messageId);
       return;
     }
 
@@ -61,6 +79,7 @@ export class EmailOutboundListener {
         `msg=${messageId}: conversa ${conversationId} é do canal email mas phone="${conv.phone}" ` +
         `não tem o prefixo "${EMAIL_PHONE_PREFIX}" — e-mail NÃO enviado`,
       );
+      await this.marcarFalha(conversationId, messageId);
       return;
     }
     const to = conv.phone.slice(EMAIL_PHONE_PREFIX.length);
@@ -71,6 +90,7 @@ export class EmailOutboundListener {
 
     if (!message?.content?.trim()) {
       this.logger.warn(`msg=${messageId}: sem conteúdo — e-mail NÃO enviado`);
+      await this.marcarFalha(conversationId, messageId);
       return;
     }
 
@@ -92,9 +112,11 @@ export class EmailOutboundListener {
     });
 
     if (!r.sent) {
-      // REGRA 3: caminho de falha SEMPRE registra o motivo. Antes desta correção
-      // era exatamente aqui que a mensagem sumia sem deixar rastro.
+      // REGRA 3: caminho de falha SEMPRE registra o motivo. E a mensagem sai do
+      // limbo: ack=-1 mostra "falhou" no Inbox em vez de "enviando" eterno — o
+      // analista vê que não saiu e reenvia, em vez de descobrir pelo lead.
       this.logger.warn(`E-mail NÃO enviado p/ ${to} (conv=${conversationId} msg=${messageId}): ${r.reason}`);
+      await this.marcarFalha(conversationId, messageId);
       return;
     }
 
@@ -111,6 +133,23 @@ export class EmailOutboundListener {
     this.events.emit('message.updated', { conversationId, id: messageId, ack: 1 });
 
     this.logger.log(`E-mail enviado p/ ${to} (conv=${conversationId.slice(0, 8)})`);
+  }
+
+  /**
+   * Marca a mensagem como FALHA de envio (ack = -1) e avisa o Inbox ao vivo.
+   *
+   * Best-effort nos dois passos: se o próprio update falhar, o log é o que resta —
+   * nunca relançar daqui, este método roda dentro do catch da rede de segurança.
+   */
+  private async marcarFalha(conversationId: string, messageId: string): Promise<void> {
+    await this.prisma.aiMessage
+      .update({ where: { id: messageId }, data: { ack: -1 } })
+      .catch((e: any) => this.logger.warn(`Falha ao marcar ack=-1 do msg=${messageId}: ${e?.message}`));
+    try {
+      this.events.emit('message.updated', { conversationId, id: messageId, ack: -1 });
+    } catch (e: any) {
+      this.logger.warn(`Falha ao emitir message.updated (msg=${messageId}): ${e?.message}`);
+    }
   }
 
   /**
