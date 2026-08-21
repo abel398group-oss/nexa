@@ -119,8 +119,17 @@ export class ContactsController {
     res.send(csv);
   }
 
-  // histórico de campanhas que o contato recebeu
+  /**
+   * Histórico de campanhas que o contato recebeu.
+   *
+   * `sdr` entra ao lado de `contacts` (21/08/2026): a mesa do SDR mostra o que já
+   * bateu neste lead antes de ele ligar — sem isso o vendedor abre a ligação sem
+   * saber que o lead recebeu três e-mails esta semana, e repete o que já foi dito.
+   * Leitura pura, do próprio lead que ele já tem na tela; a permissão `contacts`
+   * continua sendo a que dá acesso à BASE inteira.
+   */
   @Get(':id/campaigns')
+  @RequirePerm('contacts', 'sdr')
   campaigns(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.contacts.campaignsForContact(tenantId, id);
   }

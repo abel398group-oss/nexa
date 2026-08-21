@@ -23,6 +23,7 @@ import {
   descartarLead,
   listClosers,
   listMaterial,
+  listCampanhasDoContato,
   listMaterialAprovado,
   listQueue,
   pausarLead,
@@ -49,9 +50,9 @@ export function SdrWorkbenchPage() {
   const toast = useToast();
   const qc = useQueryClient();
   const [selecionado, setSelecionado] = useState<string | null>(null);
-  const [dialogo, setDialogo] = useState<'ligacao' | 'pausar' | 'descartar' | 'transferir' | null>(
-    null,
-  );
+  const [dialogo, setDialogo] = useState<
+    'ligacao' | 'pausar' | 'descartar' | 'transferir' | 'reuniao' | null
+  >(null);
   /// Aba do centro. Ver `AbasDoCentro` e o efeito abaixo, que escolhe sozinho pelo
   /// estado do lead em vez de guardar uma preferência.
   const [aba, setAba] = useState<'conversa' | 'roteiro'>('roteiro');
@@ -154,8 +155,15 @@ export function SdrWorkbenchPage() {
   const transferir = useMutation({
     mutationFn: (d: { closerId: string; meetingAt?: string; meetingUrl?: string; notes?: string }) =>
       transferirParaCloser(lead!.id, { ...d, scriptVersion }),
-    onSuccess: () => {
-      toast.success('Passado pro closer. Continua no seu histórico.');
+    onSuccess: (_r, enviado) => {
+      // A mensagem conta o que ACONTECEU, e agendar é diferente de passar adiante:
+      // "passado pro closer" depois de marcar reunião faria o SDR procurar onde
+      // registrar a data que ele acabou de digitar.
+      toast.success(
+        enviado.meetingAt
+          ? 'Reunião marcada e lead entregue. Continua no seu histórico.'
+          : 'Passado pro closer. Continua no seu histórico.',
+      );
       setDialogo(null);
       avancar(lead!.id);
     },
@@ -235,9 +243,10 @@ export function SdrWorkbenchPage() {
         />
       )}
 
-      {lead && dialogo === 'transferir' && (
+      {lead && (dialogo === 'transferir' || dialogo === 'reuniao') && (
         <DialogoTransferencia
           productCode={lead.productCode}
+          modo={dialogo}
           onFechar={() => setDialogo(null)}
           salvando={transferir.isPending}
           onSalvar={(d) => transferir.mutate(d)}
@@ -340,17 +349,61 @@ function Fila({
   selecionadoId: string | null;
   onSelecionar: (id: string) => void;
 }) {
+  /**
+   * Busca na fila. Existe para UM momento: o lead liga de volta.
+   *
+   * Ele está na lista, mas encontrá-lo rolando dezenas de linhas com o telefone
+   * tocando não acontece — o SDR atende sem contexto ou deixa tocar. Filtra por
+   * pessoa, empresa e telefone porque é assim que o lead se identifica ao ligar:
+   * pelo nome, pelo nome da transportadora, ou pelo número no identificador.
+   *
+   * Local, sem ida ao servidor: a fila inteira já está na tela, e uma requisição a
+   * cada tecla acrescentaria latência a um filtro que é instantâneo em memória.
+   */
+  const [busca, setBusca] = useState('');
+  const termo = busca.trim().toLowerCase();
+  const soDigitos = termo.replace(/\D/g, '');
+  const visiveis = !termo
+    ? fila
+    : fila.filter((f) => {
+        const alvo = [f.contact?.name, f.contact?.company, f.company]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (alvo.includes(termo)) return true;
+        // Telefone compara só dígitos: quem digita "9988" não deve depender de
+        // ter acertado a máscara com parênteses e hífen.
+        return soDigitos.length >= 3 && (f.phone ?? '').replace(/\D/g, '').includes(soDigitos);
+      });
+
   return (
     <Card className="max-h-[calc(100vh-12rem)] overflow-y-auto p-2">
       <p className="px-2 py-2 text-xs font-medium uppercase tracking-wide text-base-content/50">
         Sua fila {fila.length > 0 && `· ${fila.length}`}
       </p>
+      {/* Só com fila que não cabe de relance: campo de busca sobre cinco linhas é
+          um controle a mais para ler, não um atalho. */}
+      {fila.length > 8 && (
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Nome, empresa ou telefone…"
+          className="mb-1 h-8 w-full rounded-md border border-base-300 bg-white px-2 text-xs outline-none focus:border-brand-500 dark:bg-base-100"
+        />
+      )}
       {carregando && <p className="px-2 py-3 text-sm text-base-content/60">Carregando…</p>}
       {!carregando && !fila.length && (
         <p className="px-2 py-3 text-sm text-base-content/60">Nada pra hoje.</p>
       )}
+      {/* Fila cheia e busca sem resultado é outro estado: dizer "nada pra hoje"
+          faria o SDR achar que a fila esvaziou. */}
+      {!carregando && !!fila.length && !visiveis.length && (
+        <p className="px-2 py-3 text-sm text-base-content/60">
+          Ninguém com "{busca}" na sua fila.
+        </p>
+      )}
       <ul className="flex flex-col gap-0.5">
-        {fila.map((f) => {
+        {visiveis.map((f) => {
           const ativo = f.id === selecionadoId;
           return (
             <li key={f.id}>
@@ -362,15 +415,34 @@ function Fila({
                   (ativo ? 'bg-brand-500/10' : 'hover:bg-base-200')
                 }
               >
-                {/* Mesma cascata do card do closer: lead que entrou por e-mail não tem
-                    empresa nem nome, e a fila mostrava "Sem nome" com o endereço dele
-                    disponível ali do lado, na coluna `phone`. */}
+                {/* PESSOA e empresa na mesma linha, e o telefone embaixo.
+                    Mostrando só a empresa, quatro contatos da mesma transportadora
+                    viravam quatro linhas idênticas — o SDR tinha de clicar em cada
+                    uma para descobrir com quem ia falar, e o nome já vinha na
+                    consulta o tempo todo. Com a base real isso é o dia inteiro.
+                    A cascata continua: lead que entrou por e-mail não tem empresa
+                    nem nome, e aí o endereço é a identidade. */}
                 <p className="truncate text-sm font-medium">
-                  {f.contact?.company ??
+                  {f.contact?.name ??
+                    f.contact?.company ??
                     f.company ??
-                    f.contact?.name ??
                     (identidadeVisivel(f.phone) || 'Sem nome')}
+                  {/* Empresa como complemento, não como título: é o que separa
+                      "Fernanda" de "Fernanda" quando as duas existem. */}
+                  {!!f.contact?.name && !!(f.contact?.company ?? f.company) && (
+                    <span className="font-normal text-base-content/45">
+                      {' · '}
+                      {f.contact?.company ?? f.company}
+                    </span>
+                  )}
                 </p>
+                {/* O telefone é a ferramenta do SDR — ele liga, não navega. Ver o
+                    número sem abrir o lead é o que permite discar de uma vez. */}
+                {!!identidadeVisivel(f.phone) && (
+                  <p className="truncate text-[11px] tabular-nums text-base-content/45">
+                    {identidadeVisivel(f.phone)}
+                  </p>
+                )}
                 <div className="mt-1 flex items-center gap-2">
                   <span
                     className={
@@ -381,14 +453,35 @@ function Fila({
                     {ROTULO_PRIORIDADE[f.prioridade]}
                   </span>
                   {/* Termômetro antes das tentativas: esforço já gasto é histórico,
-                      temperatura é o que decide se vale gastar mais. */}
-                  <Termometro
-                    score={f.interestScore ?? 0}
-                    className={'text-[10px] ' + corDoScore(f.interestScore ?? 0)}
-                  />
+                      temperatura é o que decide se vale gastar mais.
+                      Só aparece com score MEDIDO: ele vem da conversa com a Lia, e
+                      a fila do SDR é feita de quem nunca foi contatado — mostrando
+                      zero para todos, o indicador ocupava a linha dizendo nada.
+                      Zero e "ainda não medido" não são a mesma coisa. */}
+                  {!!f.interestScore && (
+                    <Termometro
+                      score={f.interestScore}
+                      className={'text-[10px] ' + corDoScore(f.interestScore)}
+                    />
+                  )}
                   {f.tentativas > 0 && (
                     <span className="text-[10px] text-base-content/50">
                       {f.tentativas} {f.tentativas === 1 ? 'tentativa' : 'tentativas'}
+                    </span>
+                  )}
+                  {/* Cadência automática pendente. Só aparece em quem o robô ainda
+                      vai tocar — registrar atividade para a cadência, então este selo
+                      sumindo é sinal de que o lead passou a ser trabalho de gente. */}
+                  {f.cadenciaToque !== null && (
+                    <span
+                      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                      title={
+                        f.cadenciaProximoEm
+                          ? `Próximo disparo automático em ${new Date(f.cadenciaProximoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+                          : 'Cadência automática pendente'
+                      }
+                    >
+                      🤖 toque {f.cadenciaToque}
                     </span>
                   )}
                   {/* O mesmo lead veio em mais de uma lista. A fila já mostra ele uma
@@ -860,6 +953,75 @@ function QualificacaoDoLead({ lead }: { lead: ItemDaFila }) {
   );
 }
 
+/**
+ * O que já bateu neste lead antes da ligação.
+ *
+ * Sem isto o SDR abre a chamada sem saber que o lead recebeu três e-mails esta
+ * semana — e repete o que já foi dito, ou pergunta "chegou meu e-mail?" sem saber a
+ * resposta. O status de cada disparo (enviado, falhou, respondeu) muda a abertura:
+ * quem RESPONDEU a campanha não é abordagem fria, é retomada.
+ */
+function JaRecebeu({ contactId }: { contactId: string | null }) {
+  const { data: campanhas = [], isLoading } = useQuery({
+    queryKey: ['sdr', 'campanhas-do-contato', contactId],
+    queryFn: () => listCampanhasDoContato(contactId as string),
+    enabled: !!contactId,
+  });
+
+  // Lead sem ficha de contato nunca recebeu campanha — o disparo é por contato.
+  if (!contactId) return null;
+  if (isLoading) {
+    return (
+      <Card className="p-5 text-sm text-base-content/60">Vendo o que já foi enviado…</Card>
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <p className="mb-2 text-sm font-medium">
+        Já recebeu {campanhas.length > 0 && <span className="text-base-content/40">· {campanhas.length}</span>}
+      </p>
+      {!campanhas.length && (
+        // Dito com todas as letras: é informação de abordagem, não ausência de dado.
+        <p className="text-sm text-base-content/60">
+          Nada foi disparado para este lead ainda — sua ligação é o primeiro contato.
+        </p>
+      )}
+      <ul className="flex flex-col">
+        {campanhas.slice(0, 8).map((c) => (
+          <li key={c.campaignId} className="border-b border-base-200 py-2 text-sm last:border-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate">{c.name}</span>
+              <span className="shrink-0 text-[10px] uppercase tracking-wide text-base-content/40">
+                {c.channel === 'email' ? '✉️' : '💬'}{' '}
+                {c.sentAt
+                  ? new Date(c.sentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                  : ROTULO_ALVO[c.status] ?? c.status}
+              </span>
+            </div>
+            {/* O status só aparece quando NÃO é o caminho feliz: "enviado" com data
+                ao lado já diz tudo, e repetir enche a lista de ruído. */}
+            {c.sentAt && c.status !== 'sent' && (
+              <p className="mt-0.5 text-xs text-base-content/50">
+                {ROTULO_ALVO[c.status] ?? c.status}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/// Status do alvo da campanha, em português. Mesmo vocabulário da tela de Disparos.
+const ROTULO_ALVO: Record<string, string> = {
+  queued: 'na fila',
+  sending: 'enviando',
+  sent: 'enviado',
+  failed: 'falhou',
+  skipped: 'pulado',
+};
+
 function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void }) {
   const c = lead.contact;
   const fone = c?.phone ?? lead.phone ?? null;
@@ -930,6 +1092,7 @@ function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void
       {/* Entre a ficha e o histórico: a qualificação é o que ele PREENCHE durante a
           ligação, então fica acima do que ele só consulta. */}
       <QualificacaoDoLead lead={lead} />
+      <JaRecebeu contactId={lead.contactId} />
 
       <Card className="p-5">
         <p className="mb-2 text-sm font-medium">Histórico</p>
@@ -961,7 +1124,7 @@ function BarraDeAcoes({
 }: {
   lead: ItemDaFila;
   ocupado: boolean;
-  onAcao: (d: 'ligacao' | 'pausar' | 'descartar' | 'transferir') => void;
+  onAcao: (d: 'ligacao' | 'pausar' | 'descartar' | 'transferir' | 'reuniao') => void;
   onNaoAtendeu: () => void;
 }) {
   return (
@@ -981,7 +1144,13 @@ function BarraDeAcoes({
         <Button size="sm" variant="outline" disabled={ocupado} onClick={() => onAcao('pausar')}>
           Ligar depois
         </Button>
-        <Button size="sm" variant="success" disabled={ocupado} onClick={() => onAcao('transferir')}>
+        {/* Reunião ANTES de "passar pro closer", e em destaque: é o desfecho que a
+            operação persegue. Agendar já entrega o lead — o SDR não precisa lembrar
+            de fazer as duas coisas, e reunião marcada não fica solta no pipeline. */}
+        <Button size="sm" variant="success" disabled={ocupado} onClick={() => onAcao('reuniao')}>
+          📅 Marcar reunião
+        </Button>
+        <Button size="sm" variant="outline" disabled={ocupado} onClick={() => onAcao('transferir')}>
           Passar pro closer
         </Button>
         <Button
@@ -1213,13 +1382,24 @@ function DialogoDescarte({
   );
 }
 
+/**
+ * Passar o lead adiante. Um diálogo, dois modos.
+ *
+ * `reuniao` é o mesmo ato com a ordem invertida: agendar É entregar. O que muda é o
+ * que a tela cobra (data obrigatória) e o que ela chama a coisa — não o endpoint,
+ * porque no funil os dois terminam igual: `qualified`, com dono novo e a reunião em
+ * `meetingAt`. Dois diálogos separados seriam a mesma tela copiada, e as duas cópias
+ * divergiriam no primeiro ajuste.
+ */
 function DialogoTransferencia({
   productCode,
+  modo,
   onFechar,
   salvando,
   onSalvar,
 }: {
   productCode: string | null;
+  modo: 'transferir' | 'reuniao';
   onFechar: () => void;
   salvando: boolean;
   onSalvar: (d: {
@@ -1234,6 +1414,10 @@ function DialogoTransferencia({
   const [link, setLink] = useState('');
   const [notas, setNotas] = useState('');
 
+  const ehReuniao = modo === 'reuniao';
+  // Na reunião a data é obrigatória: sem ela o botão não faz o que promete.
+  const podeSalvar = !!closerId && (!ehReuniao || !!quando);
+
   const { data: closers = [], isLoading } = useQuery<Closer[]>({
     queryKey: ['sdr', 'closers', productCode],
     queryFn: () => listClosers(productCode as string),
@@ -1244,7 +1428,7 @@ function DialogoTransferencia({
     <Modal
       open
       onClose={onFechar}
-      title="Passar pro closer"
+      title={ehReuniao ? 'Marcar reunião' : 'Passar pro closer'}
       footer={
         <>
           <Button variant="ghost" onClick={onFechar}>
@@ -1253,7 +1437,7 @@ function DialogoTransferencia({
           <Button
             variant="success"
             loading={salvando}
-            disabled={!closerId}
+            disabled={!podeSalvar}
             onClick={() =>
               onSalvar({
                 closerId,
@@ -1263,14 +1447,14 @@ function DialogoTransferencia({
               })
             }
           >
-            Passar
+            {ehReuniao ? 'Marcar e entregar' : 'Passar'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="closer">Quem vai atender</Label>
+          <Label htmlFor="closer">{ehReuniao ? 'Quem vai na reunião' : 'Quem vai atender'}</Label>
           <select
             id="closer"
             value={closerId}
@@ -1293,7 +1477,9 @@ function DialogoTransferencia({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="reuniao">Reunião marcada (opcional)</Label>
+          <Label htmlFor="reuniao">
+            {ehReuniao ? 'Quando é a reunião' : 'Reunião marcada (opcional)'}
+          </Label>
           <Input
             id="reuniao"
             type="datetime-local"
@@ -1305,6 +1491,11 @@ function DialogoTransferencia({
             value={link}
             onChange={(e) => setLink(e.target.value)}
           />
+          {ehReuniao && !quando && (
+            <p className="text-xs text-base-content/50">
+              A data é o que faz este botão valer: sem ela, é só uma transferência.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -1318,8 +1509,9 @@ function DialogoTransferencia({
         </div>
 
         <p className="text-xs text-base-content/50">
-          O lead sai da sua fila ativa e continua no seu histórico — é o registro que
-          sustenta sua comissão.
+          {ehReuniao
+            ? 'Marcar a reunião já entrega o lead: ele vira qualificado, muda de dono e aparece no painel do closer no dia. Continua no seu histórico — é o registro que sustenta sua comissão.'
+            : 'O lead sai da sua fila ativa e continua no seu histórico — é o registro que sustenta sua comissão.'}
         </p>
       </div>
     </Modal>

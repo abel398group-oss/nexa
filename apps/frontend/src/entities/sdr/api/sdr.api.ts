@@ -118,3 +118,24 @@ export async function transferirParaCloser(
   const r = await api.patch(`/sdr/opportunities/${id}/transfer`, dados);
   return r.data;
 }
+
+/** Uma campanha que já bateu neste contato. */
+export interface CampanhaRecebida {
+  campaignId: string;
+  name: string;
+  channel: 'email' | 'whatsapp';
+  status: string;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * O que já foi disparado para este lead antes de o SDR ligar.
+ *
+ * Sem isto ele abre a ligação sem saber que o lead recebeu três e-mails esta semana
+ * — e repete o que já foi dito, ou pergunta se recebeu algo sem saber a resposta.
+ */
+export async function listCampanhasDoContato(contactId: string): Promise<CampanhaRecebida[]> {
+  const r = await api.get(`/contacts/${contactId}/campaigns`);
+  return r.data;
+}

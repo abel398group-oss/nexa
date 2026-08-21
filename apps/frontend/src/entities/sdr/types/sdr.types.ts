@@ -76,6 +76,11 @@ export interface ItemDaFila {
   activities: AtividadeRecente[];
   tentativas: number;
   prioridade: PrioridadeFila;
+  /// Em que toque da cadência automática o lead está, e quando sai o próximo.
+  /// `null` = sem cadência pendente — ou nunca teve, ou já parou porque alguém
+  /// registrou atividade (o robô cala quando a pessoa fala).
+  cadenciaToque: number | null;
+  cadenciaProximoEm: string | null;
   /// Ids das oportunidades fundidas nesta linha — o mesmo lead importado em lotes
   /// diferentes vira uma entrada só na fila. Quase sempre tem 1 item; mais que isso
   /// é o que o badge "N listas" mostra.

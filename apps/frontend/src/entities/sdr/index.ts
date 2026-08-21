@@ -9,11 +9,13 @@ export type {
 
 export { ROTULO_PRIORIDADE, ROTULO_RESULTADO, CRITERIOS_QUALIFICACAO } from './types/sdr.types';
 export type { Qualificacao } from './types/sdr.types';
+export type { CampanhaRecebida } from './api/sdr.api';
 
 export {
   ajustarScore,
   qualificarLead,
   descartarLead,
+  listCampanhasDoContato,
   listClosers,
   listMaterial,
   listMaterialAprovado,

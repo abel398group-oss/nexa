@@ -103,15 +103,43 @@ export class SdrService {
       : [];
     const porId = new Map(contatos.map((c) => [c.id, c]));
 
+    /**
+     * Em que toque da cadência automática cada lead está, e quando é o próximo.
+     *
+     * Sem isto o SDR liga sem saber se o robô mandou mensagem ontem — e repete o que
+     * já foi dito, ou pior, liga para quem vai receber um follow-up daqui a duas
+     * horas. Desde 21/08/2026 registrar atividade PARA a cadência, então o que a fila
+     * mostra é o estado de quem ainda não foi tocado por gente.
+     *
+     * Busca em LOTE por telefone, como o resto: uma consulta para a fila inteira, não
+     * uma por lead. `pending` só — cadência parada ou concluída não é informação de
+     * trabalho, é histórico.
+     */
+    const fones = [...new Set(oportunidades.map((o) => o.phone).filter((p): p is string => !!p))];
+    const cadencias = fones.length
+      ? await this.prisma.followUp.findMany({
+          where: { tenantId, phone: { in: fones }, status: 'pending' },
+          select: { phone: true, stage: true, nextRunAt: true },
+        })
+      : [];
+    const cadenciaPorFone = new Map(cadencias.map((f) => [f.phone, f]));
+
     // Agrupar ANTES de ordenar: a prioridade tem que ser calculada sobre o total de
     // tentativas do contato, não sobre uma das linhas dele. Ver `agruparPorContato`.
     return ordenarFila(
       agruparPorContato(
-        oportunidades.map((o) => ({
-          ...o,
-          contact: o.contactId ? porId.get(o.contactId) ?? null : null,
-          tentativas: o._count.activities,
-        })),
+        oportunidades.map((o) => {
+          const cad = o.phone ? cadenciaPorFone.get(o.phone) : undefined;
+          return {
+            ...o,
+            contact: o.contactId ? porId.get(o.contactId) ?? null : null,
+            tentativas: o._count.activities,
+            // `stage` do follow-up é quantas JÁ saíram (0 = nenhuma ainda), então o
+            // toque em que o lead está é a próxima: stage + 1.
+            cadenciaToque: cad ? cad.stage + 1 : null,
+            cadenciaProximoEm: cad?.nextRunAt ?? null,
+          };
+        }),
       ),
     );
   }
