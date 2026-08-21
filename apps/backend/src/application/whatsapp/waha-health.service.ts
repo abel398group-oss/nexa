@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/application/notifications/notifications.service';
-import { WahaClientService } from '@/shared/waha/waha-client.service';
+import { WahaClientService, LINHA_PRINCIPAL, linhasConfiguradas } from '@/shared/waha/waha-client.service';
 import { EmailCryptoService } from '@/shared/email-crypto/email-crypto.service';
 import { parseAdminPhones } from '@/application/monitor/admin-phones.util';
 
@@ -26,8 +26,14 @@ import { parseAdminPhones } from '@/application/monitor/admin-phones.util';
 @Injectable()
 export class WahaHealthService {
   private readonly logger = new Logger('WahaHealth');
-  private downSince: number | null = null;
-  private lastAlertAt = 0;
+  /**
+   * Estado por LINHA (21/08/2026). O monitor nasceu olhando só a sessão
+   * principal; a linha `vendas` podia cair e ficar caída para sempre — sem
+   * auto-restart e sem alerta — enquanto o worker de campanha queimava a fila.
+   * Agora cada linha declarada em WAHA_LINHAS tem o próprio downSince/cooldown.
+   */
+  private readonly downSince = new Map<string, number>();
+  private readonly lastAlertAt = new Map<string, number>();
   private readonly ALERT_COOLDOWN_MS = 30 * 60 * 1000; // 30 min entre alertas de "ainda fora"
   private checking = false;
 
@@ -38,10 +44,17 @@ export class WahaHealthService {
     private readonly crypto: EmailCryptoService,
   ) {}
 
-  private get baseUrl() { return process.env.WAHA_API_URL ?? ''; }
-  private get session() { return process.env.WAHA_SESSION ?? 'default'; }
-  private get apiKey() { return process.env.WAHA_API_KEY ?? ''; }
-  private get configured() { return !!this.baseUrl && !!this.apiKey; }
+  private get configured() { return this.waha.configured; }
+
+  /** Linhas que este monitor cobre: as declaradas E com env presente. */
+  private linhasMonitoradas(): string[] {
+    return linhasConfiguradas().filter((l) => this.waha.linhaEstaConfigurada(l));
+  }
+
+  /** Rótulo para log/alerta: a principal fica sem sufixo (compatível com o texto de sempre). */
+  private rotulo(linha: string): string {
+    return linha === LINHA_PRINCIPAL ? '' : ` (linha ${linha})`;
+  }
 
   private sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -64,12 +77,13 @@ export class WahaHealthService {
   private static readonly STATUS_TIMEOUT_MS = 8_000;
   private static readonly START_TIMEOUT_MS = 15_000;
 
-  /** Lê o status atual da sessão no WAHA. Retorna o status ou um código de erro. */
-  private async getStatus(): Promise<string> {
-    if (!this.configured) return 'NOT_CONFIGURED';
+  /** Lê o status atual da sessão da LINHA no WAHA. Retorna o status ou um código de erro. */
+  private async getStatus(linha: string = LINHA_PRINCIPAL): Promise<string> {
+    const alvo = this.waha.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return 'NOT_CONFIGURED';
     try {
-      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}`, {
-        headers: { 'X-Api-Key': this.apiKey },
+      const res = await fetch(`${alvo.baseUrl}/api/sessions/${alvo.session}`, {
+        headers: { 'X-Api-Key': alvo.apiKey },
         signal: AbortSignal.timeout(WahaHealthService.STATUS_TIMEOUT_MS),
       });
       if (!res.ok) return `HTTP_${res.status}`;
@@ -79,25 +93,26 @@ export class WahaHealthService {
       // Estourar o prazo é 'UNREACHABLE' do mesmo jeito que a conexão recusada:
       // dos dois lados a Lia não está atendendo, e é isso que o painel precisa
       // dizer. O motivo exato fica no log.
-      this.logger.warn(`getStatus falhou: ${e?.message}`);
+      this.logger.warn(`getStatus${this.rotulo(linha)} falhou: ${e?.message}`);
       return 'UNREACHABLE';
     }
   }
 
-  /** Tenta religar a sessão (auto-restart). */
-  private async tryStart(): Promise<boolean> {
-    if (!this.configured) return false;
+  /** Tenta religar a sessão da LINHA (auto-restart). */
+  private async tryStart(linha: string = LINHA_PRINCIPAL): Promise<boolean> {
+    const alvo = this.waha.resolveLinha(linha);
+    if (!alvo.baseUrl || !alvo.apiKey) return false;
     try {
-      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}/start`, {
+      const res = await fetch(`${alvo.baseUrl}/api/sessions/${alvo.session}/start`, {
         method: 'POST',
-        headers: { 'X-Api-Key': this.apiKey, 'Content-Type': 'application/json' },
+        headers: { 'X-Api-Key': alvo.apiKey, 'Content-Type': 'application/json' },
         body: '{}',
         signal: AbortSignal.timeout(WahaHealthService.START_TIMEOUT_MS),
       });
-      this.logger.log(`tryStart: HTTP ${res.status}`);
+      this.logger.log(`tryStart${this.rotulo(linha)}: HTTP ${res.status}`);
       return res.ok;
     } catch (e: any) {
-      this.logger.warn(`tryStart falhou: ${e?.message}`);
+      this.logger.warn(`tryStart${this.rotulo(linha)} falhou: ${e?.message}`);
       return false;
     }
   }
@@ -107,60 +122,73 @@ export class WahaHealthService {
     if (!this.configured || this.checking) return;
     this.checking = true;
     try {
-      const status = await this.getStatus();
-      if (status === 'WORKING') {
-        if (this.downSince) {
-          const downMin = Math.round((Date.now() - this.downSince) / 60000);
-          await this.alert(
-            '✅ WhatsApp reconectado',
-            `A sessão do WhatsApp voltou a funcionar (estava fora há ~${downMin} min).`,
-          );
-          this.downSince = null;
-        }
-        return;
-      }
-
-      // não está WORKING
-      if (!this.downSince) this.downSince = Date.now();
-      this.logger.warn(`Sessão WhatsApp fora do ar (status=${status}) — tentando religar...`);
-      await this.tryStart();
-
-      // aguarda a sessão voltar (poll até ~30s) — o restart passa por STARTING antes de WORKING
-      let status2 = status;
-      for (let i = 0; i < 6; i++) {
-        await this.sleep(5000);
-        status2 = await this.getStatus();
-        if (status2 === 'WORKING') break;
-      }
-
-      if (status2 === 'WORKING') {
-        await this.alert(
-          '🔄 WhatsApp reconectado automaticamente',
-          `A sessão caiu (status anterior: ${status}) e foi religada automaticamente. Sem ação necessária.`,
-        );
-        this.downSince = null;
-        return;
-      }
-
-      // ainda inicializando dentro da janela de 10 min → não alarma, espera o próximo ciclo
-      const downMs = Date.now() - this.downSince;
-      if (status2 === 'STARTING' && downMs < 10 * 60 * 1000) {
-        this.logger.warn(`Sessão ainda STARTING (há ${Math.round(downMs / 1000)}s) — aguardando próximo ciclo.`);
-        return;
-      }
-
-      // ainda fora (STOPPED/FAILED/SCAN_QR_CODE/UNREACHABLE ou STARTING travado) → alerta crítico com cooldown
-      if (Date.now() - this.lastAlertAt > this.ALERT_COOLDOWN_MS) {
-        this.lastAlertAt = Date.now();
-        await this.alert(
-          '🔴 WhatsApp FORA DO AR',
-          `A sessão do WhatsApp está "${status2}" e o auto-restart não resolveu. ` +
-            `A Lia NÃO está recebendo nem respondendo mensagens. ` +
-            `Verifique o WAHA (pode precisar reparear o QR).`,
-        );
+      // Sequencial de propósito: são no máximo 2-3 linhas, e paralelizar os polls
+      // de recuperação (30s cada) multiplicaria fetches concorrentes num container
+      // que pode estar justamente sobrecarregado.
+      for (const linha of this.linhasMonitoradas()) {
+        await this.checkLinha(linha);
       }
     } finally {
       this.checking = false;
+    }
+  }
+
+  private async checkLinha(linha: string): Promise<void> {
+    const rotulo = this.rotulo(linha);
+    const status = await this.getStatus(linha);
+    if (status === 'WORKING') {
+      const caiuEm = this.downSince.get(linha);
+      if (caiuEm) {
+        const downMin = Math.round((Date.now() - caiuEm) / 60000);
+        await this.alert(
+          `✅ WhatsApp reconectado${rotulo}`,
+          `A sessão do WhatsApp${rotulo} voltou a funcionar (estava fora há ~${downMin} min).`,
+        );
+        this.downSince.delete(linha);
+      }
+      return;
+    }
+
+    // não está WORKING
+    if (!this.downSince.has(linha)) this.downSince.set(linha, Date.now());
+    this.logger.warn(`Sessão WhatsApp${rotulo} fora do ar (status=${status}) — tentando religar...`);
+    await this.tryStart(linha);
+
+    // aguarda a sessão voltar (poll até ~30s) — o restart passa por STARTING antes de WORKING
+    let status2 = status;
+    for (let i = 0; i < 6; i++) {
+      await this.sleep(5000);
+      status2 = await this.getStatus(linha);
+      if (status2 === 'WORKING') break;
+    }
+
+    if (status2 === 'WORKING') {
+      await this.alert(
+        `🔄 WhatsApp reconectado automaticamente${rotulo}`,
+        `A sessão${rotulo} caiu (status anterior: ${status}) e foi religada automaticamente. Sem ação necessária.`,
+      );
+      this.downSince.delete(linha);
+      return;
+    }
+
+    // ainda inicializando dentro da janela de 10 min → não alarma, espera o próximo ciclo
+    const downMs = Date.now() - (this.downSince.get(linha) ?? Date.now());
+    if (status2 === 'STARTING' && downMs < 10 * 60 * 1000) {
+      this.logger.warn(`Sessão${rotulo} ainda STARTING (há ${Math.round(downMs / 1000)}s) — aguardando próximo ciclo.`);
+      return;
+    }
+
+    // ainda fora (STOPPED/FAILED/SCAN_QR_CODE/UNREACHABLE ou STARTING travado) → alerta crítico com cooldown
+    if (Date.now() - (this.lastAlertAt.get(linha) ?? 0) > this.ALERT_COOLDOWN_MS) {
+      this.lastAlertAt.set(linha, Date.now());
+      const impacto = linha === LINHA_PRINCIPAL
+        ? 'A Lia NÃO está recebendo nem respondendo mensagens.'
+        : `A linha "${linha}" NÃO está enviando — o disparo de campanha desta linha está segurado até ela voltar.`;
+      await this.alert(
+        `🔴 WhatsApp FORA DO AR${rotulo}`,
+        `A sessão do WhatsApp${rotulo} está "${status2}" e o auto-restart não resolveu. ` +
+          `${impacto} Verifique o WAHA (pode precisar reparear o QR).`,
+      );
     }
   }
 
@@ -174,7 +202,12 @@ export class WahaHealthService {
     await this.healthCheck();
   }
 
-  /** Status atual da sessão p/ o painel (GET /api/whatsapp/status). */
+  /**
+   * Status atual da sessão p/ o painel (GET /api/whatsapp/status).
+   *
+   * O corpo de sempre continua descrevendo a PRINCIPAL (o painel já consome esse
+   * formato); `linhas` é ADITIVO e traz as demais — contrato retrocompatível.
+   */
   async getHealth(): Promise<{
     configured: boolean;
     status: string;
@@ -182,15 +215,30 @@ export class WahaHealthService {
     downSince: string | null;
     downMinutes: number | null;
     checkedAt: string;
+    linhas: { linha: string; status: string; connected: boolean; downSince: string | null }[];
   }> {
-    const status = await this.getStatus();
+    const linhas = await Promise.all(
+      this.linhasMonitoradas().map(async (linha) => {
+        const st = await this.getStatus(linha);
+        const caiuEm = this.downSince.get(linha);
+        return {
+          linha,
+          status: st,
+          connected: st === 'WORKING',
+          downSince: caiuEm ? new Date(caiuEm).toISOString() : null,
+        };
+      }),
+    );
+    const principal = linhas.find((l) => l.linha === LINHA_PRINCIPAL);
+    const caiuEm = this.downSince.get(LINHA_PRINCIPAL);
     return {
       configured: this.configured,
-      status,
-      connected: status === 'WORKING',
-      downSince: this.downSince ? new Date(this.downSince).toISOString() : null,
-      downMinutes: this.downSince ? Math.round((Date.now() - this.downSince) / 60000) : null,
+      status: principal?.status ?? 'NOT_CONFIGURED',
+      connected: principal?.connected ?? false,
+      downSince: principal?.downSince ?? null,
+      downMinutes: caiuEm ? Math.round((Date.now() - caiuEm) / 60000) : null,
       checkedAt: new Date().toISOString(),
+      linhas,
     };
   }
 

@@ -306,7 +306,13 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     contacts = { create: vi.fn().mockResolvedValue({ id: 'c1', status: 'active' }) };
     conversations = { create: vi.fn().mockResolvedValue({ id: 'conv1' }), addMessage: vi.fn().mockResolvedValue({}) };
     followup = { schedule: vi.fn().mockResolvedValue({}) };
-    waha = { sendText: vi.fn(), sendFile: vi.fn(), sendStatusText: vi.fn(), sendStatusImage: vi.fn() };
+    waha = {
+      sendText: vi.fn(), sendFile: vi.fn(), sendStatusText: vi.fn(), sendStatusImage: vi.fn(),
+      // DISP-022: o pré-voo do tick pergunta pela linha e pela sessão antes de
+      // reivindicar alvo. O caso neutro do harness é "tudo configurado e no ar".
+      linhaEstaConfigurada: vi.fn().mockReturnValue(true),
+      getSessionStatus: vi.fn().mockResolvedValue({ status: 'WORKING', phone: null }),
+    };
     tmsLookup = { batchLookup: vi.fn().mockResolvedValue(new Map()), batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) };
   });
 
@@ -369,6 +375,33 @@ describe('SenderService.tick() — envio de campanha de mensagem (harness)', () 
     await makeService().tick();
 
     expect(conversations.create).toHaveBeenCalledWith('t1', expect.objectContaining({ wahaLine: 'vendas' }));
+  });
+
+  // ── DISP-022: pré-voo da linha antes de reivindicar alvo ──────────────────
+  it('linha da campanha sem env → campanha PAUSADA, nenhum alvo consumido', async () => {
+    prisma.campaign.findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...MSG_CAMPAIGN, linha: 'vendas' });
+    waha.linhaEstaConfigurada.mockReturnValue(false);
+
+    await makeService().tick();
+
+    expect(prisma.campaign.update).toHaveBeenCalledWith({
+      where: { id: 'camp1' }, data: { status: 'paused' },
+    });
+    expect(prisma.campaignTarget.findFirst).not.toHaveBeenCalled();
+    expect(conversations.addMessage).not.toHaveBeenCalled();
+  });
+
+  it('sessão fora do ar → tick segura sem queimar alvo (campanha continua running)', async () => {
+    waha.getSessionStatus.mockResolvedValue({ status: 'FAILED', phone: null });
+
+    await makeService().tick();
+
+    // nada consumido, nada pausado: o próximo tick tenta de novo quando a sessão voltar
+    expect(prisma.campaignTarget.findFirst).not.toHaveBeenCalled();
+    expect(conversations.addMessage).not.toHaveBeenCalled();
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
   });
 
   it('NAO envia fora da janela comercial', async () => {

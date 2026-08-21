@@ -129,12 +129,30 @@ export class WahaClientService {
   }
 
   /**
+   * A linha tem env próprio configurado? (`WAHA_<LINHA>_API_URL`)
+   *
+   * DISP-022: o disparo de CAMPANHA usa isto para recusar o start e pausar o tick
+   * quando a linha da campanha não existe — prospecção fria saindo pelo chip de
+   * atendimento é exatamente o que o fallback do `resolveLinha` produzia em
+   * silêncio. O fallback continua existindo para RESPOSTA em conversa (lá, não
+   * responder é pior que responder pelo número errado).
+   */
+  linhaEstaConfigurada(linha?: string): boolean {
+    if (!linha || linha === LINHA_PRINCIPAL) return this.configured;
+    const p = `WAHA_${linha.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+    return !!process.env[`${p}API_URL`];
+  }
+
+  /**
    * Resolve a linha para o container/sessão onde ela vive.
    *
    * Linha desconhecida ou sem env cai na PRINCIPAL de propósito: mandar pelo
    * número principal é errado, mas não mandar é pior — e o log diz qual foi.
    * Lida a cada chamada (não em campo) para respeitar mudança de env em runtime
    * e teste, mesmo padrão do resto do arquivo.
+   *
+   * ⚠️ Vale para RESPOSTA em conversa. Campanha NÃO passa por este fallback:
+   * o worker checa `linhaEstaConfigurada` antes de despachar (DISP-022).
    */
   resolveLinha(linha?: string): WahaTarget {
     const principal: WahaTarget = {

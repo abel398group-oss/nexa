@@ -978,12 +978,28 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // start é o momento do disparo, não a criação. Cobre WhatsApp e e-mail, que
     // compartilham esta rota. Pausar é sempre permitido.
     if (status === 'running') {
-      const c = await this.prisma.campaign.findFirst({
+      // cast: `linha` é campo novo pré-`prisma generate` (mesmo padrão do resto do arquivo)
+      const c: any = await this.prisma.campaign.findFirst({
         where: { id, tenantId },
-        select: { productCode: true },
+        select: { productCode: true, channel: true, linha: true } as any,
       });
       if (!c) throw new NotFoundException('Campanha não encontrada');
       await this.assertMercadoLiberado(c.productCode);
+      // DISP-022: a linha da campanha precisa EXISTIR no ambiente. O fallback do
+      // WahaClient mandava pela principal em silêncio — prospecção fria saindo
+      // pelo chip de atendimento, com o painel dizendo "vendas". Start recusado
+      // com o motivo é o comportamento certo: configurar a linha custa minutos.
+      if ((c as any).channel === 'whatsapp') {
+        const linha = (c as any).linha ?? LINHA_PRINCIPAL;
+        if (!this.waha.linhaEstaConfigurada(linha)) {
+          const env = linha === LINHA_PRINCIPAL ? 'WAHA_API_URL' : `WAHA_${linha.toUpperCase()}_API_URL`;
+          throw new BadRequestException(
+            `A linha "${linha}" desta campanha não está configurada no servidor (${env} ausente). ` +
+            'Configure a linha antes de iniciar — sem isso o disparo sairia pelo número errado ' +
+            'ou queimaria a fila sem enviar nada.',
+          );
+        }
+      }
     }
     return this.prisma.campaign.updateMany({
       where: { id, tenantId },
@@ -1402,7 +1418,50 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       const antibanState = await this.readAntibanState();
       if (Date.now() - antibanState.lastSentAt < antibanState.nextDelayMs) return;
 
-      const number = await this.ensureNumber(campaign.tenantId, (campaign as any).linha ?? 'principal');
+      // ── DISP-022: pré-voo da LINHA antes de reivindicar qualquer alvo ────────
+      // Dois problemas que o envio às cegas produzia, os dois vistos na auditoria
+      // de 21/08/2026:
+      //
+      //  1. Linha sem env (campanha agendada nasce 'running' sem passar pelo
+      //     start): o fallback do WahaClient mandava tudo pela PRINCIPAL em
+      //     silêncio. Aqui a campanha é PAUSADA com o motivo — não fica em loop
+      //     de 15s e não sai pelo chip errado.
+      //
+      //  2. Sessão fora do ar: cada envio virava timeout/5xx e o alvo era gravado
+      //     'sent' com 'entrega_nao_confirmada' (DISP-021 protege contra
+      //     duplicata, mas numa QUEDA longa isso queimava a lista inteira sem
+      //     mandar nada). Checar a sessão antes custa uma chamada por janela de
+      //     envio (30–90s) e segura o tick até ela voltar — o WahaHealthService
+      //     cuida de religar e alertar.
+      const linhaDaCampanha = (campaign as any).linha ?? LINHA_PRINCIPAL;
+      if (!this.waha.linhaEstaConfigurada(linhaDaCampanha)) {
+        const env = linhaDaCampanha === LINHA_PRINCIPAL ? 'WAHA_API_URL' : `WAHA_${linhaDaCampanha.toUpperCase()}_API_URL`;
+        this.logger.error(
+          `Campanha "${campaign.name}" PAUSADA: linha "${linhaDaCampanha}" não configurada (${env} ausente) — ` +
+          'nenhum alvo foi consumido; configure a linha e retome a campanha',
+        );
+        await this.prisma.campaign.update({ where: { id: campaign.id }, data: { status: 'paused' } });
+        await this.notifications?.create(campaign.tenantId, {
+          type: 'info',
+          title: '⏸️ Campanha pausada — linha não configurada',
+          body: `A campanha "${campaign.name}" usa a linha "${linhaDaCampanha}", que não está configurada no servidor (${env}). Configure e retome o disparo.`,
+          link: '/disparo',
+        }).catch(() => null);
+        return;
+      }
+      const sessao = await this.waha.getSessionStatus(linhaDaCampanha);
+      if (sessao?.status !== 'WORKING') {
+        // REGRA 3: espera com o motivo no log. A campanha continua 'running' e o
+        // próximo tick tenta de novo — sessão caída é transitória, pausar exigiria
+        // retomada manual depois de cada queda.
+        this.logger.warn(
+          `Disparo segurado: sessão da linha "${linhaDaCampanha}" não está WORKING ` +
+          `(status=${sessao?.status ?? 'inacessível'}) — campanha "${campaign.name}" aguarda a sessão voltar`,
+        );
+        return;
+      }
+
+      const number = await this.ensureNumber(campaign.tenantId, linhaDaCampanha);
       const dailyCap = this.effectiveDailyLimit(number);
       if (number.sentToday >= dailyCap) {
         this.logger.warn(`Limite diário atingido (${dailyCap}, warmup stage ${number.warmupStage}) — pausa hoje`);

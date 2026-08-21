@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WahaHealthService } from './waha-health.service';
+import { WahaClientService } from '@/shared/waha/waha-client.service';
 
 /**
  * O bug que estes testes travam (13/08/2026): este serviço era o ÚNICO lugar
@@ -14,10 +15,15 @@ import { WahaHealthService } from './waha-health.service';
  * sem o alerta "WhatsApp FORA DO AR", justamente quando ele é necessário.
  */
 function makeService() {
+  // WahaClient REAL (lê env a cada chamada): desde o monitor por linha
+  // (21/08/2026) o health resolve alvo/linhas por ele — mockar de novo aqui
+  // seria testar o mock. `sendText` continua mockado: alerta não sai em teste.
+  const waha: any = new WahaClientService();
+  waha.sendText = vi.fn().mockResolvedValue({ sent: true });
   const svc: any = new WahaHealthService(
     { tenant: { findMany: vi.fn().mockResolvedValue([]) }, emailChannel: { findFirst: vi.fn().mockResolvedValue(null) } } as any,
     { create: vi.fn() } as any,
-    { sendText: vi.fn().mockResolvedValue({ sent: true }) } as any,
+    waha,
     { decrypt: vi.fn() } as any,
   );
   svc['logger'] = { log: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -32,6 +38,8 @@ describe('WahaHealthService — prazo das chamadas ao WAHA', () => {
     process.env.WAHA_API_URL = 'http://waha.local';
     process.env.WAHA_API_KEY = 'k';
     process.env.WAHA_SESSION = 'default';
+    delete process.env.WAHA_LINHAS;
+    delete process.env.WAHA_VENDAS_API_URL;
     delete process.env.ALERT_ADMIN_PHONE;
     delete process.env.ALERT_ADMIN_EMAIL;
   });
@@ -115,6 +123,33 @@ describe('WahaHealthService — prazo das chamadas ao WAHA', () => {
     expect(r.status).toBe('NOT_CONFIGURED');
     expect(r.configured).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // A linha `vendas` podia cair e ficar caída para sempre — o monitor só olhava a
+  // principal. Agora cada linha declarada E configurada entra no ciclo.
+  it('com WAHA_LINHAS a checagem cobre cada linha configurada', async () => {
+    process.env.WAHA_LINHAS = 'vendas';
+    process.env.WAHA_VENDAS_API_URL = 'http://waha-vendas.local';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'WORKING' }) });
+    global.fetch = fetchMock as any;
+
+    const svc = makeService();
+    await svc.healthCheck();
+
+    const urls = fetchMock.mock.calls.map((c: any[]) => String(c[0]));
+    expect(urls).toContain('http://waha.local/api/sessions/default');
+    expect(urls).toContain('http://waha-vendas.local/api/sessions/default');
+  });
+
+  it('linha declarada mas SEM env fica fora do ciclo (não monitora a principal duas vezes)', async () => {
+    process.env.WAHA_LINHAS = 'vendas'; // sem WAHA_VENDAS_API_URL
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'WORKING' }) });
+    global.fetch = fetchMock as any;
+
+    const svc = makeService();
+    await svc.healthCheck();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1); // só a principal
   });
 
   it('o caminho feliz continua igual', async () => {
