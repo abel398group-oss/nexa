@@ -111,12 +111,56 @@ export function CloserTodayPage() {
   const vazio =
     painel && ORDEM.every((b) => !painel[b]?.length);
 
+  /**
+   * Os números do dia.
+   *
+   * A tela entregava três listas e não somava nada. Para o SDR isso não faria
+   * falta — o trabalho dele é lead a lead. Para quem FECHA, valor é a unidade de
+   * trabalho: "quanto está na rua" é a pergunta que ele responde ao gerente, e
+   * até agora só dava para responder contando card na mão.
+   *
+   * Contados do que já está na tela, sem pedir nada novo ao servidor. Reuniões é o
+   * tamanho do bloco AGORA; em proposta soma todo negócio aberto em `proposal`,
+   * esteja ele em qualquer bloco — proposta parada continua sendo dinheiro na rua.
+   */
+  const numerosDoDia = (() => {
+    if (!painel) return null;
+    const todos = ORDEM.flatMap((b) => painel[b] ?? []);
+    const emProposta = todos.filter((n) => n.stage === 'proposal');
+    const soma = emProposta.reduce((t, n) => t + Number(n.value ?? 0), 0);
+    return {
+      reunioes: (painel.agora ?? []).length,
+      propostas: emProposta.length,
+      // Sem valor somado não se inventa "R$ 0": proposta sem valor registrado é
+      // dado faltando, e mostrar zero afirmaria que ela não vale nada.
+      valorEmProposta: soma > 0 ? moeda(soma) : null,
+      parados: (painel.precisa_de_voce ?? []).length,
+    };
+  })();
+
   return (
     <PageContainer>
       <PageHeader
         title="Hoje"
         subtitle="O que tem hora marcada, o que parou, e o que só precisa de paciência."
       />
+
+      {/* Some quando não há nada aberto: linha de zeros embaixo de "nenhum negócio"
+          é ruído repetindo o que a tela já disse. */}
+      {!!numerosDoDia && !vazio && (
+        <Card className="mb-4 flex flex-wrap items-center gap-x-8 gap-y-2 px-5 py-3">
+          <NumeroDoDia rotulo="reuniões hoje" valor={String(numerosDoDia.reunioes)} />
+          <NumeroDoDia rotulo="esperando você" valor={String(numerosDoDia.parados)} />
+          <NumeroDoDia
+            rotulo={numerosDoDia.propostas === 1 ? 'proposta na rua' : 'propostas na rua'}
+            valor={
+              numerosDoDia.valorEmProposta
+                ? `${numerosDoDia.propostas} · ${numerosDoDia.valorEmProposta}`
+                : String(numerosDoDia.propostas)
+            }
+          />
+        </Card>
+      )}
 
       {isLoading && (
         <Card className="p-6 text-sm text-base-content/60">Carregando seu dia…</Card>
@@ -196,6 +240,16 @@ export function CloserTodayPage() {
         />
       )}
     </PageContainer>
+  );
+}
+
+/** Um número do dia: valor grande, rótulo pequeno embaixo. */
+function NumeroDoDia({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div>
+      <p className="text-lg font-semibold tabular-nums text-base-content">{valor}</p>
+      <p className="text-[11px] text-base-content/50">{rotulo}</p>
+    </div>
   );
 }
 
@@ -297,13 +351,26 @@ function LinhaNegocio({
         <Button size="xs" variant="outline" onClick={() => onAcao('proposta')}>
           Proposta
         </Button>
-        <Button size="xs" variant="success" onClick={() => onAcao('ganhou')}>
-          Ganhou
-        </Button>
         <Button size="xs" variant="ghost" onClick={() => onAcao('adiar')}>
           Adiar
         </Button>
-        <Button size="xs" variant="ghost" onClick={() => onAcao('perdeu')}>
+
+        {/* Daqui para a direita, o negócio ACABA.
+            Antes "Ganhou" e "Perdeu" dividiam a fileira com "Adiar" e "Remarcar",
+            no mesmo tamanho e encostados — rotina e ponto final indistinguíveis.
+            Um clique errado em "Perdeu" tira o negócio do funil, e a única defesa
+            era a pontaria. O separador não impede o clique; deixa visível que
+            aquele lado da linha é outro tipo de decisão. */}
+        <span className="mx-1 h-4 w-px shrink-0 self-center bg-base-300" aria-hidden />
+        <Button size="xs" variant="success" onClick={() => onAcao('ganhou')}>
+          Ganhou
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          className="text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15"
+          onClick={() => onAcao('perdeu')}
+        >
           Perdeu
         </Button>
       </div>
@@ -437,6 +504,7 @@ function DialogoProposta({
   const [valor, setValor] = useState(negocio.value ? String(Number(negocio.value)) : '');
   const [notas, setNotas] = useState('');
   const n = Number(valor);
+
   const valido = valor !== '' && Number.isFinite(n) && n >= 0;
 
   return (
@@ -557,6 +625,19 @@ function DialogoGanho({
   const [valor, setValor] = useState(negocio.value ? String(Number(negocio.value)) : '');
   const [notas, setNotas] = useState('');
   const n = Number(valor);
+  /**
+   * Sem proposta anterior, o valor é OBRIGATÓRIO — não há o que "manter em branco".
+   *
+   * O negócio fechado direto na reunião (o SDR passou, o closer fechou, nunca houve
+   * proposta registrada) saía com `value` nulo: o funil registrava a vitória e não
+   * sabia quanto entrou. Some do relatório de receita por lista, por mercado e por
+   * closer — e justamente nos fechados no impulso, que costumam ser os melhores.
+   *
+   * Com proposta, o comportamento antigo continua: em branco mantém o que já estava.
+   */
+  const temProposta = negocio.value != null && Number(negocio.value) > 0;
+  const valorInformado = valor !== '' && Number.isFinite(n) && n > 0;
+  const faltaValor = !temProposta && !valorInformado;
 
   return (
     <Modal
@@ -569,6 +650,7 @@ function DialogoGanho({
           salvando={salvando}
           variante="success"
           rotulo="Confirmar venda"
+          desabilitado={faltaValor}
           onSalvar={() =>
             onSalvar({
               valor: valor !== '' && Number.isFinite(n) ? n : undefined,
@@ -589,8 +671,12 @@ function DialogoGanho({
             value={valor}
             onChange={(e) => setValor(e.target.value)}
           />
-          <p className="text-xs text-base-content/50">
-            Em branco mantém o valor da proposta.
+          {/* O texto muda com a situação: "mantém o valor da proposta" não quer
+              dizer nada quando não existe proposta para manter. */}
+          <p className={`text-xs ${faltaValor ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/50'}`}>
+            {temProposta
+              ? 'Em branco mantém o valor da proposta.'
+              : 'Este negócio fechou sem proposta registrada — informe o valor, senão a venda entra no funil sem receita.'}
           </p>
         </div>
         <Textarea
