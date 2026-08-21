@@ -273,6 +273,20 @@ export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotaca
   const icms = r.taxes?.items.find((i) => i.acronym.toUpperCase() === 'ICMS') ?? null;
   const veiculo = estado.veiculo ? estado.veiculo[0].toUpperCase() + estado.veiculo.slice(1) : null;
 
+  // Decomposição aprovada pelo Abel em 20/08/2026: Frete = Total − ICMS, na exibição.
+  // A conta fecha na frente do cliente e o Total é SEMPRE o preço exato do TMS — prática
+  // de CT-e: ICMS destacado, demais impostos seguem embutidos no frete sem aparecer.
+  // Só decompõe com ICMS plausível (0 < icms < total): decomposição torta — frete
+  // negativo ou zero — é pior que a linha única de sempre.
+  const decompoe = icms !== null && icms.value > 0 && icms.value < r.valor;
+  const linhasDePreco = decompoe
+    ? [
+        `Frete: ${brl(r.valor - icms.value)}`,
+        `ICMS${icms.rate > 0 ? ` (${pct(icms.rate)})` : ''}: ${brl(icms.value)}`,
+        `💰 *Total: ${brl(r.valor)}*`,
+      ]
+    : [`💰 *Frete total: ${brl(r.valor)}*`];
+
   return [
     // O número no TÍTULO, e não no rodapé: é por ele que a pessoa vai procurar a cotação
     // no sistema, e no fim da mensagem ele compete com o preço pela atenção.
@@ -288,8 +302,7 @@ export function resultadoParaCliente(estado: EstadoCotacao, r: ResultadoDaCotaca
     // 10.000 por 100.000 muda o seguro sem ninguém perceber.
     ...(estado.valorMercadoria ? [`Mercadoria: ${brl(estado.valorMercadoria)}`] : []),
     '',
-    `💰 *Frete total: ${brl(r.valor)}*`,
-    ...(icms ? [`ICMS incluso: ${brl(icms.value)}${icms.rate > 0 ? ` (${pct(icms.rate)})` : ''}`] : []),
+    ...linhasDePreco,
     '',
     ...(validadeEmDiaMes(r.validoAte) ? [`Válida até *${validadeEmDiaMes(r.validoAte)}*`] : []),
   ]

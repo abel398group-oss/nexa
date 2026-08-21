@@ -131,28 +131,40 @@ describe('resultado — mensagem pro cliente (resultadoParaCliente)', () => {
     expect(t.trim().split(String.fromCharCode(10)).pop()).toContain('Válida até');
   });
 
-  it('destaca o ICMS como INCLUSO — imposto por dentro não soma por fora', () => {
-    // Somar "frete + ICMS" com três números inventaria uma decomposição que não bate
-    // com a proposta formal do TMS. O total não muda; o ICMS aparece destacado.
+  it('decompõe Frete / ICMS / Total — e a conta FECHA, com o Total igual ao preço do TMS', () => {
+    // Frete = Total − ICMS, na exibição. O Total nunca é recalculado: quem comparar com
+    // a proposta formal vê o mesmo número. Aprovado pelo Abel em 20/08/2026.
     const t = resultadoParaCliente(pronto, {
-      valor: 290.73,
-      taxes: { total: 52.48, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 34.89 }] },
+      valor: 1310.82,
+      taxes: { total: 236.6, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 157.3 }] },
     });
-    expect(t).toContain('Frete total:');
-    expect(t).toContain('290,73');
-    expect(t).toContain('ICMS incluso:');
-    expect(t).toContain('34,89');
-    expect(t).toContain('(12%)');
+    expect(t).toContain('Frete:');
+    expect(t).toContain('1.153,52'); // 1310.82 − 157.30
+    expect(t).toContain('ICMS (12%):');
+    expect(t).toContain('157,30');
+    expect(t).toContain('Total:');
+    expect(t).toContain('1.310,82');
   });
 
-  it('sem item de ICMS, a linha simplesmente não existe', () => {
+  it('sem item de ICMS, volta à linha única — nunca decomposição pela metade', () => {
     const semTaxes = resultadoParaCliente(pronto, { valor: 5200 });
     expect(semTaxes).not.toContain('ICMS');
+    expect(semTaxes).toContain('Frete total:');
     const outroImposto = resultadoParaCliente(pronto, {
       valor: 5200,
       taxes: { total: 10, items: [{ acronym: 'PIS', name: 'PIS', rate: 0.0165, value: 10 }] },
     });
     expect(outroImposto).not.toContain('ICMS');
+    expect(outroImposto).toContain('Frete total:');
+  });
+
+  it('ICMS implausível (>= total ou zero) não decompõe — frete negativo é pior que linha única', () => {
+    const maiorQueTotal = resultadoParaCliente(pronto, {
+      valor: 100,
+      taxes: { total: 150, items: [{ acronym: 'ICMS', name: 'ICMS', rate: 0.12, value: 150 }] },
+    });
+    expect(maiorQueTotal).toContain('Frete total:');
+    expect(maiorQueTotal).not.toContain('Total:');
   });
 
   it('sem piso e sem rascunho, não imprime linha vazia no lugar', () => {
