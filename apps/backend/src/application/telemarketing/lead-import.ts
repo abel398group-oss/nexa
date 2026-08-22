@@ -15,6 +15,14 @@ export type MotivoDescarte =
   | 'email_invalido'
   | 'concorrente'
   | 'opt_out'
+  /// Reimportação forçada (`forcarJaNaBase`) de um contato que já tem oportunidade
+  /// ATIVA neste mesmo mercado. Sem esta trava, forçar a entrada criava uma segunda
+  /// oportunidade em 'new' para quem já está em qualificação/proposta com um
+  /// SDR/Closer — o funil passava a contar o mesmo negócio duas vezes e a fila do
+  /// SDR reabria um lead que já tinha dono. Nunca forçável: forçar 'ja_na_base' é
+  /// para "mesmo contato, negócio novo"; isto aqui é "mesmo contato, MESMO negócio
+  /// ainda aberto".
+  | 'ja_tem_oportunidade'
   /// Limitação atual, não regra de negócio: o unique de `contacts` é (tenantId, phone)
   /// e phone não é nullable, então só cabe UM contato novo sem telefone por tenant.
   /// Este motivo torna a perda VISÍVEL no relatório — antes o lead sumia com um log de
@@ -146,8 +154,13 @@ export function vereditoDeBanco(args: {
   existente: FatosDoContato | null;
   estaNoTms: boolean;
   forcarJaNaBase: boolean;
+  /// Este contato já tem uma Opportunity ABERTA (fora won/lost/discarded) no MESMO
+  /// productCode desta importação. Só importa quando `existente` não é nulo — um
+  /// contato novo nunca pode ter oportunidade prévia.
+  temOportunidadeAtivaNoMercado: boolean;
 }): VereditoDeBanco {
-  const { temFone, temEmail, existente, estaNoTms, forcarJaNaBase } = args;
+  const { temFone, temEmail, existente, estaNoTms, forcarJaNaBase, temOportunidadeAtivaNoMercado } =
+    args;
 
   // Precedência, e ela importa: `cliente` ganha de `já na base` porque é mais
   // informativo e, ao contrário dele, não é forçável. Reportar o motivo frouxo
@@ -164,6 +177,14 @@ export function vereditoDeBanco(args: {
   // Só cai se o e-mail queimado era o único canal.
   if (descartarEmail && !temFone) {
     return { descarte: 'email_invalido', descartarEmail: true };
+  }
+
+  // Antes de `ja_na_base` e SEM olhar `forcarJaNaBase`: forçar a reentrada não pode
+  // duplicar um negócio que já está aberto. Um contato pode logicamente ter uma
+  // segunda oportunidade no MESMO mercado depois que a primeira fecha (won/lost) —
+  // por isso a checagem é "tem oportunidade ativa", não "já teve alguma vez".
+  if (existente && temOportunidadeAtivaNoMercado) {
+    return { descarte: 'ja_tem_oportunidade', descartarEmail };
   }
 
   if (existente && !(forcarJaNaBase && podeForcar('ja_na_base'))) {

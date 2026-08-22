@@ -18,6 +18,7 @@ import { firstName, tidyMissingName } from './name-render';
 import { assessHealth, healthThresholdsFromEnv, type HealthAssessment } from './sender-health';
 import { dedupSentAtFilter, dedupWindowLabel } from './campaign-dedup';
 import { precisaTrocarMercado } from './conversation-market';
+import { jaRespondeu, telefonesQueJaResponderam } from './engagement-gate';
 import { motivoDeBloqueioDoDisparo } from '@/application/markets/market-gate';
 import { marcarLinkDaCampanha } from './campaign-link';
 import { resolveSignature } from '@/application/email/email-signature';
@@ -25,6 +26,8 @@ import { NotificationsService } from '@/application/notifications/notifications.
 import { comEscopo } from '@/shared/auth/seller-scope';
 
 // Config anti-ban (env com defaults)
+// SENDER_WA_WEEKEND (padrão: false — não dispara sábado/domingo; paridade com
+// SENDER_EMAIL_WEEKEND do canal de e-mail, ver weekendWaLiberado() abaixo).
 const BUSINESS_START = Number(process.env.SENDER_BUSINESS_START ?? 7); // 7h
 const BUSINESS_END = Number(process.env.SENDER_BUSINESS_END ?? 19); // 19h
 // delay entre envios: aleatório 30-90s (anti-ban) — varia a cada envio
@@ -606,6 +609,26 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // ── Quem já RESPONDEU não recebe o próximo toque (21/08/2026) ─────────────
+    // Auditoria confirmou o furo: nenhum filtro aqui perguntava se um humano já
+    // respondeu — nem por este canal, nem pelo outro. Uma cadência de vários
+    // toques (cada um uma campanha separada, sem motor de agendamento) mandava o
+    // Toque 3 para quem já tinha respondido ao Toque 1 e está com um SDR.
+    //
+    // Isto pega quem JÁ respondeu antes desta campanha ser criada. Quem responde
+    // DEPOIS, com o Toque já na fila, é pego pelo mesmo gate no tick — ver
+    // dispatchOneTarget. Defesa em profundidade, mesmo padrão do resto do arquivo.
+    // Ver engagement-gate.ts para por que o sinal é "mensagem de entrada", não
+    // estágio da oportunidade nem `repliedAt`.
+    const respondidosSet = await telefonesQueJaResponderam(this.prisma as any, tenantId, targets.map((t) => t.phone));
+    const respondidosList = targets.filter((t) => respondidosSet.has(t.phone));
+    targets = targets.filter((t) => !respondidosSet.has(t.phone));
+    if (respondidosList.length) {
+      this.logger.log(
+        `Campanha "${dto.name}": ${respondidosList.length} lead(s) já responderam (WhatsApp ou e-mail) — pulados (ja_respondeu)`,
+      );
+    }
+
     // ── Filtro TMS: consulta o lote no banco do HiperTMS (read-only) ──────────
     // Clientes já cadastrados no TMS não recebem campanha de prospecção.
     //
@@ -664,7 +687,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // normalmente, porque o relatório com os motivos é justamente o que interessa.
     const totalRows =
       tmsAllowed.length + tmsBlocked.length + dupBlocked.length +
-      blockedList.length + suspectList.length + invalidList.length;
+      blockedList.length + suspectList.length + invalidList.length + respondidosList.length;
     if (totalRows === 0) {
       throw new BadRequestException(
         'Nenhum destinatário para esta campanha. Selecione contatos, informe números avulsos, ' +
@@ -717,6 +740,8 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             ...invalidList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: rejectionReason(t.phone) ?? 'telefone_invalido' })),
             // pediu para não receber mais (lista de bloqueio LGPD)
             ...optOutBloqueados.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'opted_out' })),
+            // já respondeu (WhatsApp ou e-mail) — o próximo toque não é para ele
+            ...respondidosList.map((t) => ({ tenantId, phone: t.phone, name: t.name, status: 'skipped', error: 'ja_respondeu' })),
           ],
         },
       },
@@ -733,7 +758,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Campanha "${dto.name}": ${avisoVariacao}`);
     }
 
-    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid, warnings };
+    return { ...campaign, included: tmsAllowed.length, skippedOptOut, skippedTms, skippedAlreadySent, skippedBlocked, skippedSuspect, skippedInvalid, skippedRespondidos: respondidosList.length, warnings };
   }
 
   /** `escopo` = vendedor logado; `undefined` (admin e demais) vê todas. */
@@ -1314,8 +1339,38 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
   private currentHourBR(): number {
     return (new Date().getUTCHours() - 3 + 24) % 24;
   }
+
+  /**
+   * Dia da semana em Brasília (0=domingo … 6=sábado), mesmo deslocamento fixo de
+   * `currentHourBR` — UTC-3, sem horário de verão (extinto no Brasil em 2019).
+   *
+   * `getUTCDay()` sozinho erraria perto da virada do dia: 21h de sábado em
+   * Brasília já é domingo em UTC, e o inverso na virada de domingo pra segunda.
+   * Sem subtrair as 3 horas primeiro, o gate de fim de semana teria uma janela
+   * de 3h por virada em que o dia computado não é o dia real.
+   */
+  private currentDayBR(): number {
+    return new Date(Date.now() - 3 * 60 * 60 * 1000).getUTCDay();
+  }
+
+  /**
+   * Fim de semana: fora do ar por padrão (21/08/2026, paridade com o e-mail).
+   *
+   * Auditoria confirmou a assimetria: o e-mail já bloqueia sábado/domingo por
+   * padrão (`SENDER_EMAIL_WEEKEND`, ver email-campaign-sender.ts) e o WhatsApp
+   * não bloqueava nada — só a hora do dia. É o canal com a pior consequência de
+   * erro (a denúncia de spam do fim de semana é o gatilho clássico de ban de
+   * número), e era o que estava sem a proteção que o outro canal já tinha.
+   */
+  private weekendWaLiberado(): boolean {
+    return (process.env.SENDER_WA_WEEKEND ?? 'false').toLowerCase() === 'true';
+  }
+
   // janela do WhatsApp do tenant (este worker é o de WhatsApp)
   private async withinWaWindow(tenantId: string): Promise<boolean> {
+    const dia = this.currentDayBR();
+    if ((dia === 0 || dia === 6) && !this.weekendWaLiberado()) return false;
+
     const s = await this.getSettings(tenantId);
     const h = this.currentHourBR();
     return h >= s.waStartHour && h < s.waEndHour;
@@ -1566,6 +1621,17 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
       if (contact.status === 'opted_out' || contact.status === 'blocked') {
         const reason = contact.status === 'opted_out' ? 'opted_out' : 'bloqueado';
         await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: reason } });
+        return;
+      }
+
+      // Segunda checada, agora no TICK: a campanha pode ter sido criada quando o
+      // lead ainda não tinha respondido, e a resposta chegar DEPOIS, enquanto o
+      // alvo esperava na fila (é literalmente o caso de uma cadência com dias
+      // entre os toques). A checagem em massa na criação não alcança isso — só
+      // esta, rodando no momento real do envio, alcança.
+      if (await jaRespondeu(this.prisma as any, campaign.tenantId, target.phone)) {
+        this.logger.log(`Alvo ${target.phone} já respondeu desde que a campanha foi criada — pulado (ja_respondeu)`);
+        await this.prisma.campaignTarget.update({ where: { id: target.id }, data: { status: 'skipped', error: 'ja_respondeu' } });
         return;
       }
 

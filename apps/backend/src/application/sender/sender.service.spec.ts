@@ -118,6 +118,13 @@ describe('SenderService — regras de negocio', () => {
       return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
     }
     const within = () => (svcWithPrisma() as any).withinWaWindow('default') as Promise<boolean>;
+
+    // Este bloco testa HORA, não dia da semana — a data fixa do helper `setUtc`
+    // (13/06/2026) por acaso cai num sábado, e o gate de fim de semana (novo,
+    // 21/08/2026) bloquearia os três testes abaixo por um motivo que não é o
+    // deles. O fim de semana tem describe próprio, com datas explícitas.
+    beforeEach(() => { process.env.SENDER_WA_WEEKEND = 'true'; });
+    afterEach(() => { delete process.env.SENDER_WA_WEEKEND; });
     it('dentro do horario comercial -> true', async () => {
       setUtc(13); // 10h BRT
       expect(await within()).toBe(true);
@@ -129,6 +136,59 @@ describe('SenderService — regras de negocio', () => {
     it('depois das 19h -> false', async () => {
       setUtc(23); // 20h BRT
       expect(await within()).toBe(false);
+    });
+  });
+
+  /**
+   * Fim de semana (21/08/2026, paridade com o e-mail — ver
+   * email-campaign-guards.spec.ts). Auditoria confirmou a assimetria: o e-mail já
+   * bloqueava sábado/domingo por padrão, o WhatsApp não bloqueava nada — só a
+   * hora do dia. É o canal com a pior consequência de erro (a denúncia de spam
+   * do fim de semana é o gatilho clássico de ban de número).
+   */
+  describe('withinWaWindow — fim de semana', () => {
+    function svcWithPrisma(): SenderService {
+      const prisma = { senderSettings: { findUnique: vi.fn().mockResolvedValue(null) } };
+      return new SenderService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
+    }
+    const dentro = () => (svcWithPrisma() as any).withinWaWindow('default') as Promise<boolean>;
+
+    afterEach(() => {
+      delete process.env.SENDER_WA_WEEKEND;
+    });
+
+    it('dia útil às 10h: aberta', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00')); // segunda
+      expect(await dentro()).toBe(true);
+    });
+
+    it('sábado no meio do horário comercial: fechada', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-15T10:00:00-03:00'));
+      expect(await dentro()).toBe(false);
+    });
+
+    it('domingo: fechada', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-16T10:00:00-03:00'));
+      expect(await dentro()).toBe(false);
+    });
+
+    it('SENDER_WA_WEEKEND=true libera o fim de semana', async () => {
+      process.env.SENDER_WA_WEEKEND = 'true';
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-15T10:00:00-03:00'));
+      expect(await dentro()).toBe(true);
+    });
+
+    // A virada do dia é onde um deslocamento de fuso errado apareceria: 21h de
+    // sábado em Brasília já é domingo em UTC. Sem subtrair as 3h primeiro, o
+    // gate computaria o dia errado bem na hora em que mais importa acertar.
+    it('sábado 22h BRT (já domingo em UTC): continua contando como sábado — fechada', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-15T22:00:00-03:00'));
+      expect(await dentro()).toBe(false);
     });
   });
 
@@ -1036,6 +1096,60 @@ describe('SenderService.createCampaign — dedup entre campanhas', () => {
     const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
     const blocked = created.find((t: any) => t.phone === '5511961688954');
     expect(blocked).toMatchObject({ status: 'skipped', error: 'bloqueado' });
+  });
+});
+
+/**
+ * Quem já respondeu não recebe o próximo toque (21/08/2026).
+ *
+ * Auditoria confirmou: nenhum filtro de criação nem de tick perguntava se um
+ * humano já respondeu — nem por WhatsApp, nem por e-mail. Ver engagement-gate.ts
+ * para o porquê do sinal ser "mensagem de entrada", e não estágio da
+ * oportunidade nem `repliedAt`.
+ */
+describe('SenderService.createCampaign — quem já respondeu não entra na fila', () => {
+  let prisma: any, tmsLookup: any;
+  const makeService = () =>
+    new SenderService(prisma, {} as any, {} as any, {} as any, {} as any, tmsLookup, { acquire: async () => async () => {} } as any, OPTOUT_MOCK);
+
+  beforeEach(() => {
+    prisma = {
+      campaignTarget: { findMany: vi.fn().mockResolvedValue([]) },
+      campaign: {
+        create: vi.fn().mockImplementation(({ data }: any) =>
+          Promise.resolve({ id: 'camp-new', ...data, _count: { targets: data.targets?.create?.length ?? 0 } })),
+      },
+      contact: { count: vi.fn().mockResolvedValue(0), findMany: vi.fn().mockResolvedValue([]), upsert: vi.fn().mockResolvedValue({}) },
+      aiMessage: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    tmsLookup = { batchLookupVerificado: vi.fn().mockResolvedValue({ clientes: new Map(), falhou: false }) };
+  });
+
+  const dto = (phones: string[]) => ({ name: 'Toque 2', template: 'Oi de novo', phones: phones.map((phone) => ({ phone })) });
+
+  it('telefone com mensagem de entrada registrada → skipped/ja_respondeu, fora da fila', async () => {
+    prisma.aiMessage.findMany.mockResolvedValue([{ conversation: { phone: '5511900000001' } }]);
+
+    const r = await makeService().createCampaign('t1', dto(['5511900000001', '5511900000002']));
+
+    expect((r as any).skippedRespondidos).toBe(1);
+    expect(r.included).toBe(1);
+    const created = prisma.campaign.create.mock.calls[0][0].data.targets.create;
+    expect(created.find((t: any) => t.phone === '5511900000001')).toMatchObject({ status: 'skipped', error: 'ja_respondeu' });
+    expect(created.find((t: any) => t.phone === '5511900000002').status).toBeUndefined();
+  });
+
+  it('a consulta filtra direction=inbound — mensagem NOSSA (outbound) não conta como resposta', async () => {
+    await makeService().createCampaign('t1', dto(['5511900000001']));
+
+    expect(prisma.aiMessage.findMany.mock.calls[0][0].where.direction).toBe('inbound');
+  });
+
+  it('ninguém respondeu ainda → todos na fila (o caso comum: Toque 1)', async () => {
+    const r = await makeService().createCampaign('t1', dto(['5511900000001', '5511900000002']));
+
+    expect((r as any).skippedRespondidos).toBe(0);
+    expect(r.included).toBe(2);
   });
 });
 

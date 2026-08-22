@@ -32,6 +32,9 @@ function makePrisma(over: any = {}) {
       ...over.campaign,
     },
     product: { findUnique: vi.fn().mockResolvedValue(null), ...over.product },
+    // Gate de engajamento (21/08/2026): neutro por padrão — "ninguém respondeu
+    // ainda". Testes que precisam do caso "já respondeu" sobrescrevem via `over`.
+    aiMessage: { findMany: vi.fn().mockResolvedValue([]), ...over.aiMessage },
     senderSettings: { findUnique: vi.fn().mockResolvedValue(null), ...over.senderSettings },
     // Trava de reenvio pós-crash: o tick consulta/gra­va o token de compromisso
     // antes do SMTP. O neutro é "sem token" — envio segue normal.
@@ -516,6 +519,56 @@ describe('worker — recheck LGPD na hora do envio (defesa em profundidade)', ()
     expect(prisma.campaignTarget.update).toHaveBeenCalledWith({
       where: { id: 'alvo-1' },
       data: { status: 'skipped', error: 'opted_out' },
+    });
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Paridade com o WhatsApp (21/08/2026): a fila de e-mail leva DIAS para
+   * esvaziar a 20-75/dia. Uma resposta que chega DEPOIS da campanha criada —
+   * por WhatsApp ou por e-mail, ver engagement-gate.ts — precisa parar o
+   * próximo toque no MESMO tick, não só na criação da campanha seguinte.
+   */
+  it('alvo que já respondeu (por qualquer canal) é pulado sem chamar o SMTP', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00-03:00'));
+
+    const campanha = {
+      id: 'camp-1', tenantId: 't1', name: 'Toque 2', channel: 'email', status: 'running',
+      productCode: null, subject: 's', template: 'corpo', link: null,
+      sendLinkOnFirst: false, sendLimit: null, scheduledAt: null,
+    };
+    const prisma = makePrisma({
+      campaign: {
+        create: vi.fn(), updateMany: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(campanha), update: vi.fn().mockResolvedValue({}),
+      },
+      campaignTarget: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockImplementation(({ where }: any) =>
+          where.campaignId ? { id: 'alvo-1', email: 'respondeu@x.com', name: 'Carlos' } : null),
+        updateMany: vi.fn().mockImplementation(({ where }: any) => ({ count: where.id ? 1 : 0 })),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      // `impedimento` (opt-out/bloqueio/bounce por CONTATO) roda antes do meu
+      // gate e chama `contact.findFirst` — sem este mock a chamada quebra e o
+      // catch externo do tick engole o erro em silêncio (0 chamadas, sem pista).
+      contact: { findFirst: vi.fn().mockResolvedValue(null) },
+      aiMessage: { findMany: vi.fn().mockResolvedValue([{ conversation: { phone: 'email:respondeu@x.com' } }]) },
+    });
+
+    const emailReply = { send: vi.fn() };
+    const svc = new EmailCampaignSenderService(
+      prisma, emailReply as any, {} as any, {} as any, registroVazio(), tmsSemClientes(),
+    );
+
+    await (svc as any).tickLocked();
+
+    expect(emailReply.send).not.toHaveBeenCalled();
+    expect(prisma.campaignTarget.update).toHaveBeenCalledWith({
+      where: { id: 'alvo-1' },
+      data: { status: 'skipped', error: 'ja_respondeu' },
     });
 
     vi.useRealTimers();

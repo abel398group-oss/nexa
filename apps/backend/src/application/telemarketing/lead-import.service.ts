@@ -85,7 +85,7 @@ export class LeadImportService {
 
     // A peneira de arquivo já rodou no parser (duplicado, sem canal utilizável).
     // Aqui entram os motivos que só o banco sabe.
-    await this.peneiraDeBanco(tenantId, linhas, input.forcarJaNaBase === true);
+    await this.peneiraDeBanco(tenantId, linhas, input.forcarJaNaBase === true, input.productCode);
 
     const contadores = contarLote(linhas);
 
@@ -351,6 +351,7 @@ export class LeadImportService {
     tenantId: string,
     linhas: Linha[],
     forcarJaNaBase: boolean,
+    productCode: string,
   ): Promise<void> {
     const candidatas = linhas.filter((l) => !l.descarte);
     if (!candidatas.length) return;
@@ -381,6 +382,26 @@ export class LeadImportService {
     const porEmail = new Map(
       existentes.filter((c) => c.email).map((c) => [c.email as string, c]),
     );
+
+    // Quem, entre os contatos já existentes, tem oportunidade ABERTA neste mesmo
+    // mercado — a única pergunta que falta pra `forcarJaNaBase` não duplicar negócio
+    // em andamento (ver comentário em `vereditoDeBanco`).
+    const idsExistentes = existentes.map((c) => c.id);
+    const comOportunidadeAtiva = idsExistentes.length
+      ? new Set(
+          (
+            await this.prisma.opportunity.findMany({
+              where: {
+                tenantId,
+                productCode,
+                contactId: { in: idsExistentes },
+                stage: { notIn: ['won', 'lost', 'discarded'] },
+              },
+              select: { contactId: true },
+            })
+          ).map((o) => o.contactId),
+        )
+      : new Set<string>();
 
     // A3 da auditoria: o unique de contacts é (tenantId, phone) e phone não é nullable,
     // então só existe UMA vaga para contato novo sem telefone ('' como chave). Antes, o
@@ -438,6 +459,7 @@ export class LeadImportService {
         // cliente é pego, ou a lista inteira é descartada como cliente.
         estaNoTms: !!linha.phone && noTms.has(TmsLookupService.normalize(linha.phone)),
         forcarJaNaBase,
+        temOportunidadeAtivaNoMercado: !!existente && comOportunidadeAtiva.has(existente.id),
       });
 
       if (veredito.descartarEmail) linha.email = null;

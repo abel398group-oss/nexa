@@ -104,8 +104,11 @@ describe('importação contra o banco real', () => {
     expect(c?.email).toBe('c@s.com');
   });
 
-  it('o mesmo contato numa segunda lista continua alcançável pela distribuição', async () => {
+  it('o mesmo contato numa segunda lista continua alcançável pela distribuição — depois que o primeiro negócio fecha', async () => {
     // O bug B2 inteiro, ponta a ponta: antes, esta segunda oportunidade nascia órfã.
+    // Precondição mudou em 22/08/2026 (Item 2 do Fase 1): forçar reimportação não
+    // pode mais duplicar uma oportunidade ABERTA no mesmo mercado — então este teste
+    // só prova a jornada B2 depois que a primeira oportunidade já fechou (lost).
     const seller = await prisma.seller.create({
       data: { tenantId: TENANT, name: 'Mateus', phone: '5511900000000' },
     });
@@ -114,6 +117,11 @@ describe('importação contra o banco real', () => {
     });
 
     await service.importar(TENANT, base, CSV(['Carlos;Silva;11999887766;c@s.com']));
+    await prisma.opportunity.updateMany({
+      where: { tenantId: TENANT },
+      data: { stage: 'lost' },
+    });
+
     const lote2 = await service.importar(
       TENANT,
       { ...base, name: 'Lote 2', forcarJaNaBase: true },
@@ -130,6 +138,23 @@ describe('importação contra o banco real', () => {
     const c = await prisma.contact.findFirst({ where: { tenantId: TENANT } });
     expect(o?.assignedSellerId).toBe(seller.id);
     expect(c?.ownerSellerId).toBe(seller.id);
+  });
+
+  it('reimportação forçada NÃO duplica oportunidade aberta no mesmo mercado', async () => {
+    // O bug que o Item 2 fecha: reimportar (forçado) um contato que já tem negócio
+    // ABERTO no mesmo mercado não pode criar uma segunda oportunidade — o SDR/Closer
+    // que já está com o lead perderia a oportunidade original por baixo dos panos.
+    await service.importar(TENANT, base, CSV(['Carlos;Silva;11999887766;c@s.com']));
+
+    const r = await service.importar(
+      TENANT,
+      { ...base, name: 'Lote 2', forcarJaNaBase: true },
+      CSV(['Carlos;Silva;11999887766;c@s.com']),
+    );
+
+    expect(r.contadores.valid).toBe(0);
+    expect(r.descartes[0]).toMatchObject({ motivo: 'ja_tem_oportunidade', forcavel: false });
+    expect(await prisma.opportunity.count({ where: { tenantId: TENANT } })).toBe(1);
   });
 
   it('o segundo lead sem telefone é descartado com motivo, não some', async () => {

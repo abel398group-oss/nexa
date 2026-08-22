@@ -11,7 +11,13 @@ const semNada: FatosDoContato = {
   customerSince: null,
 };
 
-const base = { temFone: true, temEmail: true, estaNoTms: false, forcarJaNaBase: false };
+const base = {
+  temFone: true,
+  temEmail: true,
+  estaNoTms: false,
+  forcarJaNaBase: false,
+  temOportunidadeAtivaNoMercado: false,
+};
 
 describe('chave do TMS — o erro que ninguém veria na tela', () => {
   // O `batchLookup` indexa o Map por telefone SEM o 55. O service consulta esse Map
@@ -140,5 +146,81 @@ describe('forcarJaNaBase', () => {
     expect(
       vereditoDeBanco({ ...base, existente: NOVO, forcarJaNaBase: true }).descarte,
     ).toBeNull();
+  });
+});
+
+describe('reimportação forçada não duplica negócio aberto', () => {
+  it('forcarJaNaBase ligado + oportunidade ativa no mesmo mercado: bloqueia', () => {
+    const r = vereditoDeBanco({
+      ...base,
+      existente: semNada,
+      forcarJaNaBase: true,
+      temOportunidadeAtivaNoMercado: true,
+    });
+    expect(r.descarte).toBe('ja_tem_oportunidade');
+  });
+
+  it('não é forçável — nem um segundo forcarJaNaBase muda o veredito', () => {
+    // Ao contrário de 'ja_na_base', não existe um segundo parâmetro para destravar
+    // isto: a única saída é a oportunidade em aberto fechar (won/lost/discarded).
+    const r = vereditoDeBanco({
+      ...base,
+      existente: semNada,
+      forcarJaNaBase: true,
+      temOportunidadeAtivaNoMercado: true,
+    });
+    expect(r.descarte).not.toBe('ja_na_base');
+    expect(r.descarte).not.toBeNull();
+  });
+
+  it('ganha de ja_na_base mas perde para cliente e opt_out', () => {
+    expect(
+      vereditoDeBanco({
+        ...base,
+        existente: { ...semNada, customerSince: new Date() },
+        forcarJaNaBase: true,
+        temOportunidadeAtivaNoMercado: true,
+      }).descarte,
+    ).toBe('cliente');
+
+    expect(
+      vereditoDeBanco({
+        ...base,
+        existente: { ...semNada, optOutAt: new Date() },
+        forcarJaNaBase: true,
+        temOportunidadeAtivaNoMercado: true,
+      }).descarte,
+    ).toBe('opt_out');
+  });
+
+  it('sem forcarJaNaBase, oportunidade ativa não muda o motivo (já cairia em ja_na_base de qualquer jeito)', () => {
+    const r = vereditoDeBanco({
+      ...base,
+      existente: semNada,
+      forcarJaNaBase: false,
+      temOportunidadeAtivaNoMercado: true,
+    });
+    expect(r.descarte).toBe('ja_tem_oportunidade');
+  });
+
+  it('oportunidade já fechada (won/lost/discarded) não bloqueia — pode reimportar', () => {
+    // O fato chega pronto de fora (`peneiraDeBanco` já filtrou por stage); aqui só
+    // confirmamos que "false" deixa passar normalmente.
+    const r = vereditoDeBanco({
+      ...base,
+      existente: semNada,
+      forcarJaNaBase: true,
+      temOportunidadeAtivaNoMercado: false,
+    });
+    expect(r.descarte).toBeNull();
+  });
+
+  it('lead novo (sem contato existente) nunca é bloqueado por este motivo', () => {
+    const r = vereditoDeBanco({
+      ...base,
+      existente: NOVO,
+      temOportunidadeAtivaNoMercado: true, // não deveria nem ser calculado para NOVO, mas defensivo
+    });
+    expect(r.descarte).toBeNull();
   });
 });

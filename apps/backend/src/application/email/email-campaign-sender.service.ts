@@ -47,6 +47,7 @@ import { SenderService } from '@/application/sender/sender.service';
 import { spin } from '@/application/sender/spintax';
 import { dedupSentAtFilter, dedupWindowLabel, podeIgnorarDedup } from '@/application/sender/campaign-dedup';
 import { precisaTrocarMercado } from '@/application/sender/conversation-market';
+import { jaRespondeu, telefonesQueJaResponderam } from '@/application/sender/engagement-gate';
 import { motivoDeBloqueioDoDisparo } from '@/application/markets/market-gate';
 import { marcarLinkDaCampanha } from '@/application/sender/campaign-link';
 import { normalizarMessageId } from './campaign-reply-linker';
@@ -536,6 +537,26 @@ export class EmailCampaignSenderService {
       );
     }
 
+    // ── Quem já RESPONDEU não recebe o próximo toque (21/08/2026, paridade com
+    // o canal WhatsApp) ─────────────────────────────────────────────────────
+    // A conversa do e-mail vive sob o telefone SINTÉTICO (`emailToPhone`) — é a
+    // mesma chave que o registro de conversa usa (ver `registrarNaConversa`
+    // abaixo), então uma resposta por WhatsApp também para o próximo e-mail da
+    // cadência e vice-versa. Ver engagement-gate.ts para o porquê do sinal.
+    const foneDoAlvo = new Map(targets.map((t) => [t.email, emailToPhone(t.email)]));
+    const respondidosFones = await telefonesQueJaResponderam(
+      this.prisma as any,
+      tenantId,
+      [...foneDoAlvo.values()],
+    );
+    const respondidosList = targets.filter((t) => respondidosFones.has(foneDoAlvo.get(t.email)!));
+    targets = targets.filter((t) => !respondidosFones.has(foneDoAlvo.get(t.email)!));
+    if (respondidosList.length) {
+      this.logger.log(
+        `Campanha "${dto.name}": ${respondidosList.length} e-mail(s) já responderam (WhatsApp ou e-mail) — pulados (ja_respondeu)`,
+      );
+    }
+
     const skippedRows = [
       ...blockedList.map((t) => ({ status: 'skipped', error: 'bloqueado', t })),
       ...bouncedList.map((t) => ({ status: 'skipped', error: 'email_invalido', t })),
@@ -546,6 +567,8 @@ export class EmailCampaignSenderService {
       ...lgpdList.map((t) => ({ status: 'skipped', error: 'opted_out', t })),
       // já é cliente TMS — prospecção fria não vai para quem paga pelo produto
       ...tmsList.map((t) => ({ status: 'skipped', error: 'tms_cliente', t })),
+      // já respondeu (WhatsApp ou e-mail) — o próximo toque não é para ele
+      ...respondidosList.map((t) => ({ status: 'skipped', error: 'ja_respondeu', t })),
     ];
 
     const campaign = await this.prisma.campaign.create({
@@ -821,6 +844,19 @@ export class EmailCampaignSenderService {
         await this.prisma.campaignTarget.update({
           where: { id: target.id },
           data: { status: 'skipped', error: impedimento },
+        });
+        return;
+      }
+
+      // Segunda checada de "já respondeu", agora no TICK (paridade com o
+      // WhatsApp — ver engagement-gate.ts). A fila de e-mail leva DIAS para
+      // esvaziar a 20-75/dia; a checagem em massa da criação não alcança quem
+      // respondeu depois que a campanha já estava rodando.
+      if (await jaRespondeu(this.prisma as any, campaign.tenantId, emailToPhone(email))) {
+        this.logger.log(`Email disparo pulado → ${email} (já respondeu — WhatsApp ou e-mail)`);
+        await this.prisma.campaignTarget.update({
+          where: { id: target.id },
+          data: { status: 'skipped', error: 'ja_respondeu' },
         });
         return;
       }
