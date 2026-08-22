@@ -589,6 +589,13 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
   const qc = useQueryClient();
   const [abertos, setAbertos] = useState<string[]>([]);
   const [aberto, setAberto] = useState(false);
+  // Resumo da ÚLTIMA distribuição, pra ficar visível depois que o toast some — é
+  // exatamente o dado que o backend já calculava (porVendedor, mantidosComDonoAtual)
+  // e que antes morria no toast genérico "N lead(s) na fila de Fulano".
+  const [resumo, setResumo] = useState<{
+    porVendedor: { nome: string; qtd: number }[];
+    mantidosComDonoAtual: number;
+  } | null>(null);
 
   const { data } = useQuery({
     queryKey: ['markets', lote.productCode, 'sellers'],
@@ -603,16 +610,19 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
         // Zero não é erro: normalmente é lote já distribuído. Dizer isso evita o
         // operador clicar de novo achando que travou.
         toast.info('Nada a distribuir — estes leads já têm dono.');
+        setResumo(null);
       } else {
-        // Diz PARA QUEM, não só quantos: "6 divididos entre 2" deixa o operador
-        // sem saber se caiu em quem ele marcou. Com dois nomes cabe a lista; de
-        // três em diante vira contagem, senão o toast fica maior que a tela.
-        const nomes = (data?.vinculados ?? [])
-          .filter((v) => abertos.includes(v.id))
-          .map((v) => v.name);
-        const paraQuem =
-          nomes.length && nomes.length <= 2 ? nomes.join(' e ') : `${abertos.length} vendedores`;
-        toast.success(`${r.distribuidos} lead(s) na fila de ${paraQuem}.`);
+        toast.success(`${r.distribuidos} lead(s) distribuído(s).`);
+        // Nome de quem recebeu cada fatia, não só o id — sem isso o resumo vira uma
+        // lista de UUIDs que ninguém lê.
+        const nomePor = new Map((data?.vinculados ?? []).map((v) => [v.id, v.name]));
+        setResumo({
+          porVendedor: Object.entries(r.porVendedor)
+            .filter(([, qtd]) => qtd > 0)
+            .map(([id, qtd]) => ({ nome: nomePor.get(id) ?? id, qtd }))
+            .sort((a, b) => b.qtd - a.qtd),
+          mantidosComDonoAtual: r.mantidosComDonoAtual,
+        });
       }
       setAberto(false);
       setAbertos([]);
@@ -626,9 +636,12 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
 
   if (!aberto) {
     return (
-      <Button size="xs" variant="outline" onClick={() => setAberto(true)}>
-        Distribuir
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button size="xs" variant="outline" onClick={() => setAberto(true)}>
+          Distribuir
+        </Button>
+        {resumo && <ResumoDaDistribuicao resumo={resumo} />}
+      </div>
     );
   }
 
@@ -688,6 +701,41 @@ function Distribuir({ lote }: { lote: LeadBatch }) {
           Cancelar
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Repartição transparente pós-distribuição (22/08/2026).
+ *
+ * O backend sempre calculou `porVendedor` e `mantidosComDonoAtual` — o segundo
+ * explicando exatamente por que a divisão às vezes parece torta ("por que Fulano
+ * recebeu 8 e Beltrano só 2?" = a carteira preservada de Fulano, não um bug no
+ * rodízio). Antes esse dado morria no toast genérico; agora fica visível até a
+ * próxima distribuição.
+ */
+function ResumoDaDistribuicao({
+  resumo,
+}: {
+  resumo: { porVendedor: { nome: string; qtd: number }[]; mantidosComDonoAtual: number };
+}) {
+  return (
+    <div className="rounded border border-base-200 bg-base-100/50 p-2 text-xs">
+      <p className="mb-1 font-medium text-base-content/70">Como ficou a última distribuição</p>
+      <ul className="flex flex-col gap-0.5">
+        {resumo.porVendedor.map((v) => (
+          <li key={v.nome} className="flex justify-between gap-2">
+            <span>{v.nome}</span>
+            <span className="tabular-nums text-base-content/60">{v.qtd}</span>
+          </li>
+        ))}
+      </ul>
+      {resumo.mantidosComDonoAtual > 0 && (
+        <p className="mt-1 text-base-content/50">
+          + {resumo.mantidosComDonoAtual} mantido(s) com o dono que já tinham (fora do
+          rodízio — carteira preservada, não passaram pela divisão acima).
+        </p>
+      )}
     </div>
   );
 }

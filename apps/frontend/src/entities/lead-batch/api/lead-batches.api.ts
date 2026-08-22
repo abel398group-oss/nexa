@@ -42,7 +42,13 @@ export async function listLeadBatches(): Promise<LeadBatch[]> {
 export async function distribuirLote(
   batchId: string,
   sellerIds: string[],
-): Promise<{ distribuidos: number; porVendedor: Record<string, number> }> {
+): Promise<{
+  distribuidos: number;
+  porVendedor: Record<string, number>;
+  /// Quantos ficaram com o dono que o contato já tinha, fora do rodízio — é o que
+  /// explica uma repartição desigual sem ser defeito (ver lead-import.service.ts).
+  mantidosComDonoAtual: number;
+}> {
   const r = await api.post(`/lead-batches/${batchId}/distribute`, { sellerIds });
   return r.data;
 }
