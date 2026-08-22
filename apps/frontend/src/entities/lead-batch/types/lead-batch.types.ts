@@ -13,7 +13,8 @@ export type MotivoDescarte =
   | 'email_invalido'
   | 'concorrente'
   | 'opt_out'
-  | 'sem_telefone';
+  | 'sem_telefone'
+  | 'ja_tem_oportunidade';
 
 export interface ContadoresLote {
   received: number;
@@ -80,6 +81,7 @@ export const ROTULO_MOTIVO: Record<MotivoDescarte, string> = {
   concorrente: 'Concorrente',
   opt_out: 'Pediu para não receber',
   sem_telefone: 'Sem telefone (limite atual)',
+  ja_tem_oportunidade: 'Já tem oportunidade ativa em andamento',
 };
 
 /// Por que cada motivo não pode ser forçado. Mostrado no lugar do botão — operador que
@@ -92,4 +94,6 @@ export const PORQUE_TRAVADO: Partial<Record<MotivoDescarte, string>> = {
   telefone_invalido: 'Sem canal para contato',
   duplicado: 'Já entrou por outra linha desta lista',
   sem_telefone: 'A base aceita um lead novo sem telefone por vez — acrescente o telefone na planilha',
+  ja_tem_oportunidade:
+    'O SDR/Closer já está trabalhando este negócio — reimportar criaria uma segunda oportunidade duplicada',
 };
