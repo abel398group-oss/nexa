@@ -6,6 +6,7 @@ import {
   getRelatorio,
   type RelatorioComercial,
   type TaxaCalculada,
+  type SlaCalculado,
 } from '@/entities/telemarketing-report';
 
 /**
@@ -65,8 +66,10 @@ export function TelemarketingReportPage() {
         <Card className="p-6 text-sm text-base-content/60">Somando…</Card>
       )}
 
+      {data && <Sla sla={data.slaPrimeiroContato} />}
       {data && <Lotes lotes={data.lotes} />}
       {data && <Vendedores vendedores={data.vendedores} />}
+      {data && <Campanhas campanhas={data.campanhas} />}
       {data && <Roteiros roteiros={data.roteiros} />}
 
       <p className="text-xs text-base-content/50">
@@ -87,6 +90,34 @@ function Taxa({ t }: { t: TaxaCalculada }) {
     );
   }
   return <span className="font-medium tabular-nums">{t.percentual.toFixed(1)}%</span>;
+}
+
+/// Quanto tempo até o primeiro toque humano — a métrica que faltava conectar
+/// (22/08/2026): o backend já calculava, a tela nunca lia.
+function Sla({ sla }: { sla: SlaCalculado }) {
+  return (
+    <Card className="p-5">
+      <p className="mb-1 text-sm font-semibold">SLA de primeiro contato</p>
+      <p className="mb-3 text-xs text-base-content/60">
+        Horas entre o lead ENTRAR na base e a primeira atividade que um SDR registra nele.
+        Só entram leads já tocados ao menos uma vez — não é "quantos ainda faltam".
+      </p>
+      {sla.mediaHoras === null ? (
+        <p className="text-sm text-base-content/40" title={`Base de ${sla.base} — pequena demais`}>
+          — <span className="text-xs">({sla.base} contatados até agora)</span>
+        </p>
+      ) : (
+        <p className="text-2xl font-semibold tabular-nums">
+          {sla.mediaHoras < 1
+            ? `${Math.round(sla.mediaHoras * 60)} min`
+            : `${sla.mediaHoras.toFixed(1)} h`}
+          <span className="ml-2 text-xs font-normal text-base-content/50">
+            média sobre {sla.base} leads
+          </span>
+        </p>
+      )}
+    </Card>
+  );
 }
 
 function Lotes({ lotes }: { lotes: RelatorioComercial['lotes'] }) {
@@ -176,6 +207,54 @@ function Vendedores({ vendedores }: { vendedores: RelatorioComercial['vendedores
                 <td className="py-2 text-right tabular-nums text-emerald-600">{v.ganhos}</td>
                 <td className="py-2 text-right">
                   <Taxa t={v.aproveitamento} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function Campanhas({ campanhas }: { campanhas: RelatorioComercial['campanhas'] }) {
+  if (!campanhas.length) return null;
+
+  return (
+    <Card className="p-5">
+      <p className="mb-1 text-sm font-semibold">Qual campanha rendeu</p>
+      <p className="mb-3 text-xs text-base-content/60">
+        Conversão e resposta sobre os <b>entregues</b> — alvo pulado por opt-out ou que
+        falhou no envio nunca teve chance de responder.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-base-300 text-left text-xs text-base-content/60">
+              <th className="py-2">Campanha</th>
+              <th className="py-2">Canal</th>
+              <th className="py-2 text-right">Entregues</th>
+              <th className="py-2 text-right">Resposta</th>
+              <th className="py-2 text-right">Ganhos</th>
+              <th className="py-2 text-right">Conversão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campanhas.map((c) => (
+              <tr key={c.nome} className="border-b border-base-200 last:border-0">
+                <td className="py-2">{c.nome}</td>
+                <td className="py-2 text-xs text-base-content/50">
+                  {c.canal === 'email' ? 'E-mail' : 'WhatsApp'}
+                </td>
+                <td className="py-2 text-right tabular-nums text-base-content/60">
+                  {c.enviados}
+                </td>
+                <td className="py-2 text-right">
+                  <Taxa t={c.resposta} />
+                </td>
+                <td className="py-2 text-right tabular-nums text-emerald-600">{c.ganhos}</td>
+                <td className="py-2 text-right">
+                  <Taxa t={c.conversao} />
                 </td>
               </tr>
             ))}

@@ -33,13 +33,39 @@ export interface VendedorNoRelatorio {
   aproveitamento: TaxaCalculada;
 }
 
+export interface CampanhaNoRelatorio {
+  nome: string;
+  canal: string;
+  /// Alvos que o disparo efetivamente ENTREGOU — é o denominador da conversão.
+  enviados: number;
+  oportunidades: number;
+  ganhos: number;
+  perdidos: number;
+  emAndamento: number;
+  conversao: TaxaCalculada;
+  resposta: TaxaCalculada;
+}
+
+/**
+ * SLA de primeiro contato: horas entre a oportunidade ENTRAR na base e a primeira
+ * atividade que um SDR registra nela. Mesma regra de amostra mínima das outras taxas —
+ * `mediaHoras: null` abaixo de 20 amostras, não um número que parece preciso e não é.
+ */
+export interface SlaCalculado {
+  mediaHoras: number | null;
+  amostraPequena: boolean;
+  base: number;
+}
+
 export interface RelatorioComercial {
   lotes: LoteNoRelatorio[];
   vendedores: VendedorNoRelatorio[];
+  campanhas: CampanhaNoRelatorio[];
   roteiros: {
     comparaveis: { versao: number; acoes: number; atendeu: number; percentual: number }[];
     /// Quantas versões ficaram fora por amostra pequena. Sem mostrar isso, quem lê conclui
     /// que só existiram as versões listadas.
     omitidasPorAmostra: number;
   };
+  slaPrimeiroContato: SlaCalculado;
 }

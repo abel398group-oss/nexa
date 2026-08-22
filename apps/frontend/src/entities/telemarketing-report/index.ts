@@ -3,6 +3,8 @@ export type {
   RelatorioComercial,
   LoteNoRelatorio,
   VendedorNoRelatorio,
+  CampanhaNoRelatorio,
+  SlaCalculado,
   TaxaCalculada,
 } from './types/report.types';
 
