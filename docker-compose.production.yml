@@ -131,7 +131,14 @@ services:
     # SEM porta no host - o backend chama http://waha-vendas:3000 pela nexa-network.
     volumes:
       - nexa-waha-vendas:/app/.sessions
-    mem_limit: 512m
+    # 512m nao bastava: o Chromium da engine WEBJS bateu 461/512MiB so para SUBIR a
+    # sessao pela primeira vez (22/08/2026, droplet de 1.9GB total) e o container
+    # morreu OOM antes do QR aparecer. 768m e um meio-termo deliberado: a soma dos
+    # mem_limit do compose ja passa da RAM fisica da caixa (swap em uso), entao
+    # subir para 1g arriscaria o OOM matar OUTRO container em vez deste. Se
+    # continuar falhando no pareamento, o proximo passo e upgrade de droplet, nao
+    # espremer mais memoria daqui.
+    mem_limit: 768m
     # Se a maquina ficar sem memoria, que o kernel mate ESTE primeiro. E o servico
     # menos critico da caixa: perder prospeccao por algumas horas custa menos que
     # perder o backend do TMS ou o canal de alertas. Sem isto o OOM killer escolhe
