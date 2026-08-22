@@ -116,7 +116,13 @@ export function SdrWorkbenchPage() {
   }
 
   const atividade = useMutation({
-    mutationFn: (dados: { result: string; notes?: string; type?: 'call' | 'whatsapp' | 'email' }) =>
+    mutationFn: (dados: {
+      result: string;
+      notes?: string;
+      type?: 'call' | 'whatsapp' | 'email';
+      /// Só controla o que acontece DEPOIS de salvar — nunca vai pro backend.
+      avancar?: boolean;
+    }) =>
       registrarAtividade({
         opportunityId: lead!.id,
         type: dados.type ?? 'call',
@@ -124,11 +130,16 @@ export function SdrWorkbenchPage() {
         notes: dados.notes,
         scriptVersion,
       }),
-    onSuccess: () => {
+    onSuccess: (_r, dados) => {
       toast.success('Registrado.');
       setDialogo(null);
-      // Sem avançar de propósito: o lead continua sendo trabalho dele.
-      qc.invalidateQueries({ queryKey: ['sdr', 'queue'] });
+      // Avançar continua sendo opt-in (22/08/2026): o padrão ainda é "o lead
+      // continua sendo trabalho dele" — mas registrar uma ligação de verdade é o
+      // caso mais comum do dia, e antes disso obrigava voltar na lista e clicar de
+      // novo a cada contato. "Salvar e avançar" no modal cobre esse atrito sem
+      // mudar o comportamento de quem só quer anotar e continuar no mesmo lead.
+      if (dados.avancar) avancar(lead!.id);
+      else qc.invalidateQueries({ queryKey: ['sdr', 'queue'] });
     },
     onError: (e) => erro(e, 'Não foi possível registrar.'),
   });
@@ -250,6 +261,7 @@ export function SdrWorkbenchPage() {
         <DialogoTransferencia
           productCode={lead.productCode}
           qualificacao={lead.qualification}
+          oportunidadesDuplicadas={(lead.oportunidades?.length ?? 1) - 1}
           modo={dialogo}
           onFechar={() => setDialogo(null)}
           salvando={transferir.isPending}
@@ -1208,11 +1220,17 @@ function DialogoLigacao({
 }: {
   onFechar: () => void;
   salvando: boolean;
-  onSalvar: (d: { result: string; notes?: string; type?: 'call' | 'whatsapp' | 'email' }) => void;
+  onSalvar: (d: {
+    result: string;
+    notes?: string;
+    type?: 'call' | 'whatsapp' | 'email';
+    avancar?: boolean;
+  }) => void;
 }) {
   const [tipo, setTipo] = useState<'call' | 'whatsapp' | 'email'>('call');
   const [resultado, setResultado] = useState('atendeu');
   const [notas, setNotas] = useState('');
+  const dados = { result: resultado, notes: notas || undefined, type: tipo };
 
   return (
     <Modal
@@ -1224,11 +1242,13 @@ function DialogoLigacao({
           <Button variant="ghost" onClick={onFechar}>
             Cancelar
           </Button>
-          <Button
-            loading={salvando}
-            onClick={() => onSalvar({ result: resultado, notes: notas || undefined, type: tipo })}
-          >
+          <Button variant="outline" loading={salvando} onClick={() => onSalvar(dados)}>
             Salvar
+          </Button>
+          {/* Ganho de ritmo (22/08/2026): sem isto, cada ligação registrada mandava
+              o SDR de volta pra lista pra clicar no próximo — 40 vezes por dia. */}
+          <Button loading={salvando} onClick={() => onSalvar({ ...dados, avancar: true })}>
+            Salvar e ir para o próximo
           </Button>
         </>
       }
@@ -1421,6 +1441,7 @@ function DialogoDescarte({
 function DialogoTransferencia({
   productCode,
   qualificacao,
+  oportunidadesDuplicadas,
   modo,
   onFechar,
   salvando,
@@ -1430,6 +1451,12 @@ function DialogoTransferencia({
   /// O que o SDR marcou na ficha. Entra aqui só para o aviso — a decisão de
   /// passar continua sendo dele.
   qualificacao?: Qualificacao | null;
+  /// Quantas outras oportunidades deste MESMO contato existem hoje ('new' pra
+  /// mais de uma lista) — o backend descarta essas como duplicata na mesma
+  /// transação da transferência (ver `sdr.service.ts:transferir`). Antes disso o
+  /// SDR só via essa contagem de forma passiva, no badge "N listas" da fila — e
+  /// podia nunca ter reparado. Aqui, na hora de confirmar, é aviso e não surpresa.
+  oportunidadesDuplicadas?: number;
   modo: 'transferir' | 'reuniao';
   onFechar: () => void;
   salvando: boolean;
@@ -1497,6 +1524,14 @@ function DialogoTransferencia({
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
             Você não marcou nenhuma qualificação. O closer vai receber sem saber se
             fala com quem decide, se tem frota própria ou se tem orçamento agora.
+          </p>
+        )}
+        {!!oportunidadesDuplicadas && oportunidadesDuplicadas > 0 && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+            Este contato entrou em {oportunidadesDuplicadas + 1} listas diferentes. Ao
+            confirmar, {oportunidadesDuplicadas === 1 ? 'a outra oportunidade' : `as outras ${oportunidadesDuplicadas} oportunidades`}{' '}
+            deste mesmo contato {oportunidadesDuplicadas === 1 ? 'será encerrada' : 'serão encerradas'} como
+            duplicata — só esta segue adiante.
           </p>
         )}
         <div className="flex flex-col gap-1.5">
