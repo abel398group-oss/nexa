@@ -90,8 +90,9 @@ export function CampaignValidationPage() {
   const [edicao, setEdicao] = useState<{ id: string | null; name: string; content: string } | null>(null);
 
   const { data: mercados = [] } = useQuery({ queryKey: ['markets'], queryFn: () => listMarkets(false) });
-  // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts.
-  const [code, setCode] = useMarketAtivo(mercados, { listaCompleta: true });
+  // Mesmo market do cabeçalho do cockpit — ver marketAtivo.ts. A tela não tem seletor
+  // próprio: dois seletores para a mesma pergunta derivam entre si.
+  const [code] = useMarketAtivo(mercados, { listaCompleta: true });
 
   const chave = ['markets', code, 'assets'];
   const { data: itens = [], isLoading } = useQuery({
@@ -369,11 +370,12 @@ export function CampaignValidationPage() {
         subtitle="Traga o material do mercado para cá, leia e aprove. Só o aprovado a Lia usa e o vendedor manda."
         actions={
           <>
-            <select className="input w-52 text-sm" value={code} onChange={(e) => setCode(e.target.value)}>
-              {mercados.map((m) => (
-                <option key={m.code} value={m.code}>{m.displayName || m.name}</option>
-              ))}
-            </select>
+            {/* Sem seletor de mercado próprio (22/08/2026): o cockpit já tem um no
+                cabeçalho, e ele corta todas as abas. Dois seletores para a mesma
+                pergunta é exatamente a deriva que `marketAtivo` veio consertar — um
+                dizia HiperTMS e o outro abria noutro mercado, sem nada na tela
+                contradizendo. Fora do cockpit (rota `/validacao`) o mercado ativo
+                continua vindo da mesma fonte. */}
             {/* Nem todo roteiro nasce num arquivo: às vezes a pessoa quer escrever
                 aqui mesmo. Cai na mesma fila e na mesma aprovação do que foi
                 arrastado — o texto não sabe por onde entrou. */}

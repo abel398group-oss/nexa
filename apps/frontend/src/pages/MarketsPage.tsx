@@ -5,9 +5,11 @@ import { useToast } from '@/app/providers/ToastContext';
 import { useConfirm } from '@/app/providers/ConfirmContext';
 import { CampoCor } from '@/components/CampoCor';
 import { NewMarketModal } from '@/components/NewMarketModal';
-import { MaterialDaCampanha } from '@/components/MaterialDaCampanha';
+import { useIrParaAba } from '@/app/providers/CockpitTabsContext';
+import { setMarketAtivo } from '@/shared/lib/marketAtivo';
 import {
   listMarkets,
+  listMarketAssets,
   updateMarket,
   releaseMarket,
   pauseMarket,
@@ -238,6 +240,70 @@ function ResumoDoMercado({ c }: { c: MarketCounts }) {
           {i.n} {i.n === 1 ? i.um : i.varios}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Quanto material o mercado tem — e o caminho para a tela que aprova (22/08/2026).
+ *
+ * Aqui morava o `MaterialDaCampanha` inteiro: subir, ler, aprovar, remover. A aba
+ * "Validação de campanha" faz exatamente o mesmo, contra os mesmos endpoints, com
+ * espaço de sobra para LER o texto antes de aprovar — que é o ponto da aprovação.
+ * Duas telas para o mesmo ato é onde as duas divergem no primeiro ajuste, e foi o que
+ * fez a operação perguntar por que existiam duas telas iguais.
+ *
+ * Ficou a contagem, que é o que o painel do mercado precisa responder ("este mercado
+ * está pronto?"), e um atalho que já troca o mercado ativo — chegar na validação com
+ * OUTRO mercado selecionado seria aprovar material no lugar errado.
+ */
+function ResumoDoMaterial({ code }: { code: string }) {
+  const irParaAba = useIrParaAba();
+
+  const { data: roteiros = [] } = useQuery({
+    queryKey: ['markets', code, 'assets', 'plan'],
+    queryFn: () => listMarketAssets(code, 'plan'),
+  });
+  const { data: portfolio = [] } = useQuery({
+    queryKey: ['markets', code, 'assets', 'portfolio'],
+    queryFn: () => listMarketAssets(code, 'portfolio'),
+  });
+
+  const aguardando = [...roteiros, ...portfolio].filter((a) => a.status === 'pending').length;
+
+  function abrirValidacao() {
+    setMarketAtivo(code);
+    // Fora do cockpit (rota própria `/markets`) não há aba para trocar — o material
+    // tem rota própria também, e é para lá que o link aponta.
+    if (irParaAba) irParaAba('conteudo', 'validacao');
+    else window.location.assign('/validacao');
+  }
+
+  return (
+    <div className="mt-3 border-t border-base-200 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-medium text-base-content">Material da campanha</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            <span className={roteiros.length === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-base-content/60'}>
+              {roteiros.length} roteiro(s)
+            </span>
+            <span className="text-base-content/60">{portfolio.length} do portfólio</span>
+            {aguardando > 0 && (
+              <span className="text-amber-600 dark:text-amber-400">{aguardando} aguardando aprovação</span>
+            )}
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={abrirValidacao}>
+          {aguardando > 0 ? 'Revisar e aprovar' : 'Abrir material'}
+        </Button>
+      </div>
+      {roteiros.length === 0 && (
+        <p className="mt-1 text-[11px] text-base-content/60">
+          Sem roteiro aprovado a Lia responde só com o conhecimento genérico, e não dá para
+          rascunhar modelo de mensagem deste mercado.
+        </p>
+      )}
     </div>
   );
 }
@@ -584,7 +650,7 @@ export function MarketsPage() {
                     pend.map((p, i) => <LinhaPendencia key={`${p.campo}-${i}`} p={p} />)
                   )}
                   <IdentidadeDoMercado market={m} />
-                  <MaterialDaCampanha code={m.code} />
+                  <ResumoDoMaterial code={m.code} />
                   <VendedoresDoMercado code={m.code} />
                 </div>
               )}
