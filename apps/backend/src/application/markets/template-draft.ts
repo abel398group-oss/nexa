@@ -69,10 +69,11 @@ O QUE NÃO FAZER
   vezes soa melhor e pressiona menos.
 
 VERDADE
-- Só afirme o que o plano afirma. Nunca invente número, prazo, preço, integração ou
-  caso de cliente.
+- Só afirme o que o plano afirma OU o que os FATOS DO PRODUTO (se vierem) confirmam.
+  Nunca invente número, prazo, preço, integração ou caso de cliente que não esteja em
+  nenhum dos dois.
 - Se o plano disser explicitamente o que NÃO prometer, respeite — isso vem antes de
-  qualquer outra regra aqui.
+  qualquer outra regra aqui, inclusive antes de um fato do produto que pareça permitir.
 - Nada de garantia absoluta ("garantimos", "100%", "sempre", "nunca falha").
 
 FORMATO
@@ -126,10 +127,25 @@ export function promptDoRascunho(
   quantos: number,
   roteiros: { name: string; content: string }[],
   evitar: string[] = [],
+  /// Fatos aprovados da base de conhecimento do mercado (22/08/2026) — mesma fonte que
+  /// a Lia usa para responder o lead depois. Sem isto, o rascunho só podia citar o que
+  /// o roteiro repetia, e o roteiro é escrito para o PLANO da campanha (público, oferta,
+  /// o que não prometer) — não para carregar todo detalhe verdadeiro do produto (preço
+  /// exato, módulo, integração). Entram como MATERIAL, na mesma cerca do roteiro: o
+  /// título de um artigo de conhecimento também pode conter algo com cara de instrução.
+  fatos: { title: string; content: string }[] = [],
 ): string {
   const material = roteiros
     .map((r) => `### ${r.name}\n${fenceUntrusted(r.content)}`)
     .join('\n\n');
+
+  const blocoFatos = fatos.length
+    ? [
+        '',
+        'FATOS VERIFICADOS DO PRODUTO (pode citar; não é permissão para ir além deles):',
+        ...fatos.map((f) => `### ${f.title}\n${fenceUntrusted(f.content)}`),
+      ].join('\n\n')
+    : '';
 
   // As frases entram como EXEMPLO, não como lista de bloqueio: o objetivo é o modelo
   // pegar o estilo e recusar também o parente que ninguém digitou. "Não use estas
@@ -149,6 +165,7 @@ export function promptDoRascunho(
     `QUANTAS MENSAGENS: ${quantos} (toques 1 a ${quantos})`,
     canal === 'whatsapp' ? 'O campo "subject" vai VAZIO neste canal.' : '',
     bloco,
+    blocoFatos,
     '',
     'PLANO DE CAMPANHA APROVADO:',
     material,

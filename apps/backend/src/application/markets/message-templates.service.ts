@@ -89,11 +89,23 @@ export class MessageTemplatesService {
       (await this.playbook.get(tenantId, productCode).catch(() => null))?.avoidPhrases,
     );
 
+    // Base de conhecimento do mercado (22/08/2026) — até então só a Lia lia isso,
+    // em tempo de conversa; o rascunho de campanha não tinha ligação nenhuma com a
+    // mesma fonte de verdade. Só categorias com cara de POSICIONAMENTO comercial —
+    // 'suporte' sozinha tem mais de mil artigos de "como usar", que não servem para
+    // convencer quem ainda não é cliente, e inundariam o prompt do roteiro.
+    const fatos = await this.prisma.aiKnowledgeBase.findMany({
+      where: { tenantId, productCode, approved: true, category: { in: ['produto', 'comercial', 'precificacao'] } },
+      select: { title: true, content: true },
+      orderBy: { createdAt: 'asc' },
+      take: 40, // teto: não pode competir por espaço com o roteiro, que é o material principal
+    });
+
     let bruto: unknown;
     try {
       bruto = await this.ai.completeJson(
         SISTEMA_RASCUNHO,
-        promptDoRascunho(canal, quantos, comTexto, evitar),
+        promptDoRascunho(canal, quantos, comTexto, evitar, fatos),
         // Teto alto: são `quantos` mensagens inteiras, e cortar no meio devolve um
         // JSON truncado que a peneira descarta por inteiro.
         //
@@ -134,6 +146,7 @@ export class MessageTemplatesService {
     this.logger.log(
       `Rascunhou ${rascunhos.length} modelo(s) de ${canal} a partir de ` +
         `${comTexto.length} roteiro(s) aprovado(s) em ${productCode}` +
+        (fatos.length ? ` + ${fatos.length} fato(s) da base de conhecimento` : '') +
         (evitar.length ? ` — evitando ${evitar.length} frase(s)` : ''),
     );
     return rascunhos;
