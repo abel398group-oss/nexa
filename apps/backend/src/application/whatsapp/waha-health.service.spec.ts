@@ -14,7 +14,7 @@ import { WahaClientService } from '@/shared/waha/waha-client.service';
  * do WhatsApp morria calado até alguém reiniciar o backend — sem auto-restart e
  * sem o alerta "WhatsApp FORA DO AR", justamente quando ele é necessário.
  */
-function makeService() {
+function makeService(opts: { lock?: any } = {}) {
   // WahaClient REAL (lê env a cada chamada): desde o monitor por linha
   // (21/08/2026) o health resolve alvo/linhas por ele — mockar de novo aqui
   // seria testar o mock. `sendText` continua mockado: alerta não sai em teste.
@@ -25,9 +25,15 @@ function makeService() {
     { create: vi.fn() } as any,
     waha,
     { decrypt: vi.fn() } as any,
+    opts.lock,
   );
   svc['logger'] = { log: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
   return svc;
+}
+
+/** Conta quantos alertas "FORA DO AR" saíram (o alert() dispara os 3 canais). */
+function alertasDeQueda(svc: any): string[] {
+  return svc.alert.mock.calls.map((c: any[]) => String(c[0])).filter((t: string) => t.includes('FORA DO AR'));
 }
 
 describe('WahaHealthService — prazo das chamadas ao WAHA', () => {
@@ -161,5 +167,129 @@ describe('WahaHealthService — prazo das chamadas ao WAHA', () => {
     expect(r.status).toBe('WORKING');
     expect(r.connected).toBe(true);
     expect(r.downSince).toBeNull();
+  });
+});
+
+/**
+ * O ruído observado em produção em 22/08/2026: a linha vendas caiu de manhã e o
+ * mesmo aviso chegou às 07:29, 08:02 e 08:22 no WhatsApp do Abel. O terceiro
+ * furou o intervalo de 30 min porque um deploy às 08:16 recriou o container e
+ * apagou o mapa em memória — e, como todo push para a master reimplanta, uma
+ * linha caída repetia o aviso a cada deploy do dia.
+ */
+describe('WahaHealthService — o aviso de queda não vira enxurrada', () => {
+  let fetchOriginal: typeof global.fetch;
+
+  /** Sessão inexistente: é o 404 real que a linha vendas devolvia. */
+  function wahaFora() {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 }) as any;
+  }
+
+  function svcCaido(lock?: any) {
+    const svc = makeService({ lock });
+    svc['sleep'] = () => Promise.resolve(); // o ciclo real espera 6×5s antes de desistir
+    svc.alert = vi.fn().mockResolvedValue(undefined);
+    return svc;
+  }
+
+  beforeEach(() => {
+    fetchOriginal = global.fetch;
+    process.env.WAHA_API_URL = 'http://waha.local';
+    process.env.WAHA_API_KEY = 'k';
+    delete process.env.WAHA_LINHAS;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T07:29:00-03:00'));
+  });
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    vi.useRealTimers();
+  });
+
+  it('a primeira queda avisa na hora', async () => {
+    wahaFora();
+    const svc = svcCaido();
+
+    await svc.healthCheck();
+
+    expect(alertasDeQueda(svc)).toHaveLength(1);
+  });
+
+  it('o intervalo ESCALONA: 30 min, 1h, 2h, 4h — não um aviso a cada 30 min', async () => {
+    wahaFora();
+    const svc = svcCaido();
+
+    await svc.healthCheck();                       // 1º aviso (07:29)
+    vi.advanceTimersByTime(31 * 60_000);
+    await svc.healthCheck();                       // 2º (passou dos 30 min)
+    expect(alertasDeQueda(svc)).toHaveLength(2);
+
+    // Agora a espera é de 1h: 31 min NÃO bastam mais.
+    vi.advanceTimersByTime(31 * 60_000);
+    await svc.healthCheck();
+    expect(alertasDeQueda(svc)).toHaveLength(2);
+
+    vi.advanceTimersByTime(31 * 60_000);           // total 62 min desde o 2º
+    await svc.healthCheck();
+    expect(alertasDeQueda(svc)).toHaveLength(3);
+
+    // ...e agora 2h. Em 4h de queda saíram 3 avisos, não 8.
+    vi.advanceTimersByTime(61 * 60_000);
+    await svc.healthCheck();
+    expect(alertasDeQueda(svc)).toHaveLength(3);
+  });
+
+  it('a chave no Redis segura o aviso quando o deploy apaga a memória', async () => {
+    wahaFora();
+    // Redis real devolve null quando a chave já existe (SET NX falhou).
+    const lock = { acquire: vi.fn().mockResolvedValue(null) };
+    const svc = svcCaido(lock); // processo NOVO, mapa em memória vazio
+
+    await svc.healthCheck();
+
+    expect(alertasDeQueda(svc)).toHaveLength(0);
+    expect(lock.acquire).toHaveBeenCalledWith('alert:waha-down:principal', 30 * 60);
+  });
+
+  it('sem Redis o aviso sai igual (dev/instância única não fica mudo)', async () => {
+    wahaFora();
+    const svc = svcCaido(undefined);
+
+    await svc.healthCheck();
+
+    expect(alertasDeQueda(svc)).toHaveLength(1);
+  });
+
+  it('a linha que volta zera o escalonamento — a próxima queda avisa na hora', async () => {
+    wahaFora();
+    const svc = svcCaido();
+    await svc.healthCheck();
+    vi.advanceTimersByTime(31 * 60_000);
+    await svc.healthCheck();                       // 2 avisos, espera agora em 1h
+
+    // Voltou.
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'WORKING' }) }) as any;
+    await svc.healthCheck();
+
+    // Caiu de novo 10 min depois: avisa imediatamente, sem herdar a espera longa.
+    wahaFora();
+    vi.advanceTimersByTime(10 * 60_000);
+    await svc.healthCheck();
+
+    expect(alertasDeQueda(svc)).toHaveLength(3);
+  });
+
+  // 404 = a sessão não existe naquele WAHA (volume novo, nunca pareado). O
+  // `/start` do auto-restart responde 404 pelo mesmo motivo, então "verifique o
+  // WAHA" manda o leitor procurar no lugar errado.
+  it('404 explica que falta parear, em vez de mandar verificar o WAHA', async () => {
+    wahaFora();
+    const svc = svcCaido();
+
+    await svc.healthCheck();
+
+    const corpo = String(svc.alert.mock.calls[0][1]);
+    expect(corpo).toContain('nunca foi pareado');
+    expect(corpo).toContain('QR');
   });
 });

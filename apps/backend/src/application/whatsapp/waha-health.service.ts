@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { RedisLockService } from '@/shared/lock/redis-lock.service';
 import { Interval } from '@nestjs/schedule';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '@/infra/prisma/prisma.service';
@@ -34,7 +35,20 @@ export class WahaHealthService {
    */
   private readonly downSince = new Map<string, number>();
   private readonly lastAlertAt = new Map<string, number>();
-  private readonly ALERT_COOLDOWN_MS = 30 * 60 * 1000; // 30 min entre alertas de "ainda fora"
+  /**
+   * Espaçamento entre avisos de "ainda fora", por linha, ESCALONADO (22/08/2026).
+   *
+   * Era fixo em 30 min: uma linha caída de manhã rendia ~16 mensagens iguais até o
+   * fim do dia. Alerta repetido não acrescenta informação — a primeira já disse
+   * tudo e a ação é a mesma — e o custo é o pior possível: quem recebe para de ler,
+   * inclusive o alerta seguinte, que pode ser de outra coisa.
+   *
+   * Então o intervalo cresce enquanto o problema não muda: 30 min, 1h, 2h, 4h daí
+   * em diante. O primeiro aviso continua imediato, e a recuperação também — o que
+   * rarefaz é só a repetição.
+   */
+  private readonly ESCALONAMENTO_MS = [30, 60, 120, 240].map((min) => min * 60 * 1000);
+  private readonly avisosSeguidos = new Map<string, number>();
   private checking = false;
 
   constructor(
@@ -42,7 +56,55 @@ export class WahaHealthService {
     private readonly notifications: NotificationsService,
     private readonly waha: WahaClientService,
     private readonly crypto: EmailCryptoService,
+    // Opcional: as specs constroem posicionalmente, e sem Redis o silenciamento
+    // cai no mapa em memória — que é o comportamento de sempre.
+    @Optional() private readonly lock?: RedisLockService,
   ) {}
+
+  /**
+   * Quanto esperar antes do PRÓXIMO aviso desta linha.
+   *
+   * `avisosSeguidos` conta avisos já emitidos; a espera antes do 2º usa o degrau 0
+   * (30 min), antes do 3º o degrau 1 (60 min) — daí o `-1`. Antes do 1º aviso
+   * (`avisosSeguidos` zerado) o valor não importa: `podeAvisar` sempre libera
+   * quando não há `lastAlertAt` registrado.
+   */
+  private cooldownDe(linha: string): number {
+    const n = Math.max(0, (this.avisosSeguidos.get(linha) ?? 0) - 1);
+    return this.ESCALONAMENTO_MS[Math.min(n, this.ESCALONAMENTO_MS.length - 1)];
+  }
+
+  /**
+   * Reserva a janela de aviso desta linha. `false` = já avisamos, fica quieto.
+   *
+   * Duas camadas porque elas cobrem falhas diferentes. O mapa em memória espaça os
+   * avisos enquanto o processo vive; a chave no Redis atravessa o RESTART — e é o
+   * furo que apareceu em produção em 22/08/2026, quando um deploy às 08:16 apagou o
+   * mapa e o alerta das 08:02 se repetiu às 08:22, 20 min depois. Como todo push
+   * para a master reimplanta, uma linha caída num dia de trabalho normal repetiria o
+   * aviso a cada deploy.
+   *
+   * Sem Redis, só a primeira camada vale (dev, instância única).
+   */
+  private async podeAvisar(linha: string): Promise<boolean> {
+    const espera = this.cooldownDe(linha);
+    if (Date.now() - (this.lastAlertAt.get(linha) ?? 0) <= espera) return false;
+
+    // TTL em segundos; a chave expira sozinha — nunca é liberada de propósito.
+    const janela = await this.lock?.acquire(
+      `alert:waha-down:${linha}`,
+      Math.round(espera / 1000),
+    );
+    if (janela === null) {
+      // Outro processo (ou este, antes do deploy) já avisou dentro da janela.
+      this.lastAlertAt.set(linha, Date.now());
+      return false;
+    }
+
+    this.lastAlertAt.set(linha, Date.now());
+    this.avisosSeguidos.set(linha, (this.avisosSeguidos.get(linha) ?? 0) + 1);
+    return true;
+  }
 
   private get configured() { return this.waha.configured; }
 
@@ -146,6 +208,11 @@ export class WahaHealthService {
         );
         this.downSince.delete(linha);
       }
+      // Linha de pé zera o escalonamento: a PRÓXIMA queda merece aviso imediato,
+      // não o intervalo de 4h herdado da queda anterior. Fora do `if` de propósito —
+      // vale também quando a linha nunca chegou a alertar.
+      this.avisosSeguidos.delete(linha);
+      this.lastAlertAt.delete(linha);
       return;
     }
 
@@ -178,16 +245,25 @@ export class WahaHealthService {
       return;
     }
 
-    // ainda fora (STOPPED/FAILED/SCAN_QR_CODE/UNREACHABLE ou STARTING travado) → alerta crítico com cooldown
-    if (Date.now() - (this.lastAlertAt.get(linha) ?? 0) > this.ALERT_COOLDOWN_MS) {
-      this.lastAlertAt.set(linha, Date.now());
+    // ainda fora (STOPPED/FAILED/SCAN_QR_CODE/UNREACHABLE ou STARTING travado) →
+    // alerta crítico, espaçado (ver podeAvisar/ESCALONAMENTO_MS)
+    if (await this.podeAvisar(linha)) {
       const impacto = linha === LINHA_PRINCIPAL
         ? 'A Lia NÃO está recebendo nem respondendo mensagens.'
         : `A linha "${linha}" NÃO está enviando — o disparo de campanha desta linha está segurado até ela voltar.`;
+      // HTTP_404 tem uma causa específica e um conserto específico: a sessão não
+      // EXISTE nesse WAHA (volume novo, nunca pareado). O `/start` do auto-restart
+      // responde 404 pelo mesmo motivo, então repetir não adianta — é preciso criar
+      // a sessão e ler o QR. Sem esta linha o alerta manda "verifique o WAHA" para
+      // um problema que não está no WAHA, e sim na falta do pareamento.
+      const pista = status2 === 'HTTP_404'
+        ? ' A sessão não existe neste WAHA — provavelmente o número nunca foi pareado: crie a sessão e leia o QR em Saúde dos Números.'
+        : ' Verifique o WAHA (pode precisar reparear o QR).';
+      const proximo = Math.round(this.cooldownDe(linha) / 60000);
       await this.alert(
         `🔴 WhatsApp FORA DO AR${rotulo}`,
         `A sessão do WhatsApp${rotulo} está "${status2}" e o auto-restart não resolveu. ` +
-          `${impacto} Verifique o WAHA (pode precisar reparear o QR).`,
+          `${impacto}${pista} (Próximo aviso só daqui a ~${proximo} min, se continuar assim.)`,
       );
     }
   }
