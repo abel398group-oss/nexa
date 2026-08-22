@@ -13,7 +13,7 @@ graph TB
   subgraph nexa["Nexa"]
     frontend["Frontend SPA<br/>React + Vite (:5174)"]
     backend["Backend API<br/>NestJS (:3001, prefixo /api)"]
-    db[("PostgreSQL 16 + pgvector<br/>(:5433)")]
+    db[("PostgreSQL 16 + pgvector<br/>(:5434)")]
     redis[("Redis<br/>(:6380)")]
   end
 
@@ -41,7 +41,7 @@ graph TB
 |---|---|---|---|
 | **Frontend SPA** | React 18 + Vite 5 + Tailwind 3 | 5174 | Painel de operação (inbox, campanhas, KB, playbooks); cookie HttpOnly |
 | **Backend API** | NestJS + Prisma | 3001 (`/api`) | API REST, WebSocket, agentes de IA, conectores, governança |
-| **PostgreSQL** | Postgres 16 + pgvector | 5433 | Dados (contatos, conversas, KB, ações, auditoria); embeddings (RAG futuro) |
+| **PostgreSQL** | Postgres 16 + pgvector | 5434 | Dados (contatos, conversas, KB, ações, auditoria); embeddings (RAG futuro) |
 | **Redis** | Redis | 6380 | Cache / filas / coordenação |
 
 Serviços externos: **Anthropic** (modelo), **WAHA** (WhatsApp, :3018),

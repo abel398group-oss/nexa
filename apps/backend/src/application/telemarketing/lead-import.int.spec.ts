@@ -11,7 +11,7 @@ import { TmsLookupService } from '@/infra/tms/tms-lookup.service';
  * lead sumindo por colisão de chave, e o lote na entidade errada. Nenhum deles um teste
  * puro pegaria.
  *
- * Banco: container local (5433). Nunca produção — ver vitest.integration.config.ts.
+ * Banco: container local (5434). Nunca produção — ver vitest.integration.config.ts.
  */
 const prisma = new PrismaClient();
 const TENANT = 'tenant-int-telemarketing';

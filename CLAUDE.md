@@ -169,7 +169,7 @@ Dois ambientes distintos — nunca confundir:
 
 - **Dev server & tooling**: Claude **may** start it (`pnpm dev`, backend
   `dev` on `:3001`, frontend `vite` on `:5174`) and `docker compose`
-  (Postgres `:5433`, Redis `:6380`, WAHA `:3018`). The user often already keeps
+  (Postgres `:5434`, Redis `:6380`, WAHA `:3018`). The user often already keeps
   servers running with file-watch, so check for a running instance / port
   conflict before starting another. Ports are deliberately offset from the
   HiperTMS / n8n MVP (3000/5432/6379) so both can run side by side.

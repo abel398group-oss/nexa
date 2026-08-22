@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: nexa_local_dev
       POSTGRES_DB: nexa
     ports:
-      - "5433:5432"   # 5433 externo (MVP usa 5432)
+      # 5434 externo (MVP usa 5432). Era 5433 até 22/08/2026 — subiu pra 5434 porque
+      # outro projeto na mesma máquina (tiktok-shop) já tinha tomado a 5433 pra si.
+      - "5434:5432"
     volumes:
       - ./pgdata:/var/lib/postgresql/data
 

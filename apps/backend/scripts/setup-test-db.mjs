@@ -4,8 +4,11 @@
 // existe no PowerShell (shell padrão aqui), e passar variável de ambiente inline muda de
 // sintaxe em cada shell. Assim roda igual no Windows, no CI e no Linux.
 //
-// O banco é o container `nexa_postgres` (5433), NUNCA o de produção — o `.env` do
+// O banco é o container `nexa_postgres` (5434), NUNCA o de produção — o `.env` do
 // backend aponta para a DigitalOcean, e esta suíte cria e apaga linhas.
+//
+// Porta 5434, não 5433 (22/08/2026): outro projeto na mesma máquina (tiktok-shop) já
+// tinha tomado a 5433 pra si.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -13,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repo = resolve(raiz, '../..');
 const TEST_DATABASE_URL =
-  'postgresql://nexa:nexa_local_dev@localhost:5433/nexa?schema=public';
+  'postgresql://nexa:nexa_local_dev@localhost:5434/nexa?schema=public';
 
 // `shell` é opcional: `docker` precisa dele (resolução de PATH no Windows), mas o Node
 // NÃO — o executável mora em "C:\Program Files\nodejs" e o shell quebraria o caminho no

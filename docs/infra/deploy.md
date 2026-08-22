@@ -16,7 +16,7 @@ Atalho: `Iniciar Nexa.bat` na área de trabalho.
 
 | Serviço | Porta | Observação |
 |---|---|---|
-| PostgreSQL (Nexa) | 5433 | Docker |
+| PostgreSQL (Nexa) | 5434 | Docker |
 | Redis | 6380 | Docker |
 | WAHA (WhatsApp) | 3018 | Docker |
 

@@ -15,7 +15,7 @@ nexa/
     types/      tipos compartilhados
     sdk/        cliente da API
   docs/         documentação (fonte de verdade)
-  docker-compose.yml   PostgreSQL :5433 + Redis :6380 (+ WAHA :3018)
+  docker-compose.yml   PostgreSQL :5434 + Redis :6380 (+ WAHA :3018)
 ```
 
 Package manager **pnpm 9**, Node >= 20. Scripts de banco no `package.json` raiz

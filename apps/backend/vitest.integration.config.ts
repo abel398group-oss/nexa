@@ -4,7 +4,7 @@ import { resolve } from 'path';
 /**
  * Testes de integração — batem num Postgres DE VERDADE.
  *
- * Banco: o container `nexa_postgres` do docker-compose (porta 5433), que já existia no
+ * Banco: o container `nexa_postgres` do docker-compose (porta 5434), que já existia no
  * projeto sem uso. NUNCA o banco de produção: estes testes criam e apagam linhas, e o
  * `.env` do backend aponta para o banco real da DigitalOcean.
  *
@@ -16,9 +16,12 @@ import { resolve } from 'path';
  * carregado por engano apontaria a suíte para produção — e o primeiro `deleteMany`
  * apagaria dado de cliente. Aqui, na pior das hipóteses, o teste falha por não achar
  * banco local.
+ *
+ * Porta 5434, não 5433 (22/08/2026): outro projeto na mesma máquina (tiktok-shop) já
+ * usa a 5433, e os dois container rodando juntos brigavam pela porta do host.
  */
 export const TEST_DATABASE_URL =
-  'postgresql://nexa:nexa_local_dev@localhost:5433/nexa?schema=public';
+  'postgresql://nexa:nexa_local_dev@localhost:5434/nexa?schema=public';
 
 export default defineConfig({
   test: {
