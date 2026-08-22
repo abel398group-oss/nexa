@@ -127,6 +127,29 @@ describe('OpportunitiesService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  // 22/08/2026: mesma trava do 'discarded' acima, agora também para 'lost' — o fluxo
+  // do closer (`closer.service.ts:perdeu`) já exigia motivo por um caminho de escrita
+  // PARALELO; só este endpoint genérico deixava "perder" sem explicação nenhuma.
+  it('moveStage lost SEM motivo -> BadRequest (mesma trava do discarded)', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'new', stageHistory: [] });
+    await expect(svc.moveStage('t1', 'o1', 'lost')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('moveStage lost com motivo invalido -> BadRequest', async () => {
+    await expect(
+      svc.moveStage('t1', 'o1', 'lost', undefined, { discardReason: 'preguica' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('moveStage lost com motivo valido -> grava discardReason (mesmo campo do discarded)', async () => {
+    prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', stage: 'qualified', stageHistory: [] });
+    prisma.$transaction.mockResolvedValue([{ id: 'o1', stage: 'lost' }, {}]);
+    await svc.moveStage('t1', 'o1', 'lost', undefined, { discardReason: 'sem_resposta' });
+    const data = prisma.opportunity.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ stage: 'lost', discardReason: 'sem_resposta', pausedUntil: null });
+  });
+
   it('createFromLead: adota assignedSellerId quando oportunidade existe sem dono', async () => {
     prisma.opportunity.findFirst.mockResolvedValue({ id: 'o1', conversationId: 'c1', assignedSellerId: null, assignedTo: null });
     prisma.opportunity.update.mockResolvedValue({ id: 'o1', assignedSellerId: 's1' });

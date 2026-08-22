@@ -362,8 +362,18 @@ export class OpportunitiesService {
     // Sem isto, discardReason ficava null em quem descarta sem informar motivo — e o
     // painel de motivo de perda (sellerOverview) perdia justamente os casos que mais
     // precisa explicar. Achado da revisão externa (Gemini, 2026-08-05), confirmado no código.
-    if (toStage === 'discarded' && (!opts.discardReason || !DISCARD_REASONS.includes(opts.discardReason as any))) {
-      throw new BadRequestException(`Motivo obrigatorio ao descartar. Use: ${DISCARD_REASONS.join(', ')}`);
+    //
+    // 'lost' entrou em 22/08/2026: o fluxo específico do closer (`closer.service.ts:perdeu`)
+    // já exigia motivo por um caminho de escrita PARALELO (grava direto via Prisma, não
+    // passa por este método) — só este endpoint genérico, usado por `/opportunities`,
+    // deixava passar 'lost' sem motivo algum, e sem gravar nada em `discardReason`.
+    // Mesma trava, mesmo campo, para os dois jeitos de chegar no mesmo estágio.
+    if (
+      (toStage === 'discarded' || toStage === 'lost') &&
+      (!opts.discardReason || !DISCARD_REASONS.includes(opts.discardReason as any))
+    ) {
+      const acao = toStage === 'lost' ? 'marcar como perdido' : 'descartar';
+      throw new BadRequestException(`Motivo obrigatorio ao ${acao}. Use: ${DISCARD_REASONS.join(', ')}`);
     }
     const opp = await this.findOne(tenantId, id, sellerScope);
     if (opp.stage === toStage) return opp;
@@ -373,7 +383,8 @@ export class OpportunitiesService {
     // `prisma generate` (mesmo padrao do humanTakeoverAt no ConversationAgent).
     const extra: Record<string, any> = {
       pausedUntil: toStage === 'paused' ? (opts.pausedUntil ? new Date(opts.pausedUntil) : null) : null,
-      discardReason: toStage === 'discarded' ? (opts.discardReason ?? null) : null,
+      discardReason:
+        toStage === 'discarded' || toStage === 'lost' ? (opts.discardReason ?? null) : null,
     };
     const [updated] = await this.prisma.$transaction([
       this.prisma.opportunity.update({ where: { id }, data: { stage: toStage, ...extra } as any }),

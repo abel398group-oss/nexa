@@ -396,9 +396,14 @@ export function OpportunitiesPage() {
   const [form, setForm] = useState<OppForm>(EMPTY_FORM);
   const [formBusy, setFormBusy] = useState(false);
 
-  // Modal pausar/descartar — pausedUntil e discardReason só existem se
+  // Modal pausar/descartar/perder — pausedUntil e discardReason só existem se
   // coletados aqui; o PATCH /:id/stage genérico não pergunta por eles.
-  const [stagePrompt, setStagePrompt] = useState<{ id: string; stage: 'paused' | 'discarded' } | null>(null);
+  //
+  // 'lost' entrou em 22/08/2026: o backend passou a exigir motivo pra marcar como
+  // perdido (mesma regra que já valia pra 'discarded' — closer.service.ts já exigia
+  // isso no fluxo dele, só este endpoint genérico deixava passar sem nada). Sem
+  // este modal, mover pro dropdown daria 400 sem explicação nenhuma na tela.
+  const [stagePrompt, setStagePrompt] = useState<{ id: string; stage: 'paused' | 'discarded' | 'lost' } | null>(null);
   const [pausedUntilInput, setPausedUntilInput] = useState('');
   const [discardReasonInput, setDiscardReasonInput] = useState('');
   const [stageBusy, setStageBusy] = useState(false);
@@ -568,7 +573,7 @@ export function OpportunitiesPage() {
   // Sair de Ganho/Perdido (estágios finais) pelo dropdown inline pede
   // confirmação — um clique errado não deve reverter um negócio fechado.
   function moveStage(id: string, stage: OppStage, fromStage: OppStage) {
-    if (stage === 'paused' || stage === 'discarded') {
+    if (stage === 'paused' || stage === 'discarded' || stage === 'lost') {
       setPausedUntilInput('');
       setDiscardReasonInput('');
       setStagePrompt({ id, stage });
@@ -611,11 +616,17 @@ export function OpportunitiesPage() {
       if (stagePrompt.stage === 'paused' && pausedUntilInput) {
         extra.pausedUntil = new Date(pausedUntilInput).toISOString();
       }
-      if (stagePrompt.stage === 'discarded' && discardReasonInput) {
+      if ((stagePrompt.stage === 'discarded' || stagePrompt.stage === 'lost') && discardReasonInput) {
         extra.discardReason = discardReasonInput;
       }
       await applyStage(stagePrompt.id, stagePrompt.stage, extra);
-      toast.success(stagePrompt.stage === 'paused' ? 'Lead pausado.' : 'Lead descartado.');
+      toast.success(
+        stagePrompt.stage === 'paused'
+          ? 'Lead pausado.'
+          : stagePrompt.stage === 'lost'
+            ? 'Marcado como perdido.'
+            : 'Lead descartado.',
+      );
       setStagePrompt(null);
     } finally {
       setStageBusy(false);
@@ -796,11 +807,17 @@ export function OpportunitiesPage() {
         </div>
       </Modal>
 
-      {/* Modal pausar / descartar — coleta pausedUntil ou discardReason antes do PATCH */}
+      {/* Modal pausar / descartar / perder — coleta pausedUntil ou discardReason antes do PATCH */}
       <Modal
         open={stagePrompt !== null}
         onClose={() => setStagePrompt(null)}
-        title={stagePrompt?.stage === 'paused' ? 'Pausar oportunidade' : 'Descartar oportunidade'}
+        title={
+          stagePrompt?.stage === 'paused'
+            ? 'Pausar oportunidade'
+            : stagePrompt?.stage === 'lost'
+              ? 'Marcar como perdida'
+              : 'Descartar oportunidade'
+        }
       >
         <div className="space-y-4">
           {stagePrompt?.stage === 'paused' && (
@@ -813,7 +830,7 @@ export function OpportunitiesPage() {
               />
             </div>
           )}
-          {stagePrompt?.stage === 'discarded' && (
+          {(stagePrompt?.stage === 'discarded' || stagePrompt?.stage === 'lost') && (
             <div>
               <Label className="mb-1 block">Motivo</Label>
               <Select value={discardReasonInput} onChange={(e) => setDiscardReasonInput(e.target.value)}>
@@ -826,9 +843,13 @@ export function OpportunitiesPage() {
             <Button variant="outline" onClick={() => setStagePrompt(null)}>Cancelar</Button>
             <Button
               onClick={confirmStagePrompt}
-              disabled={stageBusy || (stagePrompt?.stage === 'discarded' && !discardReasonInput)}
+              disabled={
+                stageBusy ||
+                ((stagePrompt?.stage === 'discarded' || stagePrompt?.stage === 'lost') &&
+                  !discardReasonInput)
+              }
             >
-              {stagePrompt?.stage === 'paused' ? 'Pausar' : 'Descartar'}
+              {stagePrompt?.stage === 'paused' ? 'Pausar' : stagePrompt?.stage === 'lost' ? 'Marcar como perdida' : 'Descartar'}
             </Button>
           </div>
         </div>
