@@ -42,6 +42,13 @@ const SKIP_REASON_PT: Record<string, string> = {
   ddd_invalido: 'DDD não existe',
   tamanho_invalido: 'Número com tamanho inválido',
   telefone_invalido: 'Telefone inválido',
+  // Gate de engajamento cross-channel (engagement-gate.ts, 21/08/2026)
+  ja_respondeu: 'Já respondeu (retomada, não abordagem fria)',
+  // E-mail (email-campaign-sender.service.ts, 21/08/2026)
+  email_invalido: 'E-mail com devolução permanente (bounce)',
+  endereco_invalido: 'Endereço de e-mail mal formado',
+  // Cancelamento manual da campanha (DISP-004)
+  cancelado: 'Campanha cancelada antes do envio',
 };
 
 export function campaignStatusLabel(status: string): string {

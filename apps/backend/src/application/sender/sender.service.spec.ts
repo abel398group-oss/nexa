@@ -802,6 +802,8 @@ describe('SenderService.resendAll — reenvio total atrás de interruptor', () =
         // vocabulário do canal de e-mail — sem estes, o reenvio total mandava
         // de novo para endereço com hard bounce e para sintaxe quebrada
         'email_invalido', 'endereco_invalido',
+        // quem já respondeu de verdade é o pior alvo pra um reenvio frio
+        'ja_respondeu',
       ]),
     );
     // ...mas 'ja_enviado' PODE voltar — é justamente o que travava o teste

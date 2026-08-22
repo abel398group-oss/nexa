@@ -1203,9 +1203,14 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
     // quebrada) entraram em 21/08/2026: o vocabulário era só do WhatsApp, e num
     // reenvio de campanha de E-MAIL os dois voltavam à fila — hard bounce
     // garantido, que é justamente o que derruba a entrega do domínio inteiro.
+    //
+    // `ja_respondeu` (gate de engajamento cross-channel, 21/08/2026) entra pelo
+    // mesmo motivo, na direção oposta: é o pior alvo possível pra um reenvio
+    // frio — a pessoa já teve uma conversa de verdade com um humano, e mandar o
+    // mesmo disparo de volta pra ela lê como "não prestou atenção na resposta".
     const EXCLUSAO_DELIBERADA = [
       'bloqueado', 'suspeito_concorrente', 'opted_out', 'tms_cliente',
-      'email_invalido', 'endereco_invalido',
+      'email_invalido', 'endereco_invalido', 'ja_respondeu',
     ];
     const r = await this.prisma.campaignTarget.updateMany({
       where: {
