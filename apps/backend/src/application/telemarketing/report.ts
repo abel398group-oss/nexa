@@ -125,6 +125,34 @@ export interface LinhaDeRoteiro {
  * aviso, quem olha conclui que só existiram duas versões, quando na verdade as outras
  * ainda não têm dado. Omissão silenciosa aqui inverte a leitura.
  */
+/**
+ * SLA de primeiro contato: quanto tempo (em horas) passa entre o lead ENTRAR na base
+ * (`Opportunity.createdAt` — a oportunidade nasce na importação, não no disparo, ver
+ * `lead-import.service.ts`) e a primeira atividade que um SDR registra nela.
+ *
+ * Só entram oportunidades com PELO MENOS uma atividade — a métrica responde "quando
+ * contatamos chega, quão rápido foi", não "quantos ainda não foram tocados". As duas
+ * perguntas são diferentes; misturar as duas faria um lead nunca tocado (SLA infinito)
+ * puxar a média para um número que não é nem "rápido" nem "lento", só errado.
+ */
+export interface SlaCalculado {
+  /// `null` na mesma condição de `TaxaCalculada.percentual` — amostra pequena não vira
+  /// número, vira "—" na tela.
+  mediaHoras: number | null;
+  amostraPequena: boolean;
+  base: number;
+}
+
+export function calcularSlaPrimeiroContato(
+  amostras: number,
+  mediaHorasBruta: number | null,
+): SlaCalculado {
+  if (amostras < AMOSTRA_MINIMA) {
+    return { mediaHoras: null, amostraPequena: true, base: amostras };
+  }
+  return { mediaHoras: mediaHorasBruta, amostraPequena: false, base: amostras };
+}
+
 export function compararRoteiros(linhas: readonly LinhaDeRoteiro[]): {
   comparaveis: (LinhaDeRoteiro & { percentual: number })[];
   omitidasPorAmostra: number;

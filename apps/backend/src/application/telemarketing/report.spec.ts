@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AMOSTRA_MINIMA,
   aproveitamento,
+  calcularSlaPrimeiroContato,
   compararRoteiros,
   conversaoDaCampanha,
   conversaoDoLote,
@@ -141,5 +142,27 @@ describe('comparação de versões do roteiro', () => {
     const r = compararRoteiros([{ versao: 5, acoes: 8, atendeu: 1 }]);
     expect(r.comparaveis).toEqual([]);
     expect(r.omitidasPorAmostra).toBe(1);
+  });
+});
+
+describe('SLA de primeiro contato', () => {
+  it('amostra suficiente: usa a média que veio do banco', () => {
+    const r = calcularSlaPrimeiroContato(AMOSTRA_MINIMA, 4.5);
+    expect(r.amostraPequena).toBe(false);
+    expect(r.mediaHoras).toBe(4.5);
+    expect(r.base).toBe(AMOSTRA_MINIMA);
+  });
+
+  it('amostra pequena não vira número, mesmo com média vinda do banco', () => {
+    const r = calcularSlaPrimeiroContato(AMOSTRA_MINIMA - 1, 0.5);
+    expect(r.amostraPequena).toBe(true);
+    expect(r.mediaHoras).toBeNull();
+  });
+
+  it('zero oportunidades com atividade: sem número, sem quebrar', () => {
+    const r = calcularSlaPrimeiroContato(0, null);
+    expect(r.mediaHoras).toBeNull();
+    expect(r.amostraPequena).toBe(true);
+    expect(r.base).toBe(0);
   });
 });

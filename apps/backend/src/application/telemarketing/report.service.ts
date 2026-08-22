@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import {
   aproveitamento,
+  calcularSlaPrimeiroContato,
   compararRoteiros,
   conversaoDaCampanha,
   conversaoDoLote,
@@ -32,11 +33,12 @@ export class TelemarketingReportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async relatorio(tenantId: string, productCode?: string) {
-    const [lotes, vendedores, roteiros, campanhas] = await Promise.all([
+    const [lotes, vendedores, roteiros, campanhas, slaBruto] = await Promise.all([
       this.porLote(tenantId, productCode),
       this.porVendedor(tenantId),
       this.porRoteiro(tenantId, productCode),
       this.porCampanha(tenantId, productCode),
+      this.slaPrimeiroContatoBruto(tenantId, productCode),
     ]);
 
     return {
@@ -48,6 +50,10 @@ export class TelemarketingReportService {
         conversao: conversaoDaCampanha(c),
         resposta: respostaDaCampanha(c),
       })),
+      slaPrimeiroContato: calcularSlaPrimeiroContato(
+        slaBruto.amostras,
+        slaBruto.mediaHorasBruta,
+      ),
     };
   }
 
@@ -159,5 +165,39 @@ export class TelemarketingReportService {
         ORDER BY a.script_version DESC`,
       ...args,
     );
+  }
+
+  /**
+   * Média bruta, sem o corte de amostra mínima — quem decide se o número aparece é
+   * `calcularSlaPrimeiroContato` (pura, testada). Aqui só a consulta.
+   *
+   * `JOIN` (não `LEFT JOIN`) em `seller_activities` de propósito: oportunidade sem
+   * nenhuma atividade ainda não teve "primeiro contato" para medir — entrar aqui com
+   * NULL contaminaria a média com um tempo que não existe.
+   */
+  private async slaPrimeiroContatoBruto(
+    tenantId: string,
+    productCode?: string,
+  ): Promise<{ amostras: number; mediaHorasBruta: number | null }> {
+    const filtro = productCode ? 'AND o.product_code = $2' : '';
+    const args = productCode ? [tenantId, productCode] : [tenantId];
+
+    const [linha] = await this.prisma.$queryRawUnsafe<
+      { amostras: number; mediaHorasBruta: number | null }[]
+    >(
+      `WITH primeiro AS (
+         SELECT o.id, o.created_at AS entrada, MIN(a.created_at) AS primeiro_contato
+           FROM opportunities o
+           JOIN seller_activities a ON a.opportunity_id = o.id
+          WHERE o.tenant_id = $1 ${filtro}
+          GROUP BY o.id, o.created_at
+       )
+       SELECT count(*)::int                                                       AS "amostras",
+              avg(EXTRACT(EPOCH FROM (primeiro_contato - entrada)) / 3600)::float  AS "mediaHorasBruta"
+         FROM primeiro`,
+      ...args,
+    );
+
+    return linha ?? { amostras: 0, mediaHorasBruta: null };
   }
 }

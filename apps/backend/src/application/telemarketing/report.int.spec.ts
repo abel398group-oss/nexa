@@ -159,4 +159,79 @@ describe('relatório contra o banco', () => {
     expect(r.vendedores).toEqual([]);
     expect(r.roteiros.comparaveis).toEqual([]);
   });
+
+  it('SLA de primeiro contato: média em horas entre a entrada e a 1ª atividade', async () => {
+    const sdr = await prisma.seller.create({
+      data: { tenantId: TENANT, name: 'SDR SLA', phone: '5511900000099' },
+    });
+    const entrada = new Date('2026-01-01T00:00:00Z');
+
+    // AMOSTRA_MINIMA (20) oportunidades entrando no mesmo instante, cada uma com a
+    // primeira atividade 1, 2, 3 ... 20 horas depois — média conhecida: 10,5h. Prova
+    // que o cálculo é ENTRADA → PRIMEIRA atividade, não qualquer atividade.
+    for (let i = 1; i <= 20; i += 1) {
+      const o = await prisma.opportunity.create({
+        data: { tenantId: TENANT, productCode: MERCADO, stage: 'new', createdAt: entrada },
+      });
+      await prisma.sellerActivity.create({
+        data: {
+          tenantId: TENANT,
+          sellerId: sdr.id,
+          opportunityId: o.id,
+          type: 'call',
+          result: 'nao_atendeu', // a 1ª tentativa, não precisa ter atendido
+          createdAt: new Date(entrada.getTime() + i * 3_600_000),
+        },
+      });
+      // 2ª atividade bem mais tarde: prova que o MIN() ignora ela, não a última.
+      await prisma.sellerActivity.create({
+        data: {
+          tenantId: TENANT,
+          sellerId: sdr.id,
+          opportunityId: o.id,
+          type: 'call',
+          result: 'atendeu',
+          createdAt: new Date(entrada.getTime() + 100 * 3_600_000),
+        },
+      });
+    }
+
+    const r = await service.relatorio(TENANT, MERCADO);
+    expect(r.slaPrimeiroContato.amostraPequena).toBe(false);
+    expect(r.slaPrimeiroContato.mediaHoras).toBeCloseTo(10.5, 1);
+  });
+
+  it('menos que a amostra mínima: sem número, mas sem erro', async () => {
+    const sdr = await prisma.seller.create({
+      data: { tenantId: TENANT, name: 'SDR SLA 2', phone: '5511900000098' },
+    });
+    const entrada = new Date('2026-01-01T00:00:00Z');
+    const o = await prisma.opportunity.create({
+      data: { tenantId: TENANT, productCode: MERCADO, stage: 'new', createdAt: entrada },
+    });
+    await prisma.sellerActivity.create({
+      data: {
+        tenantId: TENANT,
+        sellerId: sdr.id,
+        opportunityId: o.id,
+        type: 'call',
+        result: 'atendeu',
+        createdAt: new Date(entrada.getTime() + 3_600_000),
+      },
+    });
+
+    const r = await service.relatorio(TENANT, MERCADO);
+    expect(r.slaPrimeiroContato.mediaHoras).toBeNull();
+    expect(r.slaPrimeiroContato.amostraPequena).toBe(true);
+  });
+
+  it('oportunidade sem nenhuma atividade não entra na média (não é "0 horas")', async () => {
+    // 50 oportunidades 'new' do cenario() acima não têm atividade nenhuma — se
+    // entrassem como zero, puxariam a média para um tempo que não existe.
+    await cenario();
+    const r = await service.relatorio(TENANT, MERCADO);
+    // As 40 atividades do cenário são todas na MESMA oportunidade (1 amostra) —
+    // isolado, então continua abaixo da amostra mínima.
+    expect(r.slaPrimeiroContato.amostraPequena).toBe(true);
+  });
 });
