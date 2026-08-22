@@ -1458,7 +1458,7 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
             this.logger.error(`Falha ao publicar status (campanha "${statusCampaign.name}"): ${result.reason}`);
           }
         } catch (e: any) {
-          this.logger.error(`tick status falhou: ${e?.message}`);
+          this.logger.error(`tick status falhou: ${e?.message}`, e?.stack);
         }
         return; // não processa targets neste tick
       }
@@ -1573,7 +1573,10 @@ export class SenderService implements OnModuleInit, OnModuleDestroy {
 
       await this.dispatchOneTarget(campaign, number);
     } catch (e: any) {
-      this.logger.error(`tick falhou: ${e?.message}`);
+      // Stack trace de propósito — ver o mesmo comentário em
+      // EmailCampaignSenderService.tickLocked. Não relança: um tick perdido é
+      // recuperável no próximo; derrubar o @Interval não é.
+      this.logger.error(`tick falhou: ${e?.message}`, e?.stack);
     }
   }
 

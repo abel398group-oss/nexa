@@ -1036,7 +1036,12 @@ export class EmailCampaignSenderService {
         });
       }
     } catch (err: any) {
-      this.logger.error(`EmailCampaignSender tick falhou: ${err?.message}`);
+      // Stack trace de propósito: sem ela, um bug de verdade no tick (não um erro
+      // de SMTP esperado — esses têm handler próprio logo acima) some atrás de uma
+      // linha só com a mensagem, e o tick continua rodando a cada 15s como se nada
+      // tivesse acontecido. Não relança: derrubar o @Interval pararia TODO disparo
+      // de e-mail até o próximo deploy, o que é pior que perder um tick.
+      this.logger.error(`EmailCampaignSender tick falhou: ${err?.message}`, err?.stack);
     }
   }
 
