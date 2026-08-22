@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { CloserTodayPage } from './CloserTodayPage';
-import { VendasRelatorio } from './VendasRelatorio';
+import { TelemarketingReportPage } from './TelemarketingReportPage';
 import { OpportunitiesPage } from './OpportunitiesPage';
 import { useAuth } from '@/app/providers/AuthContext';
 import { temPerm } from '@/shared/lib/perms';
@@ -25,7 +25,7 @@ export function CloserCockpitPage() {
     { id: 'today', label: '📅 Agenda de Hoje', perm: 'closer', render: () => <CloserTodayPage /> },
     // A carteira é o funil — mesma tela e mesma permissão de /opportunities.
     { id: 'opportunities', label: '💼 Minha Carteira', perm: 'opportunities', render: () => <OpportunitiesPage /> },
-    { id: 'reports', label: '📊 Relatório de Vendas', perm: 'metrics', render: () => <VendasRelatorio /> },
+    { id: 'reports', label: '📊 Relatório de Vendas', perm: 'metrics', render: () => <TelemarketingReportPage /> },
   ];
 
   const visiveis = ABAS.filter((a) => temPerm(user, a.perm));
