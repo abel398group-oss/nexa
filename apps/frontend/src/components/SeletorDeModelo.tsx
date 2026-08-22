@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/shared/ui';
 import { listTemplates, type MessageTemplate } from '@/entities/message-template';
@@ -28,6 +29,19 @@ export function SeletorDeModelo({
   channel: 'email' | 'whatsapp';
   onEscolher: (m: MessageTemplate) => void;
 }) {
+  /**
+   * Qual modelo foi copiado para o formulário.
+   *
+   * O campo voltava para "Escolha…" logo depois de escolher, e a intenção era
+   * honesta: o que vale é o texto abaixo, que a pessoa pode ter editado. Só que
+   * numa cadência de seis toques, todos parecidos, a tela deixava de responder a
+   * pergunta mais imediata de quem está montando o disparo — QUAL deles está aí.
+   * Sem isso, restava reler o corpo e comparar com a lista.
+   *
+   * O que resolve os dois lados é mostrar a escolha e avisar quando o texto deixa
+   * de ser o do modelo, em vez de esconder a escolha desde o início.
+   */
+  const [escolhido, setEscolhido] = useState('');
   const code = productCode.trim();
   // Só aprovado chega aqui: rascunho oferecido a quem monta campanha é a trava de
   // revisão inteira anulada no último passo (20/08/2026).
@@ -38,6 +52,11 @@ export function SeletorDeModelo({
   });
 
   const doCanal = modelos.filter((m) => m.channel === channel);
+
+  // Trocar de canal ou de mercado troca a LISTA: a escolha anterior não está mais
+  // nela, e o select cairia calado em "Escolha…" mostrando um rótulo que não
+  // corresponde ao texto que continua no formulário. Melhor zerar de propósito.
+  useEffect(() => setEscolhido(''), [channel, code]);
   if (!code || isLoading || doCanal.length === 0) return null;
 
   return (
@@ -47,13 +66,11 @@ export function SeletorDeModelo({
         <span className="text-xs font-medium text-base-content/70">Usar um modelo pronto</span>
         <select
           className="input !h-8 min-w-56 flex-1 text-sm"
-          defaultValue=""
+          value={escolhido}
           onChange={(e) => {
             const m = doCanal.find((x) => x.id === e.target.value);
             if (m) onEscolher(m);
-            // Volta para o rótulo: o campo diz o que FAZER, não o que foi escolhido —
-            // depois de copiar, quem manda é o texto, que a pessoa pode ter editado.
-            e.target.value = '';
+            setEscolhido(e.target.value);
           }}
         >
           <option value="">Escolha…</option>
@@ -65,8 +82,9 @@ export function SeletorDeModelo({
         </select>
       </label>
       <p className="mt-1 text-[11px] text-base-content/60">
-        Preenche os campos abaixo com o texto já validado. Dá para ajustar depois — a campanha
-        guarda o que você enviar, não o modelo.
+        {escolhido
+          ? 'Texto copiado para os campos abaixo. Editar não muda o modelo — a campanha guarda o que você enviar.'
+          : 'Preenche os campos abaixo com o texto já validado. Dá para ajustar depois — a campanha guarda o que você enviar, não o modelo.'}
       </p>
     </div>
   );
