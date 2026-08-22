@@ -10,6 +10,8 @@ export type {
 export { ROTULO_PRIORIDADE, ROTULO_RESULTADO, CRITERIOS_QUALIFICACAO } from './types/sdr.types';
 export type { Qualificacao } from './types/sdr.types';
 export type { CampanhaRecebida } from './api/sdr.api';
+export type { EventoDaLinha } from './lib/timeline';
+export { montarLinhaDoTempo } from './lib/timeline';
 
 export {
   ajustarScore,

@@ -29,8 +29,10 @@ import {
   pausarLead,
   registrarAtividade,
   transferirParaCloser,
+  montarLinhaDoTempo,
   ROTULO_PRIORIDADE,
   ROTULO_RESULTADO,
+  type AtividadeRecente,
   type Closer,
   type ItemDaFila,
   type Qualificacao,
@@ -956,60 +958,93 @@ function QualificacaoDoLead({ lead }: { lead: ItemDaFila }) {
 }
 
 /**
- * O que já bateu neste lead antes da ligação.
+ * Tudo que já bateu neste lead antes da ligação — disparo E contato humano, numa
+ * timeline só (22/08/2026, Fase 2).
  *
- * Sem isto o SDR abre a chamada sem saber que o lead recebeu três e-mails esta
- * semana — e repete o que já foi dito, ou pergunta "chegou meu e-mail?" sem saber a
- * resposta. O status de cada disparo (enviado, falhou, respondeu) muda a abertura:
- * quem RESPONDEU a campanha não é abordagem fria, é retomada.
+ * Antes eram dois cards ("Já recebeu" / "Histórico") sem relação de tempo entre si:
+ * o SDR via "3 e-mails" num lugar e "1 ligação" em outro, e cruzava as datas de
+ * cabeça para saber se a ligação foi antes ou depois do último disparo. Sem isto ele
+ * também repete o que já foi dito, ou pergunta "chegou meu e-mail?" sem saber a
+ * resposta — e quem RESPONDEU a uma campanha não é abordagem fria, é retomada.
  */
-function JaRecebeu({ contactId }: { contactId: string | null }) {
+function LinhaDoTempo({
+  contactId,
+  activities,
+}: {
+  contactId: string | null;
+  activities: readonly AtividadeRecente[];
+}) {
   const { data: campanhas = [], isLoading } = useQuery({
     queryKey: ['sdr', 'campanhas-do-contato', contactId],
     queryFn: () => listCampanhasDoContato(contactId as string),
     enabled: !!contactId,
   });
 
-  // Lead sem ficha de contato nunca recebeu campanha — o disparo é por contato.
-  if (!contactId) return null;
-  if (isLoading) {
+  // Lead sem ficha de contato nunca recebeu campanha — o disparo é por contato. Ainda
+  // assim pode ter atividade (SDR registra ligação de lead sem contato vinculado), então
+  // o card segue existindo, só sem o lado do disparo.
+  if (isLoading && contactId) {
     return (
-      <Card className="p-5 text-sm text-base-content/60">Vendo o que já foi enviado…</Card>
+      <Card className="p-5 text-sm text-base-content/60">Vendo o que já aconteceu com este lead…</Card>
     );
   }
+
+  const eventos = montarLinhaDoTempo(activities, contactId ? campanhas : []);
 
   return (
     <Card className="p-5">
       <p className="mb-2 text-sm font-medium">
-        Já recebeu {campanhas.length > 0 && <span className="text-base-content/40">· {campanhas.length}</span>}
+        Histórico {eventos.length > 0 && <span className="text-base-content/40">· {eventos.length}</span>}
       </p>
-      {!campanhas.length && (
+      {!eventos.length && (
         // Dito com todas as letras: é informação de abordagem, não ausência de dado.
         <p className="text-sm text-base-content/60">
-          Nada foi disparado para este lead ainda — sua ligação é o primeiro contato.
+          Nada foi disparado nem registrado para este lead ainda — sua ligação é o primeiro contato.
         </p>
       )}
       <ul className="flex flex-col">
-        {campanhas.slice(0, 8).map((c) => (
-          <li key={c.campaignId} className="border-b border-base-200 py-2 text-sm last:border-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate">{c.name}</span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-base-content/40">
-                {c.channel === 'email' ? '✉️' : '💬'}{' '}
-                {c.sentAt
-                  ? new Date(c.sentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-                  : ROTULO_ALVO[c.status] ?? c.status}
-              </span>
-            </div>
-            {/* O status só aparece quando NÃO é o caminho feliz: "enviado" com data
-                ao lado já diz tudo, e repetir enche a lista de ruído. */}
-            {c.sentAt && c.status !== 'sent' && (
-              <p className="mt-0.5 text-xs text-base-content/50">
-                {ROTULO_ALVO[c.status] ?? c.status}
-              </p>
-            )}
-          </li>
-        ))}
+        {eventos.slice(0, 12).map((e) =>
+          e.kind === 'campanha' ? (
+            <li
+              key={`campanha-${e.campanha.campaignId}-${e.quando}`}
+              className="border-b border-base-200 py-2 text-sm last:border-0"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate">{e.campanha.name}</span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-base-content/40">
+                  {e.campanha.channel === 'email' ? '✉️' : '💬'}{' '}
+                  {e.campanha.sentAt
+                    ? new Date(e.campanha.sentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                    : ROTULO_ALVO[e.campanha.status] ?? e.campanha.status}
+                </span>
+              </div>
+              {/* O status só aparece quando NÃO é o caminho feliz: "enviado" com data
+                  ao lado já diz tudo, e repetir enche a lista de ruído. */}
+              {e.campanha.sentAt && e.campanha.status !== 'sent' && (
+                <p className="mt-0.5 text-xs text-base-content/50">
+                  {ROTULO_ALVO[e.campanha.status] ?? e.campanha.status}
+                </p>
+              )}
+            </li>
+          ) : (
+            <li
+              key={`atividade-${e.atividade.id}`}
+              className="border-b border-base-200 py-2 text-sm last:border-0"
+            >
+              <span className="text-[10px] uppercase tracking-wide text-base-content/40">
+                {ICONE_ATIVIDADE[e.atividade.type] ?? '☎️'}{' '}
+                {new Date(e.atividade.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </span>{' '}
+              <span className="font-medium">{e.atividade.type}</span>
+              {e.atividade.result && (
+                <span> · {ROTULO_RESULTADO[e.atividade.result] ?? e.atividade.result}</span>
+              )}
+              {e.atividade.notes && (
+                <p className="mt-0.5 text-base-content/70">{e.atividade.notes}</p>
+              )}
+            </li>
+          ),
+        )}
       </ul>
     </Card>
   );
@@ -1022,6 +1057,15 @@ const ROTULO_ALVO: Record<string, string> = {
   sent: 'enviado',
   failed: 'falhou',
   skipped: 'pulado',
+};
+
+/// Ícone por tipo de atividade — mesma linguagem visual dos emojis de canal da
+/// campanha (✉️/💬), pra timeline ler como uma coisa só, não duas coladas.
+const ICONE_ATIVIDADE: Record<string, string> = {
+  call: '📞',
+  whatsapp: '💬',
+  email: '✉️',
+  note: '📝',
 };
 
 function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void }) {
@@ -1094,33 +1138,7 @@ function FichaDoLead({ lead, onLigar }: { lead: ItemDaFila; onLigar?: () => void
       {/* Entre a ficha e o histórico: a qualificação é o que ele PREENCHE durante a
           ligação, então fica acima do que ele só consulta. */}
       <QualificacaoDoLead lead={lead} />
-      <JaRecebeu contactId={lead.contactId} />
-
-      <Card className="p-5">
-        <p className="mb-2 text-sm font-medium">Histórico</p>
-        {/* "Nenhuma LIGAÇÃO", não "nenhum contato": este card conta o que o SDR
-            registrou, e o card "Já recebeu", logo acima, costuma estar listando
-            dois e-mails de campanha. Dizer "nenhum contato ainda" contradizia o
-            vizinho e mandava o SDR abrir a ligação como se o lead nunca tivesse
-            ouvido falar da empresa — quando ele já recebeu (e talvez leu). */}
-        {!lead.activities.length && (
-          <p className="text-sm text-base-content/60">
-            Nenhuma ligação registrada — a primeira é sua. Veja acima o que já foi enviado.
-          </p>
-        )}
-        <ul className="flex flex-col">
-          {lead.activities.map((a) => (
-            <li key={a.id} className="border-b border-base-200 py-2 text-sm last:border-0">
-              <span className="text-base-content/50">
-                {new Date(a.createdAt).toLocaleDateString('pt-BR')}
-              </span>{' '}
-              <span className="font-medium">{a.type}</span>
-              {a.result && <span> · {ROTULO_RESULTADO[a.result] ?? a.result}</span>}
-              {a.notes && <p className="mt-0.5 text-base-content/70">{a.notes}</p>}
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <LinhaDoTempo contactId={lead.contactId} activities={lead.activities} />
     </div>
   );
 }
